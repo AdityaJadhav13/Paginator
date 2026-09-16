@@ -1,0 +1,42 @@
+# Phase 17 — Risk register
+
+Prepared 2026-09-16. Inputs: persisted Phases 1–16 and dependency/research conclusions. Ratings are architectural judgments, not measured probabilities. Severity: CRITICAL threatens confidentiality, exact publication or basic feasibility; HIGH threatens pilot success; MEDIUM affects economics/usability/maintainability. Likelihood H/M/L describes present exposure before mitigation. Ordered by severity and urgency. Owner roles are proposed responsibilities, not assigned staff.
+
+| ID / area | Severity | Likelihood | Impact | Mitigation / evidence needed | When / owner |
+|---|---|---|---|---|---|
+| K01 Publishing feasibility | CRITICAL | H | Attractive editor cannot produce accepted press output | End-to-end glyph→PDF→professional preflight→press experiment before engine commitment | Before production engine freeze / publishing lead |
+| K02 Multilingual typography | CRITICAL | H | Broken Devanagari/Urdu, lost text, unusable editing | Licensed fonts, native-reader corpus, bidi/IME/cluster/line-end shaping and writer tests | Before language support claim / typography lead |
+| K03 Tenant isolation | CRITICAL | M | Unpublished/wire/archive content leaks across customers | Scoped API/DB/queue/blob/index/cache checks, revocation races, independent security review | Before real data / security lead |
+| K04 Wrong revision or PDF release | CRITICAL | M | Press prints stale or unapproved edition | Immutable input/output manifests, hash-bound preflight/approval, race/crash suite | Before first export release / production lead |
+| K05 Data loss/archive failure | CRITICAL | M | Exact published edition or editable dependencies unrecoverable | Archive before release, independent backup/key recovery, checksum/restore drills | Before production release / operations lead |
+| K06 Copyright and source rights | CRITICAL | H | Unlawful reuse/AI processing/reprinting, customer harm | Purpose-specific grants, discovery-only default, contracts and rights revocation workflow | Before ingestion of protected full text / product/legal |
+| K07 Font/software licensing | HIGH | H | Browser distribution or embedded engine incompatible with commercial plan | Exact version/SBOM/license review, font/dictionary rights, vendor OEM terms | Before dependency adoption/distribution / engineering/legal |
+| K08 PDF/prepress procurement | HIGH | H | No affordable qualified validation/writer path | Compare open-source adapter and commercial writer; callas/Enfocus quote/trial gate | Before committing production output plan / publishing/product |
+| K09 Colour/print mismatch | HIGH | H | Wrong black, ink, transparency or image output despite valid PDF | Press-approved profile, independent render/preflight and physical inspection | Before press pilot / prepress lead |
+| K10 Document model complexity | HIGH | M | Vendor scene model or ambiguous units force redesign | Versioned editable/resolved schemas, stable IDs, controlled primitives and migration tests | Before editor persistence / architecture lead |
+| K11 Layout feasibility/solver cost | HIGH | H | Hard constraints infeasible, excessive generation time | Start bounded templates/heuristics; clear infeasibility; solver benchmark and stable accepted result | Before automatic generation / composition lead |
+| K12 Browser editor/IME | HIGH | H | Text input/caret/undo inaccessible or inaccurate | Hybrid interface experiments, story-panel fallback, keyboard and real IME tests | Before professional-editor commitment / frontend lead |
+| K13 Browser performance | HIGH | M | Dense editions exceed memory/latency on customer hardware | Page virtualization, cache caps, GPU/WASM disposal, measured fixture budgets | Before supported-browser claim / frontend lead |
+| K14 UI-first false confidence | HIGH | H | Demo “pass” mistaken for security or press readiness | Visible simulations, mock adapters, separate engine gates; no live engine backlog leakage | During immediate UI / product lead |
+| K15 Ingestion reliability | HIGH | H | Missing/wrong article fields and brittle source changes | Compare extractors on approved source/language corpus; track terminal outcomes | Before live feed / ingestion lead |
+| K16 news-please adoption | HIGH | M | Source/wheel mismatch or broad dependencies undermine reproducibility | Keep RESEARCH FURTHER; inspect exact artifact/SBOM, controlled fetch, alternatives | Before any adoption / ingestion lead |
+| K17 AI factuality/injection | HIGH | H | Fabricated translation/copy, leaked content, unauthorized action | Evidence-linked proposals, human acceptance, no tool authority, native-language evals | Before live AI / AI lead |
+| K18 Hostile media/crawling | HIGH | H | SSRF, parser compromise, resource exhaustion | Egress isolation, signed/scoped storage, parser sandbox/caps/patching | Before external inputs / security/operations |
+| K19 Collaboration/conflicts | HIGH | M | Lease expiry or linked stories overwrite colleagues | Revision checks; approve initial coordination model; test expanded reflow scope | Before multiple active editors / product/architecture |
+| K20 Archive rights/retention conflict | HIGH | M | WORM conflicts with termination/rights obligations; permanent-cost liability | Agree retention/holds/deletion and licensed dependency retention before WORM selection | Before archive contracts / product/legal |
+| K21 Deadline operations | HIGH | H | Queue/license/vendor outage misses newspaper deadline | Priority/fairness, concurrency capacity, manual fallbacks, recovery drills and measured SLOs | Before press/customer pilot / operations |
+| K22 Product segment/scope | HIGH | H | Broad feature set fails the first newsroom's daily needs | Select pilot segment, language/press/workflow and success measures | Before production scope freeze / product owner |
+| K23 Commercial viability | HIGH | M | AI/preflight/storage/support costs exceed subscription revenue | Per-edition cost model, qualified pricing/retention and buyer validation | Before paid pilot / product/finance |
+| K24 Scaling/noisy neighbor | HIGH | M | One large edition/crawl blocks others | Bounded jobs, tenant quotas, workload isolation and burst tests; avoid premature microservices | Backend foundation and load gate / operations |
+| K25 Search/evidence quality | MEDIUM | H | Poor multilingual recall or false independent corroboration | Per-language analyzer evaluation, source lineage, reversible clusters and human corrections | Before ranked-feed/semantic-search claims / news lead |
+| K26 UX/adoption | HIGH | M | Editors cannot find next action or trust automated changes | Task walkthroughs, preserved overrides, meaningful progress and fix-to-location flows | UI-first and customer pilot / design lead |
+| K27 Billing/usage integrity | HIGH | M | Duplicate charges, quota-induced loss, unavailable payment provider | Signed/idempotent webhooks, reconciled ledgers, regional eligibility, grace/retention policy | Before paid operations / commercial lead |
+| K28 Dependency/vendor longevity | MEDIUM | M | Updates break geometry/licenses or vendor exit blocks restore | Small adapters, pinned manifests, update corpus, exportability and support/DR terms | Adoption and each upgrade / engineering |
+| K29 Excess custom infrastructure | MEDIUM | M | Team builds generic identity/queue/compositor unnecessarily | Registry before adoption/build; evaluate high-level composition and text-editing reuse | Feature specification / architecture lead |
+| K30 Unbounded numeric precision | HIGH | M | Safe serialized coordinates become unsafe intermediate arithmetic | Range analysis for products/transforms, explicit rounding; compare fixed-point options | Before schema precision freeze / engine lead |
+
+## Risk gates and residual risk
+
+Documentation mitigates ambiguity but does not retire K01–K06. The current program can finish with these risks open because it is pre-implementation. A UI demo cannot retire them. The master/roadmap must prohibit press/customer production claims until applicable evidence exists. Track experiment outcomes and owner answers in the decision register; a recommendation becomes decided only with a recorded basis.
+
+The highest coupled technical risk is multilingual composition through identical preview/PDF geometry to press acceptance. Splitting this into isolated “shaping works” and “PDF opens” demos would hide integration failure. Run a thin complete publishing proof before building broad engine features, while keeping immediate UI-first work independently useful.
