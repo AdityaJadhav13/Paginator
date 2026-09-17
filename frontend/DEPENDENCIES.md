@@ -1,9 +1,12 @@
-# UI001 dependency and Node runtime record
+# UI001/UI002 dependency and Node runtime record
 
-Recorded per `specs/active/UI001_UI_FOUNDATION.md` §12 (dependency proposal and
-adoption gate), written during the H-06 correction pass identified by
-`docs/reviews/UI001_INDEPENDENT_CODE_REVIEW.md`. This is an implementation-level
-record scoped to `frontend/`, not a project architecture document.
+Recorded per `specs/active/UI001_UI_FOUNDATION.md` §12 and
+`specs/active/UI002_ROUTE_SHELLS.md` §12 (dependency proposal and adoption
+gate). The UI001 section was written during the H-06 correction pass
+identified by `docs/reviews/UI001_INDEPENDENT_CODE_REVIEW.md`; the UI002
+section was added during UI002 implementation. This is an
+implementation-level record scoped to `frontend/`, not a project architecture
+document.
 
 ## Supported Node runtime
 
@@ -36,6 +39,7 @@ in `package.json` and `package-lock.json`.
 |---|---:|---|---|---|
 | `react` | 19.3.0 | MIT | Required runtime | Component composition |
 | `react-dom` | 19.3.0 | MIT | Required runtime | Renders React into the DOM |
+| `react-router` | 8.4.0 | MIT | Required runtime (UI002) | Client-side routing: deep links, nested param-based routes, refresh-safe resolution, history-based back/forward — see below |
 | `typescript` | 7.0.2 | Apache-2.0 | Required dev | Type-checks components and fixtures |
 | `vite` | 8.3.0 | MIT | Required dev | Dev/build tool |
 | `@vitejs/plugin-react` | 6.1.1 | MIT | Required dev | React JSX transform for Vite |
@@ -49,7 +53,42 @@ in `package.json` and `package-lock.json`.
 | `@testing-library/jest-dom` | 7.0.1 | MIT | Optional dev | Readable DOM matchers |
 | `@types/node` | 22.20.3 | MIT | Approved dev (see below) | Node builtin types for filesystem-based test assertions |
 
-Required dependencies: 12. Optional: 2 (`@testing-library/jest-dom`, `@types/node`).
+Required dependencies: 13. Optional: 2 (`@testing-library/jest-dom`, `@types/node`).
+
+### `react-router` — UI002 adoption record
+
+Proposed by `specs/active/UI002_ROUTE_SHELLS.md` §12 and adopted at
+implementation time per that spec's instruction not to pin a version until
+the adoption gate runs.
+
+- **Version:** `8.4.0`, the current `latest` dist-tag, published 2026-09-15
+  (two days before adoption) — verified via `npm view react-router
+  version/license/peerDependencies/engines/dependencies`. The `7.x` line
+  (`7.18.4`) remains published/maintained as a fallback if `8.x` proved
+  incompatible; it did not.
+- **License:** MIT, verified directly (`npm view react-router license`). Its
+  only two runtime dependencies, `cookie-es` and `@remix-run/route-pattern`,
+  are also MIT (verified individually).
+- **Compatibility:** `peerDependencies` require `react >=19.2.7` and
+  `react-dom >=19.2.7` — satisfied by this project's pinned `19.3.0`. Its own
+  `engines.node` is `>=22.22.0`, a subset of this project's `engines.node`
+  range, so no runtime conflict.
+  `npm audit` after install: 0 vulnerabilities at every severity.
+- **Package shape:** One package, not `react-router` plus a separate
+  `react-router-dom` — verified by probing its export map:
+  `BrowserRouter`, `Routes`, `Route`, `Link`, `NavLink`, `Navigate`,
+  `Outlet`, `useNavigate`, `useParams`, `useLocation`, and the `createBrowserRouter`/`RouterProvider`
+  data-router API are all exported from the package root. UI002 uses only
+  the declarative API (`BrowserRouter`/`Routes`/`Route`/`Outlet`) — it has no
+  loaders/actions/data-fetching need, so the data-router API is not adopted.
+- **Runtime, not dev:** it is imported by durable shipped code
+  (`src/app/**`), unlike `@types/node`/`@testing-library/*`.
+
+### `react` / `react-dom` version note
+
+UI002 upgrades no pinned version; `react`/`react-dom` remain `19.3.0` from
+UI001, and `react-router@8.4.0`'s peer requirement (`>=19.2.7`) is satisfied
+without any change.
 
 ### `@types/node` — approval record
 
