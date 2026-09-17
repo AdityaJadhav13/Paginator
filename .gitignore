@@ -16,3 +16,10 @@
 # Temporary files
 tmp/
 temp/
+
+# Node / frontend build artifacts
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vitest/
