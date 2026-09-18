@@ -39,6 +39,19 @@
   text-decoration: none;
 }
 
+.pg-session-controls,
+.pg-auth-actions,
+.pg-auth-profiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-3);
+}
+
+.pg-session-controls--compact {
+  color: var(--pg-color-on-action);
+}
+
 .pg-shell__nav a {
   color: var(--pg-color-action);
   font-size: var(--pg-font-size-200);

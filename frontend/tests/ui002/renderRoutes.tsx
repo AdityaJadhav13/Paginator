@@ -10,14 +10,14 @@
  */
 import { BrowserRouter } from "react-router";
 import { render } from "../../src/test/render.tsx";
-import { Ui002Routes } from "../../src/demo/ui002/routeTree.tsx";
+import { Ui004Routes } from "../../src/demo/ui004/routeTree.tsx";
 
 /** Renders the app with the browser at `path`, as a fresh deep link would. */
 export function renderAt(path: string) {
   window.history.pushState(null, "", path);
   return render(
     <BrowserRouter>
-      <Ui002Routes />
+      <Ui004Routes />
     </BrowserRouter>
   );
 }

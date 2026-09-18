@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import "./ui/tokens.css";
 import "./ui/base.css";
-import { Ui002App } from "./demo/ui002/routeTree.tsx";
+import { Ui004App } from "./demo/ui004/routeTree.tsx";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
@@ -12,6 +12,6 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <Ui002App />
+      <Ui004App />
   </StrictMode>
 );

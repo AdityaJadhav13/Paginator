@@ -10,10 +10,14 @@ import { Container, Inline, Cluster } from "../../ui/index.ts";
 import { SkipLink } from "../SkipLink.tsx";
 import { CollapsibleNav } from "../CollapsibleNav.tsx";
 import { MAIN_LANDMARK_ID, paths, ROUTE_LABELS } from "../routes.ts";
+import { SignedInSessionControls } from "../../features/auth/SessionStatus.tsx";
+import { useSession } from "../../features/auth/SessionProvider.tsx";
 
 export function PublicShell() {
   const location = useLocation();
   const isOnboarding = location.pathname === paths.onboarding();
+  const isAuthRoute = [paths.login(), paths.signup(), paths.forgotPassword(), paths.verify()].includes(location.pathname);
+  const { state } = useSession();
 
   return (
     <div className="pg-shell pg-shell--public">
@@ -33,7 +37,8 @@ export function PublicShell() {
                 <Link to={paths.contact()}>{ROUTE_LABELS.contact}</Link>
               </Cluster>
             </CollapsibleNav>
-            {!isOnboarding && (
+            {!isOnboarding && !isAuthRoute && state.status === "ready" && <SignedInSessionControls />}
+            {!isOnboarding && !isAuthRoute && state.status !== "ready" && (
               <Cluster gap="3" justify="end">
                 <Link to={paths.login()}>{ROUTE_LABELS.login}</Link>
                 <Link to={paths.signup()}>{ROUTE_LABELS.signup}</Link>

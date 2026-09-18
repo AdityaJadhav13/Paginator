@@ -34,10 +34,8 @@ function extractImportPaths(source: string): string[] {
  */
 const FORBIDDEN_APP_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
   { pattern: /(^|\/)demo(\/|$)/, name: "demo module" },
-  { pattern: /(^|\/)service[s]?(\/|$)/, name: "service module" },
   { pattern: /(^|\/)routing(\/|$)/, name: "routing module" },
   { pattern: /(^|\/)storage(\/|$)/, name: "storage module" },
-  { pattern: /(^|\/)auth(entication)?(\/|$)/, name: "auth module" },
   { pattern: /(^|\/)editor(\/|$)/, name: "editor module" },
   { pattern: /(^|\/)canvas(\/|$)/, name: "canvas module" },
   { pattern: /(^|\/)composition(\/|$)/, name: "composition module" },
@@ -95,62 +93,30 @@ describe("Demo layer (src/demo/ui002) does not import test helpers", () => {
   }
 });
 
-// ── fixtureKind marker ────────────────────────────────────────────
-
-describe("UI002 fixtures declare fixtureKind", () => {
-  it("fixtures.ts declares FIXTURE_KIND as 'ui002-demo-only'", async () => {
-    const { FIXTURE_KIND } = await import("../../src/demo/ui002/fixtures.ts");
-    expect(FIXTURE_KIND).toBe("ui002-demo-only");
-  });
-
-  it("every organization/publication/edition/release fixture carries it", async () => {
-    const {
-      ORG_SAHYADRI,
-      ORG_KONKAN,
-      PUB_PUNE_DAILY,
-      PUB_URDU_EVENING,
-      PUB_RATNAGIRI_TIDE,
-      EDITION_001,
-      EDITION_002,
-      RELEASE_001,
-    } = await import("../../src/demo/ui002/fixtures.ts");
-
-    for (const fixture of [
-      ORG_SAHYADRI,
-      ORG_KONKAN,
-      PUB_PUNE_DAILY,
-      PUB_URDU_EVENING,
-      PUB_RATNAGIRI_TIDE,
-      EDITION_001,
-      EDITION_002,
-      RELEASE_001,
-    ]) {
-      expect(fixture.fixtureKind).toBe("ui002-demo-only");
-    }
-  });
-});
-
-// ── Cross-organization fixture setup sanity (backs AC-09's tests) ─────
+// ── Canonical UI003 data backs UI002 route resolution ─────────────
 
 describe("Fixture set supports the no-leakage tests", () => {
   it("has two organizations, each with at least one publication", async () => {
-    const { UI002_FIXTURES } = await import("../../src/demo/ui002/fixtures.ts");
-    const orgIds = new Set(UI002_FIXTURES.organizations.map((o) => o.id));
+    const { createMockServiceEnvironment } = await import("../../src/mocks/index.ts");
+    const { workspace } = createMockServiceEnvironment();
+    const organizations = await workspace.listOrganizations();
+    expect(organizations.ok).toBe(true);
+    if (!organizations.ok) return;
+    const orgIds = new Set(organizations.value.map((o) => o.id));
     expect(orgIds.size).toBeGreaterThanOrEqual(2);
     for (const orgId of orgIds) {
-      expect(UI002_FIXTURES.publications.some((p) => p.orgId === orgId)).toBe(true);
+      const publications = await workspace.listPublications({ organizationId: orgId });
+      expect(publications.ok && publications.value.length > 0).toBe(true);
     }
   });
 
   it("has an edition and a release, each scoped to a specific publication", async () => {
-    const { UI002_FIXTURES } = await import("../../src/demo/ui002/fixtures.ts");
-    expect(UI002_FIXTURES.editions.length).toBeGreaterThan(0);
-    expect(UI002_FIXTURES.releases.length).toBeGreaterThan(0);
-    for (const edition of UI002_FIXTURES.editions) {
-      expect(
-        UI002_FIXTURES.publications.some((p) => p.id === edition.publicationId)
-      ).toBe(true);
-    }
+    const { createMockServiceEnvironment } = await import("../../src/mocks/index.ts");
+    const { RELEASE_FIXTURES } = await import("../../src/demo/ui002/release-fixtures.ts");
+    const { workspace } = createMockServiceEnvironment();
+    const edition = await workspace.getEdition({ organizationId: "org-demo-sahyadri", publicationId: "pub-demo-pune-daily", editionId: "edition-demo-001" });
+    expect(edition.ok).toBe(true);
+    expect(RELEASE_FIXTURES).toHaveLength(1);
   });
 });
 

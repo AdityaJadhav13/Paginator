@@ -53,59 +53,62 @@ afterEach(() => {
 });
 
 describe("Editor route: phone vs. desktop content (AC-25, AC-26)", () => {
-  it("desktop width (>=768px) renders the desktop placeholder", () => {
+  it("desktop width (>=768px) renders the desktop placeholder", async () => {
     restoreMatchMedia = mockViewportWidth(1280);
     renderAt(EDITOR_PATH);
-    expect(screen.getByRole("heading", { level: 1, name: "Editor" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Editor" })).toBeInTheDocument();
     expect(screen.queryByText(/Full editing requires a larger screen/)).not.toBeInTheDocument();
   });
 
-  it("phone width (<768px) renders the phone review placeholder — a different component", () => {
+  it("phone width (<768px) renders the phone review placeholder — a different component", async () => {
     restoreMatchMedia = mockViewportWidth(375);
     renderAt(EDITOR_PATH);
-    expect(screen.getByRole("heading", { level: 1, name: "Edition review" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Edition review" })).toBeInTheDocument();
     expect(
       screen.getByText("Full editing requires a larger screen. This device shows edition review only.")
     ).toBeInTheDocument();
   });
 
-  it("both variants are reached by the identical URL", () => {
+  it("both variants are reached by the identical URL", async () => {
     restoreMatchMedia = mockViewportWidth(1280);
     const desktop = renderAt(EDITOR_PATH);
+    await screen.findByRole("heading", { level: 1, name: "Editor" });
     expect(window.location.pathname).toBe(EDITOR_PATH);
     desktop.unmount();
     restoreMatchMedia();
 
     restoreMatchMedia = mockViewportWidth(375);
     renderAt(EDITOR_PATH);
+    await screen.findByRole("heading", { level: 1, name: "Edition review" });
     expect(window.location.pathname).toBe(EDITOR_PATH);
   });
 
-  it("the phone variant never renders desktop editor chrome (no editing affordance)", () => {
+  it("the phone variant never renders desktop editor chrome (no editing affordance)", async () => {
     restoreMatchMedia = mockViewportWidth(375);
     renderAt(EDITOR_PATH);
+    await screen.findByRole("heading", { level: 1, name: "Edition review" });
     expect(screen.queryByRole("button", { name: /move|resize|zoom|select/i })).not.toBeInTheDocument();
   });
 
-  it("the desktop variant makes no editing claim either (still a placeholder)", () => {
+  it("the desktop variant makes no editing claim either (still a placeholder)", async () => {
     restoreMatchMedia = mockViewportWidth(1280);
     renderAt(EDITOR_PATH);
-    expect(screen.getByText(/not yet implemented/i)).toHaveTextContent("UI015–018");
+    expect(await screen.findByText(/not yet implemented/i)).toHaveTextContent("UI015–018");
   });
 });
 
 describe("Phone-width nav disclosure exists (§10.1) — structural check", () => {
-  it("a disclosure toggle button is present in WorkspaceShell", () => {
+  it("a disclosure toggle button is present in WorkspaceShell", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
     expect(
-      screen.getByRole("button", { name: /(Show|Hide) Publication navigation/ })
+      await screen.findByRole("button", { name: /(Show|Hide) Publication navigation/ })
     ).toBeInTheDocument();
   });
 
   it("toggling it changes its accessible name and aria-expanded state", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
     const user = userEvent.setup();
-    const toggle = screen.getByRole("button", { name: "Show Publication navigation" });
+    const toggle = await screen.findByRole("button", { name: "Show Publication navigation" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     await user.click(toggle);
     expect(screen.getByRole("button", { name: "Hide Publication navigation" })).toHaveAttribute(

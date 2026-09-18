@@ -26,14 +26,22 @@ export function RouteAnnouncer() {
       return;
     }
     previousPathname.current = location.pathname;
-    const heading = document.getElementById(ROUTE_HEADING_ID);
-    if (heading instanceof HTMLElement) {
+    const focusHeading = () => {
+      const heading = document.getElementById(ROUTE_HEADING_ID);
+      if (!(heading instanceof HTMLElement) || heading.hasAttribute("data-pg-transient-route-heading")) return false;
       if (!heading.hasAttribute("tabindex")) {
         heading.setAttribute("tabindex", "-1");
       }
       heading.focus();
       setAnnouncement(heading.textContent?.trim() ?? "");
-    }
+      return true;
+    };
+    if (focusHeading()) return;
+    const observer = new MutationObserver(() => {
+      if (focusHeading()) observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
     // Depend on location.pathname specifically: a query-string-only
     // change is not a page navigation for focus/announcement purposes.
   }, [location.pathname]);

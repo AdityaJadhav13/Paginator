@@ -7,7 +7,7 @@ import { StrictMode } from "react";
 import { BrowserRouter } from "react-router";
 import { render, screen } from "../../src/test/render.tsx";
 import userEvent from "@testing-library/user-event";
-import { Ui002Routes } from "../../src/demo/ui002/routeTree.tsx";
+import { Ui004Routes } from "../../src/demo/ui004/routeTree.tsx";
 import { renderAt } from "./renderRoutes.tsx";
 
 describe("Skip link (AC-15)", () => {
@@ -70,7 +70,7 @@ describe("Tab order (AC-29)", () => {
     // desktop width. Budget enough Tab presses to clear the full
     // publication nav (12 links) plus the header controls before it.
     const order: Element[] = [];
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 28; i++) {
       await user.tab();
       const active = document.activeElement;
       if (!active) break;
@@ -112,7 +112,7 @@ describe("Focus after navigation (AC-16)", () => {
     render(
       <StrictMode>
         <BrowserRouter>
-          <Ui002Routes />
+          <Ui004Routes />
         </BrowserRouter>
       </StrictMode>
     );
@@ -135,7 +135,7 @@ describe("Workspace exit navigation (§7.2)", () => {
   it("exposes a keyboard-operable Back to public site link to the public home route", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
     const user = userEvent.setup();
-    const link = screen.getByRole("link", { name: "Back to public site" });
+    const link = await screen.findByRole("link", { name: "Back to public site" });
     expect(link).toHaveAttribute("href", "/");
 
     link.focus();
@@ -153,7 +153,7 @@ describe("Organization/publication switchers are keyboard-operable (§7.2)", () 
 
     // getByLabelText would also match the <nav aria-label="Publication">
     // landmark, not just the <select>'s <label> — disambiguate via role.
-    const publicationSelect = screen.getByRole("combobox", { name: "Publication" });
+    const publicationSelect = await screen.findByRole("combobox", { name: "Publication" });
     publicationSelect.focus();
     await user.selectOptions(publicationSelect, "Deccan Evening Record");
 

@@ -15,7 +15,6 @@ import { ROUTE_HEADING_ID } from "./routes.ts";
 import {
   fallbackPath,
   type InvalidContext,
-  type WorkspaceFixtureSet,
 } from "./contracts/route-context.ts";
 
 const LEVEL_COPY: Record<InvalidContext["level"], string> = {
@@ -27,11 +26,10 @@ const LEVEL_COPY: Record<InvalidContext["level"], string> = {
 
 export interface InvalidContextPageProps {
   invalid: InvalidContext;
-  fixtures: WorkspaceFixtureSet;
 }
 
-export function InvalidContextPage({ invalid, fixtures }: InvalidContextPageProps) {
-  const backHref = fallbackPath(fixtures, invalid);
+export function InvalidContextPage({ invalid }: InvalidContextPageProps) {
+  const backHref = fallbackPath(invalid);
   return (
     <Container>
       <Stack gap="4">

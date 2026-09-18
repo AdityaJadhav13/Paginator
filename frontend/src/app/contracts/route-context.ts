@@ -1,38 +1,7 @@
-/**
- * Pageinator workspace route-context contract.
- *
- * This is a UI resolution contract, not a backend enum or production
- * DTO. It resolves opaque URL path segments against an injected
- * fixture set and reports only whether the context is valid — never
- * why an invalid case failed, so a caller cannot construct a
- * distinguishable response for "does not exist" vs. "exists under a
- * different organization/publication" (UI002 §8.1).
- *
- * `resolveWorkspaceContext` is pure and fixture-set-agnostic: it takes
- * the fixture arrays as an argument rather than importing them, so
- * durable `src/app/**` code never imports `src/demo/**` (UI001's same
- * replaceability boundary, applied to UI002).
- */
-import { createContext, useContext } from "react";
-
-export interface OrgFixtureLike {
-  readonly id: string;
-  readonly name: string;
-}
-
-export interface PublicationFixtureLike {
-  readonly id: string;
-  readonly orgId: string;
-  readonly name: string;
-  readonly locale: string;
-  readonly direction: "ltr" | "rtl";
-}
-
-export interface EditionFixtureLike {
-  readonly id: string;
-  readonly publicationId: string;
-  readonly label: string;
-}
+import { createContext, createElement, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useLocation, useParams } from "react-router";
+import type { EditionDto, OrganizationDto, PublicationDto, ServiceError, WorkspaceQueryService } from "../../services/index.ts";
+import { useSession } from "../../features/auth/SessionProvider.tsx";
 
 export interface ReleaseFixtureLike {
   readonly id: string;
@@ -40,145 +9,194 @@ export interface ReleaseFixtureLike {
   readonly label: string;
 }
 
-export interface WorkspaceFixtureSet {
-  readonly organizations: readonly OrgFixtureLike[];
-  readonly publications: readonly PublicationFixtureLike[];
-  readonly editions: readonly EditionFixtureLike[];
-  readonly releases: readonly ReleaseFixtureLike[];
-}
-
-export interface ResolveParams {
-  orgId?: string;
-  pubId?: string;
-  editionId?: string;
-  releaseId?: string;
-}
-
-/**
- * A successfully resolved context. Deeper fields (`publication`,
- * `edition`, `release`) are present only when the corresponding URL
- * segment was present and resolved.
- */
 export interface ResolvedContext {
-  status: "ok";
-  organization: OrgFixtureLike;
-  publication?: PublicationFixtureLike;
-  edition?: EditionFixtureLike;
-  release?: ReleaseFixtureLike;
+  readonly status: "ok";
+  readonly organization: OrganizationDto;
+  readonly publication?: PublicationDto;
+  readonly edition?: EditionDto;
+  readonly release?: ReleaseFixtureLike;
+  readonly organizations: readonly OrganizationDto[];
+  readonly publications: readonly PublicationDto[];
 }
 
-/**
- * An invalid context. `level` says *which* segment failed to resolve
- * — needed to phrase a message ("this publication...") and to pick a
- * fallback link — but deliberately carries no reason *within* that
- * level: whether `:pubId` did not match anything at all, or matched a
- * publication that belongs to a *different* organization, both
- * produce the exact same `{ status: "invalid", level: "publication",
- * organization }` value and so must render identically (§8.1 rule 2).
- * `organization` is included only when it did resolve, so a caller can
- * build a "return to a valid entry point" link (§8.1 rule 4) without
- * a second lookup — it is never the *cause* of a deeper-level failure.
- */
 export interface InvalidContext {
-  status: "invalid";
-  level: "organization" | "publication" | "edition" | "release";
-  organization?: OrgFixtureLike;
-  publication?: PublicationFixtureLike;
+  readonly status: "invalid";
+  readonly level: "organization" | "publication" | "edition" | "release";
+  readonly organization?: OrganizationDto;
+  readonly publication?: PublicationDto;
 }
 
-export type ContextResolution = ResolvedContext | InvalidContext;
+export type WorkspaceRouteState =
+  | { readonly status: "loading" }
+  | { readonly status: "signed-out"; readonly returnTo: string }
+  | { readonly status: "allowed"; readonly context: ResolvedContext }
+  | { readonly status: "inaccessible" }
+  | { readonly status: "invalid-context"; readonly invalid: InvalidContext }
+  | { readonly status: "denied"; readonly error: Extract<ServiceError, { code: "denied" }> }
+  | {
+      readonly status: "temporary-failure";
+      readonly error: Extract<ServiceError, { code: "temporary-failure" }>;
+      readonly assertive: boolean;
+    };
 
-/**
- * Resolves org/publication/edition/release path params against a
- * caller-supplied fixture set. A param that is absent from `params`
- * (the route did not declare that segment) is not checked; a param
- * that is present but does not resolve — including resolving to a
- * record that exists under a *different* parent — makes the whole
- * result `{ status: "invalid" }`.
- */
-export function resolveWorkspaceContext(
-  fixtures: WorkspaceFixtureSet,
-  params: ResolveParams
-): ContextResolution {
-  if (!params.orgId) {
-    return { status: "invalid", level: "organization" };
-  }
-  const organization = fixtures.organizations.find((o) => o.id === params.orgId);
-  if (!organization) {
-    return { status: "invalid", level: "organization" };
-  }
-
-  if (!params.pubId) {
-    return { status: "ok", organization };
-  }
-  const publication = fixtures.publications.find(
-    (p) => p.id === params.pubId && p.orgId === organization.id
-  );
-  if (!publication) {
-    return { status: "invalid", level: "publication", organization };
-  }
-
-  let edition: EditionFixtureLike | undefined;
-  if (params.editionId) {
-    edition = fixtures.editions.find(
-      (e) => e.id === params.editionId && e.publicationId === publication.id
-    );
-    if (!edition) {
-      return { status: "invalid", level: "edition", organization, publication };
-    }
-  }
-
-  let release: ReleaseFixtureLike | undefined;
-  if (params.releaseId) {
-    release = fixtures.releases.find(
-      (r) => r.id === params.releaseId && r.publicationId === publication.id
-    );
-    if (!release) {
-      return { status: "invalid", level: "release", organization, publication };
-    }
-  }
-
-  return { status: "ok", organization, publication, edition, release };
+interface WorkspaceRouteContextValue {
+  readonly state: WorkspaceRouteState;
+  retry(): void;
 }
 
-/**
- * Picks a safe, always-resolvable "return to a valid entry point"
- * link for an invalid context (§8.1 rule 4): the current publication's
- * overview when that publication resolved, else the current
- * organization's settings page when that organization resolved, else
- * the public home page. It never selects a different fixture record to
- * construct a fallback.
- */
-export function fallbackPath(
-  _fixtures: WorkspaceFixtureSet,
-  invalid: InvalidContext
-): string {
-  if (!invalid.organization) {
-    return "/";
+const WorkspaceRouteContext = createContext<WorkspaceRouteContextValue | null>(null);
+
+function serviceErrorState(error: ServiceError, assertive: boolean): WorkspaceRouteState {
+  if (error.code === "temporary-failure") {
+    return { status: "temporary-failure", error, assertive };
   }
-  if (invalid.publication) {
-    return `/org/${invalid.organization.id}/pub/${invalid.publication.id}/overview`;
-  }
+  if (error.code === "denied") return { status: "denied", error };
+  return { status: "invalid-context", invalid: {
+    status: "invalid",
+    level: error.resource === "user" ? "organization" : error.resource,
+  } };
+}
+
+export function fallbackPath(invalid: InvalidContext): string {
+  if (!invalid.organization) return "/";
+  if (invalid.publication) return `/org/${invalid.organization.id}/pub/${invalid.publication.id}/overview`;
   return `/org/${invalid.organization.id}/settings`;
 }
 
-/**
- * Dependency-injection seam: `WorkspaceShell` (durable) consumes this
- * context; the disposable route assembly provides the real fixture
- * set. No default value — using the hook outside a provider is a
- * programming error, not a valid empty state.
- */
-const WorkspaceFixturesContext = createContext<WorkspaceFixtureSet | null>(null);
+export interface WorkspaceRouteProviderProps {
+  readonly workspace: WorkspaceQueryService;
+  readonly releases: readonly ReleaseFixtureLike[];
+  readonly getSessionMutationGeneration?: () => number;
+  readonly children: ReactNode;
+}
 
-export const WorkspaceFixturesProvider = WorkspaceFixturesContext.Provider;
+const INITIAL_SESSION_GENERATION = () => 0;
 
-export function useWorkspaceFixtures(): WorkspaceFixtureSet {
-  const fixtures = useContext(WorkspaceFixturesContext);
-  if (!fixtures) {
-    throw new Error(
-      "useWorkspaceFixtures() called outside a WorkspaceFixturesProvider. " +
-        "The disposable route assembly must wrap the app in one."
+export function WorkspaceRouteProvider({
+  workspace,
+  releases,
+  getSessionMutationGeneration = INITIAL_SESSION_GENERATION,
+  children,
+}: WorkspaceRouteProviderProps) {
+  const params = useParams<{ orgId?: string; pubId?: string; editionId?: string; releaseId?: string }>();
+  const location = useLocation();
+  const session = useSession();
+  const [revision, setRevision] = useState(0);
+  const [state, setState] = useState<WorkspaceRouteState>({ status: "loading" });
+  const requestRef = useRef(0);
+  const lastResolutionPathRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const request = ++requestRef.current;
+    let active = true;
+    const currentSession = session.state;
+    if (currentSession.status === "loading") { setState({ status: "loading" }); return; }
+    if (currentSession.status === "signed-out") {
+      setState({
+        status: "signed-out",
+        returnTo: session.intentionalSignOut ? "" : location.pathname,
+      });
+      return;
+    }
+    if (currentSession.status === "denied" || currentSession.status === "temporary-failure") { setState(currentSession); return; }
+
+    const organizationId = params.orgId;
+    const publicationId = params.pubId;
+    const grant = currentSession.session.access.find((candidate) => candidate.organizationId === organizationId);
+    if (!organizationId || !grant) { setState({ status: "inaccessible" }); return; }
+    if (publicationId && !grant.publicationIds.includes(publicationId)) { setState({ status: "inaccessible" }); return; }
+
+    const assertiveFailure = revision > 0 || (
+      lastResolutionPathRef.current !== undefined &&
+      lastResolutionPathRef.current !== location.pathname
     );
-  }
-  return fixtures;
+    lastResolutionPathRef.current = location.pathname;
+    const expectedSessionGeneration = getSessionMutationGeneration();
+    const isCurrent = () =>
+      active &&
+      request === requestRef.current &&
+      expectedSessionGeneration === getSessionMutationGeneration();
+
+    setState({ status: "loading" });
+    void (async () => {
+      const organizationsResult = await workspace.listOrganizations();
+      if (!organizationsResult.ok) { if (isCurrent()) setState(serviceErrorState(organizationsResult.error, assertiveFailure)); return; }
+      if (!isCurrent()) return;
+      const organizationResult = await workspace.getOrganization({ organizationId });
+      if (!organizationResult.ok) {
+        if (isCurrent()) setState(organizationResult.error.code === "unavailable" ? { status: "invalid-context", invalid: { status: "invalid", level: "organization" } } : serviceErrorState(organizationResult.error, assertiveFailure));
+        return;
+      }
+      if (!isCurrent()) return;
+      const organization = organizationResult.value;
+      const organizations = organizationsResult.value.filter((candidate) => currentSession.session.access.some((candidateGrant) => candidateGrant.organizationId === candidate.id));
+
+      if (!publicationId) {
+        if (currentSession.session.activeOrganizationId !== organizationId) {
+          if (!isCurrent()) return;
+          await session.selectOrganization(organizationId);
+          return;
+        }
+        if (isCurrent()) setState({ status: "allowed", context: { status: "ok", organization, organizations, publications: [] } });
+        return;
+      }
+
+      const publicationsResult = await workspace.listPublications({ organizationId });
+      if (!publicationsResult.ok) { if (isCurrent()) setState(serviceErrorState(publicationsResult.error, assertiveFailure)); return; }
+      if (!isCurrent()) return;
+      const publicationResult = await workspace.getPublication({ organizationId, publicationId });
+      if (!publicationResult.ok) {
+        if (isCurrent()) setState(publicationResult.error.code === "unavailable" ? { status: "invalid-context", invalid: { status: "invalid", level: "publication", organization } } : serviceErrorState(publicationResult.error, assertiveFailure));
+        return;
+      }
+      if (!isCurrent()) return;
+      const publication = publicationResult.value;
+      const publications = publicationsResult.value.filter((candidate) => grant.publicationIds.includes(candidate.id));
+
+      let edition: EditionDto | undefined;
+      if (params.editionId) {
+        const editionResult = await workspace.getEdition({ organizationId, publicationId, editionId: params.editionId });
+        if (!editionResult.ok) {
+          if (isCurrent()) setState(editionResult.error.code === "unavailable" ? { status: "invalid-context", invalid: { status: "invalid", level: "edition", organization, publication } } : serviceErrorState(editionResult.error, assertiveFailure));
+          return;
+        }
+        if (!isCurrent()) return;
+        edition = editionResult.value;
+      }
+
+      let release: ReleaseFixtureLike | undefined;
+      if (params.releaseId) {
+        release = releases.find((candidate) => candidate.id === params.releaseId && candidate.publicationId === publicationId);
+        if (!release) { if (isCurrent()) setState({ status: "invalid-context", invalid: { status: "invalid", level: "release", organization, publication } }); return; }
+      }
+
+      if (currentSession.session.activeOrganizationId !== organizationId || currentSession.session.activePublicationId !== publicationId) {
+        // One atomic mutation: selectPublication sets both the active
+        // organization and publication. Splitting it into an organization
+        // step followed by a publication step would open an await window
+        // in which a logout, reset, or newer navigation could land and
+        // then be overwritten by this now-stale publication step.
+        if (!isCurrent()) return;
+        await session.selectPublication(organizationId, publicationId);
+        return;
+      }
+
+      if (isCurrent()) setState({ status: "allowed", context: { status: "ok", organization, publication, edition, release, organizations, publications } });
+    })();
+    return () => {
+      active = false;
+    };
+  }, [getSessionMutationGeneration, location.pathname, params.editionId, params.orgId, params.pubId, params.releaseId, releases, revision, session, workspace]);
+
+  return createElement(
+    WorkspaceRouteContext.Provider,
+    { value: { state, retry: () => setRevision((current) => current + 1) } },
+    children
+  );
+}
+
+export function useWorkspaceRouteContext(): WorkspaceRouteContextValue {
+  const value = useContext(WorkspaceRouteContext);
+  if (!value) throw new Error("useWorkspaceRouteContext() called outside WorkspaceRouteProvider.");
+  return value;
 }

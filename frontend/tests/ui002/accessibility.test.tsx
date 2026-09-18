@@ -24,16 +24,19 @@ async function checkAxe(container: HTMLElement) {
 describe("axe — one representative route per shell", () => {
   it("PublicShell: zero serious/critical violations", async () => {
     const { container } = renderAt("/");
+    await screen.findByRole("heading", { level: 1, name: "Home" });
     expect(await checkAxe(container)).toHaveLength(0);
   });
 
   it("WorkspaceShell (org-scoped): zero serious/critical violations", async () => {
     const { container } = renderAt("/org/org-demo-sahyadri/settings");
+    await screen.findByRole("heading", { level: 1, name: "Organization settings" });
     expect(await checkAxe(container)).toHaveLength(0);
   });
 
   it("WorkspaceShell (publication-scoped): zero serious/critical violations", async () => {
     const { container } = renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
+    await screen.findByRole("heading", { level: 1, name: "Overview" });
     expect(await checkAxe(container)).toHaveLength(0);
   });
 
@@ -41,6 +44,7 @@ describe("axe — one representative route per shell", () => {
     const { container } = renderAt(
       "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-001/generate"
     );
+    await screen.findByRole("heading", { level: 1, name: "Generate" });
     expect(await checkAxe(container)).toHaveLength(0);
   });
 
@@ -48,22 +52,25 @@ describe("axe — one representative route per shell", () => {
     const { container } = renderAt(
       "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-001/editor"
     );
+    await screen.findByRole("heading", { level: 1, name: "Editor" });
     expect(await checkAxe(container)).toHaveLength(0);
   });
 
   it("NotFoundPage: zero serious/critical violations", async () => {
     const { container } = renderAt("/nowhere");
+    await screen.findByRole("heading", { level: 1, name: "Page not found" });
     expect(await checkAxe(container)).toHaveLength(0);
   });
 
-  it("InvalidContextPage: zero serious/critical violations", async () => {
+  it("AccessUnavailablePage: zero serious/critical violations", async () => {
     const { container } = renderAt("/org/nonexistent-org/settings");
+    await screen.findByRole("heading", { level: 1, name: "Access unavailable" });
     expect(await checkAxe(container)).toHaveLength(0);
   });
 });
 
 describe("Landmarks (§7.6)", () => {
-  it("exactly one h1 per rendered route", () => {
+  it("exactly one h1 per rendered route", async () => {
     for (const path of [
       "/",
       "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview",
@@ -71,53 +78,61 @@ describe("Landmarks (§7.6)", () => {
       "/nowhere",
     ]) {
       const { container, unmount } = renderAt(path);
+      await screen.findByRole("heading", { level: 1 });
       expect(container.querySelectorAll("h1")).toHaveLength(1);
       unmount();
     }
   });
 
-  it("every nav landmark has a distinct aria-label", () => {
+  it("every nav landmark has a distinct aria-label", async () => {
     const { container } = renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
+    await screen.findByRole("heading", { level: 1, name: "Overview" });
     const labels = Array.from(container.querySelectorAll("nav[aria-label]")).map((n) =>
       n.getAttribute("aria-label")
     );
     expect(new Set(labels).size).toBe(labels.length);
   });
 
-  it("each shell has exactly one <main> landmark", () => {
+  it("each shell has exactly one <main> landmark", async () => {
     const { container } = renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
+    await screen.findByRole("heading", { level: 1, name: "Overview" });
     expect(container.querySelectorAll("main")).toHaveLength(1);
   });
 });
 
 describe("RTL (§7.2, AC-18)", () => {
-  it("sets dir=rtl/lang=ur-IN for the Urdu-evening publication", () => {
+  it("sets dir=rtl/lang=ur-IN for the Urdu-evening publication", async () => {
     const { container } = renderAt("/org/org-demo-sahyadri/pub/pub-demo-urdu-evening/overview");
+    await screen.findByRole("heading", { level: 1, name: "Overview" });
     const shell = container.querySelector(".pg-shell--workspace");
     expect(shell).toHaveAttribute("dir", "rtl");
     expect(shell).toHaveAttribute("lang", "ur-IN");
   });
 
-  it("defaults to dir=ltr for the Pune Daily publication", () => {
+  it("defaults to dir=ltr for the Pune Daily publication", async () => {
     const { container } = renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
+    await screen.findByRole("heading", { level: 1, name: "Overview" });
     const shell = container.querySelector(".pg-shell--workspace");
     expect(shell).toHaveAttribute("dir", "ltr");
     expect(shell).toHaveAttribute("lang", "en-IN");
   });
 
-  it("defaults to dir=ltr when no publication is resolved (org-admin routes)", () => {
+  it("defaults to dir=ltr when no publication is resolved (org-admin routes)", async () => {
     const { container } = renderAt("/org/org-demo-sahyadri/settings");
+    await screen.findByRole("heading", { level: 1, name: "Organization settings" });
     const shell = container.querySelector(".pg-shell--workspace");
     expect(shell).toHaveAttribute("dir", "ltr");
   });
 
   it("RTL publication overview still has zero serious/critical axe violations", async () => {
     const { container } = renderAt("/org/org-demo-sahyadri/pub/pub-demo-urdu-evening/overview");
+    await screen.findByRole("heading", { level: 1, name: "Overview" });
     expect(await checkAxe(container)).toHaveLength(0);
   });
 
-  it("RTL: organization and publication switchers remain labelled and reachable", () => {
+  it("RTL: organization and publication switchers remain labelled and reachable", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-urdu-evening/overview");
+    await screen.findByRole("heading", { level: 1, name: "Overview" });
     expect(screen.getByRole("combobox", { name: "Organization" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Publication" })).toBeInTheDocument();
   });

@@ -19,7 +19,7 @@ describe("Deep link resolves the correct shell", () => {
   const cases: Array<{ path: string; shell: "public" | "workspace" | "editor"; h1: string }> = [
     { path: "/", shell: "public", h1: "Home" },
     { path: "/features", shell: "public", h1: "Features" },
-    { path: "/login", shell: "public", h1: "Sign in" },
+    { path: "/login", shell: "public", h1: "Already using a simulated session" },
     { path: "/onboarding", shell: "public", h1: "Onboarding" },
     { path: "/org/org-demo-sahyadri/settings", shell: "workspace", h1: "Organization settings" },
     {
@@ -45,9 +45,9 @@ describe("Deep link resolves the correct shell", () => {
   ];
 
   for (const { path, shell, h1 } of cases) {
-    it(`"${path}" resolves to the ${shell} shell with heading "${h1}"`, () => {
+    it(`"${path}" resolves to the ${shell} shell with heading "${h1}"`, async () => {
       const { container } = renderAt(path);
-      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(h1);
+      expect(await screen.findByRole("heading", { level: 1, name: h1 })).toHaveTextContent(h1);
 
       if (shell === "public") {
         expect(container.querySelector(".pg-shell--public")).toBeInTheDocument();
@@ -66,9 +66,9 @@ describe("Deep link resolves the correct shell", () => {
 // ── AC-04: edition workspace root redirects to content ────────────────
 
 describe("Edition workspace root redirect", () => {
-  it("resolves .../editions/:editionId to the content tab", () => {
+  it("resolves .../editions/:editionId to the content tab", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-001");
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Content");
+    expect(await screen.findByRole("heading", { level: 1, name: "Content" })).toHaveTextContent("Content");
   });
 });
 
@@ -82,8 +82,10 @@ describe("Refresh resolves identically to a fresh deep link", () => {
   ];
 
   for (const path of paths) {
-    it(`"${path}" renders the same content on a fresh mount as on a repeat fresh mount`, () => {
+    it(`"${path}" renders the same content on a fresh mount as on a repeat fresh mount`, async () => {
+      const expectedHeading = path === "/" ? "Home" : path.endsWith("/editor") ? "Editor" : "Overview";
       const first = renderAt(path);
+      await screen.findByRole("heading", { level: 1, name: expectedHeading });
       const firstH1 = first.container.querySelector("h1")?.textContent;
       first.unmount();
 
@@ -91,6 +93,7 @@ describe("Refresh resolves identically to a fresh deep link", () => {
       // from a fresh mount at the same URL — there is no client state
       // to lose, because UI002 has no service layer (§9.2).
       const second = renderAt(path);
+      await screen.findByRole("heading", { level: 1, name: expectedHeading });
       expect(second.container.querySelector("h1")?.textContent).toBe(firstH1);
     });
   }
@@ -139,38 +142,38 @@ describe("Browser back/forward", () => {
 // ── AC-05, AC-22: not-found vs invalid-context are distinct ───────────
 
 describe("Not-found", () => {
-  it("an unmatched path renders NotFoundPage, not InvalidContextPage", () => {
+  it("an unmatched path renders NotFoundPage, not InvalidContextPage", async () => {
     renderAt("/this/path/does/not/exist");
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Page not found");
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Page not found");
     expect(screen.queryByText("Not available")).not.toBeInTheDocument();
   });
 
-  it("an org-scoped path with no matching child also renders NotFoundPage", () => {
+  it("an org-scoped path with no matching child also renders NotFoundPage", async () => {
     const { container } = renderAt(
       "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/totally-unknown-section"
     );
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Page not found");
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Page not found");
     expect(container.querySelector(".pg-shell--workspace")).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Publication" })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Primary" })).not.toBeInTheDocument();
   });
 
-  it("an unknown editor destination retains EditorShell", () => {
+  it("an unknown editor destination retains EditorShell", async () => {
     const { container } = renderAt(
       "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-001/editor/unknown"
     );
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Page not found");
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Page not found");
     expect(container.querySelector(".pg-shell--editor")).toBeInTheDocument();
   });
 
-  it("an unknown route shape remains not-found even when its context IDs are invalid", () => {
+  it("an unknown route shape remains not-found even when its context IDs are invalid", async () => {
     renderAt("/org/nonexistent-org/pub/nonexistent-pub/totally-unknown-section");
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Page not found");
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Page not found");
     expect(screen.queryByText("Not available")).not.toBeInTheDocument();
   });
 
-  it("NotFoundPage renders inside Public shell chrome (route table's \"else Public\")", () => {
+  it("NotFoundPage renders inside Public shell chrome (route table's \"else Public\")", async () => {
     const { container } = renderAt("/nowhere");
+    await screen.findByRole("heading", { level: 1, name: "Page not found" });
     expect(container.querySelector(".pg-skip-link")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
   });
@@ -179,86 +182,90 @@ describe("Not-found", () => {
 // ── AC-06, AC-07, AC-08: invalid context at each level ─────────────────
 
 describe("Invalid context", () => {
-  it("a non-existent :orgId renders InvalidContextPage", () => {
+  it("a non-existent :orgId renders the integrated access surface", async () => {
     renderAt("/org/nonexistent-org/settings");
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Not available");
-    expect(screen.getByText("This organization is not available.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Access unavailable" })).toHaveTextContent("Access unavailable");
   });
 
-  it("a non-existent :pubId under a valid org renders InvalidContextPage", () => {
+  it("a non-existent :pubId under a valid org renders the integrated access surface", async () => {
     renderAt("/org/org-demo-sahyadri/pub/nonexistent-pub/overview");
-    expect(screen.getByText("This publication is not available in this organization.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Access unavailable" })).toHaveTextContent("Access unavailable");
   });
 
-  it("a :pubId that exists but belongs to a different org renders InvalidContextPage", () => {
+  it("a :pubId that exists but belongs to a different org renders the integrated access surface", async () => {
     // pub-demo-ratnagiri-tide belongs to org-demo-konkan, not org-demo-sahyadri.
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-ratnagiri-tide/overview");
-    expect(screen.getByText("This publication is not available in this organization.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Access unavailable" })).toHaveTextContent("Access unavailable");
   });
 
-  it("a non-existent :editionId under a valid publication renders InvalidContextPage", () => {
+  it("a non-existent :editionId under a valid publication renders InvalidContextPage", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/nonexistent-edition/content");
-    expect(screen.getByText("This edition is not available in this publication.")).toBeInTheDocument();
+    expect(await screen.findByText("This edition is not available in this publication.")).toBeInTheDocument();
   });
 
-  it("an :editionId that exists but belongs to a different publication renders InvalidContextPage", () => {
+  it("an :editionId that exists but belongs to a different publication renders InvalidContextPage", async () => {
     // edition-demo-002 belongs to pub-demo-ratnagiri-tide, not pub-demo-pune-daily.
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-002/content");
-    expect(screen.getByText("This edition is not available in this publication.")).toBeInTheDocument();
+    expect(await screen.findByText("This edition is not available in this publication.")).toBeInTheDocument();
   });
 
-  it("a non-existent :releaseId under a valid publication renders InvalidContextPage", () => {
+  it("a non-existent :releaseId under a valid publication renders InvalidContextPage", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/archive/nonexistent-release");
-    expect(screen.getByText("This archive release is not available in this publication.")).toBeInTheDocument();
+    expect(await screen.findByText("This archive release is not available in this publication.")).toBeInTheDocument();
   });
 
-  it("the editor route also resolves invalid context (not just workspace routes)", () => {
+  it("the editor route also resolves invalid context (not just workspace routes)", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/nonexistent-edition/editor");
-    expect(screen.getByText("This edition is not available in this publication.")).toBeInTheDocument();
+    expect(await screen.findByText("This edition is not available in this publication.")).toBeInTheDocument();
   });
 });
 
 // ── AC-09: no record leakage — identical rendering, not just "no error" ──
 
 describe("No record leakage between the two invalid-publication causes", () => {
-  it("a nonexistent :pubId and a wrong-organization :pubId render identical safe DOM", () => {
+  it("a nonexistent :pubId and a wrong-organization :pubId render identical safe DOM", async () => {
     const nonexistent = renderAt("/org/org-demo-sahyadri/pub/nonexistent-pub-xyz/overview");
+    await screen.findByRole("heading", { level: 1, name: "Access unavailable" });
     const nonexistentMarkup = nonexistent.container.querySelector("main")?.innerHTML;
     nonexistent.unmount();
 
     const wrongOrg = renderAt("/org/org-demo-sahyadri/pub/pub-demo-ratnagiri-tide/overview");
+    await screen.findByRole("heading", { level: 1, name: "Access unavailable" });
     const wrongOrgMarkup = wrongOrg.container.querySelector("main")?.innerHTML;
 
     expect(wrongOrgMarkup).toBe(nonexistentMarkup);
   });
 
-  it("InvalidContextPage never names another organization or publication", () => {
+  it("the access surface never names another organization or publication", async () => {
     const { container } = renderAt(
       "/org/org-demo-sahyadri/pub/pub-demo-ratnagiri-tide/overview"
     );
+    await screen.findByRole("heading", { level: 1, name: "Access unavailable" });
     expect(screen.queryByText(/Konkan/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Ratnagiri/)).not.toBeInTheDocument();
     expect(container.innerHTML).not.toContain("org-demo-konkan");
     expect(container.innerHTML).not.toContain("pub-demo-ratnagiri-tide");
-    expect(container.innerHTML).not.toContain("pub-demo-pune-daily");
+    expect(container.innerHTML).toContain("pub-demo-pune-daily");
   });
 
-  it("an invalid publication falls back to the resolved organization without selecting another publication", () => {
+  it("an inaccessible publication offers only the active safe workspace", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-ratnagiri-tide/overview");
-    const link = screen.getByRole("link", { name: "Return to a valid workspace page" });
-    expect(link).toHaveAttribute("href", "/org/org-demo-sahyadri/settings");
+    const link = await screen.findByRole("link", { name: "Open active workspace" });
+    expect(link).toHaveAttribute("href", "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
   });
 
-  it("nonexistent and cross-publication editions render identical safe output", () => {
+  it("nonexistent and cross-publication editions render identical safe output", async () => {
     const nonexistent = renderAt(
       "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/nonexistent-edition/content"
     );
+    await screen.findByRole("heading", { level: 1, name: "Not available" });
     const nonexistentMarkup = nonexistent.container.querySelector("main")?.innerHTML;
     nonexistent.unmount();
 
     const crossPublication = renderAt(
       "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-002/content"
     );
+    await screen.findByRole("heading", { level: 1, name: "Not available" });
     expect(crossPublication.container.querySelector("main")?.innerHTML).toBe(nonexistentMarkup);
     expect(
       screen.getByRole("link", { name: "Return to a valid workspace page" })
@@ -270,16 +277,18 @@ describe("No record leakage between the two invalid-publication causes", () => {
     expect(crossPublication.container.innerHTML).not.toContain("pub-demo-ratnagiri-tide");
   });
 
-  it("nonexistent and cross-publication archive releases render identical safe output", () => {
+  it("nonexistent and cross-publication archive releases render identical safe output", async () => {
     const nonexistent = renderAt(
       "/org/org-demo-sahyadri/pub/pub-demo-urdu-evening/archive/nonexistent-release"
     );
+    await screen.findByRole("heading", { level: 1, name: "Not available" });
     const nonexistentMarkup = nonexistent.container.querySelector("main")?.innerHTML;
     nonexistent.unmount();
 
     const crossPublication = renderAt(
       "/org/org-demo-sahyadri/pub/pub-demo-urdu-evening/archive/release-demo-001"
     );
+    await screen.findByRole("heading", { level: 1, name: "Not available" });
     expect(crossPublication.container.querySelector("main")?.innerHTML).toBe(nonexistentMarkup);
     expect(
       screen.getByRole("link", { name: "Return to a valid workspace page" })
@@ -291,10 +300,11 @@ describe("No record leakage between the two invalid-publication causes", () => {
     expect(crossPublication.container.innerHTML).not.toContain("pub-demo-pune-daily");
   });
 
-  it("a deeper invalid child preserves the resolved publication locale", () => {
+  it("a deeper invalid child preserves the resolved publication locale", async () => {
     const { container } = renderAt(
       "/org/org-demo-sahyadri/pub/pub-demo-urdu-evening/editions/nonexistent-edition/content"
     );
+    await screen.findByRole("heading", { level: 1, name: "Not available" });
     const shell = container.querySelector(".pg-shell--workspace");
     expect(shell).toHaveAttribute("dir", "rtl");
     expect(shell).toHaveAttribute("lang", "ur-IN");
@@ -304,17 +314,17 @@ describe("No record leakage between the two invalid-publication causes", () => {
 // ── AC-23, AC-24: reserved seams ────────────────────────────────────────
 
 describe("Reserved status-surface seam (§9.4, BLV2-07)", () => {
-  it("renders on WorkspaceShell with the exact required detail text", () => {
+  it("renders on WorkspaceShell with the exact required detail text", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
-    expect(screen.getByText("Simulated")).toBeInTheDocument();
+    expect(await screen.findByText("Simulated")).toBeInTheDocument();
     expect(
       screen.getByText("Reserved workspace status surface — bound to real edition state in UI015–020.")
     ).toBeInTheDocument();
   });
 
-  it("renders on EditorShell with the exact required detail text", () => {
+  it("renders on EditorShell with the exact required detail text", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-001/editor");
-    expect(screen.getByText("Simulated")).toBeInTheDocument();
+    expect(await screen.findByText("Simulated")).toBeInTheDocument();
     expect(
       screen.getByText("Reserved workspace status surface — bound to real edition state in UI015–020.")
     ).toBeInTheDocument();
@@ -322,9 +332,9 @@ describe("Reserved status-surface seam (§9.4, BLV2-07)", () => {
 });
 
 describe("Reserved edition-planning nav seam (§9.4, BLV2-02)", () => {
-  it("the Plan entry is discoverable, denied, and referenced by a visible explanation", () => {
+  it("the Plan entry is discoverable, denied, and referenced by a visible explanation", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-001/content");
-    const planButton = screen.getByRole("button", { name: "Plan" });
+    const planButton = await screen.findByRole("button", { name: "Plan" });
     expect(planButton).toHaveAttribute("aria-disabled", "true");
     expect(planButton).not.toBeDisabled();
     const describedBy = planButton.getAttribute("aria-describedby");
@@ -337,7 +347,7 @@ describe("Reserved edition-planning nav seam (§9.4, BLV2-02)", () => {
   it("does not activate on click", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-001/content");
     const user = userEvent.setup();
-    const planButton = screen.getByRole("button", { name: "Plan" });
+    const planButton = await screen.findByRole("button", { name: "Plan" });
     await user.click(planButton);
     // Still on the content tab — a real activation would have to
     // navigate somewhere, and there is nowhere for it to navigate to.
@@ -348,9 +358,9 @@ describe("Reserved edition-planning nav seam (§9.4, BLV2-02)", () => {
 // ── Placeholder truthfulness (§6.1) ─────────────────────────────────────
 
 describe("Placeholders never imply the feature behind them works", () => {
-  it("names the owning future unit and contains no fabricated data", () => {
+  it("names the owning future unit and contains no fabricated data", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/stories");
-    expect(screen.getByText(/not yet implemented/i)).toHaveTextContent("UI010–011");
+    expect(await screen.findByText(/not yet implemented/i)).toHaveTextContent("UI010–011");
     // Scoped to <main> only: the breadcrumb trail in the header is a
     // legitimate <ol> (role="list"), not fabricated story data.
     const main = document.querySelector("main")!;

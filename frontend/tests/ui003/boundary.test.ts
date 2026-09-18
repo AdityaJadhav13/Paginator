@@ -48,8 +48,12 @@ describe("UI003 replaceable boundaries", () => {
     expect(violations).toEqual([]);
   });
 
-  it("exports only the factory at runtime and keeps seed storage private", () => {
-    expect(Object.keys(publicMocks)).toEqual(["createMockServiceEnvironment"]);
+  it("exports only the composed mock factories at runtime and keeps seed storage private", () => {
+    expect(Object.keys(publicMocks)).toEqual([
+      "createMockServiceEnvironment",
+      "createMockSessionEnvironment",
+      "createMockApplicationEnvironment",
+    ]);
 
     const publicBarrel = mockModules["/src/mocks/index.ts"] ?? "";
     expect(publicBarrel).not.toMatch(/seed|createCanonicalSeed|MockSeedSnapshot/);
