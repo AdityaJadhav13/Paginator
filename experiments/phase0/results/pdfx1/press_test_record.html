@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Press Test Record</title>
+<style>
+@page{size:A4;margin:11mm}
+:root{--ink:#111;--line:#555;--muted:#555;--bg:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ink:#eee;--line:#aaa;--muted:#bbb;--bg:#161616}}
+:root[data-theme="dark"]{--ink:#eee;--line:#aaa;--muted:#bbb;--bg:#161616}
+@media print{:root{--ink:#000;--line:#444;--muted:#444;--bg:#fff}}
+body{margin:0;padding:12px 16px;background:var(--bg);color:var(--ink);font:10.5pt/1.35 -apple-system,"Segoe UI",Helvetica,Arial,"Kohinoor Devanagari","Noto Sans Devanagari",sans-serif}
+h1{font-size:15pt;margin:0 0 2mm}h2{font-size:11pt;margin:4mm 0 1.5mm}
+p{margin:1mm 0}.muted{color:var(--muted)}
+table{border-collapse:collapse;width:100%}td,th{border:0.3mm solid var(--line);padding:1.6mm 2mm;vertical-align:top;text-align:left}
+th{width:42%;font-weight:600}.box{height:14mm}.big{height:24mm}
+</style></head><body>
+<h1>मुद्रण चाचणी नोंद · Pageinator press test record</h1>
+<p class="muted">One sheet per press test. Keep the RIP/preflight report, one printed copy and a photo of the printed page. Please return this sheet with them.</p>
+
+<h2>1 · File · फाईल</h2>
+<table>
+<tr><th>Date and time received · तारीख</th><td></td></tr>
+<tr><th>File name (as received)</th><td></td></tr>
+<tr><th>Build code printed on the page (top-left “build …”)</th><td></td></tr>
+<tr><th>Received by (name) · नाव</th><td></td></tr>
+</table>
+
+<h2>2 · RIP / preflight</h2>
+<table>
+<tr><th>RIP / workflow software and version</th><td></td></tr>
+<tr><th>Preflight result (circle) · होय / नाही</th><td>Accepted without messages &nbsp;/&nbsp; Accepted with warnings &nbsp;/&nbsp; Rejected</td></tr>
+<tr><th>Exact warning or error text (copy, or attach the report)</th><td class="big"></td></tr>
+<tr><th>Did the RIP need any manual change to accept it? (which)</th><td class="box"></td></tr>
+<tr><th>Which CMYK profile / newsprint condition does your RIP use? (e.g. ISOnewspaper26v4 = IFRA26, WAN-IFRAnewspaper26v5, other). If you can, send us the .icc file</th><td class="box"></td></tr>
+<tr><th>Ink limit (total area coverage) your press works to, if known (e.g. 220%, 240%)</th><td></td></tr>
+</table>
+
+<h2>3 · Plates · प्लेट</h2>
+<table>
+<tr><th>Body text and black rules appear ONLY on the K (black) plate</th><td>Yes &nbsp;/&nbsp; No</td></tr>
+<tr><th>Colour patches on the expected plates (C, M, Y; red = M + Y; rich black = C+M+Y+K)</th><td>Yes &nbsp;/&nbsp; No</td></tr>
+<tr><th>Page size on the plate matches 347 × 540 mm</th><td>Yes &nbsp;/&nbsp; No</td></tr>
+</table>
+
+<h2>4 · Printed page · छापलेले पान</h2>
+<table>
+<tr><th>Paper (newsprint, gsm)</th><td></td></tr>
+<tr><th>Marathi text correct — no boxes, no broken conjuncts (check the 6–12 pt ladder: क्ष त्र ज्ञ श्र द्ध द्य ह्म र्य ऱ्य ट्र श्‍व)</th><td>Yes &nbsp;/&nbsp; No — where:</td></tr>
+<tr><th>Smallest ladder size that is still readable</th><td>6 &nbsp; 7 &nbsp; 8 &nbsp; 9 &nbsp; 10 &nbsp; 12 pt</td></tr>
+<tr><th>Grey wedge: which step looks like a middle grey? Do 5% and 10% still show?</th><td></td></tr>
+<tr><th>Thinnest line that prints cleanly</th><td>0.1 &nbsp; 0.25 &nbsp; 0.5 &nbsp; 1 &nbsp; 2 pt</td></tr>
+<tr><th>White text on black readable (not filled in)</th><td>Yes &nbsp;/&nbsp; No</td></tr>
+<tr><th>Registration / colour / ink problems</th><td class="box"></td></tr>
+<tr><th>Body columns look like our own pages? Anything odd? · शेरा</th><td class="box"></td></tr>
+</table>
+
+<h2>5 · Verdict</h2>
+<table>
+<tr><th>Would you accept a PDF made like this for production?</th><td>Yes &nbsp;/&nbsp; Yes, if: ________________ &nbsp;/&nbsp; No, because: ________________</td></tr>
+<tr><th>Name and signature · नाव आणि सही</th><td class="box"></td></tr>
+</table>
+<p class="muted">If the press ever rejects any PDF — ours or anyone else's — please keep that file and the reason. One rejected file with its reason helps us more than many accepted ones.</p>
+</body></html>

@@ -1,0 +1,44 @@
+{
+ "A_white_overprint": {
+  "target": "overprint only when painting 100K black",
+  "caught": true,
+  "failed_checks": [
+   "overprint only when painting 100K black"
+  ]
+ },
+ "B_body_size": {
+  "target": "every glyph: font, size, id and position",
+  "caught": true,
+  "failed_checks": [
+   "every glyph: font, size, id and position as composed"
+  ]
+ },
+ "C_empty_mark_outline": {
+  "target": "outline and advance = the original font",
+  "caught": true,
+  "failed_checks": [
+   "F1: every used glyph's outline and advance = the original font (re-instanced independently)"
+  ]
+ },
+ "D_xref_offset": {
+  "target": "qpdf structural check",
+  "caught": true,
+  "failed_checks": [
+   "qpdf structural check"
+  ]
+ },
+ "E_mirrored_mark_offsets": {
+  "target": "INDEPENDENT shaping: vertical mark offsets",
+  "caught": true,
+  "failed_checks": [
+   "INDEPENDENT shaping: vertical mark offsets (rakar, u/uu matras, nukta\u2026) as HarfBuzz"
+  ]
+ },
+ "F_wrong_glyph_id": {
+  "target": "INDEPENDENT shaping: same glyph ids",
+  "caught": true,
+  "failed_checks": [
+   "INDEPENDENT shaping: same glyph ids as HarfBuzz for every line"
+  ]
+ }
+}

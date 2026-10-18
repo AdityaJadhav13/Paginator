@@ -1,0 +1,206 @@
+{
+ "pdf": "/Users/adityajadhav/Desktop/Paginator/experiments/phase0/results/pdfx1/pageinator_press_test_synthetic.pdf",
+ "results": [
+  {
+   "check": "manifest describes this exact file (SHA-256)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "qpdf structural check",
+   "pass": true,
+   "detail": "no problems"
+  },
+  {
+   "check": "not encrypted",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "classic xref, no object streams",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "header %PDF-1.4 (X-1a:2003)",
+   "pass": true,
+   "detail": "%PDF-1.4"
+  },
+  {
+   "check": "Info /GTS_PDFXVersion = PDF/X-1a:2003",
+   "pass": true,
+   "detail": "PDF/X-1a:2003"
+  },
+  {
+   "check": "no GTS_PDFXConformance key (not used in PDF/X-1a:2003)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "Title present",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "CreationDate is a PDF date",
+   "pass": true,
+   "detail": "D:20261014152409+00'00'"
+  },
+  {
+   "check": "ModDate is a PDF date",
+   "pass": true,
+   "detail": "D:20261014152409+00'00'"
+  },
+  {
+   "check": "/Trapped is /False",
+   "pass": true,
+   "detail": "/False"
+  },
+  {
+   "check": "trailer /ID present (2 strings)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "OutputIntent /S /GTS_PDFX",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "OutputConditionIdentifier as declared",
+   "pass": true,
+   "detail": "IFRA26"
+  },
+  {
+   "check": "registered characterization: RegistryName present, no embedded DestOutputProfile",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "MediaBox = 347.0 × 540.0 mm",
+   "pass": true,
+   "detail": "[0.0, 0.0, 983.622, 1530.709]"
+  },
+  {
+   "check": "TrimBox = 347.0 × 540.0 mm",
+   "pass": true,
+   "detail": "[0.0, 0.0, 983.622, 1530.709]"
+  },
+  {
+   "check": "BleedBox = 347.0 × 540.0 mm",
+   "pass": true,
+   "detail": "[0.0, 0.0, 983.622, 1530.709]"
+  },
+  {
+   "check": "no ArtBox (TrimBox only)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "only DeviceCMYK k/K colour; no images, shadings, cm, TJ or text-state tricks",
+   "pass": true,
+   "detail": "ok"
+  },
+  {
+   "check": "overprint only when painting 100K black",
+   "pass": true,
+   "detail": "14633 glyph paints checked; overprint states ['GSop']"
+  },
+  {
+   "check": "no transparency, transfer or halftone keys in ExtGState",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "no XObjects / images / annotations",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "every Tj: one 2-byte glyph, upright unscaled Tm",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "every glyph: font, size, id and position as composed",
+   "pass": true,
+   "detail": "14633 glyphs decoded, 14633 expected, 0 mismatches"
+  },
+  {
+   "check": "F1: Type0/CIDFontType2, Identity-H, CIDToGIDMap Identity, FontFile2, ToUnicode, subset tag",
+   "pass": true,
+   "detail": "/FTZOMM+NotoSerifDevanagari-Condensed875"
+  },
+  {
+   "check": "F1: /W widths = embedded advances for 188 used glyphs",
+   "pass": true,
+   "detail": "mismatch []"
+  },
+  {
+   "check": "F1: every used glyph's outline and advance = the original font (re-instanced independently)",
+   "pass": true,
+   "detail": "188 glyphs, max point deviation 0 units"
+  },
+  {
+   "check": "F2: Type0/CIDFontType2, Identity-H, CIDToGIDMap Identity, FontFile2, ToUnicode, subset tag",
+   "pass": true,
+   "detail": "/GFHVXR+NotoSansDevanagari-Bold"
+  },
+  {
+   "check": "F2: /W widths = embedded advances for 44 used glyphs",
+   "pass": true,
+   "detail": "mismatch []"
+  },
+  {
+   "check": "F2: every used glyph's outline and advance = the original font (re-instanced independently)",
+   "pass": true,
+   "detail": "44 glyphs, max point deviation 0 units"
+  },
+  {
+   "check": "F3: Type0/CIDFontType2, Identity-H, CIDToGIDMap Identity, FontFile2, ToUnicode, subset tag",
+   "pass": true,
+   "detail": "/GRNXEG+NotoSansDevanagari-Regular"
+  },
+  {
+   "check": "F3: /W widths = embedded advances for 83 used glyphs",
+   "pass": true,
+   "detail": "mismatch []"
+  },
+  {
+   "check": "F3: every used glyph's outline and advance = the original font (re-instanced independently)",
+   "pass": true,
+   "detail": "83 glyphs, max point deviation 0 units"
+  },
+  {
+   "check": "INDEPENDENT shaping: same glyph ids as HarfBuzz for every line",
+   "pass": true,
+   "detail": "646/646 lines identical"
+  },
+  {
+   "check": "INDEPENDENT shaping: vertical mark offsets (rakar, u/uu matras, nukta…) as HarfBuzz",
+   "pass": true,
+   "detail": "0 glyphs off; all within 0.02 pt"
+  },
+  {
+   "check": "INDEPENDENT shaping: horizontal spacing inside every word as HarfBuzz",
+   "pass": true,
+   "detail": "0 pairs off; all within 0.02 pt"
+  },
+  {
+   "check": "every line's text reads back exactly",
+   "pass": true,
+   "detail": "646 lines compared; mismatches 0"
+  },
+  {
+   "check": "page renders with content",
+   "pass": true,
+   "detail": "5763 dark pixels at 30 dpi"
+  },
+  {
+   "check": "patch colours render as intended",
+   "pass": true,
+   "detail": "{\"cyan\": [0, 174, 239], \"magenta\": [237, 2, 140], \"yellow\": [255, 241, 1], \"red\": [238, 29, 35], \"k100\": [35, 31, 32], \"k50\": [147, 149, 152], \"k0\": [255, 255, 255]}"
+  }
+ ],
+ "passed": true
+}
