@@ -213,6 +213,11 @@ Result: **page 3 of the 11 November edition**, a full news page. An earlier run,
 8. **Copyfit (v2.5):** stories that do not fit are re-set at 99–96% of their size. Pages passing every gate went from 4 to 22.
 9. **Page model 0.2.0:** column geometry from each story's own printed lines (pull quotes and sidebars). Pages passing every gate went from 22 to 29.
 10. **Photo pipeline (`photos.py`, `--photos`, v2.6):** real photos and ads in newsprint CMYK. After the verifier's report: photos drawn above placeholders, cut-outs flattened onto the printed backdrop (v2.6.1, photos 1.1.0).
+11. **Editor review, round 1 (2026-10-18, v2.7.1):**
+   - Headline lines that print set to at least 85% of their measure are filled to exactly their printed extent (letters stretched by at most 18%, the rest spread over word spaces).
+   - Lines of free text blocks that print justified to the block's width (not a block's last line) are justified again; the editorial no longer reads ragged.
+   - Results are unchanged: 29 of 60 Marathi pages pass every gate. A first version filled headlines to the whole measure and pushed some into the next column (25/60); it was corrected before commit.
+   - The press page's bytes changed with this, so it is to be re-verified.
 
 ## 8. G1 and G2
 - **G1: NOT MET.** The automated evidence is strong: depth within G1 A7 for 92–95% of stories on held-out editions, against a 90% bar, and no lost text. G1 still needs the editors' blind reviews (body round 1, the headline round) and fresh copy.

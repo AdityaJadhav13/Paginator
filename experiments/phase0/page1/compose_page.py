@@ -57,7 +57,7 @@ from fontTools.ttLib import TTFont  # noqa: E402
 K3 = H.K3
 MM = X.MM
 NBSP = "\u00a0"
-PAGE_MAKER = "page1-compose/2.6.1"
+PAGE_MAKER = "page1-compose/2.7.1"
 BLACK, WHITE = (0, 0, 0, 1), (0, 0, 0, 0)
 SERIF, SANS = "Noto Serif Devanagari", "Noto Sans Devanagari"
 BODY_AXES = {"wdth": 87.5}
@@ -69,6 +69,9 @@ WRAP_GAP_V_MM = 1.0          # vertical clearance below/above an obstacle
 MIN_LINE_MM = 15.0           # narrower than this beside an obstacle: the line moves below it instead
 ASC, DESC = 0.80, 0.30       # line box above/below the baseline, in ems (Devanagari marks included)
 INK_CLEAR_MM = 0.25          # display lines: required clearance between one line's lowest and the next line's highest ink
+HEAD_FILLED = 0.85            # a headline line print set to ≥ this share of its measure is filled to the measure
+HEAD_HSCALE_MAX = 1.18        # … stretching its letters by at most this much
+HEAD_GAP_EM = 0.5             # … and its word spaces by at most this much each
 MIN_LEAD_EM = 1.20           # the stand-in's vowel signs reach further than the house face's: below 1.20 em of leading
                              # a falling sign (ु ू) touches a rising one (ि ी) on the next line, so the stand-in is capped
 CODE_HASH = hashlib.sha256(b"".join((HERE / f).read_bytes() for f in ("compose_page.py", "textfix.py"))).hexdigest()[:12]
@@ -156,9 +159,14 @@ class Builder(MP.PageBuilder):
                    hscale)
         return x - x0
 
-    def text_line(self, text, fkey, size, x, y, cmyk=BLACK, align="left", meta=None):
+    def text_line(self, text, fkey, size, x, y, cmyk=BLACK, align="left", meta=None, justify_to=None):
+        """One line of short text; justify_to (mm): spread the word spaces so the line spans exactly that width."""
         p = self.prepare(text, fkey, size)
         width = sum(a for r in p.runs for a in r.x_advances_mm)
+        n_sp = sum(1 for cl in p.clusters if cl.is_space)
+        sp_extra = (justify_to - width) / n_sp if justify_to and n_sp and justify_to > width else 0.0
+        if sp_extra:
+            width, align = justify_to, "left"
         x0 = x - width if align == "right" else x - width / 2 if align == "center" else x
         out, cx = [], x0
         for cl in p.clusters:
@@ -167,9 +175,11 @@ class Builder(MP.PageBuilder):
                 r = p.runs[ri]
                 gl.append((r.glyph_ids[gi], cx + r.x_offsets_mm[gi], y + r.y_offsets_mm[gi]))
                 cx += r.x_advances_mm[gi]
+            if cl.is_space:
+                cx += sp_extra
             out.append((" " if cl.is_space else p.text[cl.start:cl.end], gl))
         self._emit(fkey, size, cmyk, out, tuple(cmyk) == BLACK,
-                   {"kind": "natural", "x0_mm": round(x0, 3), "x1_mm": round(x0 + width, 3), "baseline_mm": round(y, 3), **(meta or {})})
+                   {"kind": "justified" if sp_extra else "natural", "x0_mm": round(x0, 3), "x1_mm": round(x0 + width, 3), "baseline_mm": round(y, 3), **(meta or {})})
         return width
 
     def rect_mm(self, x0, top, x1, bottom, cmyk):
@@ -385,7 +395,17 @@ def set_display(B: Builder, cx: Context, el: dict, policy, kind_meta: dict, rep:
     for n, ((i, j), wmm) in enumerate(zip(r.lines, r.widths_mm)):
         y = lines[n]["baseline_mm"] if n < len(lines) else y + lead
         x = min(x0s) if align == "left" else max(x1s) - wmm if align == "right" else centre - wmm / 2
-        B.tokens_line(r.p, i, j, x, y, fkey, cmyk, meta={**kind_meta, "role": el["kind"], "element": el["id"]})
+        gap, hs = 0.0, 1.0
+        printed_w = (lines[n]["x1_mm"] - lines[n]["x0_mm"]) if n < len(lines) else 0.0
+        if el["kind"] == "headline" and printed_w >= HEAD_FILLED * measure and 0 < wmm < printed_w:
+            # print filled this headline line: the rebuild fills it to exactly its printed extent (the editors' review:
+            # justify headlines); letters stretch a little, the rest goes into word spaces, never letter-spacing
+            hs = min(HEAD_HSCALE_MAX, printed_w / wmm)
+            gaps = j - i - 1
+            extra = printed_w - wmm * hs
+            gap = min(extra / gaps, HEAD_GAP_EM * r.size_pt / MM) if gaps and extra > 0 else 0.0
+            x = lines[n]["x0_mm"] + max(0.0, extra - gap * gaps) / 2
+        B.tokens_line(r.p, i, j, x, y, fkey, cmyk, meta={**kind_meta, "role": el["kind"], "element": el["id"]}, gap_extra=gap, hscale=hs)
     cuts = RH.to_unglued(r.text_glued, r.lines)
     pr, acc = [], 0
     for ln in lines:
@@ -434,9 +454,14 @@ def set_lines(B: Builder, el: dict, meta: dict, rep: dict, words_width=None) -> 
                 for t in todo:
                     t[2] *= f
     fkey = B.font(family, axes, wt)
-    for ln, text, size in todo:
+    # lines print justified to the block's full width (not the block's last line) stay justified (the editors' review)
+    left, right = (min(t[0]["x0_mm"] for t in todo), max(t[0]["x1_mm"] for t in todo)) if todo else (0, 0)
+    for k, (ln, text, size) in enumerate(todo):
         x = ln["x0_mm"] if align == "left" else ln["x1_mm"] if align == "right" else (ln["x0_mm"] + ln["x1_mm"]) / 2
-        B.text_line(text, fkey, round(size, 3), x, ln["baseline_mm"], cmyk, align, meta={**meta, "role": el["kind"], "element": el["id"]})
+        full = (len(todo) >= 3 and k < len(todo) - 1 and ln["x1_mm"] - ln["x0_mm"] >= 0.97 * (right - left)
+                and abs(ln["x0_mm"] - left) < 1.0 and " " in text)
+        B.text_line(text, fkey, round(size, 3), ln["x0_mm"] if full else x, ln["baseline_mm"], cmyk, "left" if full else align,
+                    meta={**meta, "role": el["kind"], "element": el["id"]}, justify_to=(ln["x1_mm"] - ln["x0_mm"]) if full else None)
 
 
 # ------------------------------------------------------------------------------------------- body stories
