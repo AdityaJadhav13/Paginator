@@ -57,6 +57,7 @@ def overlap(a, b, m=1.0):
 def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path) -> dict:
     els = {e["id"]: e for e in model["elements"]}
     sid = {s["id"]: s for s in model["stories"] + man.get("synthetic_stories", [])}     # + loose items made stories
+    els = {**els, **{e["id"]: e for e in man.get("synthetic_elements", [])}}           # + pull quotes made elements
     sid.update({s["id"]: s for s in man.get("stories_used", [])})                       # as laid out (loose items attached)
     lines = [l for l in man["lines"] if l.get("role") not in ("placeholder", "slug") and "x1_mm" in l]
     gen_ids = {p["story"] for p in man["placed"]}

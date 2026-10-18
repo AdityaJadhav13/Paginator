@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.8.0"
+GEN = "gen1/2.8.1"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -93,7 +93,7 @@ BRIEF_HEAD_PT = 16.0                         # … under a headline of at most t
 BOX_WORDS = 300                              # a filled box holding small stories of at most this many words is one fact box
 QUOTE_WORDS = 60                             # a child story this short with no headline or photo is a pull quote
 CHILD_SPLIT = 0.8                            # cost when a sidebar and its parent story end up in different halves of a cut
-MIN_REGION_MM = 15.0                         # a strip of the newshole beside an ad block narrower than this is left empty
+MIN_REGION_MM = 25.0                         # a strip of the newshole beside an ad block narrower than this is left empty
 LEAD_LOW = 2.0                               # cost when the lead story's region does not start at the top of the newshole
 LOOSE_INTRO_WORDS = 80                       # loose text this short inside a story's printed box is that story's (an intro)
 XH_FOLLOW_MM = 15.0                          # a loose crosshead joins a flow only if a paragraph starts this close below it
@@ -224,6 +224,8 @@ class Generator:
         self._cap: dict = {}
         self._xh: dict = {}
         self._fill: dict = {}
+        # every element a flow sets as a crosshead (merged boxes and brief stacks use item headlines): re-anchored too
+        self.flow_xh = {b["element"] for s_ in model["stories"] for b in s_["flow"] if b["type"] == "crosshead" and b.get("element")}
         self.head_axes = {"wght": 800.0, "wdth": 87.5}  # house headline type is condensed (hscale 0.90)
         self.pol = replace(self.cx.head_pol, balance=False)
         p = K3.prepare(BODY_INK_TEST, "mr", "Deva", CP.SERIF, 10.0, CP.BODY_AXES, 400)
@@ -251,11 +253,11 @@ class Generator:
         measure = c0["x1_mm"] - c0["x0_mm"]
         out = {}
         for k, e in self.els.items():
-            if e["kind"] == "crosshead" and e["lines"]:
+            if (e["kind"] == "crosshead" or k in self.flow_xh) and e.get("lines"):
                 # as many anchor lines as the crosshead takes at THIS measure, so the composer's room check is exact
                 n = self.crosshead_lines(e, measure)
                 lead = (e.get("leading_pt") or e["size_pt"] * 1.083) / MM
-                out[k] = {**e, "gen_measure_mm": measure, "gen_keep_lines": XH_KEEP,
+                out[k] = {**e, "kind": "crosshead", "gen_measure_mm": measure, "gen_keep_lines": XH_KEEP,
                           "lines": [{**e["lines"][min(i, len(e["lines"]) - 1)], "baseline_mm": anchor + i * lead, "x0_mm": c0["x0_mm"],
                                      "x1_mm": c0["x1_mm"]} for i in range(n)]}
             else:
@@ -447,7 +449,7 @@ class Generator:
             text = CP.fix_bullets_all(_text(t))
             font = CP.role_font(t.get("font") or "", "other_text")
             probe = self.compose_block(text, *font, ts, span - 2 * BOX_PAD, 12, 1.15)
-            boxed = probe is not None and (len(probe[0].lines) >= 3 or t["kind"] == "body_frame")   # a fact box or a pull quote: ruled box
+            boxed = probe is not None and (len(probe[0].lines) >= 3 or t["id"].startswith("pq-"))   # a fact box or a pull quote: ruled box
             ok &= place("other_text", t["id"], text, font, ts, span - 2 * BOX_PAD, 12, 1.15, None, "left",
                         lambda y: 3.0 + 0.8 * ts / MM if y is None else y + 1.15 * ts / MM + 1.0, BOX_PAD if boxed else 0.0)
         tail, ty, tdesc = [], 0.0, 0.0                   # jump lines below the body, right-aligned; ty relative to the last row
@@ -706,7 +708,8 @@ class Generator:
                         if rest is not None:
                             b_ = best(sub, w, Hs[k])
                             if b_ is not None:
-                                c = b_[0] + rest[0] + (LEAD_LOW if lead_i is not None and sub >> lead_i & 1 and t_ > top0 + 1 else 0.0)
+                                c = (b_[0] + rest[0] + (LEAD_LOW if lead_i is not None and sub >> lead_i & 1 and t_ > top0 + 1 else 0.0)
+                                     + split_cost(sub, mask ^ sub))           # a sidebar in another region than its story
                                 if out is None or c < out[0]:
                                     out = (c, [(k, b_[1])] + rest[1])
                     sub = (sub - 1) & mask
@@ -997,18 +1000,28 @@ def fold_pull_quotes(m) -> dict:
     """A short child story (a pull quote: at most QUOTE_WORDS words, no headline, no photo) goes into its parent story as
     a boxed block under the parent's display text, so it stays with the story it quotes."""
     by_id = {s_["id"]: dict(s_) for s_ in m["stories"]}
-    gone = set()
+    els = {e["id"]: e for e in m["elements"]}
+    gone, new_els = set(), []
     for s_ in m["stories"]:
         par = s_.get("parent_story")
-        words = sum(len(f["text"].split()) for f in s_["flow"] if f["type"] == "para")
+        paras = [f["text"] for f in s_["flow"] if f["type"] == "para" and f["text"].strip()]
+        words = sum(len(t.split()) for t in paras)
         if par in by_id and not s_.get("headline") and not s_.get("images") and 0 < words <= QUOTE_WORDS:
-            frames = [f for c in s_.get("columns") or [] for f in c.get("frame_ids") or []]
-            frames += sorted({ln["line_ref"].split(":")[0] for f in s_["flow"] for ln in f.get("lines") or [] if ":" in str(ln.get("line_ref", ""))} - set(frames))
+            # the quote's own text (its frames may be shared with the parent: never copy a whole frame)
+            frame = next((els.get("bf-" + f) for c in s_.get("columns") or [] for f in c.get("frame_ids") or [] if els.get("bf-" + f)), None)
+            q = {"id": f"pq-{s_['id']}", "kind": "other_text", "text": " ".join(" ".join(paras).split()),
+                 "size_pt": (frame or {}).get("size_pt") or 12.0, "font": (frame or {}).get("font") or "Body",
+                 "bbox_mm": list(s_.get("bbox_mm") or [0, 0, 0, 0]), "lines": [], "synthetic": True}
+            new_els.append(q)
             p_ = by_id[par]
-            p_["other_elements"] = list(p_.get("other_elements") or []) + [f"bf-{f}" for f in frames]
+            extra = [x for x in [s_.get("kicker"), s_.get("byline"), *(s_.get("decks") or []),
+                                 *[y if isinstance(y, str) else y.get("id") for y in s_.get("other_elements") or []]] if x]
+            p_["other_elements"] = list(p_.get("other_elements") or []) + [q["id"]] + extra
+            frames = [f for c in s_.get("columns") or [] for f in c.get("frame_ids") or []]
+            p_["columns"] = list(p_.get("columns") or []) + [{"frame_ids": frames, "first_baseline_mm": 1e9}]   # ownership only
             p_.setdefault("folded_quotes", []).append(s_["id"])
             gone.add(s_["id"])
-    return {**m, "stories": [by_id[s_["id"]] for s_ in m["stories"] if s_["id"] not in gone]}
+    return {**m, "elements": m["elements"] + new_els, "stories": [by_id[s_["id"]] for s_ in m["stories"] if s_["id"] not in gone]}
 
 
 def gap_mm(a, b) -> float:
@@ -1187,8 +1200,8 @@ def regions_for(top, bottom, ad):
     → [(first column, columns, top mm, bottom mm)]."""
     if ad is None:
         return [(0, NCOL, top, bottom)]
-    c0 = max(0, min(NCOL, round((ad[0] - ORIGIN) / PITCH)))
-    c1 = max(c0 + 1, min(NCOL, round((ad[2] + GUT - ORIGIN) / PITCH)))
+    c0 = max(0, min(NCOL, math.floor((ad[0] - ORIGIN + 1.0) / PITCH)))      # every column the ad touches is the ad's
+    c1 = max(c0 + 1, min(NCOL, math.ceil((ad[2] - ORIGIN - 1.0) / PITCH)))
     out = []
     if c0 > 0:
         out.append((0, c0, top, bottom))
@@ -1253,11 +1266,11 @@ def render(g: Generator, model, placed, news_top, news_bottom, photo_dir, kept_s
             if blk[0] == "kicker" and blk[1] in fills[1]:    # a label tab: its printed panel and text colour, as wide as print
                 kel = g.els[blk[1]]
                 c, _ = CP.to_cmyk(fills[1][blk[1]])
-                pw = min(span, max(blk[2].widths_mm) + 4.0, max(20.0, kel["bbox_mm"][2] - kel["bbox_mm"][0] + 4.0))
+                pw = min(span, max(max(blk[2].widths_mm) + 4.0, kel["bbox_mm"][2] - kel["bbox_mm"][0] + 4.0, 20.0))
                 ks = blk[2].size_pt / MM
                 if c:
                     B.rect_mm(x, y + blk[3][0] - 0.95 * ks, x + pw, y + blk[3][-1] + 0.4 * ks, c)
-                draw_block(B, blk, x, y, pw, meta, 0.0, CP._colour(kel, rep))
+                draw_block(B, blk, x, y, pw, meta, 0.0, CP._colour(kel, rep) if c else CP.BLACK)   # no panel: never white text
                 continue
             draw_block(B, blk, x, y, span, meta, BOX_PAD if blk[1] in boxed else 0.0)
         for t0, t1, _ in dsp["boxes"]:
@@ -1380,6 +1393,9 @@ def main():
             m = merge_briefs(m, ids)
             ids = {s_["id"] for s_ in m["stories"] if s_.get("bbox_mm") and in_regions(s_["bbox_mm"])}
             kept_stories, keep, intruders, decor = fixed_parts(m, ids, rboxes)
+            if intruders:
+                results.append({"page": name, "status": "skipped: fixed parts reach into the newshole", "intruders": len(intruders)})
+                print(name, "skipped: fixed parts reach into the newshole (after stacking briefs)"); continue
         g = Generator(cx, m, photo_dir, styles, ids, space_em)
         if len(g.stories) > MAX_STORIES:
             results.append({"page": name, "status": f"skipped: more than {MAX_STORIES} stories (search limit)"}); print(name, "skipped:", len(g.stories), "stories"); continue
@@ -1398,7 +1414,7 @@ def main():
                 g.extra_rows[k] = g.extra_rows.get(k, 0) + 1
             retries.append([st_["story"] for st_, _ in over])
         if res is None:
-            results.append({"page": name, "status": "infeasible" if not info.get("feasible", True) else "budget", **info,
+            results.append({"page": name, "status": "budget" if info.get("budget_hit") else "infeasible", **info,
                             "stories": len(g.stories), "retries": len(retries)})
             print(name, "no layout", info); continue
         data = pdf_bytes(m, B, B.items)
@@ -1418,7 +1434,8 @@ def main():
                "head_ids": {s.id: s.head_ids for s in g.stories}, "deck_ids": {s.id: s.deck_ids for s in g.stories},
                "caption_ids": {s.id: s.caption["ids"] for s in g.stories if s.caption},
                "synthetic_stories": [s.src for s in g.stories if s.src.get("synthetic")],
-               "stories_used": [s.src for s in g.stories],          # as laid out (loose items attached)
+               "stories_used": [s.src for s in g.stories],
+               "synthetic_elements": [e for e in m["elements"] if e.get("synthetic")],          # as laid out (loose items attached)
                "icons_not_set": loose_icons(m_orig, (ORIGIN, news_top, x_hi, news_bottom), photo_ids),
                "decoration_removed": decor,               # the old layout's rules, boxes, panels, icons, graphics (reported)
                "decoration_removed_detail": [[i, (els_ := {e["id"]: e for e in m["elements"]})[i]["kind"],
