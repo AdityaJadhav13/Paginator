@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.5.0"
+GEN = "gen1/2.6.0"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -88,6 +88,9 @@ XH_SPACE_L = 1.5                             # crosshead space above/below in bo
 MAX_STORIES = 11
 LOOSE_GAP_MM = 30.0                          # a loose item joins a headline at most this far above it
 ICON_MM = 25.0
+BOX_WORDS = 300                              # a filled box holding small stories of at most this many words is one fact box
+QUOTE_WORDS = 60                             # a child story this short with no headline or photo is a pull quote
+CHILD_SPLIT = 0.8                            # cost when a sidebar and its parent story end up in different halves of a cut
 LOOSE_INTRO_WORDS = 80                       # loose text this short inside a story's printed box is that story's (an intro)
 XH_FOLLOW_MM = 15.0                          # a loose crosshead joins a flow only if a paragraph starts this close below it
 HEAD_GROW = 1.25                             # a headline may grow this much to fill its measure (same number of lines)
@@ -440,7 +443,7 @@ class Generator:
             text = CP.fix_bullets_all(_text(t))
             font = CP.role_font(t.get("font") or "", "other_text")
             probe = self.compose_block(text, *font, ts, span - 2 * BOX_PAD, 12, 1.15)
-            boxed = probe is not None and len(probe[0].lines) >= 3            # a small fact box: the house's 1 pt ruled box
+            boxed = probe is not None and (len(probe[0].lines) >= 3 or t["kind"] == "body_frame")   # a fact box or a pull quote: ruled box
             ok &= place("other_text", t["id"], text, font, ts, span - 2 * BOX_PAD, 12, 1.15, None, "left",
                         lambda y: 3.0 + 0.8 * ts / MM if y is None else y + 1.15 * ts / MM + 1.0, BOX_PAD if boxed else 0.0)
         tail, ty, tdesc = [], 0.0, 0.0                   # jump lines below the body, right-aligned; ty relative to the last row
@@ -595,6 +598,11 @@ class Generator:
                           "newshole_mm": Hn * UNIT, "stories_without_options": no_option}
         memo, nodes = {}, [0]
         rank = [s.rank for s in self.stories]
+        idx = {s.id: i for i, s in enumerate(self.stories)}
+        pairs = [(idx[s.src["parent_story"]], i) for i, s in enumerate(self.stories) if s.src.get("parent_story") in idx]
+
+        def split_cost(a, b):                            # a sidebar separated from its parent at this cut
+            return CHILD_SPLIT * sum(1 for p_, c_ in pairs if (a >> p_ & 1 and b >> c_ & 1) or (b >> p_ & 1 and a >> c_ & 1))
 
         def hierarchy(HA, HB):
             """Headline hierarchy: a more important story must not carry a smaller headline; the lead's headline must be the
@@ -646,7 +654,7 @@ class Generator:
                         if Bt is None:
                             continue
                         inv = sum(max(0, rank[x] - rank[y]) for x in range(n) if a >> x & 1 for y in range(n) if b >> y & 1)
-                        c = A[0] + Bt[0] + 0.6 * inv + 1.5 * hierarchy(A[2][2], Bt[2][2])
+                        c = A[0] + Bt[0] + 0.6 * inv + 1.5 * hierarchy(A[2][2], Bt[2][2]) + split_cost(a, b)
                         if cand is None or c < cand[0]:
                             cand = (c, ("v", A[1], Bt[1], ha), (A[2][0], A[2][1], A[2][2] + Bt[2][2]))
                 # side by side: a left (w1), b right
@@ -655,7 +663,7 @@ class Generator:
                         A, Bt = best(a, w1, h), best(b, w - w1, h)
                         if A is None or Bt is None:
                             continue
-                        c = A[0] + Bt[0]
+                        c = A[0] + Bt[0] + split_cost(a, b)
                         lead_in_b = min(rank[y] for y in range(n) if b >> y & 1) < min(rank[x] for x in range(n) if a >> x & 1)
                         c += 0.8 if lead_in_b == (lead_side == "left") else 0.0
                         if A[2][1] and Bt[2][0] and abs(A[2][1] - Bt[2][0]) < 6.0:
@@ -761,10 +769,10 @@ def panels_of(model, gen_ids, removed):
             c = [bx for bx in boxes if ov(bx["bbox_mm"], sb) >= 0.7 * area(sb) and area(bx["bbox_mm"]) <= 1.6 * area(sb)]
             if c:
                 story_fill[s["id"]] = min(c, key=lambda bx: area(bx["bbox_mm"]))["fill"]
-            for i in s.get("other_elements") or []:
+            for i in ([s["kicker"]] if s.get("kicker") else []) + list(s.get("other_elements") or []):   # label tabs, fact boxes
                 if i in els:
                     eb = els[i]["bbox_mm"]
-                    c = [bx for bx in boxes if ov(bx["bbox_mm"], eb) >= 0.8 * area(eb) and area(bx["bbox_mm"]) <= 4 * max(area(eb), 1.0)]
+                    c = [bx for bx in boxes if ov(bx["bbox_mm"], eb) >= 0.6 * area(eb) and area(bx["bbox_mm"]) <= 4 * max(area(eb), 1.0)]
                     if c:
                         el_fill[i] = min(c, key=lambda bx: area(bx["bbox_mm"]))["fill"]
     return story_fill, el_fill
@@ -855,6 +863,70 @@ def attach_loose(m, loose, box) -> dict:
             target.setdefault("attached_loose", []).extend(ids)
     stories = [by_id.get(s["id"], s) for s in m["stories"]] + keep
     return {**m, "stories": stories}
+
+
+def merge_boxed(m, box) -> dict:
+    """Fact boxes: a filled box in the newshole that holds two or more small stories (at most BOX_WORDS words in all)
+    becomes one boxed story — the items in printed reading order, an item's headline as a crosshead before it, the box's
+    loose title and bullet column with it — so the box stays one module and keeps its fill (panels_of)."""
+    els = {e["id"]: e for e in m["elements"]}
+    x0, t, x1, b = box
+    stories = list(m["stories"])
+    owned = set().union(*(owned_ids(s_) for s_ in stories)) if stories else set()
+    boxes = [e for e in m["elements"] if e["kind"] == "box" and e.get("fill") and e["bbox_mm"][0] >= x0 - 1 and e["bbox_mm"][2] <= x1 + 1
+             and e["bbox_mm"][1] >= t - 1 and e["bbox_mm"][3] <= b + 1 and (e["bbox_mm"][2] - e["bbox_mm"][0]) >= 20 and (e["bbox_mm"][3] - e["bbox_mm"][1]) >= 20]
+    for bx in sorted(boxes, key=lambda e: e["id"]):
+        bb = bx["bbox_mm"]
+        inner = [s_ for s_ in stories if s_.get("bbox_mm") and not s_.get("synthetic") and inside_frac(s_["bbox_mm"], bb) >= 0.9
+                 and any(f["type"] == "para" and f["text"].strip() for f in s_["flow"])]
+        words = sum(len(f["text"].split()) for s_ in inner for f in s_["flow"] if f["type"] == "para")
+        if len(inner) < 2 or words > BOX_WORDS:
+            continue
+        inner.sort(key=lambda s_: (round(s_["bbox_mm"][1]), s_["bbox_mm"][0]))
+        flow, other, images, captions, frames = [], [], [], [], []
+        for s_ in inner:
+            if s_.get("headline") in els:
+                flow.append({"type": "crosshead", "element": s_["headline"]})
+            flow += s_["flow"]
+            other += [x for x in [s_.get("kicker"), s_.get("byline"), *(s_.get("decks") or []), *(s_.get("headline_parts") or []),
+                                  *[y if isinstance(y, str) else y.get("id") for y in s_.get("other_elements") or []]] if x]
+            images += s_.get("images") or []
+            captions += s_.get("captions") or []
+            frames += [f for c in s_.get("columns") or [] for f in c.get("frame_ids") or []]
+        loose = [e["id"] for e in m["elements"] if e["id"] not in owned and e["kind"] in TEXT_KINDS and el_text(e).strip()
+                 and inside_frac(e["bbox_mm"], bb) >= 0.8]                    # the box's title and bullet column
+        for k_, s_ in enumerate(stories):                 # box items the page model gave to a neighbouring story's loose text
+            oe = [y if isinstance(y, str) else y.get("id") for y in s_.get("other_elements") or []]
+            take = [i for i in oe if i in els and inside_frac(els[i]["bbox_mm"], bb) >= 0.8 and s_ not in inner]
+            if take:
+                stories[k_] = {**s_, "other_elements": [i for i in oe if i not in take]}
+                loose += take
+        merged = {"id": f"box-{bx['id']}", "synthetic": True, "boxed": True, "headline": None, "headline_parts": [], "kicker": None,
+                  "decks": [], "byline": None, "captions": captions, "images": images, "jump_lines": [], "other_elements": loose + other,
+                  "parent_story": None, "bbox_mm": list(bb), "columns": [{"frame_ids": frames, "first_baseline_mm": bb[1]}],
+                  "flow": flow, "merged_from": [s_["id"] for s_ in inner]}
+        gone = {s_["id"] for s_ in inner}
+        stories = [s_ for s_ in stories if s_["id"] not in gone] + [merged]
+        owned |= owned_ids(merged)
+    return {**m, "stories": stories}
+
+
+def fold_pull_quotes(m) -> dict:
+    """A short child story (a pull quote: at most QUOTE_WORDS words, no headline, no photo) goes into its parent story as
+    a boxed block under the parent's display text, so it stays with the story it quotes."""
+    by_id = {s_["id"]: dict(s_) for s_ in m["stories"]}
+    gone = set()
+    for s_ in m["stories"]:
+        par = s_.get("parent_story")
+        words = sum(len(f["text"].split()) for f in s_["flow"] if f["type"] == "para")
+        if par in by_id and not s_.get("headline") and not s_.get("images") and 0 < words <= QUOTE_WORDS:
+            frames = [f for c in s_.get("columns") or [] for f in c.get("frame_ids") or []]
+            frames += sorted({ln["line_ref"].split(":")[0] for f in s_["flow"] for ln in f.get("lines") or [] if ":" in str(ln.get("line_ref", ""))} - set(frames))
+            p_ = by_id[par]
+            p_["other_elements"] = list(p_.get("other_elements") or []) + [f"bf-{f}" for f in frames]
+            p_.setdefault("folded_quotes", []).append(s_["id"])
+            gone.add(s_["id"])
+    return {**m, "stories": [by_id[s_["id"]] for s_ in m["stories"] if s_["id"] not in gone]}
 
 
 def gap_mm(a, b) -> float:
@@ -1026,8 +1098,9 @@ def newshole(m):
 
 
 # ------------------------------------------------------------------------------------------- render
-def draw_block(B, blk, x, y, span, meta, inset=0.0):
+def draw_block(B, blk, x, y, span, meta, inset=0.0, cmyk=None):
     role, eid, r, bl, font, align = blk
+    cmyk = cmyk or CP.BLACK
     x, span = x + inset, span - 2 * inset
     if align == "fill":                                  # a filled headline: each line its own shaping, full measure
         for (p, axes, gap, off, hs), yb in zip(r, bl):
@@ -1040,7 +1113,7 @@ def draw_block(B, blk, x, y, span, meta, inset=0.0):
     B.register(fk, r.p)
     for (a_, b_), wmm, yb in zip(r.lines, r.widths_mm, bl):
         xx = x + (span - wmm) / 2 if align == "center" else x + span - wmm if align == "right" else x
-        B.tokens_line(r.p, a_, b_, xx, y + yb, fk, CP.BLACK, meta={**meta, "role": role, "element": eid})
+        B.tokens_line(r.p, a_, b_, xx, y + yb, fk, cmyk, meta={**meta, "role": role, "element": eid})
 
 
 def render(g: Generator, model, placed, news_top, news_bottom, photo_dir, kept_stories, keep, fills=({}, {})):
@@ -1068,6 +1141,15 @@ def render(g: Generator, model, placed, news_top, news_bottom, photo_dir, kept_s
                 if c:
                     B.rect_mm(x, y + t0, x + span, y + t1, c)
         for blk in dsp["blocks"]:
+            if blk[0] == "kicker" and blk[1] in fills[1]:    # a label tab: its printed panel and text colour, as wide as print
+                kel = g.els[blk[1]]
+                c, _ = CP.to_cmyk(fills[1][blk[1]])
+                pw = min(span, max(blk[2].widths_mm) + 4.0, max(20.0, kel["bbox_mm"][2] - kel["bbox_mm"][0] + 4.0))
+                ks = blk[2].size_pt / MM
+                if c:
+                    B.rect_mm(x, y + blk[3][0] - 0.95 * ks, x + pw, y + blk[3][-1] + 0.4 * ks, c)
+                draw_block(B, blk, x, y, pw, meta, 0.0, CP._colour(kel, rep))
+                continue
             draw_block(B, blk, x, y, span, meta, BOX_PAD if blk[1] in boxed else 0.0)
         for t0, t1, _ in dsp["boxes"]:
             for p0, p1 in (((x, y + t0), (x + span, y + t0)), ((x + span, y + t0), (x + span, y + t1)), ((x + span, y + t1), (x, y + t1)), ((x, y + t1), (x, y + t0))):
@@ -1159,7 +1241,9 @@ def main():
         photo_ids = set(json.loads((photo_dir / "index.json").read_text())["elements"]) if (photo_dir / "index.json").exists() else set()
         m_orig = m
         for _ in range(4):
-            m = attach_loose(m_orig, loose_stories(m_orig, (ORIGIN, news_top, x_hi, news_bottom), photo_ids), (ORIGIN, news_top, x_hi, news_bottom))
+            hole_box = (ORIGIN, news_top, x_hi, news_bottom)
+            m0 = fold_pull_quotes(merge_boxed(m_orig, hole_box))
+            m = attach_loose(m0, loose_stories(m0, hole_box, photo_ids), hole_box)
             ids = {s["id"] for s in m["stories"] if s.get("bbox_mm") and news_top - 1 <= (s["bbox_mm"][1] + s["bbox_mm"][3]) / 2 <= news_bottom + 1
                    and ORIGIN - 1 <= (s["bbox_mm"][0] + s["bbox_mm"][2]) / 2 <= x_hi + 1}
             kept_stories, keep, intruders, decor = fixed_parts(m, ids, (ORIGIN, news_top, x_hi, news_bottom))
