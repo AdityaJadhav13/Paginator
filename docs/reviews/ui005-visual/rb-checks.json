@@ -1,0 +1,1589 @@
+{
+  "browser": "Chrome/153.0.8010.48",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+  "capturedAt": "2026-09-18T16:17:10.153Z",
+  "checks": [
+    {
+      "id": "VA-12",
+      "name": "Signed-in primary CTA label and destination",
+      "viewport": "1280x800",
+      "check": "Read every a.pg-public__cta label and href on / and /pricing with the canonical default (signed-in) session",
+      "result": "PASS",
+      "observed": {
+        "home": [
+          "Open your demonstration workspace -> /org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview",
+          "Open your demonstration workspace -> /org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview"
+        ],
+        "pricing": [
+          "Open your demonstration workspace -> /org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview",
+          "Open your demonstration workspace -> /org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview"
+        ]
+      }
+    },
+    {
+      "id": "RB-01",
+      "name": "No horizontal overflow",
+      "viewport": "320, 390, 834, 1280, 1440",
+      "check": "document.documentElement.scrollWidth vs clientWidth, 5 routes x 5 widths",
+      "result": "PASS",
+      "combinations": 25,
+      "observed": [
+        {
+          "route": "/",
+          "width": 320,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": false
+        },
+        {
+          "route": "/",
+          "width": 390,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": false
+        },
+        {
+          "route": "/",
+          "width": 834,
+          "scrollWidth": 834,
+          "clientWidth": 834,
+          "overflow": false
+        },
+        {
+          "route": "/",
+          "width": 1280,
+          "scrollWidth": 1280,
+          "clientWidth": 1280,
+          "overflow": false
+        },
+        {
+          "route": "/",
+          "width": 1440,
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "overflow": false
+        },
+        {
+          "route": "/features",
+          "width": 320,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": false
+        },
+        {
+          "route": "/features",
+          "width": 390,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": false
+        },
+        {
+          "route": "/features",
+          "width": 834,
+          "scrollWidth": 834,
+          "clientWidth": 834,
+          "overflow": false
+        },
+        {
+          "route": "/features",
+          "width": 1280,
+          "scrollWidth": 1280,
+          "clientWidth": 1280,
+          "overflow": false
+        },
+        {
+          "route": "/features",
+          "width": 1440,
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "overflow": false
+        },
+        {
+          "route": "/pricing",
+          "width": 320,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": false
+        },
+        {
+          "route": "/pricing",
+          "width": 390,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": false
+        },
+        {
+          "route": "/pricing",
+          "width": 834,
+          "scrollWidth": 834,
+          "clientWidth": 834,
+          "overflow": false
+        },
+        {
+          "route": "/pricing",
+          "width": 1280,
+          "scrollWidth": 1280,
+          "clientWidth": 1280,
+          "overflow": false
+        },
+        {
+          "route": "/pricing",
+          "width": 1440,
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "overflow": false
+        },
+        {
+          "route": "/security",
+          "width": 320,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": false
+        },
+        {
+          "route": "/security",
+          "width": 390,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": false
+        },
+        {
+          "route": "/security",
+          "width": 834,
+          "scrollWidth": 834,
+          "clientWidth": 834,
+          "overflow": false
+        },
+        {
+          "route": "/security",
+          "width": 1280,
+          "scrollWidth": 1280,
+          "clientWidth": 1280,
+          "overflow": false
+        },
+        {
+          "route": "/security",
+          "width": 1440,
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "overflow": false
+        },
+        {
+          "route": "/contact",
+          "width": 320,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": false
+        },
+        {
+          "route": "/contact",
+          "width": 390,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": false
+        },
+        {
+          "route": "/contact",
+          "width": 834,
+          "scrollWidth": 834,
+          "clientWidth": 834,
+          "overflow": false
+        },
+        {
+          "route": "/contact",
+          "width": 1280,
+          "scrollWidth": 1280,
+          "clientWidth": 1280,
+          "overflow": false
+        },
+        {
+          "route": "/contact",
+          "width": 1440,
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "overflow": false
+        }
+      ]
+    },
+    {
+      "id": "RB-02",
+      "name": "axe-core in a real engine, zero violations of any impact",
+      "viewport": "1280, 390",
+      "check": "axe.run(document) with no rule disabled; every impact level counted",
+      "result": "PASS",
+      "combinations": 10,
+      "observed": [
+        {
+          "route": "/",
+          "width": 1280,
+          "violations": []
+        },
+        {
+          "route": "/",
+          "width": 390,
+          "violations": []
+        },
+        {
+          "route": "/features",
+          "width": 1280,
+          "violations": []
+        },
+        {
+          "route": "/features",
+          "width": 390,
+          "violations": []
+        },
+        {
+          "route": "/pricing",
+          "width": 1280,
+          "violations": []
+        },
+        {
+          "route": "/pricing",
+          "width": 390,
+          "violations": []
+        },
+        {
+          "route": "/security",
+          "width": 1280,
+          "violations": []
+        },
+        {
+          "route": "/security",
+          "width": 390,
+          "violations": []
+        },
+        {
+          "route": "/contact",
+          "width": 1280,
+          "violations": []
+        },
+        {
+          "route": "/contact",
+          "width": 390,
+          "violations": []
+        }
+      ]
+    },
+    {
+      "id": "RB-03",
+      "name": "Keyboard traversal order, focus indicator, no trap",
+      "viewport": "1280x900",
+      "check": "Dispatch Tab repeatedly from document start on /, recording document.activeElement each time",
+      "result": "PASS",
+      "totalStops": 44,
+      "firstStop": {
+        "tag": "A",
+        "name": "Skip to main content",
+        "href": "#pg-main",
+        "outline": "solid 2px rgb(124, 58, 237)"
+      },
+      "observed": [
+        {
+          "tag": "A",
+          "name": "Skip to main content",
+          "href": "#pg-main",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Pageinator",
+          "href": "/",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Home",
+          "href": "/",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Features",
+          "href": "/features",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Pricing",
+          "href": "/pricing",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Security",
+          "href": "/security",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Contact",
+          "href": "/contact",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "SELECT",
+          "name": "Sahyadri Demo EditorKonkan Demo Reviewer",
+          "href": null,
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "BUTTON",
+          "name": "Open workspace",
+          "href": null,
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "BUTTON",
+          "name": "Sign out",
+          "href": null,
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Open your demonstration workspace",
+          "href": "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "See the workflow",
+          "href": "/features",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Read the full workflow",
+          "href": "/features",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Read the packaging note",
+          "href": "/pricing",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Security posture and limits",
+          "href": "/security",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Open your demonstration workspace",
+          "href": "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Contact",
+          "href": "/contact",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Home",
+          "href": "/",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Features",
+          "href": "/features",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Pricing",
+          "href": "/pricing",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Security",
+          "href": "/security",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Contact",
+          "href": "/contact",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Skip to main content",
+          "href": "#pg-main",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Pageinator",
+          "href": "/",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Home",
+          "href": "/",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Features",
+          "href": "/features",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Pricing",
+          "href": "/pricing",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Security",
+          "href": "/security",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Contact",
+          "href": "/contact",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "SELECT",
+          "name": "Sahyadri Demo EditorKonkan Demo Reviewer",
+          "href": null,
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "BUTTON",
+          "name": "Open workspace",
+          "href": null,
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "BUTTON",
+          "name": "Sign out",
+          "href": null,
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Open your demonstration workspace",
+          "href": "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "See the workflow",
+          "href": "/features",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Read the full workflow",
+          "href": "/features",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Read the packaging note",
+          "href": "/pricing",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Security posture and limits",
+          "href": "/security",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Open your demonstration workspace",
+          "href": "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Contact",
+          "href": "/contact",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Home",
+          "href": "/",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Features",
+          "href": "/features",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Pricing",
+          "href": "/pricing",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Security",
+          "href": "/security",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        },
+        {
+          "tag": "A",
+          "name": "Contact",
+          "href": "/contact",
+          "outline": "solid 2px rgb(124, 58, 237)"
+        }
+      ]
+    },
+    {
+      "id": "RB-03b",
+      "name": "Focus after client navigation and history.back()",
+      "viewport": "1280x900",
+      "check": "Click Features in the Primary nav then history.back(); read location.pathname and document.activeElement.id",
+      "result": "PASS",
+      "observed": {
+        "afterForwardNavigation": "/features|pg-route-heading",
+        "afterBack": "/|pg-route-heading"
+      }
+    },
+    {
+      "id": "RB-04",
+      "name": "Visual (geometric) order equals DOM order",
+      "viewport": "390, 1280",
+      "check": "Compare each top-level section's getBoundingClientRect().top ordering against DOM order",
+      "result": "PASS",
+      "observed": [
+        {
+          "route": "/",
+          "width": 390,
+          "regionCount": 7,
+          "tops": [
+            237,
+            891,
+            1552,
+            2855,
+            3941,
+            4451,
+            5005
+          ],
+          "inDomOrder": true
+        },
+        {
+          "route": "/",
+          "width": 1280,
+          "regionCount": 7,
+          "tops": [
+            121,
+            586,
+            1138,
+            2034,
+            3028,
+            3410,
+            3899
+          ],
+          "inDomOrder": true
+        },
+        {
+          "route": "/features",
+          "width": 390,
+          "regionCount": 5,
+          "tops": [
+            237,
+            765,
+            3001,
+            3883,
+            4608
+          ],
+          "inDomOrder": true
+        },
+        {
+          "route": "/features",
+          "width": 1280,
+          "regionCount": 5,
+          "tops": [
+            121,
+            576,
+            1728,
+            2258,
+            2874
+          ],
+          "inDomOrder": true
+        },
+        {
+          "route": "/pricing",
+          "width": 390,
+          "regionCount": 5,
+          "tops": [
+            237,
+            737,
+            1197,
+            2684,
+            2934
+          ],
+          "inDomOrder": true
+        },
+        {
+          "route": "/pricing",
+          "width": 1280,
+          "regionCount": 5,
+          "tops": [
+            121,
+            548,
+            919,
+            1640,
+            1946
+          ],
+          "inDomOrder": true
+        },
+        {
+          "route": "/security",
+          "width": 390,
+          "regionCount": 7,
+          "tops": [
+            237,
+            709,
+            1215,
+            1861,
+            2416,
+            2794,
+            3076
+          ],
+          "inDomOrder": true
+        },
+        {
+          "route": "/security",
+          "width": 1280,
+          "regionCount": 7,
+          "tops": [
+            121,
+            548,
+            997,
+            1478,
+            1904,
+            2250,
+            2556
+          ],
+          "inDomOrder": true
+        },
+        {
+          "route": "/contact",
+          "width": 390,
+          "regionCount": 3,
+          "tops": [
+            237,
+            625,
+            1561
+          ],
+          "inDomOrder": true
+        },
+        {
+          "route": "/contact",
+          "width": 1280,
+          "regionCount": 3,
+          "tops": [
+            121,
+            504,
+            1315
+          ],
+          "inDomOrder": true
+        }
+      ]
+    },
+    {
+      "id": "RB-05",
+      "name": "Zero network requests beyond the app's own module graph",
+      "viewport": "1280x900",
+      "check": "CDP Network.requestWillBeSent log per route, excluding the document and /assets/ bundle",
+      "result": "PASS",
+      "observed": [
+        {
+          "route": "/",
+          "requests": [
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css"
+          ],
+          "thirdParty": []
+        },
+        {
+          "route": "/features",
+          "requests": [
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css"
+          ],
+          "thirdParty": []
+        },
+        {
+          "route": "/pricing",
+          "requests": [
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css"
+          ],
+          "thirdParty": []
+        },
+        {
+          "route": "/security",
+          "requests": [
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css"
+          ],
+          "thirdParty": []
+        },
+        {
+          "route": "/contact",
+          "requests": [
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/features",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/pricing",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/security",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/contact",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css",
+            "http://localhost:4173/",
+            "http://localhost:4173/assets/index-DjOIbRvz.js",
+            "http://localhost:4173/assets/index-CtKT3lSi.css"
+          ],
+          "thirdParty": []
+        }
+      ]
+    },
+    {
+      "id": "RB-06",
+      "name": "Contact form performs no network, storage or navigation side effect",
+      "viewport": "1280x900",
+      "check": "fetch / XHR.open / XHR.send / sendBeacon / WebSocket / HTMLFormElement.submit instrumented via Page.addScriptToEvaluateOnNewDocument BEFORE load, then fill and submit",
+      "result": "PASS",
+      "observed": {
+        "instrumentedCalls": [],
+        "before": {
+          "url": "http://localhost:4173/contact",
+          "cookie": "",
+          "ls": 0,
+          "ss": 0,
+          "formAction": null,
+          "formMethod": null,
+          "formTarget": null
+        },
+        "after": {
+          "calls": [],
+          "url": "http://localhost:4173/contact",
+          "cookie": "",
+          "ls": 0,
+          "ss": 0,
+          "acknowledgement": "ℹNothing was sentYour text was not transmitted and was not stored. It has been cleared from this page and will be gone when you close the tab.",
+          "focusMovedToAcknowledgement": true,
+          "textareaValue": ""
+        }
+      }
+    },
+    {
+      "id": "RB-07",
+      "name": "RTL layout: no overflow, no overlap, footer nav mirrors",
+      "viewport": "1280x900, dir=rtl",
+      "check": "Set dir=rtl; measure every element in main and footer against the viewport, sibling region overlap, and footer Secondary nav mirroring",
+      "result": "PASS",
+      "observed": [
+        {
+          "route": "/",
+          "elementsOutsideViewport": [],
+          "siblingRegionOverlaps": 0,
+          "horizontalScroll": false,
+          "footerLinkCount": 5,
+          "footerFirstLinkIsRightmost": true
+        },
+        {
+          "route": "/features",
+          "elementsOutsideViewport": [],
+          "siblingRegionOverlaps": 0,
+          "horizontalScroll": false,
+          "footerLinkCount": 5,
+          "footerFirstLinkIsRightmost": true
+        },
+        {
+          "route": "/pricing",
+          "elementsOutsideViewport": [],
+          "siblingRegionOverlaps": 0,
+          "horizontalScroll": false,
+          "footerLinkCount": 5,
+          "footerFirstLinkIsRightmost": true
+        },
+        {
+          "route": "/security",
+          "elementsOutsideViewport": [],
+          "siblingRegionOverlaps": 0,
+          "horizontalScroll": false,
+          "footerLinkCount": 5,
+          "footerFirstLinkIsRightmost": true
+        },
+        {
+          "route": "/contact",
+          "elementsOutsideViewport": [],
+          "siblingRegionOverlaps": 0,
+          "horizontalScroll": false,
+          "footerLinkCount": 5,
+          "footerFirstLinkIsRightmost": true
+        }
+      ]
+    },
+    {
+      "id": "RB-08",
+      "name": "Text contrast measured from resolved computed colours",
+      "viewport": "1280x900",
+      "check": "WCAG relative-luminance ratio of getComputedStyle(color) against the nearest opaque ancestor background",
+      "result": "PASS",
+      "observed": [
+        {
+          "label": "ink band body",
+          "fontSize": "16px",
+          "fontWeight": "400",
+          "foreground": "rgb(255, 255, 255)",
+          "background": "rgb(23, 32, 42)",
+          "ratio": 16.45,
+          "threshold": 4.5,
+          "pass": true
+        },
+        {
+          "label": "ink band lead",
+          "fontSize": "20px",
+          "fontWeight": "400",
+          "foreground": "rgb(255, 255, 255)",
+          "background": "rgb(23, 32, 42)",
+          "ratio": 16.45,
+          "threshold": 4.5,
+          "pass": true
+        },
+        {
+          "label": "ink band note (muted)",
+          "fontSize": "12px",
+          "fontWeight": "400",
+          "foreground": "rgb(203, 213, 225)",
+          "background": "rgb(23, 32, 42)",
+          "ratio": 11.08,
+          "threshold": 4.5,
+          "pass": true
+        },
+        {
+          "label": "ink band availability label",
+          "fontSize": "12px",
+          "fontWeight": "500",
+          "foreground": "rgb(203, 213, 225)",
+          "background": "rgb(23, 32, 42)",
+          "ratio": 11.08,
+          "threshold": 4.5,
+          "pass": true
+        },
+        {
+          "label": "ink band section title",
+          "fontSize": "32px",
+          "fontWeight": "600",
+          "foreground": "rgb(255, 255, 255)",
+          "background": "rgb(23, 32, 42)",
+          "ratio": 16.45,
+          "threshold": 3,
+          "pass": true
+        },
+        {
+          "label": "ink band standing head",
+          "fontSize": "12px",
+          "fontWeight": "600",
+          "foreground": "rgb(203, 213, 225)",
+          "background": "rgb(23, 32, 42)",
+          "ratio": 11.08,
+          "threshold": 4.5,
+          "pass": true
+        },
+        {
+          "label": "subtle band body",
+          "fontSize": "16px",
+          "fontWeight": "400",
+          "foreground": "rgb(23, 32, 42)",
+          "background": "rgb(241, 245, 249)",
+          "ratio": 15.02,
+          "threshold": 4.5,
+          "pass": true
+        },
+        {
+          "label": "standing head on subtle band",
+          "fontSize": "12px",
+          "fontWeight": "600",
+          "foreground": "rgb(75, 85, 99)",
+          "background": "rgb(241, 245, 249)",
+          "ratio": 6.9,
+          "threshold": 4.5,
+          "pass": true
+        },
+        {
+          "label": "primary CTA label",
+          "fontSize": "20px",
+          "fontWeight": "500",
+          "foreground": "rgb(255, 255, 255)",
+          "background": "rgb(29, 78, 216)",
+          "ratio": 6.7,
+          "threshold": 4.5,
+          "pass": true
+        },
+        {
+          "label": "primary CTA on ink band",
+          "fontSize": "20px",
+          "fontWeight": "500",
+          "foreground": "rgb(23, 32, 42)",
+          "background": "rgb(255, 255, 255)",
+          "ratio": 16.45,
+          "threshold": 4.5,
+          "pass": true
+        },
+        {
+          "label": "footer Secondary nav link",
+          "fontSize": "14px",
+          "fontWeight": "500",
+          "foreground": "rgb(29, 78, 216)",
+          "background": "rgb(248, 250, 252)",
+          "ratio": 6.41,
+          "threshold": 4.5,
+          "pass": true
+        },
+        {
+          "label": "footer simulation notice",
+          "fontSize": "12px",
+          "fontWeight": "400",
+          "foreground": "rgb(23, 32, 42)",
+          "background": "rgb(248, 250, 252)",
+          "ratio": 15.72,
+          "threshold": 4.5,
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "AC-57",
+      "name": "Zoom reflow (WCAG 1.4.10)",
+      "viewport": "640 (=200% at 1280), 320 (=400% at 1280)",
+      "check": "Reflow equivalence: measure scrollWidth vs clientWidth at the CSS width each zoom level produces",
+      "result": "PASS",
+      "observed": [
+        {
+          "label": "200% zoom at 1280px",
+          "equivalentCssWidth": 640,
+          "route": "/",
+          "scrollWidth": 640,
+          "clientWidth": 640,
+          "overflow": false
+        },
+        {
+          "label": "200% zoom at 1280px",
+          "equivalentCssWidth": 640,
+          "route": "/features",
+          "scrollWidth": 640,
+          "clientWidth": 640,
+          "overflow": false
+        },
+        {
+          "label": "200% zoom at 1280px",
+          "equivalentCssWidth": 640,
+          "route": "/pricing",
+          "scrollWidth": 640,
+          "clientWidth": 640,
+          "overflow": false
+        },
+        {
+          "label": "200% zoom at 1280px",
+          "equivalentCssWidth": 640,
+          "route": "/security",
+          "scrollWidth": 640,
+          "clientWidth": 640,
+          "overflow": false
+        },
+        {
+          "label": "200% zoom at 1280px",
+          "equivalentCssWidth": 640,
+          "route": "/contact",
+          "scrollWidth": 640,
+          "clientWidth": 640,
+          "overflow": false
+        },
+        {
+          "label": "400% zoom at 1280px",
+          "equivalentCssWidth": 320,
+          "route": "/",
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": false
+        },
+        {
+          "label": "400% zoom at 1280px",
+          "equivalentCssWidth": 320,
+          "route": "/features",
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": false
+        },
+        {
+          "label": "400% zoom at 1280px",
+          "equivalentCssWidth": 320,
+          "route": "/pricing",
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": false
+        },
+        {
+          "label": "400% zoom at 1280px",
+          "equivalentCssWidth": 320,
+          "route": "/security",
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": false
+        },
+        {
+          "label": "400% zoom at 1280px",
+          "equivalentCssWidth": 320,
+          "route": "/contact",
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": false
+        }
+      ]
+    },
+    {
+      "id": "H2-footer",
+      "name": "Secondary footer navigation after removing the shell.css additions",
+      "viewport": "320, 390, 834, 1280, 1440",
+      "check": "Measure the footer nav element, its computed flex layout and every link box at each width",
+      "result": "PASS",
+      "observed": [
+        {
+          "width": 320,
+          "navTag": "NAV",
+          "ariaLabel": "Secondary",
+          "display": "flex",
+          "flexWrap": "wrap",
+          "gap": "16px",
+          "linkCount": 5,
+          "linkLabels": [
+            "Home",
+            "Features",
+            "Pricing",
+            "Security",
+            "Contact"
+          ],
+          "linkHrefs": [
+            "/",
+            "/features",
+            "/pricing",
+            "/security",
+            "/contact"
+          ],
+          "rowsUsed": 2,
+          "anyLinkClipped": false,
+          "anyLinkZeroSize": false,
+          "minLinkHeight": 22,
+          "footerOverflow": false
+        },
+        {
+          "width": 390,
+          "navTag": "NAV",
+          "ariaLabel": "Secondary",
+          "display": "flex",
+          "flexWrap": "wrap",
+          "gap": "16px",
+          "linkCount": 5,
+          "linkLabels": [
+            "Home",
+            "Features",
+            "Pricing",
+            "Security",
+            "Contact"
+          ],
+          "linkHrefs": [
+            "/",
+            "/features",
+            "/pricing",
+            "/security",
+            "/contact"
+          ],
+          "rowsUsed": 1,
+          "anyLinkClipped": false,
+          "anyLinkZeroSize": false,
+          "minLinkHeight": 22,
+          "footerOverflow": false
+        },
+        {
+          "width": 834,
+          "navTag": "NAV",
+          "ariaLabel": "Secondary",
+          "display": "flex",
+          "flexWrap": "wrap",
+          "gap": "16px",
+          "linkCount": 5,
+          "linkLabels": [
+            "Home",
+            "Features",
+            "Pricing",
+            "Security",
+            "Contact"
+          ],
+          "linkHrefs": [
+            "/",
+            "/features",
+            "/pricing",
+            "/security",
+            "/contact"
+          ],
+          "rowsUsed": 1,
+          "anyLinkClipped": false,
+          "anyLinkZeroSize": false,
+          "minLinkHeight": 22,
+          "footerOverflow": false
+        },
+        {
+          "width": 1280,
+          "navTag": "NAV",
+          "ariaLabel": "Secondary",
+          "display": "flex",
+          "flexWrap": "wrap",
+          "gap": "16px",
+          "linkCount": 5,
+          "linkLabels": [
+            "Home",
+            "Features",
+            "Pricing",
+            "Security",
+            "Contact"
+          ],
+          "linkHrefs": [
+            "/",
+            "/features",
+            "/pricing",
+            "/security",
+            "/contact"
+          ],
+          "rowsUsed": 1,
+          "anyLinkClipped": false,
+          "anyLinkZeroSize": false,
+          "minLinkHeight": 22,
+          "footerOverflow": false
+        },
+        {
+          "width": 1440,
+          "navTag": "NAV",
+          "ariaLabel": "Secondary",
+          "display": "flex",
+          "flexWrap": "wrap",
+          "gap": "16px",
+          "linkCount": 5,
+          "linkLabels": [
+            "Home",
+            "Features",
+            "Pricing",
+            "Security",
+            "Contact"
+          ],
+          "linkHrefs": [
+            "/",
+            "/features",
+            "/pricing",
+            "/security",
+            "/contact"
+          ],
+          "rowsUsed": 1,
+          "anyLinkClipped": false,
+          "anyLinkZeroSize": false,
+          "minLinkHeight": 22,
+          "footerOverflow": false
+        }
+      ]
+    },
+    {
+      "id": "H2-footer-focus",
+      "name": "Rebuilt footer links remain focusable with a visible indicator",
+      "viewport": "1280x900",
+      "check": "Focus the first footer Secondary link; read document.activeElement and its computed outline",
+      "result": "PASS",
+      "observed": {
+        "focused": true,
+        "tabIndex": 0,
+        "outlineOnFocus": "none 3px rgb(29, 78, 216)"
+      }
+    }
+  ]
+}

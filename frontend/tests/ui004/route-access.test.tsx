@@ -69,12 +69,12 @@ describe("UI004 auth and public routes", () => {
 
   it("keeps public leaf content while changing only the session affordance", async () => {
     const signedIn = renderUi004("/");
-    expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Newspaper production, end to end" })).toBeInTheDocument();
     expect(signedIn.container).toHaveTextContent("Sahyadri Demo Editor");
     expect(signedIn.container).toHaveTextContent("editor");
     signedIn.unmount();
     renderUi004("/", "signed-out");
-    expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Newspaper production, end to end" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign in" })).toBeInTheDocument();
   });
 });

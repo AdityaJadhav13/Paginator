@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { PublicShell } from "../../app/shells/PublicShell.tsx";
 import { WorkspaceShell } from "../../app/shells/WorkspaceShell.tsx";
@@ -13,6 +13,8 @@ import { SessionProvider } from "../../features/auth/SessionProvider.tsx";
 import { AuthRouteScreen } from "../../features/auth/AuthRouteScreen.tsx";
 import { createMockApplicationEnvironment, type MockApplicationEnvironment } from "../../mocks/index.ts";
 import { PlaceholderScreen } from "../ui002/PlaceholderScreen.tsx";
+import { Container } from "../../ui/index.ts";
+import { HomePage, FeaturesPage, PricingPage, SecurityPage, ContactPage } from "../../features/public/index.ts";
 import { EditorRouteContent } from "../ui002/EditorRouteContent.tsx";
 import { RELEASE_FIXTURES } from "../ui002/release-fixtures.ts";
 import "../../app/shell.css";
@@ -20,6 +22,16 @@ import "../../app/shell.css";
 type LabeledRouteKey = keyof typeof ROUTE_LABELS & keyof typeof OWNING_UNIT;
 function placeholder(key: LabeledRouteKey) {
   return <PlaceholderScreen title={ROUTE_LABELS[key]} owningUnit={OWNING_UNIT[key]} />;
+}
+
+/**
+ * UI005 §20.4 moved the content measure out of PublicShell's <main> so the
+ * public surfaces can render full-width bands. Every other public-shell
+ * route supplies the measure here instead, which keeps rows 6-10 (auth and
+ * onboarding) rendering exactly as they did before.
+ */
+function measured(element: ReactNode) {
+  return <Container>{element}</Container>;
 }
 
 function WorkspaceBoundary({ editor = false }: { readonly editor?: boolean }) {
@@ -55,17 +67,17 @@ export function Ui004Routes({ environment }: { readonly environment?: MockApplic
         <RouteAnnouncer />
         <Routes>
           <Route element={<PublicShell />}>
-            <Route path={PATTERNS.home} element={placeholder("home")} />
-            <Route path={PATTERNS.features} element={placeholder("features")} />
-            <Route path={PATTERNS.pricing} element={placeholder("pricing")} />
-            <Route path={PATTERNS.security} element={placeholder("security")} />
-            <Route path={PATTERNS.contact} element={placeholder("contact")} />
-            <Route path={PATTERNS.login} element={<AuthRouteScreen kind="login" />} />
-            <Route path={PATTERNS.signup} element={<AuthRouteScreen kind="signup" />} />
-            <Route path={PATTERNS.forgotPassword} element={<AuthRouteScreen kind="forgot-password" />} />
-            <Route path={PATTERNS.verify} element={<AuthRouteScreen kind="verify" />} />
-            <Route path={PATTERNS.onboarding} element={placeholder("onboarding")} />
-            <Route path="*" element={<NotFoundPage />} />
+            <Route path={PATTERNS.home} element={<HomePage />} />
+            <Route path={PATTERNS.features} element={<FeaturesPage />} />
+            <Route path={PATTERNS.pricing} element={<PricingPage />} />
+            <Route path={PATTERNS.security} element={<SecurityPage />} />
+            <Route path={PATTERNS.contact} element={<ContactPage />} />
+            <Route path={PATTERNS.login} element={measured(<AuthRouteScreen kind="login" />)} />
+            <Route path={PATTERNS.signup} element={measured(<AuthRouteScreen kind="signup" />)} />
+            <Route path={PATTERNS.forgotPassword} element={measured(<AuthRouteScreen kind="forgot-password" />)} />
+            <Route path={PATTERNS.verify} element={measured(<AuthRouteScreen kind="verify" />)} />
+            <Route path={PATTERNS.onboarding} element={measured(placeholder("onboarding"))} />
+            <Route path="*" element={measured(<NotFoundPage />)} />
           </Route>
 
           <Route path={PATTERNS.workspaceRoot} element={<WorkspaceBoundary />}>

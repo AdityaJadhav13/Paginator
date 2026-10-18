@@ -24,7 +24,9 @@ async function checkAxe(container: HTMLElement) {
 describe("axe — one representative route per shell", () => {
   it("PublicShell: zero serious/critical violations", async () => {
     const { container } = renderAt("/");
-    await screen.findByRole("heading", { level: 1, name: "Home" });
+    // UI005 replaced the public placeholders; the landing heading is now
+    // the real hero title.
+    await screen.findByRole("heading", { level: 1, name: "Newspaper production, end to end" });
     expect(await checkAxe(container)).toHaveLength(0);
   });
 

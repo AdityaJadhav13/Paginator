@@ -9,6 +9,12 @@
   /* ── Typography: font families ─────────────────────────────────────── */
   --pg-font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --pg-font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  /*
+   * Editorial display family (UI005 §10.2). Operating-system stack only —
+   * nothing is downloaded or bundled, and no qualified newspaper font is
+   * implied (UI001 §6.1).
+   */
+  --pg-font-serif: ui-serif, Georgia, "Times New Roman", "Noto Serif", serif;
 
   /* ── Typography: sizes ─────────────────────────────────────────────── */
   --pg-font-size-100: 0.75rem;
@@ -17,6 +23,9 @@
   --pg-font-size-400: 1.25rem;
   --pg-font-size-500: 1.5rem;
   --pg-font-size-600: 2rem;
+  /* Display steps above the application page-title size (UI005 §10.2). */
+  --pg-font-size-700: 2.5rem;
+  --pg-font-size-800: 3.25rem;
 
   /* ── Typography: line heights ──────────────────────────────────────── */
   --pg-line-height-100: 1rem;
@@ -25,6 +34,8 @@
   --pg-line-height-400: 1.75rem;
   --pg-line-height-500: 2rem;
   --pg-line-height-600: 2.5rem;
+  --pg-line-height-700: 2.875rem;
+  --pg-line-height-800: 3.5rem;
 
   /* ── Typography: weights ───────────────────────────────────────────── */
   --pg-font-weight-regular: 400;
@@ -43,6 +54,12 @@
   --pg-space-7: 2rem;
   --pg-space-8: 3rem;
   --pg-space-9: 4rem;
+  /*
+   * Band-level rhythm for public surfaces (UI005 §10.2). The 0–9 scale is
+   * tuned for application density; layout primitives still accept 0–9 only.
+   */
+  --pg-space-10: 6rem;
+  --pg-space-11: 8rem;
 
   /* ── Control heights ────────────────────────────────────────────────── */
   --pg-control-height-sm: 2rem;

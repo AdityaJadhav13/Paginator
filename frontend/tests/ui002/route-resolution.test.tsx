@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { act } from "react";
-import { screen } from "../../src/test/render.tsx";
+import { screen, within } from "../../src/test/render.tsx";
 import userEvent from "@testing-library/user-event";
 import { renderAt } from "./renderRoutes.tsx";
 
@@ -17,8 +17,8 @@ import { renderAt } from "./renderRoutes.tsx";
 
 describe("Deep link resolves the correct shell", () => {
   const cases: Array<{ path: string; shell: "public" | "workspace" | "editor"; h1: string }> = [
-    { path: "/", shell: "public", h1: "Home" },
-    { path: "/features", shell: "public", h1: "Features" },
+    { path: "/", shell: "public", h1: "Newspaper production, end to end" },
+    { path: "/features", shell: "public", h1: "What Pageinator is being built to do" },
     { path: "/login", shell: "public", h1: "Already using a simulated session" },
     { path: "/onboarding", shell: "public", h1: "Onboarding" },
     { path: "/org/org-demo-sahyadri/settings", shell: "workspace", h1: "Organization settings" },
@@ -83,7 +83,7 @@ describe("Refresh resolves identically to a fresh deep link", () => {
 
   for (const path of paths) {
     it(`"${path}" renders the same content on a fresh mount as on a repeat fresh mount`, async () => {
-      const expectedHeading = path === "/" ? "Home" : path.endsWith("/editor") ? "Editor" : "Overview";
+      const expectedHeading = path === "/" ? "Newspaper production, end to end" : path.endsWith("/editor") ? "Editor" : "Overview";
       const first = renderAt(path);
       await screen.findByRole("heading", { level: 1, name: expectedHeading });
       const firstH1 = first.container.querySelector("h1")?.textContent;
@@ -106,8 +106,11 @@ describe("Browser back/forward", () => {
     renderAt("/");
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("link", { name: "Features" }));
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Features");
+    // UI005's Secondary footer nav repeats the primary links, so the
+    // nav-link query is scoped to the Primary landmark.
+    const primaryNav = within(screen.getByRole("navigation", { name: "Primary" }));
+    await user.click(primaryNav.getByRole("link", { name: "Features" }));
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("What Pageinator is being built to do");
 
     // Programmatic navigation to a workspace URL — Features has no
     // link into the workspace, so a direct history push simulates
@@ -126,15 +129,15 @@ describe("Browser back/forward", () => {
     // "Features"/"Home" are also nav-link text, present alongside the
     // heading on every public page — disambiguate by role+level.
     window.history.back();
-    await screen.findByRole("heading", { level: 1, name: "Features" });
+    await screen.findByRole("heading", { level: 1, name: "What Pageinator is being built to do" });
     expect(window.location.pathname).toBe("/features");
 
     window.history.back();
-    await screen.findByRole("heading", { level: 1, name: "Home" });
+    await screen.findByRole("heading", { level: 1, name: "Newspaper production, end to end" });
     expect(window.location.pathname).toBe("/");
 
     window.history.forward();
-    await screen.findByRole("heading", { level: 1, name: "Features" });
+    await screen.findByRole("heading", { level: 1, name: "What Pageinator is being built to do" });
     expect(window.location.pathname).toBe("/features");
   });
 });

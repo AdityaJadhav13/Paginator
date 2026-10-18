@@ -5,7 +5,7 @@
 import { describe, it, expect } from "vitest";
 import { StrictMode } from "react";
 import { BrowserRouter } from "react-router";
-import { render, screen } from "../../src/test/render.tsx";
+import { render, screen, within } from "../../src/test/render.tsx";
 import userEvent from "@testing-library/user-event";
 import { Ui004Routes } from "../../src/demo/ui004/routeTree.tsx";
 import { renderAt } from "./renderRoutes.tsx";
@@ -98,13 +98,16 @@ describe("Focus after navigation (AC-16)", () => {
     renderAt("/");
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("link", { name: "Pricing" }));
+    // UI005 added a Secondary footer nav that repeats the primary links,
+    // so nav-link queries are scoped to the Primary landmark.
+    const primaryNav = within(screen.getByRole("navigation", { name: "Primary" }));
+    await user.click(primaryNav.getByRole("link", { name: "Pricing" }));
 
-    const heading = await screen.findByRole("heading", { level: 1, name: "Pricing" });
+    const heading = await screen.findByRole("heading", { level: 1, name: "Illustrative packaging" });
     expect(document.activeElement).toBe(heading);
 
     const liveRegion = screen.getByRole("status");
-    expect(liveRegion).toHaveTextContent("Pricing");
+    expect(liveRegion).toHaveTextContent("Illustrative packaging");
   });
 
   it("stays silent on initial load under the application's StrictMode root, then announces navigation", async () => {
@@ -120,14 +123,15 @@ describe("Focus after navigation (AC-16)", () => {
     const liveRegion = screen.getByRole("status");
     expect(liveRegion).toHaveTextContent("");
     expect(document.activeElement).not.toBe(
-      screen.getByRole("heading", { level: 1, name: "Security" })
+      screen.getByRole("heading", { level: 1, name: "Security posture and current limits" })
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("link", { name: "Pricing" }));
-    const heading = await screen.findByRole("heading", { level: 1, name: "Pricing" });
+    const primaryNav = within(screen.getByRole("navigation", { name: "Primary" }));
+    await user.click(primaryNav.getByRole("link", { name: "Pricing" }));
+    const heading = await screen.findByRole("heading", { level: 1, name: "Illustrative packaging" });
     expect(document.activeElement).toBe(heading);
-    expect(liveRegion).toHaveTextContent("Pricing");
+    expect(liveRegion).toHaveTextContent("Illustrative packaging");
   });
 });
 
@@ -142,7 +146,7 @@ describe("Workspace exit navigation (§7.2)", () => {
     await user.keyboard("{Enter}");
 
     expect(window.location.pathname).toBe("/");
-    expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toHaveFocus();
+    expect(await screen.findByRole("heading", { level: 1, name: "Newspaper production, end to end" })).toHaveFocus();
   });
 });
 
