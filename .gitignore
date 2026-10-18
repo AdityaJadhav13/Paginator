@@ -16,3 +16,15 @@
 # Temporary files
 tmp/
 temp/
+# Python environments and caches (experiments, oracle)
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local tooling: Claude Code personal settings, graphify knowledge-graph output (regenerated locally)
+.claude/
+graphify-out/
+
+# Private pilot data never lives in the repo (it stays in $PAGEINATOR_PRIVATE_CORPUS outside git)
