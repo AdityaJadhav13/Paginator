@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.4.2"
+GEN = "gen1/2.5.0"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -73,7 +73,8 @@ BOX_PAD = 2.0                                # inner margin of a ruled fact box
 PHOTO_GAP = 2.0                              # between photos stacked in one story
 CAPTION_GAP = 1.5                            # photo bottom → caption cap line (the profile has one observation only)
 CROP = 1.5                                   # photo aspect may change by up to ×/÷ 1.5 (cost grows with the square of the log)
-FITS = (1.0, 0.98, 0.96)
+FITS = (1.04, 1.02, 1.0, 0.98, 0.96)           # body size: up to 4 % larger (fills columns, the editors' wish) or smaller
+SHORT_COST = 0.4                             # per empty line at the foot of the last column (columns should end level)
 BUDGET = 400_000
 TOMBSTONE = 4.0                              # cost of neighbouring top headlines within 6 pt of each other
 LEAD_MARGIN_PT = 2.0
@@ -512,7 +513,8 @@ class Generator:
                             if L == 0:                                  # display only: the block and the rule gap
                                 cands.append((0, 0.0, None))
                             else:
-                                cands.append((math.ceil(L / m), 0.0, None))
+                                R0 = math.ceil(L / m)
+                                cands.append((R0, SHORT_COST * (R0 * m - L), None))
                         else:
                             ph_top = top_text + max({"deck": SP["deck_to_photo"]}.get(after, SP["headline_to_photo"]), desc + 1.0) \
                                 if dsp["has_display"] else SP["rule_to_photo"]
@@ -539,7 +541,8 @@ class Generator:
                                     if px_w / (ph_w / 25.4) < s.photo["min_ppi"]:
                                         continue
                                     R = max(j, math.ceil((L + k * j) / m))
-                                    pc = 3.0 * math.log(asp / s.photo["aspect"]) ** 2 + (3.0 if s.rank <= 2 else 1.0) * (1 - k / m)
+                                    short = k * (R - j) + (m - k) * R - L          # empty lines at the last column's foot
+                                    pc = 3.0 * math.log(asp / s.photo["aspect"]) ** 2 + (3.0 if s.rank <= 2 else 1.0) * (1 - k / m) + SHORT_COST * short
                                     cands.append((R, pc, {"k": k, "j": j, "ph_top": ph_top, "ph_h": ph_h, "ph_w": ph_w, "cap": bool(cap)}))
                         for R, pc, ph in cands:
                             if m == 1 and R * lead_b > LEG_MM:          # a single leg deeper than LEG_MM reads badly

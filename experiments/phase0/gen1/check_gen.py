@@ -174,6 +174,20 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
         if bl:
             ws.append(round(p["y"] + p["h"] - max(bl), 2))
     out["white_at_foot_mm"] = {"median": round(st.median(ws), 2), "max": max(ws)} if ws else None
+    # empty lines at column feet: per story column, the rows between its last body line and the module's last row
+    empty = 0
+    for so_ in man["stories_out"]:
+        cols = so_.get("columns") or []
+        lead = (so_.get("style") or [0, 13.0])[1] / CMP.MM
+        body = [l for l in gl if l.get("story") == so_["story"] and l.get("role") == "body"]
+        if not cols or not body or not lead:
+            continue
+        last_row = max(l["baseline_mm"] for l in body)
+        for c in cols:
+            inc = [l["baseline_mm"] for l in body if c[0] - 0.5 <= l["x0_mm"] <= c[2] + 0.5]
+            if inc:
+                empty += max(0, round((last_row - max(inc)) / lead))
+    out["empty_lines_at_column_feet"] = empty
     out["spans"] = [p["w"] for p in pl]
     out["styles"] = [tuple(s.get("style") or ()) for s in man["stories_out"]]
     # printed lead for reference (span in grid columns, at the top?)
@@ -271,6 +285,7 @@ def main():
            "newshole_filled_pct_min": min((p["newshole_filled_pct"] for p in pages), default=None),
            "lead_at_top": sum(p["lead_at_top"] for p in pages), "lead_span_ge_print": sum(p["lead_span"] >= p["print_lead_span"] for p in pages),
            "hierarchy_breaks": sum(p["hierarchy_breaks"] for p in pages), "tombstones": sum(p["tombstones"] for p in pages),
+           "empty_lines_at_column_feet": sum(p.get("empty_lines_at_column_feet", 0) for p in pages),
            "white_at_foot_mm_median": st.median([p["white_at_foot_mm"]["median"] for p in pages if p["white_at_foot_mm"]]) if pages else None}
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "check.json").write_text(json.dumps(agg, indent=1) + "\n")
