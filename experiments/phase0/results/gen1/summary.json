@@ -1,6 +1,6 @@
 {
  "schema": "pageinator.gen1.summary/2",
- "generator": "gen1/2.4.2",
+ "generator": "gen1/2.5.0",
  "lead_side": "right",
  "body_styles": {
   "12.0/13.0": 80,
@@ -53,5 +53,5 @@
  },
  "overset_lines": 0,
  "problems": 0,
- "retried_pages": 1
+ "retried_pages": 4
 }

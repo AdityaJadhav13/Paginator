@@ -347,6 +347,10 @@ His summary, through the owner's family: the placement of images, text and stori
 
    The hierarchy measure counts 35 pairs, but these are first-line differences of 1–3 pt between stories of equal width, caused by the per-line growth.
 6. **Round 2 of the review** (`review2`, new shuffle) is built from 2.4.2 for the same reviewer.
+7. **gen1/2.5.0, no empty space after a story ends** (the reviewer's other note):
+   - Every empty line left at the foot of a story's last column costs 0.4 in the search.
+   - Body text may be set up to 4% larger as well as up to 4% smaller.
+   - **Result:** empty lines at column feet fall from 57 to 25 on the 17 pages. All 17 pages still pass every check, and the lead is at the top on all 17.
 
 ## 10. Next steps
 1. **Editors:** a blind review of generated vs printed pages, side by side and unlabelled: "which would you print?" and "what would you change?". Sheets come from `report/gen1/check/*.side.png` (private).
