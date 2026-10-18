@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.6.0"
+GEN = "gen1/2.8.0"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -88,9 +88,13 @@ XH_SPACE_L = 1.5                             # crosshead space above/below in bo
 MAX_STORIES = 11
 LOOSE_GAP_MM = 30.0                          # a loose item joins a headline at most this far above it
 ICON_MM = 25.0
+BRIEF_WORDS = 60                             # a brief: at most this many words …
+BRIEF_HEAD_PT = 16.0                         # … under a headline of at most this size, with no photo
 BOX_WORDS = 300                              # a filled box holding small stories of at most this many words is one fact box
 QUOTE_WORDS = 60                             # a child story this short with no headline or photo is a pull quote
 CHILD_SPLIT = 0.8                            # cost when a sidebar and its parent story end up in different halves of a cut
+MIN_REGION_MM = 15.0                         # a strip of the newshole beside an ad block narrower than this is left empty
+LEAD_LOW = 2.0                               # cost when the lead story's region does not start at the top of the newshole
 LOOSE_INTRO_WORDS = 80                       # loose text this short inside a story's printed box is that story's (an intro)
 XH_FOLLOW_MM = 15.0                          # a loose crosshead joins a flow only if a paragraph starts this close below it
 HEAD_GROW = 1.25                             # a headline may grow this much to fill its measure (same number of lines)
@@ -565,9 +569,12 @@ class Generator:
         return [best[k] for k in sorted(best)]
 
     # ---- the search
-    def run(self, news_top, news_bottom, span_prior, lead_side):
+    def run(self, regions, span_prior, lead_side):
+        """regions: [(first grid column, columns, top mm, bottom mm)] that together make the newshole (one, or several
+        around an ad block). → ((cost, [(region index, tree)]), info)."""
         n = len(self.stories)
-        Hn = math.floor((news_bottom - news_top) / UNIT)
+        Hs = [math.floor((b_ - t_) / UNIT) for _, _, t_, b_ in regions]
+        Hn = max(Hs)
         leaf = {}
         for i, s in enumerate(self.stories):
             for w in range(1, NCOL + 1):
@@ -593,9 +600,9 @@ class Generator:
                     sub = (sub - 1) & mask
                 R[(mask, w)] = merge(acc)
         no_option = [self.stories[i].id for i in range(n) if not any(leaf[(i, w)] for w in range(1, NCOL + 1))]
-        if not contains(R[(full, NCOL)], Hn):
-            return None, {"feasible": False, "reachable_mm": [[a * UNIT, b * UNIT] for a, b in R[(full, NCOL)][:6]],
-                          "newshole_mm": Hn * UNIT, "stories_without_options": no_option}
+        if len(regions) == 1 and not contains(R[(full, regions[0][1])], Hs[0]):
+            return None, {"feasible": False, "reachable_mm": [[a * UNIT, b * UNIT] for a, b in R[(full, regions[0][1])][:6]],
+                          "newshole_mm": Hs[0] * UNIT, "stories_without_options": no_option}
         memo, nodes = {}, [0]
         rank = [s.rank for s in self.stories]
         idx = {s.id: i for i, s in enumerate(self.stories)}
@@ -674,8 +681,40 @@ class Generator:
                 sub = (sub - 1) & mask
             memo[key] = cand
             return cand
-        res = best(full, NCOL, Hn)
-        info = {"feasible": res is not None, "nodes": nodes[0], "budget_hit": nodes[0] > BUDGET, "newshole_mm": Hn * UNIT}
+        if len(regions) == 1:
+            r1 = best(full, regions[0][1], Hs[0])
+            res = None if r1 is None else (r1[0], [(0, r1[1])])
+        else:
+            # several regions: which stories fill which region exactly, the cheapest assignment (each region non-empty);
+            # the lead belongs in a region at the top of the newshole
+            top0 = min(t_ for _, _, t_, _ in regions)
+            lead_i = next((i for i, s_ in enumerate(self.stories) if s_.rank == 0), None)
+            F = {}
+
+            def assign(k, mask):
+                if k == len(regions):
+                    return (0.0, []) if mask == 0 else None
+                key = (k, mask)
+                if key in F:
+                    return F[key]
+                c0, w, t_, _ = regions[k]
+                out = None
+                sub = mask
+                while sub:
+                    if contains(R[(sub, w)], Hs[k]):
+                        rest = assign(k + 1, mask ^ sub)
+                        if rest is not None:
+                            b_ = best(sub, w, Hs[k])
+                            if b_ is not None:
+                                c = b_[0] + rest[0] + (LEAD_LOW if lead_i is not None and sub >> lead_i & 1 and t_ > top0 + 1 else 0.0)
+                                if out is None or c < out[0]:
+                                    out = (c, [(k, b_[1])] + rest[1])
+                    sub = (sub - 1) & mask
+                F[key] = out
+                return out
+            res = assign(0, full)
+        info = {"feasible": res is not None, "nodes": nodes[0], "budget_hit": nodes[0] > BUDGET,
+                "newshole_mm": Hs[0] * UNIT if len(regions) == 1 else [h * UNIT for h in Hs], "regions": len(regions)}
         return res, info
 
     def place(self, tree, x, y):
@@ -708,17 +747,17 @@ def owned_ids(story) -> set:
     return ids | {f"bf-{i}" for i in ids}               # body-frame elements carry the frame id with a "bf-" prefix
 
 
-def fixed_parts(model, gen_ids, box):
+def fixed_parts(model, gen_ids, boxes_):
     """The page without the generated stories: (kept stories, kept elements, intruders). Removed: everything a generated
     story owns, and rules / boxes / loose items of the old plan inside or crossing the newshole. Intruders = kept text,
     images, graphics or ads reaching more than 2 mm into the newshole: the newshole is then not a free rectangle."""
-    x0, t, x1, b = box
+    boxes_ = [boxes_] if isinstance(boxes_[0], (int, float)) else boxes_
     owned = set().union(*(owned_ids(s) for s in model["stories"] if s["id"] in gen_ids))
     kept_stories = [s for s in model["stories"] if s["id"] not in gen_ids]
     kept_owned = set().union(*(owned_ids(s) for s in kept_stories)) if kept_stories else set()
 
     def into(bb, m=2.0):
-        return min(bb[2], x1) - max(bb[0], x0) > m and min(bb[3], b) - max(bb[1], t) > m
+        return any(min(bb[2], x1) - max(bb[0], x0) > m and min(bb[3], b) - max(bb[1], t) > m for x0, t, x1, b in boxes_)
     gen_boxes = [[b[0] - DECOR_MM, b[1] - DECOR_MM, b[2] + DECOR_MM, b[3] + DECOR_MM]
                  for b in (s["bbox_mm"] for s in model["stories"] if s["id"] in gen_ids and s.get("bbox_mm"))]
 
@@ -734,7 +773,7 @@ def fixed_parts(model, gen_ids, box):
         if e["kind"] in ("rule", "box", "image", "graphic") and e["id"] not in kept_owned and any(within(bb, o) for o in gen_boxes):
             decor.append(e["id"])
             continue                                           # decoration of a story that moved (label panel, icon)
-        inside = bb[1] >= t - 1 and bb[3] <= b + 1 and bb[0] >= x0 - 1 and bb[2] <= x1 + 1
+        inside = any(bb[1] >= t - 1 and bb[3] <= b + 1 and bb[0] >= x0 - 1 and bb[2] <= x1 + 1 for x0, t, x1, b in boxes_)
         if e["kind"] in ("rule", "box") and (inside or into(bb, 0.5)) and e["id"] not in kept_owned:
             decor.append(e["id"])
             continue                                           # decoration of the old plan
@@ -908,6 +947,49 @@ def merge_boxed(m, box) -> dict:
         gone = {s_["id"] for s_ in inner}
         stories = [s_ for s_ in stories if s_["id"] not in gone] + [merged]
         owned |= owned_ids(merged)
+    return {**m, "stories": stories}
+
+
+def merge_briefs(m, ids) -> dict:
+    """A page with more stories than the search takes: briefs (at most BRIEF_WORDS words, a headline of at most
+    BRIEF_HEAD_PT, no photo) printed in the same column are stacked into one "news in brief" module — each brief's
+    headline as a crosshead before its text, in printed order — so the page fits the search."""
+    els = {e["id"]: e for e in m["elements"]}
+
+    def brief(s_):
+        w = sum(len(f["text"].split()) for f in s_["flow"] if f["type"] == "para")
+        hs = els[s_["headline"]]["size_pt"] if s_.get("headline") in els else 0.0
+        return s_["id"] in ids and s_.get("bbox_mm") and 0 < w <= BRIEF_WORDS and hs <= BRIEF_HEAD_PT and not s_.get("images") \
+            and not s_.get("parent_story")
+    briefs = sorted([s_ for s_ in m["stories"] if brief(s_)], key=lambda s_: (round(s_["bbox_mm"][0] / 10), s_["bbox_mm"][1]))
+    groups = []
+    for s_ in briefs:
+        b = s_["bbox_mm"]
+        for g_ in groups:
+            o = g_[-1]["bbox_mm"]
+            if min(b[2], o[2]) - max(b[0], o[0]) >= 0.5 * min(b[2] - b[0], o[2] - o[0]) and b[1] - o[3] <= 15.0:
+                g_.append(s_); break
+        else:
+            groups.append([s_])
+    stories, n = list(m["stories"]), 0
+    for g_ in groups:
+        if len(g_) < 2:
+            continue
+        n += 1
+        flow, other, frames = [], [], []
+        for s_ in g_:
+            if s_.get("headline") in els:
+                flow.append({"type": "crosshead", "element": s_["headline"]})
+            flow += s_["flow"]
+            other += [x for x in [s_.get("kicker"), s_.get("byline"), *(s_.get("decks") or []), *(s_.get("headline_parts") or []),
+                                  *[y if isinstance(y, str) else y.get("id") for y in s_.get("other_elements") or []]] if x]
+            frames += [f for c in s_.get("columns") or [] for f in c.get("frame_ids") or []]
+        bb = [min(x["bbox_mm"][0] for x in g_), min(x["bbox_mm"][1] for x in g_), max(x["bbox_mm"][2] for x in g_), max(x["bbox_mm"][3] for x in g_)]
+        gone = {x["id"] for x in g_}
+        stories = [x for x in stories if x["id"] not in gone] + [{
+            "id": f"briefs{n}", "synthetic": True, "headline": None, "headline_parts": [], "kicker": None, "decks": [], "byline": None,
+            "captions": [], "images": [], "jump_lines": [], "other_elements": other, "parent_story": None, "bbox_mm": bb,
+            "columns": [{"frame_ids": frames, "first_baseline_mm": bb[1]}], "flow": flow, "merged_from": [x["id"] for x in g_]}]
     return {**m, "stories": stories}
 
 
@@ -1091,10 +1173,37 @@ def newshole(m):
         band_top = min(a[1] for a in ads)
         band = (all(a[3] > m["page_h_mm"] * 0.9 for a in ads) and min(a[0] for a in ads) < ORIGIN + GUT
                 and max(a[2] for a in ads) > x_hi - GUT and band_top > top + 50)
-        if not band:
-            return None, "irregular ad shapes (not a rectangular newshole)"
-        return (top, band_top - 3.0), None
-    return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm"))), None
+        if band:
+            return (top, band_top - 3.0, None), None
+        if len(ads) == 1 and ads[0][1] > top - 1:          # one ad block inside the news area: the newshole goes around it
+            return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm")), ads[0]), None
+        return None, "irregular ad shapes (more than one ad block)"
+    return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm")), None), None
+
+
+def regions_for(top, bottom, ad):
+    """The newshole as rectangles of whole grid columns: all of it, or — around one ad block — the columns left and right
+    of the ad at full height and the ad's columns above and below it (3 mm clear; strips under MIN_REGION_MM dropped).
+    → [(first column, columns, top mm, bottom mm)]."""
+    if ad is None:
+        return [(0, NCOL, top, bottom)]
+    c0 = max(0, min(NCOL, round((ad[0] - ORIGIN) / PITCH)))
+    c1 = max(c0 + 1, min(NCOL, round((ad[2] + GUT - ORIGIN) / PITCH)))
+    out = []
+    if c0 > 0:
+        out.append((0, c0, top, bottom))
+    if ad[1] - 3.0 - top >= MIN_REGION_MM:
+        out.append((c0, c1 - c0, top, ad[1] - 3.0))
+    if bottom - (ad[3] + 3.0) >= MIN_REGION_MM:
+        out.append((c0, c1 - c0, ad[3] + 3.0, bottom))
+    if c1 < NCOL:
+        out.append((c1, NCOL - c1, top, bottom))
+    return out
+
+
+def region_box(r):
+    c0, w, t, b = r
+    return (ORIGIN + c0 * PITCH, t, ORIGIN + c0 * PITCH + span_mm(w), b)
 
 
 # ------------------------------------------------------------------------------------------- render
@@ -1235,7 +1344,7 @@ def main():
         hole, why = newshole(m)
         if hole is None:
             results.append({"page": name, "status": f"skipped: {why}"}); print(name, "skipped:", why); continue
-        news_top, news_bottom = hole
+        news_top, news_bottom, ad_block = hole
         x_hi = ORIGIN + span_mm(NCOL)
         photo_dir = ds / "report" / "page1" / "photos" / name
         photo_ids = set(json.loads((photo_dir / "index.json").read_text())["elements"]) if (photo_dir / "index.json").exists() else set()
@@ -1244,9 +1353,14 @@ def main():
             hole_box = (ORIGIN, news_top, x_hi, news_bottom)
             m0 = fold_pull_quotes(merge_boxed(m_orig, hole_box))
             m = attach_loose(m0, loose_stories(m0, hole_box, photo_ids), hole_box)
-            ids = {s["id"] for s in m["stories"] if s.get("bbox_mm") and news_top - 1 <= (s["bbox_mm"][1] + s["bbox_mm"][3]) / 2 <= news_bottom + 1
-                   and ORIGIN - 1 <= (s["bbox_mm"][0] + s["bbox_mm"][2]) / 2 <= x_hi + 1}
-            kept_stories, keep, intruders, decor = fixed_parts(m, ids, (ORIGIN, news_top, x_hi, news_bottom))
+            regions = regions_for(news_top, news_bottom, ad_block)
+            rboxes = [region_box(r) for r in regions]
+
+            def in_regions(bb):
+                cx_, cy_ = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
+                return any(x0 - 1 <= cx_ <= x1 + 1 and t - 1 <= cy_ <= b + 1 for x0, t, x1, b in rboxes)
+            ids = {s["id"] for s in m["stories"] if s.get("bbox_mm") and in_regions(s["bbox_mm"])}
+            kept_stories, keep, intruders, decor = fixed_parts(m, ids, rboxes)
             # small fixed items on the newshole's top or bottom edge (a section logo, an emblem, a boxed notice at the foot):
             # move that edge clear of them, as a designer would; anything else inside makes the page irregular
             boxes = {e["id"]: e["bbox_mm"] for e in m["elements"]} | {s_["id"]: s_["bbox_mm"] for s_ in m["stories"] if s_.get("bbox_mm")}
@@ -1261,15 +1375,20 @@ def main():
         if intruders:
             results.append({"page": name, "status": "skipped: fixed parts reach into the newshole", "intruders": len(intruders)})
             print(name, "skipped: fixed parts reach into the newshole", len(intruders)); continue
+        n_cand = sum(1 for s_ in m["stories"] if s_["id"] in ids and (s_.get("synthetic") or any(f["type"] == "para" and f["text"].strip() for f in s_["flow"])))
+        if n_cand > MAX_STORIES:                     # too many for the search: stack the briefs of each column into one module
+            m = merge_briefs(m, ids)
+            ids = {s_["id"] for s_ in m["stories"] if s_.get("bbox_mm") and in_regions(s_["bbox_mm"])}
+            kept_stories, keep, intruders, decor = fixed_parts(m, ids, rboxes)
         g = Generator(cx, m, photo_dir, styles, ids, space_em)
         if len(g.stories) > MAX_STORIES:
             results.append({"page": name, "status": f"skipped: more than {MAX_STORIES} stories (search limit)"}); print(name, "skipped:", len(g.stories), "stories"); continue
         retries = []
         for attempt in range(RETRIES + 1):
-            res, info = g.run(news_top, news_bottom, span_prior, lead_side)
+            res, info = g.run(regions, span_prior, lead_side)
             if res is None:
                 break
-            placed = g.place(res[1], ORIGIN, news_top)
+            placed = [pl for k, tree in res[1] for pl in g.place(tree, ORIGIN + regions[k][0] * PITCH, regions[k][2])]
             B, rep, n_fixed = render(g, m, placed, news_top, news_bottom, photo_dir, kept_stories, keep, panels_of(m, ids, decor))
             over = [(st_, o) for st_, (_, _, _, _, _, o) in zip(rep["stories"], placed) if st_["overset_lines"] or st_.get("overset_crosshead_words")]
             if not over or attempt == RETRIES:
@@ -1293,6 +1412,7 @@ def main():
         man = {"schema": "pageinator.gen1.page/2", "generator": GEN, "sha256": hashlib.sha256(data).hexdigest(), **summ,
                "fixed_problems": rep["fixed_problems"], "lead_side": lead_side,
                "newshole_box_mm": [ORIGIN, round(news_top, 3), round(x_hi, 3), round(news_bottom, 3)],
+               "regions_mm": [[round(v, 3) for v in b] for b in rboxes], "ad_block_mm": ad_block,
                "placed": [{"story": g.stories[i].id, "rank": g.stories[i].rank, "x": round(x, 2), "y": round(y, 2), "w": w, "h": round(h, 2),
                            "m": o["m"], "fit": o["fit"], "photo_cols": o["photo"]["k"] if o["photo"] else None} for i, x, y, w, h, o in placed],
                "head_ids": {s.id: s.head_ids for s in g.stories}, "deck_ids": {s.id: s.deck_ids for s in g.stories},

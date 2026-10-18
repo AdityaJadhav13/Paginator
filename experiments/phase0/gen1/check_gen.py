@@ -125,9 +125,10 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
     # clean
     boxes = list(mod.values())
     out["module_overlaps"] = sum(overlap(boxes[i], boxes[j], 0.3) for i in range(len(boxes)) for j in range(i + 1, len(boxes)))
-    out["outside_newshole"] = sum(not inside(b, hole) for b in boxes)
+    regions = man.get("regions_mm") or [hole]                 # the newshole, or its rectangles around an ad block
+    out["outside_newshole"] = sum(not any(inside(b, r) for r in regions) for b in boxes)
     area = sum((b[2] - b[0]) * (b[3] - b[1]) for b in boxes)
-    out["newshole_filled_pct"] = round(100 * area / ((hole[2] - hole[0]) * (hole[3] - hole[1])), 1)
+    out["newshole_filled_pct"] = round(100 * area / sum((r[2] - r[0]) * (r[3] - r[1]) for r in regions), 1)
     gl = [l for l in lines if l.get("story") in gen_ids]
     lb = [CMP.line_box(l["x0_mm"], l["x1_mm"], l["baseline_mm"], l["size_pt"]) for l in gl]
     out["outside_module"] = sum(not inside(b, mod[l["story"]], 1.0) for l, b in zip(gl, lb))
