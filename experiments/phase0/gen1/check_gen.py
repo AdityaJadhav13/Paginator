@@ -75,6 +75,7 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
 
     # complete: body text character for character; every display part word for word; nothing left unset
     integ, acct, missing_photos, not_set = [], [], 0, Counter()
+    expected_words = 0                                 # words the generated stories hold: drawn words may not exceed them
     so = {s["story"]: s for s in man["stories_out"]}
     got = Counter()
     for l in lines:
@@ -94,6 +95,7 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
         src = "".join(" ".join(fix_bullet(b["text"]) for b in paras).split())          # every paragraph, none excused
         ours = "".join(" ".join(l["text"] for l in lines if l.get("role") == "body" and l.get("story") == story).split())
         integ.append(ours == src)
+        expected_words += sum(len(fix_bullet(b["text"]).split()) for b in paras)
         want = {}
         if man["head_ids"].get(story):
             want[f"gen-h-{story}"] = words(man["head_ids"][story])
@@ -102,7 +104,7 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
         if man.get("caption_ids", {}).get(story):
             want[f"gen-c-{story}"] = words(man["caption_ids"][story])
         for k in ("kicker", "byline"):
-            if ms.get(k) in els:
+            if ms.get(k) in els and not els[ms[k]].get("run_in"):      # a run-in dateline is part of the paragraph
                 want[ms[k]] = words([ms[k]])
         for k in ("other_elements", "jump_lines"):                 # loose story text and jump lines are set too
             for x in ms.get(k) or []:
@@ -113,11 +115,14 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
             if b["type"] == "crosshead" and b.get("element") in els:
                 want[b["element"]] = words([b["element"]])
         acct += [k for k, v in want.items() if got.get(k, 0) != v]
+        expected_words += sum(want.values())
         if ms.get("images") and not s.get("photo_box"):
             missing_photos += 1
         for k, v in (s.get("not_set") or {}).items():
             not_set[k] += len(v)
     out["integrity_ok"], out["accounting_mismatches"], out["photos_missing"] = all(integ), acct, missing_photos
+    drawn_words = sum(len(l["text"].split()) for l in lines if l.get("story") in gen_ids)
+    out["duplicate_words"] = max(0, drawn_words - expected_words)          # text set twice (e.g. a run-in dateline)
     out["parts_not_set"] = dict(not_set)
     out["overset_lines"] = sum(s.get("overset_lines", 0) for s in man["stories_out"])
     out["overset_crosshead_words"] = sum(s.get("overset_crosshead_words", 0) for s in man["stories_out"])
@@ -215,7 +220,7 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
     out["body_frames_unowned"] = [e["id"] for e in model["elements"] if e["kind"] == "body_frame" and not in_ad(e["bbox_mm"])
                                   and any(not l.get("excluded") and l.get("use", "body") == "body" and l.get("text", "").strip() for l in e.get("lines") or [])
                                   and e["id"] not in frame_owner and e["id"] not in body_src]
-    out["page_text_lost"] = [e["id"] for e in model["elements"] if e["kind"] in TEXT_KINDS and e.get("text", "").split()
+    out["page_text_lost"] = [e["id"] for e in model["elements"] if e["kind"] in TEXT_KINDS and e.get("text", "").split() and not e.get("run_in")
                              and not only_bullets(e["text"]) and not in_ad(e["bbox_mm"]) and e["id"] not in drawn_ids and e["id"] not in body_src
                              and not any(e["id"] in (sid[st].get("headline_parts") or []) or e["id"] in (man["head_ids"].get(st) or [])
                                          or e["id"] in (man["deck_ids"].get(st) or []) or e["id"] in (man.get("caption_ids", {}).get(st) or [])
@@ -229,6 +234,7 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
     out["icons_not_set"] = len(man.get("icons_not_set", []))          # small decorative images of no story: reported, not a gate
     gates = {"checker_fail": out["checker"]["FAIL"] > 0, "problems": out["problems"] > 0,
              "page_text_lost": bool(out["page_text_lost"]) or bool(out["body_frames_unowned"]), "page_photos_lost": bool(out["page_photos_lost"]),
+             "duplicate_text": out["duplicate_words"] > 0,
              "overset": out["overset_lines"] > 0 or out["overset_crosshead_words"] > 0, "integrity": not out["integrity_ok"],
              "accounting": bool(acct), "photos_missing": missing_photos > 0, "parts_not_set": sum(not_set.values()) > 0,
              "module_overlap": out["module_overlaps"] > 0,
@@ -281,6 +287,7 @@ def main():
            "glyph_collisions_display": sum(p["glyph_collisions_display"] for p in pages), "glyph_collisions_body": sum(p["glyph_collisions_body"] for p in pages), "glyph_collisions_print": sum(p["glyph_collisions_print"] for p in pages),
            "overlaps": sum(p["overlaps"] for p in pages), "photos_missing": sum(p["photos_missing"] for p in pages),
            "glyph_collisions_fixed_parts": sum(p["glyph_collisions_fixed_parts"] or 0 for p in pages),
+           "duplicate_words": sum(p["duplicate_words"] for p in pages),
            "icons_not_set": sum(p["icons_not_set"] for p in pages), "decoration_removed": sum(p["decoration_removed"] for p in pages),
            "page_text_lost": sum(len(p["page_text_lost"]) for p in pages), "page_photos_lost": sum(len(p["page_photos_lost"]) for p in pages),
            "parts_not_set": dict(sum((Counter(p["parts_not_set"]) for p in pages), Counter())),

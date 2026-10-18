@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.8.2"
+GEN = "gen1/2.8.3"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -93,6 +93,7 @@ BRIEF_HEAD_PT = 16.0                         # … under a headline of at most t
 BOX_WORDS = 300                              # a filled box holding small stories of at most this many words is one fact box
 QUOTE_WORDS = 60                             # a child story this short with no headline or photo is a pull quote
 CHILD_SPLIT = 0.8                            # cost when a sidebar and its parent story end up in different halves of a cut
+AD_STRIP_MM = 6.0                            # a bar this close above/below an ad block, as wide as it, belongs to the ad
 MIN_REGION_MM = 25.0                         # a strip of the newshole beside an ad block narrower than this is left empty
 LEAD_LOW = 2.0                               # cost when the lead story's region does not start at the top of the newshole
 LOOSE_INTRO_WORDS = 80                       # loose text this short inside a story's printed box is that story's (an intro)
@@ -173,8 +174,9 @@ class Story:
         decks = [els[d] for d in s.get("decks", []) if d in els]
         self.deck = " ".join(_text(d) for d in decks) or None
         self.deck_ids = [d["id"] for d in decks]
-        self.kicker = els.get(s.get("kicker")) if s.get("kicker") else None
-        self.byline = els.get(s.get("byline")) if s.get("byline") else None
+        # a run-in dateline is already the start of the first paragraph: never set on its own
+        self.kicker = els.get(s.get("kicker")) if s.get("kicker") and not els.get(s.get("kicker"), {}).get("run_in") else None
+        self.byline = els.get(s.get("byline")) if s.get("byline") and not els.get(s.get("byline"), {}).get("run_in") else None
         ph = sorted((i for i in s.get("images", []) if i in photos_index),
                     key=lambda i: (-photos_index[i]["width_px"] * photos_index[i]["height_px"], i))
         # min_ppi: never enlarged below MIN_PPI, or below the resolution the paper itself printed it at (if lower)
@@ -184,7 +186,8 @@ class Story:
         self.photo = photos[0] if photos else None
         self.photos_extra = photos[1:]                       # stacked under the first photo at its width, uncropped
         other = [x if isinstance(x, str) else x.get("id") for x in s.get("other_elements") or []]
-        self.tags = [els[i] for i in other if i in els and el_text(els[i]).strip() and not CP.only_bullets(el_text(els[i]))]
+        self.tags = [els[i] for i in other if i in els and el_text(els[i]).strip() and not CP.only_bullets(el_text(els[i]))
+                     and not els[i].get("run_in")]
         self.bullet_columns = [i for i in other if i in els and CP.only_bullets(el_text(els[i]))]   # decoration, not set
         # jump lines: "continued from …" (printed in the story's upper half) opens the story, "continued on …" closes it
         first_bl = min((c["first_baseline_mm"] for c in s.get("columns") or []), default=1e9)
@@ -1070,7 +1073,7 @@ def loose_icons(m, box, photo_ids) -> list:
             and e["bbox_mm"][0] >= x0 - 1 and e["bbox_mm"][2] <= x1 + 1 and e["bbox_mm"][1] >= t - 1 and e["bbox_mm"][3] <= b + 1]
 
 
-def loose_stories(m, box, photo_ids) -> list:
+def loose_stories(m, box, photo_ids, ad_block=None) -> list:
     """Text and photos inside the newshole that the page model gave to no story (an editorial set as a free text frame,
     a picture with its headline, a lone label): grouped by where print had them — an item joins the nearest headline or
     kicker above it that overlaps it across by half its width, within LOOSE_GAP_MM — and turned into stories of their
@@ -1084,7 +1087,8 @@ def loose_stories(m, box, photo_ids) -> list:
 
     def in_ad(bb):
         return any(a[0] - 0.5 <= bb[0] and bb[2] <= a[2] + 0.5 and a[1] - 0.5 <= bb[1] and bb[3] <= a[3] + 0.5 for a in ads)
-    U = [e for e in m["elements"] if e["id"] not in owned and inside(e["bbox_mm"]) and not in_ad(e["bbox_mm"]) and (
+    U = [e for e in m["elements"] if e["id"] not in owned and inside(e["bbox_mm"]) and not in_ad(e["bbox_mm"]) and not e.get("run_in")
+         and not (ad_block and inside_frac(e["bbox_mm"], ad_block) >= 0.8) and (
         (e["kind"] in TEXT_KINDS + ("body_frame",) and el_text(e).split() and not CP.only_bullets(el_text(e))) or (e["kind"] == "image" and e["id"] in photo_ids
                                                                                                          and not is_icon(e)))]
     U.sort(key=lambda e: (e["bbox_mm"][1], e["bbox_mm"][0], e["id"]))
@@ -1191,7 +1195,14 @@ def newshole(m):
         if band:
             return (top, band_top - 3.0, None), None
         if len(ads) == 1 and ads[0][1] > top - 1:          # one ad block inside the news area: the newshole goes around it
-            return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm")), ads[0]), None
+            ad = list(ads[0])
+            for e in m["elements"]:                        # strips touching it (a coloured bar with its text) are the ad's frame
+                b = e["bbox_mm"]
+                if e["kind"] in ("furniture", "box", "other_text", "graphic") and min(b[2], ad[2]) - max(b[0], ad[0]) >= 0.8 * (ad[2] - ad[0]) \
+                        and (0 <= ad[1] - b[3] <= AD_STRIP_MM or 0 <= b[1] - ad[3] <= AD_STRIP_MM or (b[1] < ad[1] < b[3]) or (b[1] < ad[3] < b[3])) \
+                        and b[3] - b[1] <= 15.0:
+                    ad = [min(ad[0], b[0]), min(ad[1], b[1]), max(ad[2], b[2]), max(ad[3], b[3])]
+            return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm")), ad), None
         return None, "irregular ad shapes (more than one ad block)"
     return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm")), None), None
 
@@ -1367,7 +1378,7 @@ def main():
         for _ in range(4):
             hole_box = (ORIGIN, news_top, x_hi, news_bottom)
             m0 = fold_pull_quotes(merge_boxed(m_orig, hole_box))
-            m = attach_loose(m0, loose_stories(m0, hole_box, photo_ids), hole_box)
+            m = attach_loose(m0, loose_stories(m0, hole_box, photo_ids, ad_block), hole_box)
             regions = regions_for(news_top, news_bottom, ad_block)
             rboxes = [region_box(r) for r in regions]
 
