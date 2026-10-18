@@ -1,0 +1,13 @@
+{
+  "schema": "pageinator.compose2.house_profile/1",
+  "status": "PROVISIONAL — NOT the newsroom's real geometry. Replace with values measured by EXP-PUBLISHED-1 from production PDFs (house_profile.measured.json) as soon as they exist.",
+  "basis": "Plausible broadsheet grids for sensitivity only; 30.25 mm from the old spec (318 mm page, 8 columns, 24 mm margins, 4 mm gutters).",
+  "profiles": [
+    {"id": "PROV-8col", "page_mm": [318, 510], "margin_mm": 24, "columns": 8, "gutter_mm": 4.0},
+    {"id": "PROV-7col", "page_mm": [318, 510], "margin_mm": 24, "columns": 7, "gutter_mm": 4.0},
+    {"id": "PROV-6col", "page_mm": [318, 510], "margin_mm": 24, "columns": 6, "gutter_mm": 4.0},
+    {"id": "PROV-5col", "page_mm": [318, 510], "margin_mm": 24, "columns": 5, "gutter_mm": 4.0}
+  ],
+  "body_sizes_pt": [8.5, 9.0, 9.5],
+  "leading_factor": 1.15
+}

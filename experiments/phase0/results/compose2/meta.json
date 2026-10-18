@@ -1,0 +1,597 @@
+{
+ "composer": "compose2/1.0.0",
+ "house_profile_source": "house_profile.provisional.json",
+ "house_profile_status": "PROVISIONAL — NOT the newsroom's real geometry. Replace with values measured by EXP-PUBLISHED-1 from production PDFs (house_profile.measured.json) as soon as they exist.",
+ "grid_widths_mm": [
+  [
+   "PROV-8col",
+   30.25
+  ],
+  [
+   "PROV-7col",
+   35.14
+  ],
+  [
+   "PROV-6col",
+   41.67
+  ],
+  [
+   "PROV-5col",
+   50.8
+  ]
+ ],
+ "widths_mm": [
+  30.25,
+  35.14,
+  41.67,
+  45.0,
+  50.8,
+  60.0
+ ],
+ "sizes_pt": [
+  8.5,
+  9.0,
+  9.5
+ ],
+ "fonts": [
+  {
+   "label": "NotoSerifDeva-w100",
+   "family": "Noto Serif Devanagari",
+   "axes": {
+    "wdth": 100.0
+   },
+   "weight": 400,
+   "category": "serif"
+  },
+  {
+   "label": "NotoSerifDeva-w87.5",
+   "family": "Noto Serif Devanagari",
+   "axes": {
+    "wdth": 87.5
+   },
+   "weight": 400,
+   "category": "serif"
+  },
+  {
+   "label": "NotoSansDeva-w100",
+   "family": "Noto Sans Devanagari",
+   "axes": {
+    "wdth": 100.0
+   },
+   "weight": 400,
+   "category": "sans"
+  },
+  {
+   "label": "NotoSansDeva-w87.5",
+   "family": "Noto Sans Devanagari",
+   "axes": {
+    "wdth": 87.5
+   },
+   "weight": 400,
+   "category": "sans"
+  },
+  {
+   "label": "Mukta",
+   "family": "Mukta",
+   "axes": null,
+   "weight": 400,
+   "category": "sans"
+  },
+  {
+   "label": "TiroDevaMarathi",
+   "family": "Tiro Devanagari Marathi",
+   "axes": null,
+   "weight": 400,
+   "category": "serif"
+  },
+  {
+   "label": "Hind",
+   "family": "Hind",
+   "axes": null,
+   "weight": 400,
+   "category": "sans"
+  },
+  {
+   "label": "Martel",
+   "family": "Martel",
+   "axes": null,
+   "weight": 400,
+   "category": "serif"
+  },
+  {
+   "label": "Yantramanav",
+   "family": "Yantramanav",
+   "axes": null,
+   "weight": 400,
+   "category": "sans"
+  },
+  {
+   "label": "Baloo2",
+   "family": "Baloo 2",
+   "axes": {
+    "wght": 400.0
+   },
+   "weight": 400,
+   "category": "rounded"
+  },
+  {
+   "label": "Khand",
+   "family": "Khand",
+   "axes": null,
+   "weight": 400,
+   "category": "condensed (display face; body use atypical)"
+  }
+ ],
+ "policies": [
+  {
+   "name": "C2_FULL_rules_h2.00",
+   "family": "FULL",
+   "algorithm": "DP",
+   "ws_min_hard": 0.8,
+   "ws_min_soft": 0.9,
+   "ws_max_soft": 1.33,
+   "ws_max_hard": 2.0,
+   "inword": "rules",
+   "inword_min": [
+    2,
+    2
+   ],
+   "emergency": true,
+   "ragged_zone": 0.2,
+   "tracking_max_milli_em": 0.0,
+   "last_line_min_frac": 0.15,
+   "visible_hyphen": true,
+   "token_breaks": true,
+   "max_consecutive_inword": 2,
+   "fallback_max_slack": 0.35,
+   "weights": {
+    "soft_space": 100.0,
+    "ragged": 400.0,
+    "ragged_zone_excess": 100.0,
+    "hybrid_fallback": 50.0,
+    "shortfall": 400.0,
+    "hyphen": 30.0,
+    "hyphen_consecutive": 60.0,
+    "emergency": 10000.0,
+    "short_last_line": 10.0,
+    "tracking": 20.0,
+    "token_break": 15.0
+   }
+  },
+  {
+   "name": "C2_FULL_rules_h1.75",
+   "family": "FULL",
+   "algorithm": "DP",
+   "ws_min_hard": 0.8,
+   "ws_min_soft": 0.9,
+   "ws_max_soft": 1.33,
+   "ws_max_hard": 1.75,
+   "inword": "rules",
+   "inword_min": [
+    2,
+    2
+   ],
+   "emergency": true,
+   "ragged_zone": 0.2,
+   "tracking_max_milli_em": 0.0,
+   "last_line_min_frac": 0.15,
+   "visible_hyphen": true,
+   "token_breaks": true,
+   "max_consecutive_inword": 2,
+   "fallback_max_slack": 0.35,
+   "weights": {
+    "soft_space": 100.0,
+    "ragged": 400.0,
+    "ragged_zone_excess": 100.0,
+    "hybrid_fallback": 50.0,
+    "shortfall": 400.0,
+    "hyphen": 30.0,
+    "hyphen_consecutive": 60.0,
+    "emergency": 10000.0,
+    "short_last_line": 10.0,
+    "tracking": 20.0,
+    "token_break": 15.0
+   }
+  },
+  {
+   "name": "C2_HYBRID_rules_h2.00",
+   "family": "HYBRID",
+   "algorithm": "DP",
+   "ws_min_hard": 0.8,
+   "ws_min_soft": 0.9,
+   "ws_max_soft": 1.33,
+   "ws_max_hard": 2.0,
+   "inword": "rules",
+   "inword_min": [
+    2,
+    2
+   ],
+   "emergency": true,
+   "ragged_zone": 0.2,
+   "tracking_max_milli_em": 0.0,
+   "last_line_min_frac": 0.15,
+   "visible_hyphen": true,
+   "token_breaks": true,
+   "max_consecutive_inword": 2,
+   "fallback_max_slack": 0.35,
+   "weights": {
+    "soft_space": 100.0,
+    "ragged": 400.0,
+    "ragged_zone_excess": 100.0,
+    "hybrid_fallback": 50.0,
+    "shortfall": 400.0,
+    "hyphen": 30.0,
+    "hyphen_consecutive": 60.0,
+    "emergency": 10000.0,
+    "short_last_line": 10.0,
+    "tracking": 20.0,
+    "token_break": 15.0
+   }
+  },
+  {
+   "name": "C2_HYBRID_h2.00",
+   "family": "HYBRID",
+   "algorithm": "DP",
+   "ws_min_hard": 0.8,
+   "ws_min_soft": 0.9,
+   "ws_max_soft": 1.33,
+   "ws_max_hard": 2.0,
+   "inword": "none",
+   "inword_min": [
+    2,
+    2
+   ],
+   "emergency": true,
+   "ragged_zone": 0.2,
+   "tracking_max_milli_em": 0.0,
+   "last_line_min_frac": 0.15,
+   "visible_hyphen": true,
+   "token_breaks": true,
+   "max_consecutive_inword": 2,
+   "fallback_max_slack": 0.35,
+   "weights": {
+    "soft_space": 100.0,
+    "ragged": 400.0,
+    "ragged_zone_excess": 100.0,
+    "hybrid_fallback": 50.0,
+    "shortfall": 400.0,
+    "hyphen": 30.0,
+    "hyphen_consecutive": 60.0,
+    "emergency": 10000.0,
+    "short_last_line": 10.0,
+    "tracking": 20.0,
+    "token_break": 15.0
+   }
+  },
+  {
+   "name": "C2_CONSTRAINED_c2.00",
+   "family": "CONSTRAINED",
+   "algorithm": "DP",
+   "ws_min_hard": 0.8,
+   "ws_min_soft": 0.9,
+   "ws_max_soft": 1.33,
+   "ws_max_hard": 2.0,
+   "inword": "none",
+   "inword_min": [
+    2,
+    2
+   ],
+   "emergency": true,
+   "ragged_zone": 0.2,
+   "tracking_max_milli_em": 0.0,
+   "last_line_min_frac": 0.15,
+   "visible_hyphen": true,
+   "token_breaks": true,
+   "max_consecutive_inword": 2,
+   "fallback_max_slack": 0.35,
+   "weights": {
+    "soft_space": 100.0,
+    "ragged": 400.0,
+    "ragged_zone_excess": 100.0,
+    "hybrid_fallback": 50.0,
+    "shortfall": 400.0,
+    "hyphen": 30.0,
+    "hyphen_consecutive": 60.0,
+    "emergency": 10000.0,
+    "short_last_line": 10.0,
+    "tracking": 20.0,
+    "token_break": 15.0
+   }
+  },
+  {
+   "name": "C2_RAGGED",
+   "family": "RAGGED",
+   "algorithm": "DP",
+   "ws_min_hard": 0.8,
+   "ws_min_soft": 0.9,
+   "ws_max_soft": 1.33,
+   "ws_max_hard": 2.0,
+   "inword": "none",
+   "inword_min": [
+    2,
+    2
+   ],
+   "emergency": true,
+   "ragged_zone": 0.2,
+   "tracking_max_milli_em": 0.0,
+   "last_line_min_frac": 0.15,
+   "visible_hyphen": true,
+   "token_breaks": true,
+   "max_consecutive_inword": 2,
+   "fallback_max_slack": 0.35,
+   "weights": {
+    "soft_space": 100.0,
+    "ragged": 400.0,
+    "ragged_zone_excess": 100.0,
+    "hybrid_fallback": 50.0,
+    "shortfall": 400.0,
+    "hyphen": 30.0,
+    "hyphen_consecutive": 60.0,
+    "emergency": 10000.0,
+    "short_last_line": 10.0,
+    "tracking": 20.0,
+    "token_break": 15.0
+   }
+  },
+  {
+   "name": "C2_RAGGED_rules",
+   "family": "RAGGED",
+   "algorithm": "DP",
+   "ws_min_hard": 0.8,
+   "ws_min_soft": 0.9,
+   "ws_max_soft": 1.33,
+   "ws_max_hard": 2.0,
+   "inword": "rules",
+   "inword_min": [
+    2,
+    2
+   ],
+   "emergency": true,
+   "ragged_zone": 0.2,
+   "tracking_max_milli_em": 0.0,
+   "last_line_min_frac": 0.15,
+   "visible_hyphen": true,
+   "token_breaks": true,
+   "max_consecutive_inword": 2,
+   "fallback_max_slack": 0.35,
+   "weights": {
+    "soft_space": 100.0,
+    "ragged": 400.0,
+    "ragged_zone_excess": 100.0,
+    "hybrid_fallback": 50.0,
+    "shortfall": 400.0,
+    "hyphen": 30.0,
+    "hyphen_consecutive": 60.0,
+    "emergency": 10000.0,
+    "short_last_line": 10.0,
+    "tracking": 20.0,
+    "token_break": 15.0
+   }
+  },
+  {
+   "name": "C2_MEAS_uncapped",
+   "family": "FULL",
+   "algorithm": "DP",
+   "ws_min_hard": 0.8,
+   "ws_min_soft": 0.9,
+   "ws_max_soft": 1.33,
+   "ws_max_hard": 50.0,
+   "inword": "none",
+   "inword_min": null,
+   "emergency": true,
+   "ragged_zone": 0.2,
+   "tracking_max_milli_em": 0.0,
+   "last_line_min_frac": 0.15,
+   "visible_hyphen": true,
+   "token_breaks": true,
+   "max_consecutive_inword": null,
+   "fallback_max_slack": null,
+   "weights": {
+    "soft_space": 236876.89,
+    "ragged": 400.0,
+    "ragged_zone_excess": 100.0,
+    "hybrid_fallback": 50.0,
+    "shortfall": 400.0,
+    "hyphen": 30.0,
+    "hyphen_consecutive": 60.0,
+    "emergency": 10000.0,
+    "short_last_line": 10.0,
+    "tracking": 20.0,
+    "token_break": 15.0
+   }
+  },
+  {
+   "name": "C2_MEAS_uncapped_rules",
+   "family": "FULL",
+   "algorithm": "DP",
+   "ws_min_hard": 0.8,
+   "ws_min_soft": 0.9,
+   "ws_max_soft": 1.33,
+   "ws_max_hard": 50.0,
+   "inword": "rules",
+   "inword_min": [
+    2,
+    2
+   ],
+   "emergency": true,
+   "ragged_zone": 0.2,
+   "tracking_max_milli_em": 0.0,
+   "last_line_min_frac": 0.15,
+   "visible_hyphen": true,
+   "token_breaks": true,
+   "max_consecutive_inword": null,
+   "fallback_max_slack": null,
+   "weights": {
+    "soft_space": 236876.89,
+    "ragged": 400.0,
+    "ragged_zone_excess": 100.0,
+    "hybrid_fallback": 50.0,
+    "shortfall": 400.0,
+    "hyphen": 30.0,
+    "hyphen_consecutive": 60.0,
+    "emergency": 10000.0,
+    "short_last_line": 10.0,
+    "tracking": 20.0,
+    "token_break": 15.0
+   }
+  },
+  {
+   "name": "REF_C1_HYBRID_DP_h2.00_rules",
+   "composer": "compose1/1.0.0"
+  }
+ ],
+ "font_characterisation": {
+  "NotoSerifDeva-w100": {
+   "family": "Noto Serif Devanagari",
+   "category": "serif",
+   "mean_advancing_glyph_em": 0.4723,
+   "em_per_char": 0.375,
+   "space_em": 0.26,
+   "cold_load_ms": 518.7
+  },
+  "NotoSerifDeva-w87.5": {
+   "family": "Noto Serif Devanagari",
+   "category": "serif",
+   "mean_advancing_glyph_em": 0.4357,
+   "em_per_char": 0.3459,
+   "space_em": 0.241,
+   "cold_load_ms": 592.6
+  },
+  "NotoSansDeva-w100": {
+   "family": "Noto Sans Devanagari",
+   "category": "sans",
+   "mean_advancing_glyph_em": 0.5022,
+   "em_per_char": 0.4017,
+   "space_em": 0.26,
+   "cold_load_ms": 328.3
+  },
+  "NotoSansDeva-w87.5": {
+   "family": "Noto Sans Devanagari",
+   "category": "sans",
+   "mean_advancing_glyph_em": 0.4581,
+   "em_per_char": 0.3664,
+   "space_em": 0.231,
+   "cold_load_ms": 401.9
+  },
+  "Mukta": {
+   "family": "Mukta",
+   "category": "sans",
+   "mean_advancing_glyph_em": 0.5006,
+   "em_per_char": 0.3803,
+   "space_em": 0.222,
+   "cold_load_ms": 0.1
+  },
+  "TiroDevaMarathi": {
+   "family": "Tiro Devanagari Marathi",
+   "category": "serif",
+   "mean_advancing_glyph_em": 0.5354,
+   "em_per_char": 0.4056,
+   "space_em": 0.26,
+   "cold_load_ms": 0.1
+  },
+  "Hind": {
+   "family": "Hind",
+   "category": "sans",
+   "mean_advancing_glyph_em": 0.5214,
+   "em_per_char": 0.3949,
+   "space_em": 0.244,
+   "cold_load_ms": 0.1
+  },
+  "Martel": {
+   "family": "Martel",
+   "category": "serif",
+   "mean_advancing_glyph_em": 0.5421,
+   "em_per_char": 0.4378,
+   "space_em": 0.231,
+   "cold_load_ms": 0.1
+  },
+  "Yantramanav": {
+   "family": "Yantramanav",
+   "category": "sans",
+   "mean_advancing_glyph_em": 0.4972,
+   "em_per_char": 0.3978,
+   "space_em": 0.2539,
+   "cold_load_ms": 0.1
+  },
+  "Baloo2": {
+   "family": "Baloo 2",
+   "category": "rounded",
+   "mean_advancing_glyph_em": 0.522,
+   "em_per_char": 0.3966,
+   "space_em": 0.2,
+   "cold_load_ms": 898.1
+  },
+  "Khand": {
+   "family": "Khand",
+   "category": "condensed (display face; body use atypical)",
+   "mean_advancing_glyph_em": 0.4359,
+   "em_per_char": 0.3303,
+   "space_em": 0.189,
+   "cold_load_ms": 0.1
+  }
+ },
+ "compose_ms": {
+  "C2_FULL_rules_h2.00": {
+   "n": 3564,
+   "median": 0.3236,
+   "p95": 0.6577,
+   "max": 2.2248
+  },
+  "C2_FULL_rules_h1.75": {
+   "n": 3564,
+   "median": 0.3104,
+   "p95": 0.6174,
+   "max": 4.1768
+  },
+  "C2_HYBRID_rules_h2.00": {
+   "n": 3564,
+   "median": 0.7914,
+   "p95": 1.7286,
+   "max": 11.2299
+  },
+  "C2_HYBRID_h2.00": {
+   "n": 3564,
+   "median": 0.1879,
+   "p95": 0.4782,
+   "max": 2.478
+  },
+  "C2_CONSTRAINED_c2.00": {
+   "n": 3564,
+   "median": 0.206,
+   "p95": 0.5043,
+   "max": 2.212
+  },
+  "C2_RAGGED": {
+   "n": 3564,
+   "median": 0.162,
+   "p95": 0.4084,
+   "max": 2.7652
+  },
+  "C2_RAGGED_rules": {
+   "n": 3564,
+   "median": 0.7169,
+   "p95": 1.5633,
+   "max": 6.0143
+  },
+  "C2_MEAS_uncapped": {
+   "n": 3564,
+   "median": 0.2463,
+   "p95": 0.5372,
+   "max": 10.3081
+  },
+  "C2_MEAS_uncapped_rules": {
+   "n": 3564,
+   "median": 0.9173,
+   "p95": 1.9285,
+   "max": 10.8617
+  },
+  "REF_C1_HYBRID_DP_h2.00_rules": {
+   "n": 3564,
+   "median": 0.9902,
+   "p95": 2.0955,
+   "max": 12.218
+  }
+ },
+ "corpus": "Phase 0 Marathi body corpus — 18 internally authored paragraphs (NOT newsroom text, NOT native-reviewed)",
+ "runtime_s": 34.8
+}
