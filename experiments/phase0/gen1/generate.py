@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.8.1"
+GEN = "gen1/2.8.2"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -772,6 +772,8 @@ def fixed_parts(model, gen_ids, boxes_):
     for e in model["elements"]:
         if e["id"] in owned:
             continue
+        if e["kind"] == "body_frame" and not el_text(e).strip():
+            continue                                           # an empty text frame: nothing to keep or to lose
         bb = e["bbox_mm"]
         if e["kind"] in ("rule", "box", "image", "graphic") and e["id"] not in kept_owned and any(within(bb, o) for o in gen_boxes):
             decor.append(e["id"])
@@ -1369,9 +1371,9 @@ def main():
             regions = regions_for(news_top, news_bottom, ad_block)
             rboxes = [region_box(r) for r in regions]
 
-            def in_regions(bb):
-                cx_, cy_ = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
-                return any(x0 - 1 <= cx_ <= x1 + 1 and t - 1 <= cy_ <= b + 1 for x0, t, x1, b in rboxes)
+            def in_regions(bb):                       # at least half of it lies in the regions (not just its centre, which
+                a = max(1e-9, (bb[2] - bb[0]) * (bb[3] - bb[1]))   # for a page-wide story can fall in a gutter between them)
+                return sum(max(0.0, min(bb[2], x1) - max(bb[0], x0)) * max(0.0, min(bb[3], b) - max(bb[1], t)) for x0, t, x1, b in rboxes) >= 0.5 * a
             ids = {s["id"] for s in m["stories"] if s.get("bbox_mm") and in_regions(s["bbox_mm"])}
             kept_stories, keep, intruders, decor = fixed_parts(m, ids, rboxes)
             # small fixed items on the newshole's top or bottom edge (a section logo, an emblem, a boxed notice at the foot):
