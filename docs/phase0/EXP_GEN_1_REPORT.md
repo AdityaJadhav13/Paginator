@@ -1,7 +1,7 @@
 # EXP-GEN-1: Pageinator Lays Out a Newspaper Page Itself (report)
 
-**Status:** COMPLETE (experiment, first version). On the held-out editions Pageinator laid out 17 of 28 Marathi pages by itself.
-- **All 17 pass every automatic check.**
+**Status:** COMPLETE (experiment). On the held-out editions Pageinator laid out **24 of 28 Marathi pages** by itself (gen1/2.8.2, 2026-10-20). Earlier versions are reported below; the latest results are in §9.
+- **23 of the 24 pass every automatic check.** The 24th fails on one body-line touch where its printed original has none.
 - 11 pages are outside this version's scope or have no exact fit.
 - **No editor has judged the layouts yet. G1: NOT MET.**
 
@@ -14,7 +14,7 @@
 - Every frequency the generator learns (span by story priority, body type styles, word space, the lead's side) is counted on the **calibration editions only**.
 - Only aggregate numbers appear here. Generated PDFs, manifests and side-by-side images stay in `$PAGEINATOR_PRIVATE_CORPUS/report/gen1/`.
 
-**Date:** 2026-10-18. **Versions:** `gen1/2.4.2`, check schema `pageinator.gen1.check/2`. Built on `page1-model/0.2.0`, `page1-photos/1.1.0`, `page1-compose/2.6.1`, `head1/1.3.1`, `compose3/1.0.0` and `pdfx1/1.0.0`.
+**Date:** 2026-10-20. **Versions:** `gen1/2.8.2`, `page1-compose/2.7.1`, check schema `pageinator.gen1.check/2`. Built on `page1-model/0.2.0`, `page1-photos/1.1.0`, `page1-compose/2.6.1`, `head1/1.3.1`, `compose3/1.0.0` and `pdfx1/1.0.0`.
 
 **Reproduce from the repo root, prefixing each command with `PYTHONDONTWRITEBYTECODE=1`; `$DS` is the private dataset:**
 ```bash
@@ -33,7 +33,7 @@ Prerequisites: EXP-PAGE-1's page models, house profile and photos.
   - the paper's design language, learned in EXP-PAGE-1.
 
   It decides where each story goes, how wide it is, how many text columns it gets, how big its photo is, its headline size and its body type.
-- **Result on the held-out editions:** 17 of 28 Marathi pages laid out; **all 17 pass every check**.
+- **Result on the held-out editions** (gen1/2.4.2; see §9 for the latest, 24 of 28 laid out, 23 passing): 17 of 28 Marathi pages laid out; **all 17 pass every check**.
   - **Nothing is lost on any of the 17.** Every word of every story is set, and every part of the page appears:
     - headlines, decks, kickers, bylines, captions, sub-headings, fact boxes, "continued" lines and every photo;
     - text and photos the page model gave to no story. They are joined to the story they were printed with where that is clear (8 items: kickers, a second headline, an intro, photos and a credit). Where it is not clear, they stand as modules of their own (6: an editorial with its body, 3 headlines, 2 sub-headings), which is never wrong but can look odd.
@@ -351,6 +351,39 @@ His summary, through the owner's family: the placement of images, text and stori
    - Every empty line left at the foot of a story's last column costs 0.4 in the search.
    - Body text may be set up to 4% larger as well as up to 4% smaller.
    - **Result:** empty lines at column feet fall from 57 to 25 on the 17 pages. All 17 pages still pass every check, and the lead is at the top on all 17.
+
+**Overnight, 2026-10-19/20 (gen1/2.5–2.8.2, page1-compose/2.7.1):**
+
+| Change | Effect |
+|---|---|
+| Level column ends (cost per empty line at a story's last column foot; body size 104–96%) | Empty lines at column feet 57 → 25 (17 pages), 20 on 24 pages |
+| Printed-layout side: headline lines and free-text lines that print filled are filled/justified to their printed extent | Rebuild unchanged at 29/60 pages passing; the press page passes |
+| Fact boxes: a filled box with two or more small stories becomes one boxed story with its title and fill | Items stay together inside the yellow box |
+| Pull quotes: a child story of ≤ 60 words is folded into its parent as a ruled box (its own words only) | Quotes stay with their story |
+| Sidebars: separating a child story from its parent costs extra (within and across regions) | Sidebars land near their story |
+| Label tabs: a filled panel behind a kicker is carried with the kicker's printed colour | e.g. white text on a black notice bar |
+| Ad blocks: the newshole becomes rectangles around one ad block; stories are assigned to regions | 6 pages that were out of scope now lay out |
+| Busy fronts: briefs in one column are stacked into a news-in-brief module | The 15-story front now lays out |
+
+**Code review (agent)** found 1 critical and 4 required issues, all fixed before the final run:
+- the pull-quote fold copied whole shared frames, which would print a parent's text twice;
+- item headlines in merged modules kept their printed position;
+- kicker panel width and white-text fallback;
+- an intruder check after stacking briefs;
+- budget hits reported as infeasible.
+
+**Results, gen1/2.8.2 (held-out, 28 Marathi pages):**
+- **Laid out: 24.** 23 pass every check; 1 fails on one body–body touch (its print has none).
+- **Not laid out: 4.**
+  - skipped: 3, where fixed items sit inside the news area (a full-height text rail; leftover items);
+  - no exact fit: 1, the editorial page.
+- **On the 24:**
+  - 0 text or photos lost;
+  - 0 display-text collisions, 3 body–body (print: 14 by the laxer measure);
+  - 0 overlaps; PDF/X 0 FAIL;
+  - lead at the top on 23;
+  - empty lines at column feet 20.
+- **Review kit round 3** (`review3`, 24 real + 3 check pairs, sides balanced) is built for the same reviewer, offline only.
 
 ## 10. Next steps
 1. **Editors:** a blind review of generated vs printed pages, side by side and unlabelled: "which would you print?" and "what would you change?". Sheets come from `report/gen1/check/*.side.png` (private).
