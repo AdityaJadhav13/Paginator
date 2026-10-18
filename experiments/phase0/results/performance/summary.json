@@ -1,0 +1,149 @@
+{
+  "scope_note": "Engine compute on the measurement machine only. Excludes network, frame flow, justified positions, display-list construction, serialization unless stated.",
+  "A_cold_first_paragraph_ms": {
+    "Noto Serif Devanagari": 524.77,
+    "Source Serif 4": 3206.67
+  },
+  "A_warm_per_paragraph": {
+    "Deva": {
+      "shape": {
+        "n": 1000,
+        "p50_ms": 0.1665,
+        "p95_ms": 0.2986,
+        "p99_ms": 0.3385,
+        "max_ms": 0.3633
+      },
+      "nodes": {
+        "n": 1000,
+        "p50_ms": 0.0879,
+        "p95_ms": 0.164,
+        "p99_ms": 0.188,
+        "max_ms": 0.1947
+      },
+      "break": {
+        "n": 1000,
+        "p50_ms": 0.0421,
+        "p95_ms": 0.0663,
+        "p99_ms": 0.0825,
+        "max_ms": 0.122
+      },
+      "total": {
+        "n": 1000,
+        "p50_ms": 0.2989,
+        "p95_ms": 0.5187,
+        "p99_ms": 0.6099,
+        "max_ms": 0.6414
+      },
+      "mean_chars": 254.8
+    },
+    "Latn": {
+      "shape": {
+        "n": 500,
+        "p50_ms": 0.1098,
+        "p95_ms": 0.2516,
+        "p99_ms": 0.4778,
+        "max_ms": 2.8056
+      },
+      "nodes": {
+        "n": 500,
+        "p50_ms": 0.0814,
+        "p95_ms": 0.2063,
+        "p99_ms": 0.3577,
+        "max_ms": 0.6352
+      },
+      "break": {
+        "n": 500,
+        "p50_ms": 0.0411,
+        "p95_ms": 0.0901,
+        "p99_ms": 0.1836,
+        "max_ms": 0.3353
+      },
+      "total": {
+        "n": 500,
+        "p50_ms": 0.2305,
+        "p95_ms": 0.5483,
+        "p99_ms": 1.0413,
+        "max_ms": 3.1947
+      },
+      "mean_chars": 234.0
+    }
+  },
+  "B_edition_1200_paragraphs_s": {
+    "cold_shaping_each_paragraph": 0.414,
+    "shaping_cached_rebreak_only": 0.17
+  },
+  "C_server_compute_scenarios": {
+    "headline_edit": {
+      "n": 100,
+      "p50_ms": 0.0613,
+      "p95_ms": 0.0649,
+      "p99_ms": 0.0703,
+      "max_ms": 0.0711
+    },
+    "body_text_edit": {
+      "n": 100,
+      "p50_ms": 1.2704,
+      "p95_ms": 1.3089,
+      "p99_ms": 1.3585,
+      "max_ms": 1.4095
+    },
+    "frame_resize": {
+      "n": 100,
+      "p50_ms": 1.0127,
+      "p95_ms": 1.0323,
+      "p99_ms": 1.0692,
+      "max_ms": 1.0788
+    },
+    "column_resize_3_stories": {
+      "n": 100,
+      "p50_ms": 3.0471,
+      "p95_ms": 3.1123,
+      "p99_ms": 3.1351,
+      "max_ms": 3.1809
+    },
+    "image_move_text_wrap": {
+      "n": 100,
+      "p50_ms": 0.978,
+      "p95_ms": 0.9958,
+      "p99_ms": 1.0344,
+      "max_ms": 1.0882
+    },
+    "story_continuation_change_2_stories": {
+      "n": 100,
+      "p50_ms": 1.9804,
+      "p95_ms": 2.0082,
+      "p99_ms": 2.0379,
+      "max_ms": 2.0671
+    },
+    "page_recompose_shaping_cached": {
+      "n": 20,
+      "p50_ms": 24.2538,
+      "p95_ms": 24.692,
+      "p99_ms": 24.7815,
+      "max_ms": 24.8038
+    },
+    "page_recompose_uncached": {
+      "n": 20,
+      "p50_ms": 60.8364,
+      "p95_ms": 80.8123,
+      "p99_ms": 94.9157,
+      "max_ms": 98.4415
+    }
+  },
+  "D_payload": {
+    "story_6_paragraphs": {
+      "glyph_runs": 6,
+      "glyphs": 1756,
+      "json_bytes": 24392,
+      "gzip_bytes": 9559,
+      "encode_ms": 0.181
+    },
+    "page_180_paragraphs": {
+      "glyph_runs": 243,
+      "glyphs": 41598,
+      "json_bytes": 572968,
+      "gzip_bytes": 200990,
+      "encode_ms": 4.175
+    }
+  }
+}

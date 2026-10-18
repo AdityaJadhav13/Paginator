@@ -1,0 +1,565 @@
+{
+  "J0_reproduce_original": {
+    "paragraphs": 240,
+    "feasible": 0,
+    "method": "random 90-word paragraphs from fixed vocab, seeds 0-39, 10pt, P0",
+    "by_case": {
+      "en@30.25": 40,
+      "en@45.0": 40,
+      "en@60.0": 40,
+      "mr@30.25": 40,
+      "mr@45.0": 40,
+      "mr@60.0": 40
+    }
+  },
+  "J1_J7_authored_prose": {
+    "en@30.25": {
+      "cases": 40,
+      "feasible_P0": 0.0,
+      "feasible_P1": 0.0,
+      "feasible_P2": 0.0,
+      "feasible_P3": 0.025,
+      "feasible_P0_inword_ub": 0.025,
+      "feasible_P1_inword_ub": 0.0,
+      "feasible_P0_track-5": 0.0,
+      "feasible_P0_track-10": 0.0,
+      "required_wsmax_median": 4.845,
+      "required_wsmax_p90": 7.837,
+      "required_wsmax_unreachable_le_8": 31,
+      "greedy_violating_line_share": 0.9028,
+      "best_effort_violating_line_share": 0.8988,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 4,
+      "infeasible_paragraphs": 40,
+      "primary_causes": {
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 33,
+        "NO_LEGAL_BREAK_WORD_WIDER_THAN_MEASURE": 6,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 1
+      }
+    },
+    "en@38.0": {
+      "cases": 40,
+      "feasible_P0": 0.0,
+      "feasible_P1": 0.0,
+      "feasible_P2": 0.0,
+      "feasible_P3": 0.05,
+      "feasible_P0_inword_ub": 0.075,
+      "feasible_P1_inword_ub": 0.05,
+      "feasible_P0_track-5": 0.025,
+      "feasible_P0_track-10": 0.025,
+      "required_wsmax_median": 5.019,
+      "required_wsmax_p90": 7.282,
+      "required_wsmax_unreachable_le_8": 17,
+      "greedy_violating_line_share": 0.8605,
+      "best_effort_violating_line_share": 0.8217,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 4,
+      "infeasible_paragraphs": 40,
+      "primary_causes": {
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 24,
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 11,
+        "NO_LEGAL_BREAK_WORD_WIDER_THAN_MEASURE": 2,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 3
+      }
+    },
+    "en@45.0": {
+      "cases": 40,
+      "feasible_P0": 0.0,
+      "feasible_P1": 0.0,
+      "feasible_P2": 0.025,
+      "feasible_P3": 0.1,
+      "feasible_P0_inword_ub": 0.125,
+      "feasible_P1_inword_ub": 0.1,
+      "feasible_P0_track-5": 0.025,
+      "feasible_P0_track-10": 0.025,
+      "required_wsmax_median": 4.676,
+      "required_wsmax_p90": 6.325,
+      "required_wsmax_unreachable_le_8": 16,
+      "greedy_violating_line_share": 0.8708,
+      "best_effort_violating_line_share": 0.8092,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 4,
+      "infeasible_paragraphs": 40,
+      "primary_causes": {
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 18,
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 16,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 5,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 1
+      }
+    },
+    "en@52.0": {
+      "cases": 40,
+      "feasible_P0": 0.05,
+      "feasible_P1": 0.05,
+      "feasible_P2": 0.075,
+      "feasible_P3": 0.15,
+      "feasible_P0_inword_ub": 0.25,
+      "feasible_P1_inword_ub": 0.15,
+      "feasible_P0_track-5": 0.05,
+      "feasible_P0_track-10": 0.025,
+      "required_wsmax_median": 4.418,
+      "required_wsmax_p90": 6.097,
+      "required_wsmax_unreachable_le_8": 10,
+      "greedy_violating_line_share": 0.8165,
+      "best_effort_violating_line_share": 0.7865,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 6,
+      "infeasible_paragraphs": 38,
+      "primary_causes": {
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 8,
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 11,
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 18,
+        "FEASIBLE": 2,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 1
+      }
+    },
+    "en@60.0": {
+      "cases": 40,
+      "feasible_P0": 0.05,
+      "feasible_P1": 0.025,
+      "feasible_P2": 0.125,
+      "feasible_P3": 0.35,
+      "feasible_P0_inword_ub": 0.525,
+      "feasible_P1_inword_ub": 0.275,
+      "feasible_P0_track-5": 0.075,
+      "feasible_P0_track-10": 0.05,
+      "required_wsmax_median": 3.214,
+      "required_wsmax_p90": 5.264,
+      "required_wsmax_unreachable_le_8": 7,
+      "greedy_violating_line_share": 0.7797,
+      "best_effort_violating_line_share": 0.7489,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 8,
+      "infeasible_paragraphs": 38,
+      "primary_causes": {
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 11,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 18,
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 6,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 3,
+        "FEASIBLE": 2
+      }
+    },
+    "hi@30.25": {
+      "cases": 32,
+      "feasible_P0": 0.0,
+      "feasible_P1": 0.0,
+      "feasible_P2": 0.0625,
+      "feasible_P3": 0.375,
+      "feasible_P0_inword_ub": 0.0,
+      "feasible_P1_inword_ub": 0.0,
+      "feasible_P0_track-5": 0.0,
+      "feasible_P0_track-10": 0.0,
+      "required_wsmax_median": 3.634,
+      "required_wsmax_p90": 5.263,
+      "required_wsmax_unreachable_le_8": 0,
+      "greedy_violating_line_share": 0.799,
+      "best_effort_violating_line_share": 0.6716,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 4,
+      "infeasible_paragraphs": 32,
+      "primary_causes": {
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 29,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 2,
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 1
+      }
+    },
+    "hi@38.0": {
+      "cases": 32,
+      "feasible_P0": 0.0625,
+      "feasible_P1": 0.0,
+      "feasible_P2": 0.1562,
+      "feasible_P3": 0.7812,
+      "feasible_P0_inword_ub": 0.1875,
+      "feasible_P1_inword_ub": 0.0,
+      "feasible_P0_track-5": 0.0625,
+      "feasible_P0_track-10": 0.0312,
+      "required_wsmax_median": 2.742,
+      "required_wsmax_p90": 3.472,
+      "required_wsmax_unreachable_le_8": 0,
+      "greedy_violating_line_share": 0.7468,
+      "best_effort_violating_line_share": 0.6234,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 9,
+      "infeasible_paragraphs": 30,
+      "primary_causes": {
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 3,
+        "FEASIBLE": 2,
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 9,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 3,
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 15
+      }
+    },
+    "hi@45.0": {
+      "cases": 32,
+      "feasible_P0": 0.0938,
+      "feasible_P1": 0.0,
+      "feasible_P2": 0.5,
+      "feasible_P3": 0.9375,
+      "feasible_P0_inword_ub": 0.375,
+      "feasible_P1_inword_ub": 0.125,
+      "feasible_P0_track-5": 0.0625,
+      "feasible_P0_track-10": 0.0625,
+      "required_wsmax_median": 2.0,
+      "required_wsmax_p90": 2.595,
+      "required_wsmax_unreachable_le_8": 0,
+      "greedy_violating_line_share": 0.625,
+      "best_effort_violating_line_share": 0.5,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 22,
+      "infeasible_paragraphs": 29,
+      "primary_causes": {
+        "FEASIBLE": 3,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 13,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 4,
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 4,
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 8
+      }
+    },
+    "hi@52.0": {
+      "cases": 32,
+      "feasible_P0": 0.1562,
+      "feasible_P1": 0.0938,
+      "feasible_P2": 0.6562,
+      "feasible_P3": 1.0,
+      "feasible_P0_inword_ub": 0.5312,
+      "feasible_P1_inword_ub": 0.1875,
+      "feasible_P0_track-5": 0.1875,
+      "feasible_P0_track-10": 0.1875,
+      "required_wsmax_median": 1.886,
+      "required_wsmax_p90": 2.522,
+      "required_wsmax_unreachable_le_8": 0,
+      "greedy_violating_line_share": 0.5455,
+      "best_effort_violating_line_share": 0.3455,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 27,
+      "infeasible_paragraphs": 27,
+      "primary_causes": {
+        "FEASIBLE": 5,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 16,
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 5,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 5,
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 1
+      }
+    },
+    "hi@60.0": {
+      "cases": 32,
+      "feasible_P0": 0.4062,
+      "feasible_P1": 0.3125,
+      "feasible_P2": 0.8125,
+      "feasible_P3": 1.0,
+      "feasible_P0_inword_ub": 0.7188,
+      "feasible_P1_inword_ub": 0.5312,
+      "feasible_P0_track-5": 0.4375,
+      "feasible_P0_track-10": 0.5,
+      "required_wsmax_median": 1.658,
+      "required_wsmax_p90": 2.284,
+      "required_wsmax_unreachable_le_8": 0,
+      "greedy_violating_line_share": 0.4432,
+      "best_effort_violating_line_share": 0.3182,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 19,
+      "infeasible_paragraphs": 19,
+      "primary_causes": {
+        "FEASIBLE": 13,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 13,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 4,
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 2
+      }
+    },
+    "mr@30.25": {
+      "cases": 288,
+      "feasible_P0": 0.0174,
+      "feasible_P1": 0.0139,
+      "feasible_P2": 0.0312,
+      "feasible_P3": 0.0556,
+      "feasible_P0_inword_ub": 0.0174,
+      "feasible_P1_inword_ub": 0.0139,
+      "feasible_P0_track-5": 0.0208,
+      "feasible_P0_track-10": 0.0174,
+      "required_wsmax_median": 6.217,
+      "required_wsmax_p90": 7.482,
+      "required_wsmax_unreachable_le_8": 224,
+      "greedy_violating_line_share": 0.8945,
+      "best_effort_violating_line_share": 0.8631,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 13,
+      "infeasible_paragraphs": 283,
+      "primary_causes": {
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 261,
+        "NO_LEGAL_BREAK_WORD_WIDER_THAN_MEASURE": 16,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 4,
+        "FEASIBLE": 5,
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 2
+      }
+    },
+    "mr@38.0": {
+      "cases": 288,
+      "feasible_P0": 0.0104,
+      "feasible_P1": 0.0035,
+      "feasible_P2": 0.0174,
+      "feasible_P3": 0.0451,
+      "feasible_P0_inword_ub": 0.0451,
+      "feasible_P1_inword_ub": 0.0208,
+      "feasible_P0_track-5": 0.0035,
+      "feasible_P0_track-10": 0.0104,
+      "required_wsmax_median": 5.318,
+      "required_wsmax_p90": 7.268,
+      "required_wsmax_unreachable_le_8": 74,
+      "greedy_violating_line_share": 0.8745,
+      "best_effort_violating_line_share": 0.8262,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 16,
+      "infeasible_paragraphs": 285,
+      "primary_causes": {
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 251,
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 14,
+        "NO_LEGAL_BREAK_WORD_WIDER_THAN_MEASURE": 8,
+        "FEASIBLE": 3,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 10,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 2
+      }
+    },
+    "mr@45.0": {
+      "cases": 288,
+      "feasible_P0": 0.0278,
+      "feasible_P1": 0.0243,
+      "feasible_P2": 0.0451,
+      "feasible_P3": 0.1319,
+      "feasible_P0_inword_ub": 0.0451,
+      "feasible_P1_inword_ub": 0.0312,
+      "feasible_P0_track-5": 0.0347,
+      "feasible_P0_track-10": 0.0312,
+      "required_wsmax_median": 4.358,
+      "required_wsmax_p90": 6.579,
+      "required_wsmax_unreachable_le_8": 31,
+      "greedy_violating_line_share": 0.8346,
+      "best_effort_violating_line_share": 0.7617,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 21,
+      "infeasible_paragraphs": 280,
+      "primary_causes": {
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 43,
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 227,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 5,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 5,
+        "FEASIBLE": 8
+      }
+    },
+    "mr@52.0": {
+      "cases": 288,
+      "feasible_P0": 0.059,
+      "feasible_P1": 0.0486,
+      "feasible_P2": 0.0903,
+      "feasible_P3": 0.3125,
+      "feasible_P0_inword_ub": 0.1285,
+      "feasible_P1_inword_ub": 0.059,
+      "feasible_P0_track-5": 0.0625,
+      "feasible_P0_track-10": 0.066,
+      "required_wsmax_median": 3.521,
+      "required_wsmax_p90": 5.431,
+      "required_wsmax_unreachable_le_8": 20,
+      "greedy_violating_line_share": 0.8035,
+      "best_effort_violating_line_share": 0.7056,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 44,
+      "infeasible_paragraphs": 271,
+      "primary_causes": {
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 59,
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 183,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 9,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 20,
+        "FEASIBLE": 17
+      }
+    },
+    "mr@60.0": {
+      "cases": 288,
+      "feasible_P0": 0.066,
+      "feasible_P1": 0.0625,
+      "feasible_P2": 0.1701,
+      "feasible_P3": 0.4792,
+      "feasible_P0_inword_ub": 0.1562,
+      "feasible_P1_inword_ub": 0.1042,
+      "feasible_P0_track-5": 0.0799,
+      "feasible_P0_track-10": 0.0903,
+      "required_wsmax_median": 3.086,
+      "required_wsmax_p90": 4.48,
+      "required_wsmax_unreachable_le_8": 16,
+      "greedy_violating_line_share": 0.7606,
+      "best_effort_violating_line_share": 0.6689,
+      "infeasible_paragraphs_with_le_2_bad_lines_best_effort": 83,
+      "infeasible_paragraphs": 269,
+      "primary_causes": {
+        "IN_WORD_BREAKS_AND_LOOSER_SPACING_NEEDED": 81,
+        "MEASURE_TOO_NARROW_FOR_JUSTIFICATION": 135,
+        "IN_WORD_BREAKS_NEEDED_AT_P0": 23,
+        "POLICY_LIMIT_SPACING_BOUNDS_TOO_STRICT": 30,
+        "FEASIBLE": 19
+      }
+    }
+  },
+  "J8_engine_bug_check": {
+    "cases": 1800,
+    "disagreements": [],
+    "method": "oracle break_knuth_plass feasibility vs independent DP over the same node stream"
+  },
+  "words_per_line_bins": {
+    "en|3-4": {
+      "cases": 56,
+      "feasible_P0": 0.0,
+      "feasible_P2": 0.0,
+      "feasible_P0_inword_ub": 0.1607,
+      "best_effort_violating_line_share": 0.8712
+    },
+    "en|4-5": {
+      "cases": 41,
+      "feasible_P0": 0.0488,
+      "feasible_P2": 0.0732,
+      "feasible_P0_inword_ub": 0.1707,
+      "best_effort_violating_line_share": 0.7514
+    },
+    "en|5-6": {
+      "cases": 38,
+      "feasible_P0": 0.0526,
+      "feasible_P2": 0.0789,
+      "feasible_P0_inword_ub": 0.3421,
+      "best_effort_violating_line_share": 0.7037
+    },
+    "en|6-7": {
+      "cases": 13,
+      "feasible_P0": 0.0,
+      "feasible_P2": 0.2308,
+      "feasible_P0_inword_ub": 0.4615,
+      "best_effort_violating_line_share": 0.7945
+    },
+    "en|<=3": {
+      "cases": 48,
+      "feasible_P0": 0.0,
+      "feasible_P2": 0.0,
+      "feasible_P0_inword_ub": 0.0417,
+      "best_effort_violating_line_share": 0.9037
+    },
+    "en|>7": {
+      "cases": 4,
+      "feasible_P0": 0.0,
+      "feasible_P2": 0.0,
+      "feasible_P0_inword_ub": 0.75,
+      "best_effort_violating_line_share": 0.5789
+    },
+    "mr+hi|3-4": {
+      "cases": 351,
+      "feasible_P0": 0.0057,
+      "feasible_P2": 0.0171,
+      "feasible_P0_inword_ub": 0.0228,
+      "best_effort_violating_line_share": 0.8086
+    },
+    "mr+hi|4-5": {
+      "cases": 407,
+      "feasible_P0": 0.0147,
+      "feasible_P2": 0.0319,
+      "feasible_P0_inword_ub": 0.0663,
+      "best_effort_violating_line_share": 0.7426
+    },
+    "mr+hi|5-6": {
+      "cases": 318,
+      "feasible_P0": 0.0031,
+      "feasible_P2": 0.0535,
+      "feasible_P0_inword_ub": 0.0535,
+      "best_effort_violating_line_share": 0.6996
+    },
+    "mr+hi|6-7": {
+      "cases": 143,
+      "feasible_P0": 0.035,
+      "feasible_P2": 0.2028,
+      "feasible_P0_inword_ub": 0.2028,
+      "best_effort_violating_line_share": 0.5837
+    },
+    "mr+hi|<=3": {
+      "cases": 255,
+      "feasible_P0": 0.0157,
+      "feasible_P2": 0.0235,
+      "feasible_P0_inword_ub": 0.0157,
+      "best_effort_violating_line_share": 0.8894
+    },
+    "mr+hi|>7": {
+      "cases": 92,
+      "feasible_P0": 0.25,
+      "feasible_P2": 0.7283,
+      "feasible_P0_inword_ub": 0.5652,
+      "best_effort_violating_line_share": 0.355
+    }
+  },
+  "J9_set_width_sensitivity_mr_9pt_NotoSerifDeva": {
+    "wdth100.0@38.0mm": {
+      "paragraphs": 18,
+      "feasible_P0": 0.0556,
+      "feasible_P2": 0.0556,
+      "best_effort_violating_line_share": 0.8514,
+      "avg_words_per_line": 3.95
+    },
+    "wdth100.0@45.0mm": {
+      "paragraphs": 18,
+      "feasible_P0": 0.0556,
+      "feasible_P2": 0.1111,
+      "best_effort_violating_line_share": 0.7647,
+      "avg_words_per_line": 4.68
+    },
+    "wdth100.0@52.0mm": {
+      "paragraphs": 18,
+      "feasible_P0": 0.1111,
+      "feasible_P2": 0.1111,
+      "best_effort_violating_line_share": 0.6364,
+      "avg_words_per_line": 5.54
+    },
+    "wdth87.5@38.0mm": {
+      "paragraphs": 18,
+      "feasible_P0": 0.0,
+      "feasible_P2": 0.0556,
+      "best_effort_violating_line_share": 0.7143,
+      "avg_words_per_line": 4.35
+    },
+    "wdth87.5@45.0mm": {
+      "paragraphs": 18,
+      "feasible_P0": 0.0556,
+      "feasible_P2": 0.1111,
+      "best_effort_violating_line_share": 0.6476,
+      "avg_words_per_line": 5.17
+    },
+    "wdth87.5@52.0mm": {
+      "paragraphs": 18,
+      "feasible_P0": 0.0556,
+      "feasible_P2": 0.2778,
+      "best_effort_violating_line_share": 0.7033,
+      "avg_words_per_line": 6.07
+    },
+    "wdth75.0@38.0mm": {
+      "paragraphs": 18,
+      "feasible_P0": 0.0556,
+      "feasible_P2": 0.0556,
+      "best_effort_violating_line_share": 0.7438,
+      "avg_words_per_line": 4.7
+    },
+    "wdth75.0@45.0mm": {
+      "paragraphs": 18,
+      "feasible_P0": 0.1111,
+      "feasible_P2": 0.1111,
+      "best_effort_violating_line_share": 0.6531,
+      "avg_words_per_line": 5.7
+    },
+    "wdth75.0@52.0mm": {
+      "paragraphs": 18,
+      "feasible_P0": 0.1667,
+      "feasible_P2": 0.2778,
+      "best_effort_violating_line_share": 0.6353,
+      "avg_words_per_line": 6.49
+    }
+  },
+  "J9_note": "opsz axis on Source Serif 4 had no measurable effect through oracle-v0 (OL-09); Latin set-width not swept.",
+  "line_class_counts": {
+    "en|best_effort_kp|OK": 271,
+    "en|best_effort_kp|OVERFULL_NO_LEGAL_BREAK": 14,
+    "en|best_effort_kp|SPACING_ABOVE_MAX": 1340,
+    "en|best_effort_kp|UNDERFULL_SINGLE_WORD": 60,
+    "en|greedy|OK": 244,
+    "en|greedy|OVERFULL_NO_LEGAL_BREAK": 14,
+    "en|greedy|SPACING_ABOVE_MAX": 1372,
+    "en|greedy|UNDERFULL_SINGLE_WORD": 80,
+    "hi|best_effort_kp|OK": 301,
+    "hi|best_effort_kp|SPACING_ABOVE_MAX": 363,
+    "hi|greedy|OK": 227,
+    "hi|greedy|SPACING_ABOVE_MAX": 457,
+    "mr|best_effort_kp|OK": 2228,
+    "mr|best_effort_kp|OVERFULL_NO_LEGAL_BREAK": 41,
+    "mr|best_effort_kp|SPACING_ABOVE_MAX": 8727,
+    "mr|best_effort_kp|UNDERFULL_SINGLE_WORD": 92,
+    "mr|greedy|OK": 1727,
+    "mr|greedy|OVERFULL_NO_LEGAL_BREAK": 41,
+    "mr|greedy|SPACING_ABOVE_MAX": 9373,
+    "mr|greedy|UNDERFULL_SINGLE_WORD": 138
+  }
+}
