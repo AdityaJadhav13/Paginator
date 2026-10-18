@@ -16,6 +16,14 @@
 # Temporary files
 tmp/
 temp/
+
+# Node / frontend build artifacts
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vitest/
+
 # Python environments and caches (experiments, oracle)
 .venv/
 venv/
