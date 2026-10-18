@@ -1,0 +1,33 @@
+{
+ "schema": "pageinator.gen1.check/2",
+ "generator": "gen1/2.4.2",
+ "pages_generated": 17,
+ "pages_attempted": 28,
+ "attempt_status": {
+  "generated": 17,
+  "skipped": 10,
+  "infeasible": 1
+ },
+ "pages_passing_all_gates": 17,
+ "gate_failures": {},
+ "checker_fail_pages": 0,
+ "text_complete_pages": 17,
+ "glyph_collisions": 1,
+ "glyph_collisions_display": 0,
+ "glyph_collisions_body": 1,
+ "glyph_collisions_print": 12,
+ "overlaps": 0,
+ "photos_missing": 0,
+ "glyph_collisions_fixed_parts": 2,
+ "icons_not_set": 3,
+ "decoration_removed": 112,
+ "page_text_lost": 0,
+ "page_photos_lost": 0,
+ "parts_not_set": {},
+ "newshole_filled_pct_min": 96.4,
+ "lead_at_top": 16,
+ "lead_span_ge_print": 11,
+ "hierarchy_breaks": 35,
+ "tombstones": 2,
+ "white_at_foot_mm_median": 3.3
+}
