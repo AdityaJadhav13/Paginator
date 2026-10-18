@@ -1,0 +1,20 @@
+{
+  "oracle_tests": {
+    "returncode": 0,
+    "summary": "................................ [ 39%]\n........................................................................ [ 79%]\n......................................                                   [100%]\n"
+  },
+  "fixtures_regenerated_byte_identical": {
+    "body.jsonl": true,
+    "difficult.jsonl": true,
+    "headline.jsonl": true,
+    "mixed.jsonl": true
+  },
+  "justification_csvs_byte_identical": {
+    "paragraphs.csv": true,
+    "lines.csv": true
+  },
+  "J0_feasible_of_240": 0,
+  "authored_feasible_P0": "79/1800",
+  "engine_bug_disagreements": 0,
+  "matches_phase0": true
+}

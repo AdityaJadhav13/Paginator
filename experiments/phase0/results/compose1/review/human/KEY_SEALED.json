@@ -1,0 +1,146 @@
+{
+  "seed": 20261008,
+  "rule": "per family: highest pooled lines-within-policy at \u226545 mm among policies with spaces \u22642.0\u00d7, composable \u226585 %, excluding EXPLORATORY; RAGGED = RAGGED_DP",
+  "representatives": {
+    "FULL": "FULL_DP_h2.00_rules_publishedmin",
+    "CONSTRAINED": "CONSTRAINED_DP_c2.00",
+    "HYBRID": "HYBRID_DP_h2.00_rules",
+    "RAGGED": "RAGGED_DP"
+  },
+  "font": "NotoSerifDeva-w100",
+  "size_pt": 9.5,
+  "samples": [
+    {
+      "sample": 1,
+      "text_id": "mr-body-02",
+      "width_mm": 52.0,
+      "labels": {
+        "A": "HYBRID_DP_h2.00_rules",
+        "B": "FULL_DP_h2.00_rules_publishedmin",
+        "C": "CONSTRAINED_DP_c2.00",
+        "D": "RAGGED_DP"
+      }
+    },
+    {
+      "sample": 2,
+      "text_id": "mr-body-16",
+      "width_mm": 38.0,
+      "labels": {
+        "A": "FULL_DP_h2.00_rules_publishedmin",
+        "B": "HYBRID_DP_h2.00_rules",
+        "C": "RAGGED_DP",
+        "D": "CONSTRAINED_DP_c2.00"
+      }
+    },
+    {
+      "sample": 3,
+      "text_id": "mr-body-05",
+      "width_mm": 45.0,
+      "labels": {
+        "A": "CONSTRAINED_DP_c2.00",
+        "B": "HYBRID_DP_h2.00_rules",
+        "C": "RAGGED_DP",
+        "D": "FULL_DP_h2.00_rules_publishedmin"
+      }
+    },
+    {
+      "sample": 4,
+      "text_id": "mr-body-07",
+      "width_mm": 45.0,
+      "labels": {
+        "A": "FULL_DP_h2.00_rules_publishedmin",
+        "B": "CONSTRAINED_DP_c2.00",
+        "C": "RAGGED_DP",
+        "D": "HYBRID_DP_h2.00_rules"
+      }
+    },
+    {
+      "sample": 5,
+      "text_id": "mr-body-15",
+      "width_mm": 45.0,
+      "labels": {
+        "A": "FULL_DP_h2.00_rules_publishedmin",
+        "B": "HYBRID_DP_h2.00_rules",
+        "C": "CONSTRAINED_DP_c2.00",
+        "D": "RAGGED_DP"
+      }
+    },
+    {
+      "sample": 6,
+      "text_id": "mr-body-18",
+      "width_mm": 45.0,
+      "labels": {
+        "A": "HYBRID_DP_h2.00_rules",
+        "B": "CONSTRAINED_DP_c2.00",
+        "C": "RAGGED_DP",
+        "D": "FULL_DP_h2.00_rules_publishedmin"
+      }
+    },
+    {
+      "sample": 7,
+      "text_id": "mr-body-18",
+      "width_mm": 38.0,
+      "labels": {
+        "A": "HYBRID_DP_h2.00_rules",
+        "B": "RAGGED_DP",
+        "C": "CONSTRAINED_DP_c2.00",
+        "D": "FULL_DP_h2.00_rules_publishedmin"
+      }
+    },
+    {
+      "sample": 8,
+      "text_id": "mr-body-09",
+      "width_mm": 52.0,
+      "labels": {
+        "A": "CONSTRAINED_DP_c2.00",
+        "B": "FULL_DP_h2.00_rules_publishedmin",
+        "C": "RAGGED_DP",
+        "D": "HYBRID_DP_h2.00_rules"
+      }
+    },
+    {
+      "sample": 9,
+      "text_id": "mr-body-03",
+      "width_mm": 45.0,
+      "labels": {
+        "A": "RAGGED_DP",
+        "B": "CONSTRAINED_DP_c2.00",
+        "C": "FULL_DP_h2.00_rules_publishedmin",
+        "D": "HYBRID_DP_h2.00_rules"
+      }
+    },
+    {
+      "sample": 10,
+      "text_id": "mr-body-13",
+      "width_mm": 38.0,
+      "labels": {
+        "A": "CONSTRAINED_DP_c2.00",
+        "B": "HYBRID_DP_h2.00_rules",
+        "C": "RAGGED_DP",
+        "D": "FULL_DP_h2.00_rules_publishedmin"
+      }
+    },
+    {
+      "sample": 11,
+      "text_id": "mr-body-10",
+      "width_mm": 52.0,
+      "labels": {
+        "A": "RAGGED_DP",
+        "B": "CONSTRAINED_DP_c2.00",
+        "C": "FULL_DP_h2.00_rules_publishedmin",
+        "D": "HYBRID_DP_h2.00_rules"
+      }
+    },
+    {
+      "sample": 12,
+      "text_id": "mr-body-01",
+      "width_mm": 45.0,
+      "labels": {
+        "A": "HYBRID_DP_h2.00_rules",
+        "B": "RAGGED_DP",
+        "C": "FULL_DP_h2.00_rules_publishedmin",
+        "D": "CONSTRAINED_DP_c2.00"
+      }
+    }
+  ]
+}
