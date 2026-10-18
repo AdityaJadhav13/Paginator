@@ -1,0 +1,1950 @@
+{
+ "tool": "published1/1.1.0",
+ "class": "GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+ "chrome": "Google Chrome 154.0.8037.98",
+ "tolerances": {
+  "geom_mm": 0.1,
+  "gap_mm": 0.05,
+  "size_pt": 0.05,
+  "lead_pt": 0.05,
+  "ratio_median_abs": 0.02,
+  "ratio_gap_abs": 0.05,
+  "hscale_abs": 0.005,
+  "tracking_pt": 0.05,
+  "baseline_same_line_em": 0.15,
+  "word_gap_min_em": 0.12,
+  "segment_split_em": 0.8,
+  "column_left_cluster_pt": 1.5,
+  "gutter_min_mm": 1.0,
+  "gutter_window_lines": 6,
+  "indent_min_em": 0.5,
+  "align_full_pt": 0.25,
+  "align_near_spaces": 1.0,
+  "para_gap_factor": 1.4,
+  "body_size_rel_band": [
+   0.8,
+   1.25
+  ],
+  "body_size_band_pt": 0.3,
+  "long_token_frac": 0.5
+ },
+ "note": "Validates the measurement TOOL against known geometry. Says nothing about newspaper typography.",
+ "fixtures": [
+  {
+   "fixture": "GT-A_left_natural",
+   "class": "GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+   "pdf_sha256": "098151ab4974f94569488c26b7e14ccb91b681ce452896996d5811a364633450",
+   "passed": 14,
+   "failed": 0,
+   "checks": [
+    {
+     "check": "page_size_equals_mediabox",
+     "pass": true,
+     "detail": {
+      "tool_mm": [
+       209.8887,
+       297.0107
+      ],
+      "requested_mm": [
+       210,
+       297
+      ]
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f1"
+      ]
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 19.9967,
+      "truth": 19.9967
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.5,
+      "truth": 9.5
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 11.1992,
+      "truth": 11.2,
+      "lines": 60
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: line count",
+     "pass": true,
+     "detail": {
+      "tool": 60,
+      "truth": 60
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 60,
+      "compared": 60
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 180,
+      "share_within": 1.0,
+      "max_err_mm": 0.0041,
+      "median_err_mm": 0.00209
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: space ratio median = 1.0 (±0.02)",
+     "pass": true,
+     "detail": {
+      "median": 1.003,
+      "nominal_space_source": "font width table (PDF /W via ToUnicode U+0020)",
+      "confidence": "EXACT"
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: per-gap ratio within ±0.05 of 1.0 (≥99 %)",
+     "pass": true,
+     "detail": {
+      "share": 1.0,
+      "n": 180,
+      "scope": "word–word gaps (punctuation-adjacent gaps excluded: font kerning)"
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: left-aligned lines not reported as justified (≥90 % RAGGED/NEAR/SPECIAL)",
+     "pass": true,
+     "detail": {
+      "share": 0.9661,
+      "classes": {
+       "FINAL_PARAGRAPH_LINE": 1,
+       "SPECIAL_CASE": 1,
+       "FULLY_ALIGNED": 2,
+       "RAGGED": 53,
+       "NEAR_ALIGNED": 3
+      }
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-A_left_natural/col0: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    }
+   ]
+  },
+  {
+   "fixture": "GT-B_left_ws1.5",
+   "class": "GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+   "pdf_sha256": "acf481aa19589ead229650bb78bf4402cf8b5bcb40a47a37e2dbce3eaa59c7f5",
+   "passed": 14,
+   "failed": 0,
+   "checks": [
+    {
+     "check": "page_size_equals_mediabox",
+     "pass": true,
+     "detail": {
+      "tool_mm": [
+       209.8887,
+       297.0107
+      ],
+      "requested_mm": [
+       210,
+       297
+      ]
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f1"
+      ]
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 19.9967,
+      "truth": 19.9967
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.5,
+      "truth": 9.5
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 11.2016,
+      "truth": 11.2,
+      "lines": 63
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: line count",
+     "pass": true,
+     "detail": {
+      "tool": 63,
+      "truth": 63
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 63,
+      "compared": 63
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 175,
+      "share_within": 1.0,
+      "max_err_mm": 0.0041,
+      "median_err_mm": 0.00195
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: space ratio median = 1.5 (±0.02)",
+     "pass": true,
+     "detail": {
+      "median": 1.5029,
+      "nominal_space_source": "font width table (PDF /W via ToUnicode U+0020)",
+      "confidence": "EXACT"
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: per-gap ratio within ±0.05 of 1.5 (≥99 %)",
+     "pass": true,
+     "detail": {
+      "share": 1.0,
+      "n": 175,
+      "scope": "word–word gaps (punctuation-adjacent gaps excluded: font kerning)"
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: left-aligned lines not reported as justified (≥90 % RAGGED/NEAR/SPECIAL)",
+     "pass": true,
+     "detail": {
+      "share": 0.9839,
+      "classes": {
+       "FINAL_PARAGRAPH_LINE": 1,
+       "SPECIAL_CASE": 2,
+       "FULLY_ALIGNED": 1,
+       "RAGGED": 55,
+       "NEAR_ALIGNED": 4
+      }
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-B_left_ws1.5/col0: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    }
+   ]
+  },
+  {
+   "fixture": "GT-C_justify_tiro",
+   "class": "GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+   "pdf_sha256": "c24d00dce654cc5fdff39a559a5c6b090022a8c2752e86dda404d950fd17bd93",
+   "passed": 14,
+   "failed": 0,
+   "checks": [
+    {
+     "check": "page_size_equals_mediabox",
+     "pass": true,
+     "detail": {
+      "tool_mm": [
+       209.8887,
+       297.0107
+      ],
+      "requested_mm": [
+       210,
+       297
+      ]
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f1"
+      ]
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 19.9967,
+      "truth": 19.9967
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: column width (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 51.9998,
+      "truth": 51.9989
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.0,
+      "truth": 9.0
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 10.7965,
+      "truth": 10.8,
+      "lines": 44
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: line count",
+     "pass": true,
+     "detail": {
+      "tool": 44,
+      "truth": 44
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 44,
+      "compared": 44
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 166,
+      "share_within": 1.0,
+      "max_err_mm": 0.0041,
+      "median_err_mm": 0.00227
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: justified lines classified FULLY_ALIGNED (no RAGGED/NEAR)",
+     "pass": true,
+     "detail": {
+      "classes": {
+       "FULLY_ALIGNED": 38,
+       "FINAL_PARAGRAPH_LINE": 6
+      }
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: FINAL lines ≤ paragraphs (6)",
+     "pass": true,
+     "detail": {
+      "final_lines": 6,
+      "paragraphs": 6,
+      "note": "a final line that happens to fill the measure is FULLY_ALIGNED by definition"
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-C_justify_tiro/col0: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    }
+   ]
+  },
+  {
+   "fixture": "GT-D_broadsheet_8col_justify",
+   "class": "GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+   "pdf_sha256": "93f697a6b21e9ab61540e33cc61f07265eab23ff74c85348dfbcbafa052d6aa2",
+   "passed": 105,
+   "failed": 0,
+   "checks": [
+    {
+     "check": "page_size_equals_mediabox",
+     "pass": true,
+     "detail": {
+      "tool_mm": [
+       317.8387,
+       510.1167
+      ],
+      "requested_mm": [
+       318,
+       510
+      ]
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f1"
+      ]
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 23.9985,
+      "truth": 23.9985
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: column width (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 30.2464,
+      "truth": 30.2493
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.0,
+      "truth": 9.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 10.625,
+      "truth": 10.6,
+      "lines": 31
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: line count",
+     "pass": true,
+     "detail": {
+      "tool": 31,
+      "truth": 31
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 31,
+      "compared": 31
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 59,
+      "share_within": 1.0,
+      "max_err_mm": 0.004,
+      "median_err_mm": 0.00158
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: justified lines classified FULLY_ALIGNED (no RAGGED/NEAR)",
+     "pass": true,
+     "detail": {
+      "classes": {
+       "SPECIAL_CASE": 1,
+       "FULLY_ALIGNED": 29,
+       "FINAL_PARAGRAPH_LINE": 1
+      }
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: FINAL lines ≤ paragraphs (2)",
+     "pass": true,
+     "detail": {
+      "final_lines": 1,
+      "paragraphs": 2,
+      "note": "a final line that happens to fill the measure is FULLY_ALIGNED by definition"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col0: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f2"
+      ]
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 58.2497,
+      "truth": 58.2497
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: column width (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 30.2477,
+      "truth": 30.2493
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.0,
+      "truth": 9.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 10.625,
+      "truth": 10.6,
+      "lines": 25
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: line count",
+     "pass": true,
+     "detail": {
+      "tool": 25,
+      "truth": 25
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 25,
+      "compared": 25
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 40,
+      "share_within": 1.0,
+      "max_err_mm": 0.004,
+      "median_err_mm": 0.00237
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: justified lines classified FULLY_ALIGNED (no RAGGED/NEAR)",
+     "pass": true,
+     "detail": {
+      "classes": {
+       "FULLY_ALIGNED": 23,
+       "FINAL_PARAGRAPH_LINE": 2
+      }
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: FINAL lines ≤ paragraphs (2)",
+     "pass": true,
+     "detail": {
+      "final_lines": 2,
+      "paragraphs": 2,
+      "note": "a final line that happens to fill the measure is FULLY_ALIGNED by definition"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col1: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f3"
+      ]
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 92.4967,
+      "truth": 92.4967
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: column width (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 30.2464,
+      "truth": 30.2493
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.0,
+      "truth": 9.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 10.625,
+      "truth": 10.6,
+      "lines": 31
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: line count",
+     "pass": true,
+     "detail": {
+      "tool": 31,
+      "truth": 31
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 31,
+      "compared": 31
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 57,
+      "share_within": 1.0,
+      "max_err_mm": 0.004,
+      "median_err_mm": 0.00184
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: justified lines classified FULLY_ALIGNED (no RAGGED/NEAR)",
+     "pass": true,
+     "detail": {
+      "classes": {
+       "SPECIAL_CASE": 1,
+       "FULLY_ALIGNED": 28,
+       "FINAL_PARAGRAPH_LINE": 2
+      }
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: FINAL lines ≤ paragraphs (2)",
+     "pass": true,
+     "detail": {
+      "final_lines": 2,
+      "paragraphs": 2,
+      "note": "a final line that happens to fill the measure is FULLY_ALIGNED by definition"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col2: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f4"
+      ]
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 126.7478,
+      "truth": 126.7478
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: column width (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 30.2469,
+      "truth": 30.2493
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.0,
+      "truth": 9.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 10.6125,
+      "truth": 10.6,
+      "lines": 21
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: line count",
+     "pass": true,
+     "detail": {
+      "tool": 21,
+      "truth": 21
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 21,
+      "compared": 21
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 39,
+      "share_within": 1.0,
+      "max_err_mm": 0.0041,
+      "median_err_mm": 0.00161
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: justified lines classified FULLY_ALIGNED (no RAGGED/NEAR)",
+     "pass": true,
+     "detail": {
+      "classes": {
+       "FULLY_ALIGNED": 19,
+       "FINAL_PARAGRAPH_LINE": 2
+      }
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: FINAL lines ≤ paragraphs (2)",
+     "pass": true,
+     "detail": {
+      "final_lines": 2,
+      "paragraphs": 2,
+      "note": "a final line that happens to fill the measure is FULLY_ALIGNED by definition"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col3: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f5"
+      ]
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 160.999,
+      "truth": 160.999
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: column width (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 30.2458,
+      "truth": 30.2493
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.0,
+      "truth": 9.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 10.6071,
+      "truth": 10.6,
+      "lines": 22
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: line count",
+     "pass": true,
+     "detail": {
+      "tool": 22,
+      "truth": 22
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 22,
+      "compared": 22
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 38,
+      "share_within": 1.0,
+      "max_err_mm": 0.004,
+      "median_err_mm": 0.00172
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: justified lines classified FULLY_ALIGNED (no RAGGED/NEAR)",
+     "pass": true,
+     "detail": {
+      "classes": {
+       "SPECIAL_CASE": 1,
+       "FULLY_ALIGNED": 20,
+       "FINAL_PARAGRAPH_LINE": 1
+      }
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: FINAL lines ≤ paragraphs (2)",
+     "pass": true,
+     "detail": {
+      "final_lines": 1,
+      "paragraphs": 2,
+      "note": "a final line that happens to fill the measure is FULLY_ALIGNED by definition"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col4: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f6"
+      ]
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 195.246,
+      "truth": 195.246
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: column width (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 30.2465,
+      "truth": 30.2493
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.0,
+      "truth": 9.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 10.6034,
+      "truth": 10.6,
+      "lines": 30
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: line count",
+     "pass": true,
+     "detail": {
+      "tool": 30,
+      "truth": 30
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 30,
+      "compared": 30
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 56,
+      "share_within": 1.0,
+      "max_err_mm": 0.0041,
+      "median_err_mm": 0.00205
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: justified lines classified FULLY_ALIGNED (no RAGGED/NEAR)",
+     "pass": true,
+     "detail": {
+      "classes": {
+       "FULLY_ALIGNED": 28,
+       "FINAL_PARAGRAPH_LINE": 2
+      }
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: FINAL lines ≤ paragraphs (2)",
+     "pass": true,
+     "detail": {
+      "final_lines": 2,
+      "paragraphs": 2,
+      "note": "a final line that happens to fill the measure is FULLY_ALIGNED by definition"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col5: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f7"
+      ]
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 229.4971,
+      "truth": 229.4971
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: column width (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 30.2468,
+      "truth": 30.2493
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.0,
+      "truth": 9.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 10.6071,
+      "truth": 10.6,
+      "lines": 22
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: line count",
+     "pass": true,
+     "detail": {
+      "tool": 22,
+      "truth": 22
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 22,
+      "compared": 22
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 34,
+      "share_within": 1.0,
+      "max_err_mm": 0.004,
+      "median_err_mm": 0.00183
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: justified lines classified FULLY_ALIGNED (no RAGGED/NEAR)",
+     "pass": true,
+     "detail": {
+      "classes": {
+       "SPECIAL_CASE": 4,
+       "FULLY_ALIGNED": 17,
+       "FINAL_PARAGRAPH_LINE": 1
+      }
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: FINAL lines ≤ paragraphs (2)",
+     "pass": true,
+     "detail": {
+      "final_lines": 1,
+      "paragraphs": 2,
+      "note": "a final line that happens to fill the measure is FULLY_ALIGNED by definition"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 1,
+      "truth": 1,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col6: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f8"
+      ]
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 263.7482,
+      "truth": 263.7482
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: column width (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 30.247,
+      "truth": 30.2493
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.0,
+      "truth": 9.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: leading (±0.094 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 10.6875,
+      "truth": 10.6,
+      "lines": 9
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: line count",
+     "pass": true,
+     "detail": {
+      "tool": 9,
+      "truth": 9
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 9,
+      "compared": 9
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 20,
+      "share_within": 1.0,
+      "max_err_mm": 0.0037,
+      "median_err_mm": 0.00236
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: justified lines classified FULLY_ALIGNED (no RAGGED/NEAR)",
+     "pass": true,
+     "detail": {
+      "classes": {
+       "FULLY_ALIGNED": 7,
+       "FINAL_PARAGRAPH_LINE": 2
+      }
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: FINAL lines ≤ paragraphs (2)",
+     "pass": true,
+     "detail": {
+      "final_lines": 2,
+      "paragraphs": 2,
+      "note": "a final line that happens to fill the measure is FULLY_ALIGNED by definition"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-D_broadsheet_8col_justify/col7: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    }
+   ]
+  },
+  {
+   "fixture": "GT-E_manual_hyphen_justify",
+   "class": "GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+   "pdf_sha256": "324e78416e04494be168f7a0cb9546be4e3e29cc1c20c5950fad76dbae2c422f",
+   "passed": 14,
+   "failed": 0,
+   "checks": [
+    {
+     "check": "page_size_equals_mediabox",
+     "pass": true,
+     "detail": {
+      "tool_mm": [
+       209.8887,
+       297.0107
+      ],
+      "requested_mm": [
+       210,
+       297
+      ]
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f1"
+      ]
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 19.9967,
+      "truth": 19.9967
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: column width (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 37.9987,
+      "truth": 37.9966
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.5,
+      "truth": 9.5
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 11.2024,
+      "truth": 11.2,
+      "lines": 64
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: line count",
+     "pass": true,
+     "detail": {
+      "tool": 64,
+      "truth": 64
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 64,
+      "compared": 64
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 167,
+      "share_within": 1.0,
+      "max_err_mm": 0.0041,
+      "median_err_mm": 0.00206
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: justified lines classified FULLY_ALIGNED (no RAGGED/NEAR)",
+     "pass": true,
+     "detail": {
+      "classes": {
+       "SPECIAL_CASE": 1,
+       "FULLY_ALIGNED": 59,
+       "FINAL_PARAGRAPH_LINE": 4
+      }
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: FINAL lines ≤ paragraphs (5)",
+     "pass": true,
+     "detail": {
+      "final_lines": 4,
+      "paragraphs": 5,
+      "note": "a final line that happens to fill the measure is FULLY_ALIGNED by definition"
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 13,
+      "truth": 13,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-E_manual_hyphen_justify/col0: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    }
+   ]
+  },
+  {
+   "fixture": "GT-F_mixed_script_left",
+   "class": "GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+   "pdf_sha256": "ff56299b1e68ef2a14520c49c7a024a52dfd6e77b91587e8ac254a370b25a3c7",
+   "passed": 15,
+   "failed": 0,
+   "checks": [
+    {
+     "check": "page_size_equals_mediabox",
+     "pass": true,
+     "detail": {
+      "tool_mm": [
+       209.8887,
+       297.0107
+      ],
+      "requested_mm": [
+       210,
+       297
+      ]
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f1"
+      ]
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 19.9967,
+      "truth": 19.9967
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.5,
+      "truth": 9.5
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 11.1964,
+      "truth": 11.2,
+      "lines": 29
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: line count",
+     "pass": true,
+     "detail": {
+      "tool": 29,
+      "truth": 29
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 29,
+      "compared": 29
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 86,
+      "share_within": 1.0,
+      "max_err_mm": 0.0041,
+      "median_err_mm": 0.00214
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: space ratio median = 1.0 (±0.02)",
+     "pass": true,
+     "detail": {
+      "median": 1.003,
+      "nominal_space_source": "font width table (PDF /W via ToUnicode U+0020)",
+      "confidence": "EXACT"
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: per-gap ratio within ±0.05 of 1.0 (≥99 %)",
+     "pass": true,
+     "detail": {
+      "share": 1.0,
+      "n": 86,
+      "scope": "word–word gaps (punctuation-adjacent gaps excluded: font kerning)"
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: left-aligned lines not reported as justified (≥90 % RAGGED/NEAR/SPECIAL)",
+     "pass": true,
+     "detail": {
+      "share": 0.9643,
+      "classes": {
+       "FINAL_PARAGRAPH_LINE": 1,
+       "SPECIAL_CASE": 1,
+       "FULLY_ALIGNED": 1,
+       "RAGGED": 25,
+       "NEAR_ALIGNED": 1
+      }
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 1,
+      "truth": 1,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    },
+    {
+     "check": "GT-F_mixed_script_left/col0: lines containing Latin script (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 4,
+      "truth": 4
+     }
+    }
+   ]
+  },
+  {
+   "fixture": "GT-G_letterspacing_0.3pt",
+   "class": "GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+   "pdf_sha256": "44bb79d0b6fa1c76ccf9753a3e6569808c8eacc3b6ea8ee4f7ab01d0d58769d0",
+   "passed": 12,
+   "failed": 0,
+   "checks": [
+    {
+     "check": "page_size_equals_mediabox",
+     "pass": true,
+     "detail": {
+      "tool_mm": [
+       209.8887,
+       297.0107
+      ],
+      "requested_mm": [
+       210,
+       297
+      ]
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f1"
+      ]
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: column left edge (±0.1 mm)",
+     "pass": true,
+     "detail": {
+      "tool": 19.9967,
+      "truth": 19.9967
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.5,
+      "truth": 9.5
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 11.1937,
+      "truth": 11.2,
+      "lines": 41
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: line count",
+     "pass": true,
+     "detail": {
+      "tool": 41,
+      "truth": 41
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 41,
+      "compared": 41
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 109,
+      "share_within": 1.0,
+      "max_err_mm": 0.0041,
+      "median_err_mm": 0.00181
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: left-aligned lines not reported as justified (≥90 % RAGGED/NEAR/SPECIAL)",
+     "pass": true,
+     "detail": {
+      "share": 0.975,
+      "classes": {
+       "FINAL_PARAGRAPH_LINE": 1,
+       "SPECIAL_CASE": 2,
+       "FULLY_ALIGNED": 1,
+       "RAGGED": 36,
+       "NEAR_ALIGNED": 1
+      }
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 1.0,
+      "truth": 1.0
+     }
+    },
+    {
+     "check": "GT-G_letterspacing_0.3pt/col0: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.3,
+      "truth_pt": 0.3
+     }
+    }
+   ]
+  },
+  {
+   "fixture": "GT-H_hscale_0.9",
+   "class": "GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+   "pdf_sha256": "01698575169ba55effb2508c0bb01953d2a504eb53a584184cd84649a449a04a",
+   "passed": 12,
+   "failed": 0,
+   "checks": [
+    {
+     "check": "page_size_equals_mediabox",
+     "pass": true,
+     "detail": {
+      "tool_mm": [
+       209.8887,
+       297.0107
+      ],
+      "requested_mm": [
+       210,
+       297
+      ]
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: column detected",
+     "pass": true,
+     "detail": {
+      "frames": [
+       "p1-f1"
+      ]
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: column left equals PDF first-glyph origin (DOM not valid for transformed box)",
+     "pass": true,
+     "detail": {
+      "tool": 20.1083,
+      "pdf_origin": 20.1083,
+      "dom": 19.9967,
+      "note": "Chrome DOM vs print discrepancy 0.11 mm for scaleX boxes"
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: font size (±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool": 9.5,
+      "truth": 9.5
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: leading (±0.05 pt incl. renderer px-snapping)",
+     "pass": true,
+     "detail": {
+      "tool": 11.1892,
+      "truth": 11.2,
+      "lines": 38
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: line count",
+     "pass": true,
+     "detail": {
+      "tool": 38,
+      "truth": 38
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: per-line token count matches (≥99 % of lines)",
+     "pass": true,
+     "detail": {
+      "matching_lines": 38,
+      "compared": 38
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: word–word gaps within ±0.05 mm of DOM (≥99 %)",
+     "pass": true,
+     "detail": {
+      "gaps": 114,
+      "share_within": 1.0,
+      "max_err_mm": 0.0037,
+      "median_err_mm": 0.00193
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: left-aligned lines not reported as justified (≥90 % RAGGED/NEAR/SPECIAL)",
+     "pass": true,
+     "detail": {
+      "share": 0.973,
+      "classes": {
+       "NEAR_ALIGNED": 6,
+       "RAGGED": 30,
+       "FINAL_PARAGRAPH_LINE": 1,
+       "FULLY_ALIGNED": 1
+      }
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: line-end hyphen breaks = DOM words split across lines (exact)",
+     "pass": true,
+     "detail": {
+      "tool": 0,
+      "truth": 0,
+      "note": "includes breaks at existing hard hyphens (e.g. ई-मेल) which browsers may legitimately take"
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: horizontal glyph scale (±0.005)",
+     "pass": true,
+     "detail": {
+      "tool": 0.9,
+      "truth": 0.9
+     }
+    },
+    {
+     "check": "GT-H_hscale_0.9/col0: tracking (median intra-token gap ±0.05 pt)",
+     "pass": true,
+     "detail": {
+      "tool_median_pt": 0.0,
+      "truth_pt": 0.0
+     }
+    }
+   ]
+  },
+  {
+   "fixture": "GT-A fallback chain",
+   "passed": 4,
+   "failed": 0,
+   "checks": [
+    {
+     "check": "fallback: font-program space route availability (informational)",
+     "pass": true,
+     "detail": {
+      "pdf_widths_space_em": 0.222,
+      "program_has_cmap": true,
+      "program_has_space_name": true
+     }
+    },
+    {
+     "check": "fallback: ESTIMATED nominal space (no space info) within 3 % of EXACT",
+     "pass": true,
+     "detail": {
+      "exact_pt": 2.109,
+      "estimated_pt": 2.1148,
+      "confidence": "ESTIMATED",
+      "source": "median gap on ragged/final lines (assumes natural spacing there)",
+      "rel_err": 0.0028
+     }
+    },
+    {
+     "check": "font-width metric from PDF geometry vs HarfBuzz reference (Mukta) within 3 %",
+     "pass": true,
+     "detail": {
+      "pdf_em": 0.5027,
+      "reference_em": 0.5006,
+      "rel": 0.0042,
+      "note": "text subsets differ slightly (fixture vs whole corpus)"
+     }
+    },
+    {
+     "check": "font-width metric from PDF geometry vs HarfBuzz reference (TiroDevaHindi) within 3 %",
+     "pass": true,
+     "detail": {
+      "pdf_em": 0.5408,
+      "reference_em": 0.5349,
+      "rel": 0.011,
+      "note": "text subsets differ slightly (fixture vs whole corpus)"
+     }
+    }
+   ]
+  }
+ ],
+ "total_passed": 204,
+ "total_failed": 0
+}

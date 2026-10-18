@@ -1,0 +1,68 @@
+{
+ "metric": "mean advance of advancing non-space glyphs, em (shaped by HarfBuzz via oracle-v0)",
+ "corpus": "Phase 0 Marathi body corpus (synthetic)",
+ "fonts": {
+  "NotoSerifDeva-w100": {
+   "mean_advancing_glyph_em": 0.4723,
+   "n_glyphs": 3272
+  },
+  "NotoSerifDeva-w87.5": {
+   "mean_advancing_glyph_em": 0.4357,
+   "n_glyphs": 3272
+  },
+  "NotoSerifDeva-w75": {
+   "mean_advancing_glyph_em": 0.4024,
+   "n_glyphs": 3272
+  },
+  "NotoSansDeva-w100": {
+   "mean_advancing_glyph_em": 0.5022,
+   "n_glyphs": 3295
+  },
+  "NotoSansDeva-w75": {
+   "mean_advancing_glyph_em": 0.4181,
+   "n_glyphs": 3295
+  },
+  "Mukta": {
+   "mean_advancing_glyph_em": 0.5006,
+   "n_glyphs": 3133
+  },
+  "TiroDevaHindi": {
+   "mean_advancing_glyph_em": 0.5349,
+   "n_glyphs": 3133
+  }
+ },
+ "env": {
+  "captured_at_utc": "2026-10-07T19:21:10Z",
+  "hardware": {
+   "machine": "arm64",
+   "cpu": "Apple M4 Pro",
+   "cores_logical": 12,
+   "mem_bytes": 25769803776,
+   "model": "Mac16,8"
+  },
+  "os": "macOS-26.5.1-arm64-arm-64bit",
+  "python": "3.11.14",
+  "python_executable": "/Users/adityajadhav/Desktop/Paginator/tools/oracle/v0/.venv/bin/python",
+  "harfbuzz": "14.3.0",
+  "packages": {
+   "uharfbuzz": "0.56.0",
+   "fonttools": "4.63.0",
+   "pydantic": "2.13.4",
+   "freetype-py": "2.5.1"
+  },
+  "oracle": {
+   "id": "oracle-v0",
+   "source_commit": "4694f81fe484f2d14019899df050f580b63340e8",
+   "manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05"
+  },
+  "corpus": {
+   "path": "fixtures/typeset/v1/corpus/texts.json",
+   "sha256": "71b18a5e49718174ce33614adafa064371bb74f48f1e6a38c028d0379c134d82"
+  },
+  "conditions": {
+   "path": "fixtures/typeset/v1/conditions.json",
+   "sha256": "312d15a2e02ae2049a3132dfd0b74978c9685db73633eeed8ef0bc2b3820e807"
+  },
+  "power_note": "Laptop measurements: record AC power / low-power mode manually if relevant."
+ }
+}

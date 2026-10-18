@@ -1,0 +1,15 @@
+{
+  "schema": "pageinator.published1.corrections/1",
+  "author": "",
+  "date": "YYYY-MM-DD",
+  "ops": [
+    {"op": "exclude_frame", "frame": "p1-f3", "reason": "advertisement text / caption / headline"},
+    {"op": "exclude_line", "line": "p1-f2-l7", "reason": ""},
+    {"op": "set_line_class", "line": "p1-f2-l9", "class": "FINAL_PARAGRAPH_LINE", "reason": ""},
+    {"op": "set_break", "line": "p1-f2-l4", "is_break": true, "visible_hyphen": true, "verified_word": "", "break_offset_chars": 0, "manual_or_auto": "unknown", "note": ""},
+    {"op": "set_break", "line": "p1-f2-l15", "is_break": false, "note": "real compound hyphen, not a line-end word break"},
+    {"op": "set_font", "frame": "p1-f2", "family": "", "version": "", "licence": "", "note": "as confirmed by the pilot"},
+    {"op": "set_column", "frame": "p1-f2", "left_mm": 0.0, "right_mm": 0.0, "reason": ""},
+    {"op": "annotate", "target": "p1-f2-l12", "note": ""}
+  ]
+}

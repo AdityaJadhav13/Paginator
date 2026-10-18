@@ -1,0 +1,9 @@
+{
+  "dataset_id": "pilot-<publication-slug>-<yyyymmdd>",
+  "dataset_class": "PILOT_EVIDENCE | TOOL_VALIDATION_SAMPLE | GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+  "description": "",
+  "collected_by": "",
+  "agreement_reference": "pilot MoU clause / email reference (required for PILOT_EVIDENCE)",
+  "storage_location": "PRIVATE — $PAGEINATOR_PRIVATE_CORPUS (default ~/PageinatorPrivate/published1/). Never inside git unless permission_regression_tests is true for every sample AND the files are cleared for commit.",
+  "notes": ""
+}
