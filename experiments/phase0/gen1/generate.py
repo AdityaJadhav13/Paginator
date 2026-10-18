@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.8.3"
+GEN = "gen1/2.8.4"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -191,7 +191,7 @@ class Story:
         self.bullet_columns = [i for i in other if i in els and CP.only_bullets(el_text(els[i]))]   # decoration, not set
         # jump lines: "continued from …" (printed in the story's upper half) opens the story, "continued on …" closes it
         first_bl = min((c["first_baseline_mm"] for c in s.get("columns") or []), default=1e9)
-        jl = [els[i] for i in s.get("jump_lines") or [] if i in els]
+        jl = [els[i] for i in s.get("jump_lines") or [] if i in els and not els[i].get("run_in")]   # run-in: inside the paragraph
         self.jump_in = [e for e in jl if e["bbox_mm"][3] <= first_bl]
         self.jumps = [e for e in jl if e not in self.jump_in]
         caps = [els[c] for c in s.get("captions", []) if c in els]

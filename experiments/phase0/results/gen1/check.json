@@ -1,6 +1,6 @@
 {
  "schema": "pageinator.gen1.check/2",
- "generator": "gen1/2.8.2",
+ "generator": "gen1/2.8.3",
  "pages_generated": 24,
  "pages_attempted": 28,
  "attempt_status": {
@@ -21,16 +21,17 @@
  "overlaps": 0,
  "photos_missing": 0,
  "glyph_collisions_fixed_parts": 14,
+ "duplicate_words": 0,
  "icons_not_set": 7,
- "decoration_removed": 177,
+ "decoration_removed": 175,
  "page_text_lost": 0,
  "page_photos_lost": 0,
  "parts_not_set": {},
  "newshole_filled_pct_min": 96.3,
  "lead_at_top": 23,
- "lead_span_ge_print": 12,
- "hierarchy_breaks": 53,
- "tombstones": 3,
- "empty_lines_at_column_feet": 20,
- "white_at_foot_mm_median": 3.3
+ "lead_span_ge_print": 11,
+ "hierarchy_breaks": 58,
+ "tombstones": 4,
+ "empty_lines_at_column_feet": 12,
+ "white_at_foot_mm_median": 3.32
 }

@@ -385,6 +385,33 @@ His summary, through the owner's family: the placement of images, text and stori
   - empty lines at column feet 20.
 - **Review kit round 3** (`review3`, 24 real + 3 check pairs, sides balanced) is built for the same reviewer, offline only.
 
+**Independent verification (agent) of gen1/2.8.2, then gen1/2.8.4.** The verifier used its own text extraction, outline-box collision check, pixel-matched photos, and renders beside print.
+- **Confirmed:**
+  - no text printed twice through pull quotes or merged boxes;
+  - 0 display collisions and 3 body–body collisions;
+  - nothing crosses an ad block;
+  - PDF/X 0 FAIL on 24 pages;
+  - 98% of column segments end with at most one empty line.
+- **Found, and fixed in 2.8.3–2.8.4:**
+  - Run-in datelines and run-in jump lines (text that is already part of a paragraph) were set again as separate lines by loose-item handling and brief stacks. They are no longer set on their own.
+  - Text on the coloured bars touching an ad block was attached to unrelated stories. The bars now belong to the ad.
+  - A new `duplicate_text` gate fails a page whose drawn characters exceed what its stories hold (characters, because body text may break a compound after its hyphen).
+- **Found, not fixed (recorded):**
+  - On one front, a brief carries the wrong headline: the page model's story grouping, carried through.
+  - On one inside page, a printed story is split in two (page model).
+  - Two "in brief" label tabs print black, where print has white on red (their panel is not detected).
+  - Two lines of a dateline box are not set on three fronts.
+  - Two 8 mm icons are neither set nor listed.
+  - Glyph ink runs up to 1.25 mm past a region edge in four places.
+  - The masthead and bottom logos, rebuilt from text, overlap (placeholders until the house fonts arrive).
+
+**Final, gen1/2.8.4 (held-out, 28 Marathi pages):**
+- **24 laid out, 23 pass every check.** The 24th has one body–body touch; its print has none.
+- **Text:** complete on all 24 pages, 0 duplicate characters, 0 text or photos lost.
+- **Collisions:** 0 involving display text.
+- **Columns:** 12 empty lines at column feet (57 at the start of the night).
+- **Layout:** the lead is at the top on 23 pages.
+
 ## 10. Next steps
 1. **Editors:** a blind review of generated vs printed pages, side by side and unlabelled: "which would you print?" and "what would you change?". Sheets come from `report/gen1/check/*.side.png` (private).
 2. **Engineering:**

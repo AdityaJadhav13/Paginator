@@ -75,7 +75,8 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
 
     # complete: body text character for character; every display part word for word; nothing left unset
     integ, acct, missing_photos, not_set = [], [], 0, Counter()
-    expected_words = 0                                 # words the generated stories hold: drawn words may not exceed them
+    expected_chars = 0                                 # characters the generated stories hold: drawn text may not exceed them
+    nchar = lambda t: len("".join(t.split()))          # (characters, not words: a compound may break after its hyphen)
     so = {s["story"]: s for s in man["stories_out"]}
     got = Counter()
     for l in lines:
@@ -95,7 +96,7 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
         src = "".join(" ".join(fix_bullet(b["text"]) for b in paras).split())          # every paragraph, none excused
         ours = "".join(" ".join(l["text"] for l in lines if l.get("role") == "body" and l.get("story") == story).split())
         integ.append(ours == src)
-        expected_words += sum(len(fix_bullet(b["text"]).split()) for b in paras)
+        expected_chars += sum(nchar(fix_bullet(b["text"])) for b in paras)
         want = {}
         if man["head_ids"].get(story):
             want[f"gen-h-{story}"] = words(man["head_ids"][story])
@@ -109,20 +110,21 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
         for k in ("other_elements", "jump_lines"):                 # loose story text and jump lines are set too
             for x in ms.get(k) or []:
                 i = x if isinstance(x, str) else x.get("id")
-                if i in els and el_text(els[i]).strip() and not only_bullets(el_text(els[i])):   # a bullet column is decoration
+                if i in els and el_text(els[i]).strip() and not only_bullets(el_text(els[i])) and not els[i].get("run_in"):
+                    # (a bullet column is decoration; a run-in dateline or jump line is part of its paragraph)
                     want[i] = words([i])
         for b in ms["flow"]:
             if b["type"] == "crosshead" and b.get("element") in els:
                 want[b["element"]] = words([b["element"]])
         acct += [k for k, v in want.items() if got.get(k, 0) != v]
-        expected_words += sum(want.values())
+        expected_chars += sum(nchar(CP_fix(el_text(els[i]) if i in els else "")) for i in want_ids(want, story, man))
         if ms.get("images") and not s.get("photo_box"):
             missing_photos += 1
         for k, v in (s.get("not_set") or {}).items():
             not_set[k] += len(v)
     out["integrity_ok"], out["accounting_mismatches"], out["photos_missing"] = all(integ), acct, missing_photos
-    drawn_words = sum(len(l["text"].split()) for l in lines if l.get("story") in gen_ids)
-    out["duplicate_words"] = max(0, drawn_words - expected_words)          # text set twice (e.g. a run-in dateline)
+    drawn_chars = sum(nchar(l["text"]) for l in lines if l.get("story") in gen_ids)
+    out["duplicate_words"] = max(0, drawn_chars - expected_chars)          # characters set twice (e.g. a run-in dateline)
     out["parts_not_set"] = dict(not_set)
     out["overset_lines"] = sum(s.get("overset_lines", 0) for s in man["stories_out"])
     out["overset_crosshead_words"] = sum(s.get("overset_crosshead_words", 0) for s in man["stories_out"])
@@ -252,6 +254,19 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
     side.paste(orig, (0, 0)); side.paste(ours, (orig.width + 16, 0))
     f = cmp_dir / f"{name}.side.png"; side.save(f); f.chmod(0o600)
     return out
+
+
+def CP_fix(t: str) -> str:
+    """Display text as the generator sets it: bullets decoded, run-together bullet lists too."""
+    from textfix import fix_bullets_all
+    return fix_bullets_all(" ".join(t.split()))
+
+
+def want_ids(want, story, man):
+    """The source element ids behind a story's accounting entries (gen-h/-d/-c stand for headline, deck, caption parts)."""
+    src = {f"gen-h-{story}": man["head_ids"].get(story) or [], f"gen-d-{story}": man["deck_ids"].get(story) or [],
+           f"gen-c-{story}": man.get("caption_ids", {}).get(story) or []}
+    return [i for k in want for i in (src[k] if k in src else [k])]
 
 
 def CMP_span(w: int) -> float:
