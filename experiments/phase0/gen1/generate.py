@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.9.2"
+GEN = "gen1/2.9.3"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -1290,7 +1290,8 @@ def render(g: Generator, model, placed, news_top, news_bottom, photo_dir, kept_s
                 if c:
                     B.rect_mm(x, y + t0, x + span, y + t1, c)
         for blk in dsp["blocks"]:
-            if blk[0] == "kicker" and blk[1] in fills[1]:    # a label tab: its printed panel and text colour, as wide as print
+            if blk[0] in ("kicker", "other_text") and blk[1] in fills[1] and blk[1] not in boxed:
+                # a label tab (a kicker, or a label that became loose text in a brief stack): its printed panel and colour
                 kel = g.els[blk[1]]
                 c, _ = CP.to_cmyk(fills[1][blk[1]])
                 pw = min(span, max(max(blk[2].widths_mm) + 4.0, kel["bbox_mm"][2] - kel["bbox_mm"][0] + 4.0, 20.0))
