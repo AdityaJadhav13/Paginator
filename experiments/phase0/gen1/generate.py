@@ -30,7 +30,7 @@ the photo step) is listed in the manifest, and the checker (check_gen.py) fails 
 Deterministic (ordered enumeration, a node budget instead of a clock).
 Output: <dataset>/report/gen1/ (private) and experiments/phase0/results/gen1/summary.json (aggregates; full runs only).
 Usage (repo root): PYTHONDONTWRITEBYTECODE=1 tools/oracle/v0/.venv/bin/python experiments/phase0/gen1/generate.py <dataset_dir> [<page> ...]
-                   [--out DIR] [--lead-side left|right]   (an alternative layout, e.g. for review check pairs)
+                   [--out DIR] [--lead-side left|right] [--ban-lead-width N[,N]]   (alternative layouts; see alternatives.py)
 """
 from __future__ import annotations
 
@@ -226,6 +226,7 @@ class Generator:
             return (-(he["size_pt"] if he else 0.0), order[s["id"]])
         main.sort(key=prio)
         self.stories = [Story(s, self.els, idx, photo_dir, r) for r, s in enumerate(main)]
+        self.ban_lead: set = set()                        # widths the lead may not take (alternatives)
         self.ext_styles = False                          # True when the rarer house styles are in use (a fallback)
         self.extra_rows: dict = {}                       # (story, w, m, fit, style) → rows added after an overset render
         self._lines: dict = {}
@@ -498,6 +499,11 @@ class Generator:
 
     # ---- module options of a story at width w
     def options(self, s: Story, w: int):
+        if s.rank == 0 and w in self.ban_lead:          # an alternative layout: the lead at another width
+            return []
+        return self._options(s, w)
+
+    def _options(self, s: Story, w: int):
         """Every way to set story s at w grid columns, as height intervals (units of UNIT mm), cheapest per height.
         Headline at the profile's size for the span, or one or two steps smaller (not for the lead). Body: m = w or w−1
         equal text columns. Photo (always kept): across k of the m text columns, top left of the body, with the body
@@ -1359,7 +1365,8 @@ def pdf_bytes(m, B, items):
 def main():
     args = sys.argv[1:]
     opt = {}
-    for flag in ("--out", "--lead-side"):                # --out DIR: write elsewhere (alternatives); --lead-side: force it
+    for flag in ("--out", "--lead-side", "--ban-lead-width"):   # --out DIR: write elsewhere (alternatives); --lead-side: force
+        # it; --ban-lead-width N[,N]: the lead may not take these widths (an alternative to a layout that used them)
         if flag in args:
             i = args.index(flag); opt[flag] = args[i + 1]; del args[i:i + 2]
     ds = Path(args[0]).expanduser()
@@ -1427,6 +1434,7 @@ def main():
                 results.append({"page": name, "status": "skipped: fixed parts reach into the newshole", "intruders": len(intruders)})
                 print(name, "skipped: fixed parts reach into the newshole (after stacking briefs)"); continue
         g = Generator(cx, m, photo_dir, styles, ids, space_em)
+        g.ban_lead = {int(x) for x in opt.get("--ban-lead-width", "").split(",") if x}
         if len(g.stories) > MAX_STORIES:
             results.append({"page": name, "status": f"skipped: more than {MAX_STORIES} stories (search limit)"}); print(name, "skipped:", len(g.stories), "stories"); continue
         retries = []
@@ -1434,8 +1442,9 @@ def main():
             res, info = g.run(regions, span_prior, lead_side)
             if res is None and not info.get("budget_hit") and len(styles_ext) > len(styles) and not g.ext_styles:
                 # no exact fit with the commonest styles: retry once with the house's rarer body styles too (they cost more)
+                ban = g.ban_lead
                 g = Generator(cx, m, photo_dir, styles_ext, ids, space_em)
-                g.ext_styles = True
+                g.ext_styles, g.ban_lead = True, ban
                 res, info = g.run(regions, span_prior, lead_side)
                 info["rare_styles"] = True
             if res is None:
@@ -1492,7 +1501,7 @@ def main():
            "skip_reasons": dict(Counter(r["status"].split(": ", 1)[1] for r in results if r["status"].startswith("skipped"))),
            "overset_lines": sum(r.get("overset_lines", 0) for r in results), "problems": sum(r.get("problems", 0) for r in results),
            "retried_pages": sum(1 for r in results if r.get("retries"))}
-    if not names and "--out" not in opt and "--lead-side" not in opt:   # aggregates only from standard full runs
+    if not names and not opt:                          # aggregates only from standard full runs
         OUT.mkdir(parents=True, exist_ok=True)
         (OUT / "summary.json").write_text(json.dumps(agg, indent=1) + "\n")
     print(json.dumps(agg))
