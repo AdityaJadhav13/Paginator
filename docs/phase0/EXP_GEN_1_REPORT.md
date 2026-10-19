@@ -1,7 +1,7 @@
 # EXP-GEN-1: Pageinator Lays Out a Newspaper Page Itself (report)
 
-**Status:** COMPLETE (experiment). On the held-out editions Pageinator laid out **24 of 28 Marathi pages** by itself (gen1/2.8.2, 2026-10-20). Earlier versions are reported below; the latest results are in §9.
-- **23 of the 24 pass every automatic check.** The 24th fails on one body-line touch where its printed original has none.
+**Status:** COMPLETE (experiment). On the held-out editions Pageinator lays out **all 28 Marathi pages** by itself (gen1/2.9.6, 2026-10-21). Earlier versions are reported below; the latest results are in §9.
+- **All 28 pass every automatic check.**
 - 11 pages are outside this version's scope or have no exact fit.
 - **No editor has judged the layouts yet. G1: NOT MET.**
 
@@ -14,7 +14,7 @@
 - Every frequency the generator learns (span by story priority, body type styles, word space, the lead's side) is counted on the **calibration editions only**.
 - Only aggregate numbers appear here. Generated PDFs, manifests and side-by-side images stay in `$PAGEINATOR_PRIVATE_CORPUS/report/gen1/`.
 
-**Date:** 2026-10-20. **Versions:** `gen1/2.8.2`, `page1-compose/2.7.1`, check schema `pageinator.gen1.check/2`. Built on `page1-model/0.2.0`, `page1-photos/1.1.0`, `page1-compose/2.6.1`, `head1/1.3.1`, `compose3/1.0.0` and `pdfx1/1.0.0`.
+**Date:** 2026-10-21. **Versions:** `gen1/2.9.6`, `page1-compose/2.7.1`, check schema `pageinator.gen1.check/2`. Built on `page1-model/0.2.0`, `page1-photos/1.1.0`, `page1-compose/2.6.1`, `head1/1.3.1`, `compose3/1.0.0` and `pdfx1/1.0.0`.
 
 **Reproduce from the repo root, prefixing each command with `PYTHONDONTWRITEBYTECODE=1`; `$DS` is the private dataset:**
 ```bash
@@ -411,6 +411,26 @@ His summary, through the owner's family: the placement of images, text and stori
 - **Collisions:** 0 involving display text.
 - **Columns:** 12 empty lines at column feet (57 at the start of the night).
 - **Layout:** the lead is at the top on 23 pages.
+
+**The last four pages (gen1/2.9.x, 2026-10-21):**
+- **The editorial page (no exact fit before).** Print set the long lead story with tighter leading (12.5/12) than any common house style. The house's rarer body styles (used at least twice on the calibration editions, leading at most 1.3 × size) are now a fallback when a page has no exact fit with the common ones.
+- **An editorial rail reaching a few mm past the newshole.** A loose item at least 80% inside the newshole is laid out with it.
+- **A small boxed list split into five loose modules.** Loose pieces of one column within 6 mm of each other, with no heading between, are one item.
+- **A one-line frame in the newshole's top band.** An item ending within 15 mm of the top moves the top edge.
+- **A promo strip under an ad block (13 loose pieces).** The ad block grows over fixed artwork touching it (furniture text, boxes, graphics, rules, coloured bars). Its first version also swallowed the fronts' boxed rail of briefs, keeping them as printed; it now never takes in a panel that holds story text.
+- **"In brief" label tabs.** A label carried as loose text keeps its printed panel and colour (white on red).
+
+**Alternatives for the editor (`alternatives.py`).** Three complete, checked layouts of a page:
+- A, the best;
+- B, the lead on the other side;
+- C, the lead at another width (new generator option `--ban-lead-width`).
+
+**Final, gen1/2.9.6 (held-out, 28 Marathi pages):**
+- **28 laid out, 28 pass every check.**
+- **Text and photos:** 0 text or photos lost, 0 duplicate characters.
+- **Collisions:** 0 display-text collisions; 2 body–body (print 47 by the laxer PDFium measure).
+- **Layout:** the lead is at the top on 28 pages; 25 empty lines at column feet.
+- **Press:** PDF/X-1a 0 FAIL.
 
 ## 10. Next steps
 1. **Editors:** a blind review of generated vs printed pages, side by side and unlabelled: "which would you print?" and "what would you change?". Sheets come from `report/gen1/check/*.side.png` (private).

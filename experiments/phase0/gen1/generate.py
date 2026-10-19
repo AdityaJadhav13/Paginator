@@ -30,7 +30,7 @@ the photo step) is listed in the manifest, and the checker (check_gen.py) fails 
 Deterministic (ordered enumeration, a node budget instead of a clock).
 Output: <dataset>/report/gen1/ (private) and experiments/phase0/results/gen1/summary.json (aggregates; full runs only).
 Usage (repo root): PYTHONDONTWRITEBYTECODE=1 tools/oracle/v0/.venv/bin/python experiments/phase0/gen1/generate.py <dataset_dir> [<page> ...]
-                   [--out DIR] [--lead-side left|right]   (an alternative layout, e.g. for review check pairs)
+                   [--out DIR] [--lead-side left|right] [--ban-lead-width N[,N]]   (alternative layouts; see alternatives.py)
 """
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.8.4"
+GEN = "gen1/2.9.6"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -86,6 +86,8 @@ XH_KEEP = 2                                  # a crosshead needs room for this m
 XH_SPACE_L = 1.5                             # crosshead space above/below in body leadings: the house uses 1.0 with its own face;
                                              # the stand-in's taller vowel signs touch the next line at 1.0
 MAX_STORIES = 11
+RARE_STYLE_MIN = 2                           # body styles used at least this often are the fallback palette
+MAX_LEAD_RATIO = 1.3                         # … at a sensible leading (≤ 1.3 × size)
 LOOSE_GAP_MM = 30.0                          # a loose item joins a headline at most this far above it
 ICON_MM = 25.0
 BRIEF_WORDS = 60                             # a brief: at most this many words …
@@ -96,6 +98,8 @@ CHILD_SPLIT = 0.8                            # cost when a sidebar and its paren
 AD_STRIP_MM = 6.0                            # a bar this close above/below an ad block, as wide as it, belongs to the ad
 MIN_REGION_MM = 25.0                         # a strip of the newshole beside an ad block narrower than this is left empty
 LEAD_LOW = 2.0                               # cost when the lead story's region does not start at the top of the newshole
+LOOSE_JOIN_MM = 6.0                          # loose pieces of one column this close together are one item
+LOOSE_INSIDE = 0.8                           # a loose item at least this much inside the newshole is laid out with it
 LOOSE_INTRO_WORDS = 80                       # loose text this short inside a story's printed box is that story's (an intro)
 XH_FOLLOW_MM = 15.0                          # a loose crosshead joins a flow only if a paragraph starts this close below it
 HEAD_GROW = 1.25                             # a headline may grow this much to fill its measure (same number of lines)
@@ -109,6 +113,7 @@ HEAD_STEPS = ((1.0, 0.0), (0.85, 0.6), (0.72, 1.5))   # headline size × the spa
 MIN_PPI = 150                                # photos are never enlarged below this (or below the paper's own print, if lower)
 BODY_INK_TEST = "\u0915\u093f\u0902 \u0930\u094d\u0915\u0940\u0902 \u0911 \u0915\u0945 \u0907\u0901 \u0936\u094d\u0930\u0940"   # tall marks
 WHITE_MAX = 2                                # leadings of white space a module may leave at its column feet (> 1 costs extra)
+EDGE_TOP_MM = 15.0                           # … or one that ends within this distance below the newshole's top
 EDGE_MM = 60.0                               # fixed items shorter than this on the newshole's top/bottom edge move that edge
 DEVA = (chr(0x0900), chr(0x097F))
 
@@ -221,6 +226,8 @@ class Generator:
             return (-(he["size_pt"] if he else 0.0), order[s["id"]])
         main.sort(key=prio)
         self.stories = [Story(s, self.els, idx, photo_dir, r) for r, s in enumerate(main)]
+        self.ban_lead: set = set()                        # widths the lead may not take (alternatives)
+        self.ext_styles = False                          # True when the rarer house styles are in use (a fallback)
         self.extra_rows: dict = {}                       # (story, w, m, fit, style) → rows added after an overset render
         self._lines: dict = {}
         self._disp: dict = {}
@@ -492,6 +499,11 @@ class Generator:
 
     # ---- module options of a story at width w
     def options(self, s: Story, w: int):
+        if s.rank == 0 and w in self.ban_lead:          # an alternative layout: the lead at another width
+            return []
+        return self._options(s, w)
+
+    def _options(self, s: Story, w: int):
         """Every way to set story s at w grid columns, as height intervals (units of UNIT mm), cheapest per height.
         Headline at the profile's size for the span, or one or two steps smaller (not for the lead). Body: m = w or w−1
         equal text columns. Photo (always kept): across k of the m text columns, top left of the body, with the body
@@ -1082,8 +1094,8 @@ def loose_stories(m, box, photo_ids, ad_block=None) -> list:
     ads = [e["bbox_mm"] for e in m["elements"] if e["kind"] == "ad"]
     x0, t, x1, b = box
 
-    def inside(bb):
-        return bb[0] >= x0 - 1 and bb[2] <= x1 + 1 and bb[1] >= t - 1 and bb[3] <= b + 1
+    def inside(bb):                                    # mostly inside (a rail may reach a few mm past the newshole's edge)
+        return inside_frac(bb, (x0, t, x1, b)) >= LOOSE_INSIDE
 
     def in_ad(bb):
         return any(a[0] - 0.5 <= bb[0] and bb[2] <= a[2] + 0.5 and a[1] - 0.5 <= bb[1] and bb[3] <= a[3] + 0.5 for a in ads)
@@ -1110,7 +1122,15 @@ def loose_stories(m, box, photo_ids, ad_block=None) -> list:
             group[sd["id"]].append(e); head_of[e["id"]] = sd["id"]
             group.pop(e["id"], None)
         elif e["id"] not in group:
-            group[e["id"]] = [e]
+            # no heading above: join the loose piece right above it in the same column (one box's lines), else alone
+            prev = next((g_ for g_ in reversed(list(group.values())) if g_[0]["kind"] not in ("headline", "kicker")
+                         and min(g_[-1]["bbox_mm"][2], e["bbox_mm"][2]) - max(g_[-1]["bbox_mm"][0], e["bbox_mm"][0])
+                         >= 0.8 * min(g_[-1]["bbox_mm"][2] - g_[-1]["bbox_mm"][0], e["bbox_mm"][2] - e["bbox_mm"][0])
+                         and 0 <= e["bbox_mm"][1] - g_[-1]["bbox_mm"][3] <= LOOSE_JOIN_MM), None)
+            if prev is not None:
+                prev.append(e)
+            else:
+                group[e["id"]] = [e]
     out = []
     for n, (gid, items) in enumerate(sorted(group.items(), key=lambda kv: (kv[1][0]["bbox_mm"][1], kv[0]))):
         heads = [e for e in items if e["kind"] == "headline"]
@@ -1154,7 +1174,7 @@ def styles_from(cal_models, min_count=10) -> dict:
             if s.get("parent_story") or not s.get("body_size_pt") or not s.get("body_leading_pt") or not deva(txt):
                 continue
             c[(round(s["body_size_pt"] * 2) / 2, round(s["body_leading_pt"] * 2) / 2)] += 1
-    out = {k: v for k, v in c.items() if v >= min_count}
+    out = {k: v for k, v in c.items() if v >= min_count and k[1] / k[0] <= MAX_LEAD_RATIO}
     if not out:
         sys.exit("no house body style with enough calibration stories")
     return out
@@ -1196,12 +1216,28 @@ def newshole(m):
             return (top, band_top - 3.0, None), None
         if len(ads) == 1 and ads[0][1] > top - 1:          # one ad block inside the news area: the newshole goes around it
             ad = list(ads[0])
-            for e in m["elements"]:                        # strips touching it (a coloured bar with its text) are the ad's frame
-                b = e["bbox_mm"]
-                if e["kind"] in ("furniture", "box", "other_text", "graphic") and min(b[2], ad[2]) - max(b[0], ad[0]) >= 0.8 * (ad[2] - ad[0]) \
-                        and (0 <= ad[1] - b[3] <= AD_STRIP_MM or 0 <= b[1] - ad[3] <= AD_STRIP_MM or (b[1] < ad[1] < b[3]) or (b[1] < ad[3] < b[3])) \
-                        and b[3] - b[1] <= 15.0:
-                    ad = [min(ad[0], b[0]), min(ad[1], b[1]), max(ad[2], b[2]), max(ad[3], b[3])]
+            # the ad's frame grows to take in fixed artwork that touches it, piece by piece: coloured bars with their text,
+            # a promo strip (furniture text, boxes, graphics, rules) — it stays where print had it
+            fixed_kinds = ("furniture", "box", "graphic", "image", "rule")
+            story_boxes = [st_["bbox_mm"] for st_ in m["stories"] if st_.get("bbox_mm")]
+
+            def holds_story(b):                            # a panel or box that holds story text is news, not ad artwork
+                area = max(1e-9, (b[2] - b[0]) * (b[3] - b[1]))
+                return any(max(0.0, min(b[2], o[2]) - max(b[0], o[0])) * max(0.0, min(b[3], o[3]) - max(b[1], o[1])) > 0.3 * min(area, (o[2] - o[0]) * (o[3] - o[1]))
+                           for o in story_boxes)
+            changed = True
+            while changed:
+                changed = False
+                for e in m["elements"]:
+                    b = e["bbox_mm"]
+                    if e["kind"] not in fixed_kinds + ("other_text",) or (b[0] >= ad[0] - 0.5 and b[2] <= ad[2] + 0.5 and b[1] >= ad[1] - 0.5 and b[3] <= ad[3] + 0.5):
+                        continue
+                    xo = min(b[2], ad[2]) - max(b[0], ad[0])
+                    near = (-1.0 <= ad[1] - b[3] <= AD_STRIP_MM or -1.0 <= b[1] - ad[3] <= AD_STRIP_MM)
+                    wide_bar = e["kind"] == "other_text" and xo >= 0.8 * (ad[2] - ad[0]) and b[3] - b[1] <= 15.0
+                    if near and xo >= 0.5 * (b[2] - b[0]) and (e["kind"] in fixed_kinds or wide_bar) and not holds_story(b):
+                        ad = [min(ad[0], b[0]), min(ad[1], b[1]), max(ad[2], b[2]), max(ad[3], b[3])]
+                        changed = True
             return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm")), ad), None
         return None, "irregular ad shapes (more than one ad block)"
     return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm")), None), None
@@ -1276,7 +1312,8 @@ def render(g: Generator, model, placed, news_top, news_bottom, photo_dir, kept_s
                 if c:
                     B.rect_mm(x, y + t0, x + span, y + t1, c)
         for blk in dsp["blocks"]:
-            if blk[0] == "kicker" and blk[1] in fills[1]:    # a label tab: its printed panel and text colour, as wide as print
+            if blk[0] in ("kicker", "other_text") and blk[1] in fills[1] and blk[1] not in boxed:
+                # a label tab (a kicker, or a label that became loose text in a brief stack): its printed panel and colour
                 kel = g.els[blk[1]]
                 c, _ = CP.to_cmyk(fills[1][blk[1]])
                 pw = min(span, max(max(blk[2].widths_mm) + 4.0, kel["bbox_mm"][2] - kel["bbox_mm"][0] + 4.0, 20.0))
@@ -1344,7 +1381,8 @@ def pdf_bytes(m, B, items):
 def main():
     args = sys.argv[1:]
     opt = {}
-    for flag in ("--out", "--lead-side"):                # --out DIR: write elsewhere (alternatives); --lead-side: force it
+    for flag in ("--out", "--lead-side", "--ban-lead-width"):   # --out DIR: write elsewhere (alternatives); --lead-side: force
+        # it; --ban-lead-width N[,N]: the lead may not take these widths (an alternative to a layout that used them)
         if flag in args:
             i = args.index(flag); opt[flag] = args[i + 1]; del args[i:i + 2]
     ds = Path(args[0]).expanduser()
@@ -1359,6 +1397,7 @@ def main():
     lead_side = opt.get("--lead-side") or lead_side_from(cal)
     assert lead_side in ("left", "right"), lead_side
     styles = styles_from(cal)
+    styles_ext = styles_from(cal, RARE_STYLE_MIN)       # rarer house styles (e.g. tight leading on dense pages): fallback only
     space_em = space_em_from(cal)
     print("house body styles (calibration editions):", styles, "word space em:", space_em)
     todo = names or [k for k, m in models.items() if m["split"] == "test"]
@@ -1390,7 +1429,8 @@ def main():
             # small fixed items on the newshole's top or bottom edge (a section logo, an emblem, a boxed notice at the foot):
             # move that edge clear of them, as a designer would; anything else inside makes the page irregular
             boxes = {e["id"]: e["bbox_mm"] for e in m["elements"]} | {s_["id"]: s_["bbox_mm"] for s_ in m["stories"] if s_.get("bbox_mm")}
-            top_i = [boxes[i] for i in intruders if boxes[i][1] <= news_top + 2 and boxes[i][3] - boxes[i][1] < EDGE_MM]
+            top_i = [boxes[i] for i in intruders if (boxes[i][1] <= news_top + 2 or boxes[i][3] <= news_top + EDGE_TOP_MM)
+                     and boxes[i][3] - boxes[i][1] < EDGE_MM]
             bot_i = [boxes[i] for i in intruders if boxes[i][3] >= news_bottom - 2 and boxes[i][3] - boxes[i][1] < EDGE_MM]
             if not intruders or not (top_i or bot_i):
                 break
@@ -1410,11 +1450,19 @@ def main():
                 results.append({"page": name, "status": "skipped: fixed parts reach into the newshole", "intruders": len(intruders)})
                 print(name, "skipped: fixed parts reach into the newshole (after stacking briefs)"); continue
         g = Generator(cx, m, photo_dir, styles, ids, space_em)
+        g.ban_lead = {int(x) for x in opt.get("--ban-lead-width", "").split(",") if x}
         if len(g.stories) > MAX_STORIES:
             results.append({"page": name, "status": f"skipped: more than {MAX_STORIES} stories (search limit)"}); print(name, "skipped:", len(g.stories), "stories"); continue
         retries = []
         for attempt in range(RETRIES + 1):
             res, info = g.run(regions, span_prior, lead_side)
+            if res is None and not info.get("budget_hit") and len(styles_ext) > len(styles) and not g.ext_styles:
+                # no exact fit with the commonest styles: retry once with the house's rarer body styles too (they cost more)
+                ban = g.ban_lead
+                g = Generator(cx, m, photo_dir, styles_ext, ids, space_em)
+                g.ext_styles, g.ban_lead = True, ban
+                res, info = g.run(regions, span_prior, lead_side)
+                info["rare_styles"] = True
             if res is None:
                 break
             placed = [pl for k, tree in res[1] for pl in g.place(tree, ORIGIN + regions[k][0] * PITCH, regions[k][2])]
@@ -1442,7 +1490,7 @@ def main():
                "fixed_problems": rep["fixed_problems"], "lead_side": lead_side,
                "newshole_box_mm": [ORIGIN, round(news_top, 3), round(x_hi, 3), round(news_bottom, 3)],
                "regions_mm": [[round(v, 3) for v in b] for b in rboxes], "ad_block_mm": ad_block,
-               "placed": [{"story": g.stories[i].id, "rank": g.stories[i].rank, "x": round(x, 2), "y": round(y, 2), "w": w, "h": round(h, 2),
+               "placed": [{"story": g.stories[i].id, "rank": g.stories[i].rank, "x": round(x, 2), "y": round(y, 2), "w": w, "w_mm": round(span_mm(w), 2), "h": round(h, 2),
                            "m": o["m"], "fit": o["fit"], "photo_cols": o["photo"]["k"] if o["photo"] else None} for i, x, y, w, h, o in placed],
                "head_ids": {s.id: s.head_ids for s in g.stories}, "deck_ids": {s.id: s.deck_ids for s in g.stories},
                "caption_ids": {s.id: s.caption["ids"] for s in g.stories if s.caption},
@@ -1469,7 +1517,7 @@ def main():
            "skip_reasons": dict(Counter(r["status"].split(": ", 1)[1] for r in results if r["status"].startswith("skipped"))),
            "overset_lines": sum(r.get("overset_lines", 0) for r in results), "problems": sum(r.get("problems", 0) for r in results),
            "retried_pages": sum(1 for r in results if r.get("retries"))}
-    if not names and "--out" not in opt and "--lead-side" not in opt:   # aggregates only from standard full runs
+    if not names and not opt:                          # aggregates only from standard full runs
         OUT.mkdir(parents=True, exist_ok=True)
         (OUT / "summary.json").write_text(json.dumps(agg, indent=1) + "\n")
     print(json.dumps(agg))
