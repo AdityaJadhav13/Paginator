@@ -165,3 +165,9 @@ def collisions(path) -> list:
             if ov > MIN_MM2:
                 out.append((round(ov, 3), [round(v, 1) for v in a["bbox"]], [round(v, 1) for v in b["bbox"]]))
     return out
+
+
+if __name__ == "__main__":                 # used by generate.py, whose environment has no pikepdf / PIL
+    import json
+    import sys
+    print(json.dumps(collisions(sys.argv[1])))
