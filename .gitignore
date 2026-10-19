@@ -35,4 +35,7 @@ __pycache__/
 .claude/
 graphify-out/
 
+# Brand artwork dropped in locally (mastheads, logos): private, never committed
+Logos/
+
 # Private pilot data never lives in the repo (it stays in $PAGEINATOR_PRIVATE_CORPUS outside git)
