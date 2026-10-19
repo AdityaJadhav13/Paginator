@@ -1,0 +1,267 @@
+{
+  "checker": "check_pdfx1a_independent",
+  "version": "1.0",
+  "file": "/Users/adityajadhav/Desktop/Paginator/experiments/phase0/results/pdfx1/pageinator_press_test_synthetic.pdf",
+  "bytes": 150254,
+  "sha256": "7593d3f4981ce02a5ce90ee274e4ab31600745ba6a05832b0d61dba0ace7f1bd",
+  "header_version": "1.4",
+  "pdfx": "PDF/X-1a:2003",
+  "results": [
+    {
+      "status": "PASS",
+      "check": "A.binary-comment",
+      "message": "binary comment line (>=4 bytes >= 128) follows the header"
+    },
+    {
+      "status": "PASS",
+      "check": "A.open-strict",
+      "message": "qpdf 12.2.0 opened the file without xref recovery (1 page(s), 23 objects)"
+    },
+    {
+      "status": "PASS",
+      "check": "A.encrypt",
+      "message": "not encrypted"
+    },
+    {
+      "status": "PASS",
+      "check": "A.version",
+      "message": "header %PDF-1.4 (effective 1.4); allowed for PDF/X-1a:2003"
+    },
+    {
+      "status": "PASS",
+      "check": "A.qpdf-check",
+      "message": "qpdf check_pdf_syntax: no warnings or errors (all streams decode, page content parses)"
+    },
+    {
+      "status": "PASS",
+      "check": "A.xref",
+      "message": "classic xref table (24 entries, 1 section(s)); all 23 in-use offsets hit their 'N G obj'; /Size 24 consistent; nothing but whitespace after %%EOF"
+    },
+    {
+      "status": "PASS",
+      "check": "A.pdf15-structures",
+      "message": "no object streams or cross-reference streams"
+    },
+    {
+      "status": "PASS",
+      "check": "A.unreferenced",
+      "message": "every in-use object is reachable from the trailer"
+    },
+    {
+      "status": "PASS",
+      "check": "A.content-syntax",
+      "message": "1 content stream(s), 42159 operators: all known, operand types/arity correct, BT/ET balanced, all named resources resolve"
+    },
+    {
+      "status": "PASS",
+      "check": "B.pdfx-version",
+      "message": "GTS_PDFXVersion (PDF/X-1a:2003)"
+    },
+    {
+      "status": "PASS",
+      "check": "B.title",
+      "message": "Title 'Pageinator press test 39b217c097 (TEST - not for publication)'"
+    },
+    {
+      "status": "PASS",
+      "check": "B.dates",
+      "message": "/CreationDate \"D:20261014152409+00'00'\" valid"
+    },
+    {
+      "status": "PASS",
+      "check": "B.dates",
+      "message": "/ModDate \"D:20261014152409+00'00'\" valid"
+    },
+    {
+      "status": "PASS",
+      "check": "B.trapped",
+      "message": "Trapped /False"
+    },
+    {
+      "status": "PASS",
+      "check": "B.id",
+      "message": "trailer /ID present (16+16 bytes)"
+    },
+    {
+      "status": "INFO",
+      "check": "B.producer",
+      "message": "Producer 'Pageinator pdfx1/1.0.0', Creator 'Pageinator EXP-PDF-1'"
+    },
+    {
+      "status": "PASS",
+      "check": "C.outputintents",
+      "message": "exactly one GTS_PDFX output intent"
+    },
+    {
+      "status": "PASS",
+      "check": "C.identifier",
+      "message": "OutputConditionIdentifier 'IFRA26'"
+    },
+    {
+      "status": "PASS",
+      "check": "C.registry",
+      "message": "no embedded profile; RegistryName 'http://www.color.org' present"
+    },
+    {
+      "status": "WARN",
+      "check": "C.registered-condition",
+      "message": "printing condition referenced by name only: 'IFRA26' -- a registered ICC characterization known to this checker; a human must confirm the press/RIP supports it (newsprint: IFRA26 / IFRA30)"
+    },
+    {
+      "status": "INFO",
+      "check": "C.summary",
+      "message": "identifier='IFRA26' condition='Newsprint, coldset offset (ISO 12647-3), ISOnewspaper26v4' registry='http://www.color.org' info='IFRA26 - ISOnewspaper26v4 - coldset offset on newsprint' profile=none"
+    },
+    {
+      "status": "PASS",
+      "check": "D.boxes",
+      "message": "all 1 page(s): MediaBox present, TrimBox/ArtBox in page dict, BleedBox <= MediaBox, Trim <= Bleed/Media"
+    },
+    {
+      "status": "INFO",
+      "check": "D.size",
+      "message": "pages 1: TrimBox 347.0 x 540.0 mm, MediaBox 347.0 x 540.0 mm, BleedBox min bleed 0.0 mm"
+    },
+    {
+      "status": "PASS",
+      "check": "E.colour",
+      "message": "content uses only DeviceCMYK / DeviceGray / Separation|DeviceN with CMYK|Gray alternates (no RGB, ICC, Cal, Lab)"
+    },
+    {
+      "status": "INFO",
+      "check": "E.colour-usage",
+      "message": "colour selections: DeviceCMYK x679"
+    },
+    {
+      "status": "PASS",
+      "check": "E.tac",
+      "message": "max total area coverage in k/K and DeviceCMYK sc/scn: 200% at p1#536"
+    },
+    {
+      "status": "PASS",
+      "check": "F.extgstate",
+      "message": "2 ExtGState(s): no SMask, CA/ca = 1, BM Normal/Compatible"
+    },
+    {
+      "status": "PASS",
+      "check": "F.group",
+      "message": "no transparency groups on pages or forms"
+    },
+    {
+      "status": "PASS",
+      "check": "F.image-smask",
+      "message": "no image soft masks (0 image XObject(s) checked)"
+    },
+    {
+      "status": "INFO",
+      "check": "G.images",
+      "message": "no images"
+    },
+    {
+      "status": "WARN",
+      "check": "H.font",
+      "message": "/F3 GRNXEG+NotoSansDevanagari-Regular [Type0] (first use p1#3): 3 used code(s) have no ToUnicode mapping: 0x1c0, 0x225, 0x279"
+    },
+    {
+      "status": "PASS",
+      "check": "H.font",
+      "message": "/F3 GRNXEG+NotoSansDevanagari-Regular [Type0] (first use p1#3): embedded; CIDFontType2; Identity-H; embedded FontFile2 15.1 KB; Adobe-Identity-0; CIDToGIDMap Identity; 1111 glyphs, upem 1000, 83 distinct code(s) used, max |W-hmtx| 0.00; 1 empty glyph(s) are spaces per ToUnicode"
+    },
+    {
+      "status": "WARN",
+      "check": "H.font",
+      "message": "/F2 GFHVXR+NotoSansDevanagari-Bold [Type0] (first use p1#243): 5 used code(s) have no ToUnicode mapping: 0x1af, 0x1fa, 0x221, 0x223, 0x227"
+    },
+    {
+      "status": "PASS",
+      "check": "H.font",
+      "message": "/F2 GFHVXR+NotoSansDevanagari-Bold [Type0] (first use p1#243): embedded; CIDFontType2; Identity-H; embedded FontFile2 11.1 KB; Adobe-Identity-0; CIDToGIDMap Identity; 815 glyphs, upem 1000, 44 distinct code(s) used, max |W-hmtx| 0.00; 1 empty glyph(s) are spaces per ToUnicode"
+    },
+    {
+      "status": "WARN",
+      "check": "H.font",
+      "message": "/F1 FTZOMM+NotoSerifDevanagari-Condensed875 [Type0] (first use p1#887): 42 used code(s) have no ToUnicode mapping: 0xf6, 0x12c, 0x135, 0x1ae, 0x1b8, 0x1ba (+36 more)"
+    },
+    {
+      "status": "WARN",
+      "check": "H.font",
+      "message": "/F1 FTZOMM+NotoSerifDevanagari-Condensed875 [Type0] (first use p1#887): 1 used glyph(s) have an empty outline and no space-like ToUnicode (space/NBSP?): 752"
+    },
+    {
+      "status": "PASS",
+      "check": "H.font",
+      "message": "/F1 FTZOMM+NotoSerifDevanagari-Condensed875 [Type0] (first use p1#887): embedded; CIDFontType2; Identity-H; embedded FontFile2 35.3 KB; Adobe-Identity-0; CIDToGIDMap Identity; 1256 glyphs, upem 1000, 188 distinct code(s) used, max |W-hmtx| 0.00; 1 empty glyph(s) are spaces per ToUnicode"
+    },
+    {
+      "status": "PASS",
+      "check": "I.javascript",
+      "message": "no JavaScript (no /JS, no JavaScript actions, no JavaScript name tree)"
+    },
+    {
+      "status": "PASS",
+      "check": "I.annotations",
+      "message": "no annotations inside the TrimBox other than PrinterMark/TrapNet (0 mark/trap, 0 outside bleed)"
+    },
+    {
+      "status": "PASS",
+      "check": "I.embedded-files",
+      "message": "no embedded files"
+    },
+    {
+      "status": "PASS",
+      "check": "I.optional-content",
+      "message": "no /OCProperties (optional content, PDF 1.5)"
+    },
+    {
+      "status": "PASS",
+      "check": "I.postscript",
+      "message": "no PostScript XObjects, Subtype2 /PS forms or PS operators"
+    },
+    {
+      "status": "PASS",
+      "check": "I.transfer",
+      "message": "no transfer functions (TR/TR2 absent or /Default)"
+    },
+    {
+      "status": "INFO",
+      "check": "J.overprint",
+      "message": "2 ExtGState(s) set overprint: obj4: OP=True op=True OPM=1, obj5: OP=False op=False OPM=0; 14545 fill paint operation(s) with overprint on"
+    },
+    {
+      "status": "PASS",
+      "check": "J.white-overprint",
+      "message": "no white (0 0 0 0 k / 1 g / 0-tint) fills or strokes painted with overprint on"
+    },
+    {
+      "status": "PASS",
+      "check": "K.marked-content",
+      "message": "BMC/BDC/EMC balanced in all 1 content stream(s); none crosses a BT/ET boundary (4067 BDC)"
+    },
+    {
+      "status": "WARN",
+      "check": "K.actualtext",
+      "message": "4067 ActualText span(s) in a PDF 1.4 file (ActualText marked content is PDF 1.5; tolerated -- Adobe InDesign PDF/X-1a exports contain it)"
+    },
+    {
+      "status": "WARN",
+      "check": "L.text",
+      "message": "pdfminer.six 20250506: 13057 non-space character(s), 978 '(cid:N)' placeholder(s) = 7.0% (> 5% unmapped glyphs)"
+    },
+    {
+      "status": "PASS",
+      "check": "M.pdfium",
+      "message": "PDFium opened and rendered all 1 page(s) at 24 dpi; PDFium text layer: 6344 non-space character(s)"
+    }
+  ],
+  "summary": {
+    "PASS": 36,
+    "INFO": 6,
+    "WARN": 7
+  },
+  "verdict": "PASS",
+  "exit_code": 0,
+  "tools": {
+    "pikepdf": "9.11.0",
+    "qpdf": "12.2.0"
+  }
+}

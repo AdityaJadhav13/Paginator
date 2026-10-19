@@ -1,0 +1,854 @@
+{
+  "schema": "pageinator.oracle-manifest/1",
+  "oracle_id": "oracle-v0",
+  "status": "FROZEN — reference behaviour, not correctness. Do not edit; record defects in KNOWN_LIMITATIONS.md",
+  "generated_at_utc": "2026-10-07T17:36:48+00:00",
+  "source": {
+    "path": "/Users/adityajadhav/Engineering/Development /My Projects/Paginator",
+    "git_commit": "4694f81fe484f2d14019899df050f580b63340e8",
+    "git_commit_date": "2026-08-14T19:12:13+05:30",
+    "git_status_porcelain": "?? Paginator.code-workspace",
+    "note": "Copied, not moved. Source repository left unmodified."
+  },
+  "copy_integrity": {
+    "files": 41,
+    "byte_identical_to_source": true,
+    "mismatches": []
+  },
+  "runtime": {
+    "python": "3.11.14",
+    "implementation": "CPython",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpu": "Apple M4 Pro",
+    "harfbuzz": "14.3.0",
+    "key_packages": {
+      "uharfbuzz": "0.56.0",
+      "fonttools": "4.63.0",
+      "freetype-py": "2.5.1",
+      "pydantic": "2.13.4",
+      "pytest": "9.1.1",
+      "hypothesis": "6.165.3"
+    },
+    "all_packages": {
+      "PyYAML": "6.0.3",
+      "Pygments": "2.20.0",
+      "annotated-doc": "0.0.5",
+      "annotated-types": "0.8.0",
+      "anyio": "4.14.2",
+      "ast_serialize": "0.8.0",
+      "certifi": "2026.7.22",
+      "click": "8.4.2",
+      "coverage": "7.15.4",
+      "fastapi": "0.141.1",
+      "fonttools": "4.63.0",
+      "freetype-py": "2.5.1",
+      "h11": "0.16.0",
+      "httpcore": "1.0.9",
+      "httptools": "0.8.0",
+      "httpx": "0.28.1",
+      "hypothesis": "6.165.3",
+      "idna": "3.18",
+      "iniconfig": "2.3.0",
+      "librt": "0.15.0",
+      "mypy": "2.3.0",
+      "mypy_extensions": "1.1.0",
+      "packaging": "26.3",
+      "pathspec": "1.1.1",
+      "pluggy": "1.6.0",
+      "pydantic": "2.13.4",
+      "pydantic_core": "2.46.4",
+      "pytest": "9.1.1",
+      "pytest-cov": "7.1.0",
+      "python-dotenv": "1.2.2",
+      "ruff": "0.16.2",
+      "sortedcontainers": "2.4.0",
+      "starlette": "1.6.0",
+      "typing-inspection": "0.4.4",
+      "typing_extensions": "4.16.0",
+      "uharfbuzz": "0.56.0",
+      "uvicorn": "0.52.1",
+      "uvloop": "0.22.1",
+      "watchfiles": "1.2.0",
+      "websockets": "17.0.1"
+    },
+    "lockfile_sha256": "25b294882e64a93ea35417890803ad4eeeebf7b4098a97d98446784ecf4de11c",
+    "install": "uv venv --python 3.11.14 .venv && uv pip install --python .venv/bin/python --require-hashes -r requirements.lock"
+  },
+  "public_api_used_by_harness": [
+    "paginator.typeset.FontRegistry(register_dir, resolve)",
+    "paginator.typeset.shape_run",
+    "paginator.typeset.linebreak.build_nodes",
+    "paginator.typeset.linebreak.break_lines / break_knuth_plass / break_greedy",
+    "paginator.typeset.schemas.TextStyle / HyphenPoint"
+  ],
+  "capabilities": {
+    "shaping": true,
+    "script_itemization": true,
+    "line_breaking_knuth_plass": true,
+    "line_breaking_greedy": true,
+    "hyphenation_hook": "input only (HyphenPoint); no hyphenator",
+    "justification_positions": false,
+    "frame_flow": false,
+    "overset": false,
+    "rtl": false,
+    "emergency_stretch": false,
+    "tracking_in_breaking": false
+  },
+  "tests": {
+    "command": "python -m pytest -q -p no:cacheprovider tests/",
+    "tests": 182,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "time_s": 47.33,
+    "env": "PYTHONDONTWRITEBYTECODE=1 recommended"
+  },
+  "fonts": [
+    {
+      "file": "assets/fonts/devanagari/Mukta-Bold.ttf",
+      "sha256": "7d22891cd57507b04af95a67ffaf59b7073b3595a27d1cfbbcefb418de820a12",
+      "bytes": 418416,
+      "family": "Mukta",
+      "subfamily": "Bold",
+      "full_name": "Mukta Bold",
+      "version": "Version 2.538;PS 1.002;hotconv 16.6.51;makeotf.lib2.5.65220; ttfautohint (v1.6)",
+      "typographic_family": null,
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "mukta-OFL.txt",
+        "notosansdevanagari-OFL.txt",
+        "notoserifdevanagari-OFL.txt",
+        "tirodevanagarihindi-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/devanagari/Mukta-Light.ttf",
+      "sha256": "161f2f22d33a1c75d9fb37d74ea99e8dbbe119cd5c102c83146fb032a552e8f2",
+      "bytes": 405188,
+      "family": "Mukta",
+      "subfamily": "Light",
+      "full_name": "Mukta Light",
+      "version": "Version 2.538;PS 1.002;hotconv 16.6.51;makeotf.lib2.5.65220; ttfautohint (v1.6)",
+      "typographic_family": "Mukta",
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "mukta-OFL.txt",
+        "notosansdevanagari-OFL.txt",
+        "notoserifdevanagari-OFL.txt",
+        "tirodevanagarihindi-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/devanagari/Mukta-Regular.ttf",
+      "sha256": "2958e4af564507df2a856164df6f9978dacb03f999a4f34a0c269dc8a4de9688",
+      "bytes": 432248,
+      "family": "Mukta",
+      "subfamily": "Regular",
+      "full_name": "Mukta Regular",
+      "version": "Version 2.538;PS 1.001;hotconv 16.6.51;makeotf.lib2.5.65220; ttfautohint (v1.6)",
+      "typographic_family": null,
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "mukta-OFL.txt",
+        "notosansdevanagari-OFL.txt",
+        "notoserifdevanagari-OFL.txt",
+        "tirodevanagarihindi-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/devanagari/Mukta-SemiBold.ttf",
+      "sha256": "f437fb098f8f29acb8628617cb2682f0780ef22fa8b0443de1f66090c36e510a",
+      "bytes": 411160,
+      "family": "Mukta",
+      "subfamily": "SemiBold",
+      "full_name": "Mukta SemiBold",
+      "version": "Version 2.538;PS 1.002;hotconv 16.6.51;makeotf.lib2.5.65220; ttfautohint (v1.6)",
+      "typographic_family": "Mukta",
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "mukta-OFL.txt",
+        "notosansdevanagari-OFL.txt",
+        "notoserifdevanagari-OFL.txt",
+        "tirodevanagarihindi-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/devanagari/NotoSansDevanagari[wdth,wght].ttf",
+      "sha256": "9ce7b04f60e363d8870e5997744cf85cf69d38a4d7d129d364d92a3b14b461d7",
+      "bytes": 647144,
+      "family": "Noto Sans Devanagari",
+      "subfamily": "Regular",
+      "full_name": "Noto Sans Devanagari Regular",
+      "version": "Version 2.006",
+      "typographic_family": null,
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [
+        "wght",
+        "wdth"
+      ],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "mukta-OFL.txt",
+        "notosansdevanagari-OFL.txt",
+        "notoserifdevanagari-OFL.txt",
+        "tirodevanagarihindi-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/devanagari/NotoSerifDevanagari[wdth,wght].ttf",
+      "sha256": "1191e07bfeb062d80e252eb85b0eafdfbda1e350707a2a60628668e8f677dbbb",
+      "bytes": 757692,
+      "family": "Noto Serif Devanagari",
+      "subfamily": "Regular",
+      "full_name": "Noto Serif Devanagari Regular",
+      "version": "Version 2.006",
+      "typographic_family": null,
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [
+        "wght",
+        "wdth"
+      ],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "mukta-OFL.txt",
+        "notosansdevanagari-OFL.txt",
+        "notoserifdevanagari-OFL.txt",
+        "tirodevanagarihindi-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/devanagari/TiroDevanagariHindi-Italic.ttf",
+      "sha256": "eed07aca7291e34fa2c4f3e48be325b261f60516ecf835610fee30dade0f78ec",
+      "bytes": 425636,
+      "family": "Tiro Devanagari Hindi",
+      "subfamily": "Italic",
+      "full_name": "Tiro Devanagari Hindi Italic",
+      "version": "Version 1.52",
+      "typographic_family": null,
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "mukta-OFL.txt",
+        "notosansdevanagari-OFL.txt",
+        "notoserifdevanagari-OFL.txt",
+        "tirodevanagarihindi-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/devanagari/TiroDevanagariHindi-Regular.ttf",
+      "sha256": "d2abcb4d352f0bfab91632df5d9c8173882073c182e662fa731a5a738e6681d7",
+      "bytes": 423224,
+      "family": "Tiro Devanagari Hindi",
+      "subfamily": "Regular",
+      "full_name": "Tiro Devanagari Hindi Regular",
+      "version": "Version 1.52",
+      "typographic_family": null,
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "mukta-OFL.txt",
+        "notosansdevanagari-OFL.txt",
+        "notoserifdevanagari-OFL.txt",
+        "tirodevanagarihindi-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/latin/Archivo-Italic[wdth,wght].ttf",
+      "sha256": "305d13b4eb80e62f7d517f78d7c045250d977552a420f2dbed906f314e761305",
+      "bytes": 741368,
+      "family": "Archivo SemiBold",
+      "subfamily": "Italic",
+      "full_name": "Archivo SemiBold Italic",
+      "version": "Version 2.001",
+      "typographic_family": "Archivo",
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [
+        "wght",
+        "wdth"
+      ],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "archivo-OFL.txt",
+        "archivonarrow-OFL.txt",
+        "sourcesans3-OFL.txt",
+        "sourceserif4-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/latin/ArchivoNarrow-Italic[wght].ttf",
+      "sha256": "147c09214be086bf1c70311ffb66f4f5a252e48f828f1d49e35ae56951016cc6",
+      "bytes": 98456,
+      "family": "Archivo Narrow",
+      "subfamily": "Italic",
+      "full_name": "Archivo Narrow Italic",
+      "version": "Version 3.002",
+      "typographic_family": null,
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [
+        "wght"
+      ],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "archivo-OFL.txt",
+        "archivonarrow-OFL.txt",
+        "sourcesans3-OFL.txt",
+        "sourceserif4-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/latin/ArchivoNarrow[wght].ttf",
+      "sha256": "adbe027f625c8393ae0f6e174e32e233dda485bc3eda5153ce428275394ef97f",
+      "bytes": 93304,
+      "family": "Archivo Narrow",
+      "subfamily": "Regular",
+      "full_name": "Archivo Narrow Regular",
+      "version": "Version 3.002",
+      "typographic_family": null,
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [
+        "wght"
+      ],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "archivo-OFL.txt",
+        "archivonarrow-OFL.txt",
+        "sourcesans3-OFL.txt",
+        "sourceserif4-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/latin/Archivo[wdth,wght].ttf",
+      "sha256": "0e094a7d3c7c4c25cf1310c4b30014f1dae9332220b1c2c88f4fa996f0b05053",
+      "bytes": 658596,
+      "family": "Archivo SemiBold",
+      "subfamily": "Regular",
+      "full_name": "Archivo SemiBold",
+      "version": "Version 2.001",
+      "typographic_family": "Archivo",
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [
+        "wght",
+        "wdth"
+      ],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "archivo-OFL.txt",
+        "archivonarrow-OFL.txt",
+        "sourcesans3-OFL.txt",
+        "sourceserif4-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/latin/SourceSans3-Italic[wght].ttf",
+      "sha256": "39e3ab05ccd7cb94907c31005bb5bec1d5432f0b096a2b782976e217a540eb6c",
+      "bytes": 395372,
+      "family": "Source Sans 3 ExtraLight",
+      "subfamily": "Italic",
+      "full_name": "Source Sans 3 Italic",
+      "version": "Version 3.052;hotconv 1.1.0;makeotfexe 2.6.0",
+      "typographic_family": "Source Sans 3",
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [
+        "wght"
+      ],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "archivo-OFL.txt",
+        "archivonarrow-OFL.txt",
+        "sourcesans3-OFL.txt",
+        "sourceserif4-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/latin/SourceSans3[wght].ttf",
+      "sha256": "042fe2cc0b933e328410d7acbd0aa6a1873dca5aef81875f4bc214b08825c7b9",
+      "bytes": 646340,
+      "family": "Source Sans 3 ExtraLight",
+      "subfamily": "Regular",
+      "full_name": "Source Sans 3",
+      "version": "Version 3.052;hotconv 1.1.0;makeotfexe 2.6.0",
+      "typographic_family": "Source Sans 3",
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [
+        "wght"
+      ],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "archivo-OFL.txt",
+        "archivonarrow-OFL.txt",
+        "sourcesans3-OFL.txt",
+        "sourceserif4-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/latin/SourceSerif4-Italic[opsz,wght].ttf",
+      "sha256": "15fbc7e4679489a501998c3669272637a6646388ef7e4bd77eebb5bf967a1f42",
+      "bytes": 855432,
+      "family": "Source Serif 4",
+      "subfamily": "Italic",
+      "full_name": "Source Serif 4 Italic",
+      "version": "Version 4.004;hotconv 1.0.116;makeotfexe 2.5.65601",
+      "typographic_family": null,
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [
+        "wght",
+        "opsz"
+      ],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "archivo-OFL.txt",
+        "archivonarrow-OFL.txt",
+        "sourcesans3-OFL.txt",
+        "sourceserif4-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    },
+    {
+      "file": "assets/fonts/latin/SourceSerif4[opsz,wght].ttf",
+      "sha256": "97b2d4da6e3cb494b5a1e66ae176914d852ccabef49e0c02c0df25f3e39aca0b",
+      "bytes": 1209508,
+      "family": "Source Serif 4",
+      "subfamily": "Regular",
+      "full_name": "Source Serif 4 Regular",
+      "version": "Version 4.004;hotconv 1.0.116;makeotfexe 2.5.65601",
+      "typographic_family": null,
+      "outline_format": "TrueType(glyf)",
+      "variable_axes": [
+        "wght",
+        "opsz"
+      ],
+      "upem": 1000,
+      "os2_fsType": 0,
+      "os2_fsType_flags": [
+        "installable_embedding"
+      ],
+      "licence": "SIL OFL 1.1 (licence file shipped alongside)",
+      "licence_files": [
+        "archivo-OFL.txt",
+        "archivonarrow-OFL.txt",
+        "sourcesans3-OFL.txt",
+        "sourceserif4-OFL.txt"
+      ],
+      "rights": {
+        "server_shaping": true,
+        "browser_binary": true,
+        "pdf_embedding": true,
+        "subsetting": true,
+        "redistribution_in_repo": true,
+        "basis": "SIL OFL 1.1; verify licence file before any non-OFL font is added"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "paginator/typeset/__init__.py",
+      "sha256": "2635bfa0897ce0f45d0ec416920f657f15b0c766a8e98aa60b674517f4818191",
+      "source_sha256": "2635bfa0897ce0f45d0ec416920f657f15b0c766a8e98aa60b674517f4818191"
+    },
+    {
+      "path": "paginator/typeset/fonts.py",
+      "sha256": "7991deb8c36b8b667fd4333cc18f5949d2c2d8a0fbf09ee84782862c59fa16a5",
+      "source_sha256": "7991deb8c36b8b667fd4333cc18f5949d2c2d8a0fbf09ee84782862c59fa16a5"
+    },
+    {
+      "path": "paginator/typeset/linebreak.py",
+      "sha256": "aea2697e9db4014e7912cef26febe0607aaae37f088c803546c84209d32ef4f5",
+      "source_sha256": "aea2697e9db4014e7912cef26febe0607aaae37f088c803546c84209d32ef4f5"
+    },
+    {
+      "path": "paginator/typeset/schemas.py",
+      "sha256": "8560ea766de1174f7c6b1c3ee706462e277503eb5bbac008dc03c17ab8e125ef",
+      "source_sha256": "8560ea766de1174f7c6b1c3ee706462e277503eb5bbac008dc03c17ab8e125ef"
+    },
+    {
+      "path": "paginator/typeset/shape.py",
+      "sha256": "acbf515dc5b7dc7c1bacba107a72037b9677d040a2b58b60f0072db06af4e2a4",
+      "source_sha256": "acbf515dc5b7dc7c1bacba107a72037b9677d040a2b58b60f0072db06af4e2a4"
+    },
+    {
+      "path": "paginator/geometry/__init__.py",
+      "sha256": "991c5df70459e5696facf9eba187166a59ad85d5c2bfd4eb131f09fa8aebe7f7",
+      "source_sha256": "991c5df70459e5696facf9eba187166a59ad85d5c2bfd4eb131f09fa8aebe7f7"
+    },
+    {
+      "path": "paginator/geometry/page.py",
+      "sha256": "418df8db5a90d5e803758a9ee4c146b24b7cc3e3a393e7d1943bf13edfa32e3e",
+      "source_sha256": "418df8db5a90d5e803758a9ee4c146b24b7cc3e3a393e7d1943bf13edfa32e3e"
+    },
+    {
+      "path": "paginator/__init__.py",
+      "sha256": "91447944015cec709e8aa7655f7e9d64e1e4508e7023a57fe3746911c0fc6fed",
+      "source_sha256": "91447944015cec709e8aa7655f7e9d64e1e4508e7023a57fe3746911c0fc6fed"
+    },
+    {
+      "path": "paginator/errors.py",
+      "sha256": "8326b5875498081102d5a09222dbadfa2ff19be35a9d6802289328bc1bfda410",
+      "source_sha256": "8326b5875498081102d5a09222dbadfa2ff19be35a9d6802289328bc1bfda410"
+    },
+    {
+      "path": "paginator/ids.py",
+      "sha256": "43e36e0a0fea85430de0435dbe208493cfcdba04f5494fa872274a47059ccb09",
+      "source_sha256": "43e36e0a0fea85430de0435dbe208493cfcdba04f5494fa872274a47059ccb09"
+    },
+    {
+      "path": "paginator/color.py",
+      "sha256": "34af1344c06d845dea6cbb3d8ced4cd7ca024616619055d87487749593f5369b",
+      "source_sha256": "34af1344c06d845dea6cbb3d8ced4cd7ca024616619055d87487749593f5369b"
+    },
+    {
+      "path": "tests/test_typeset_fonts.py",
+      "sha256": "7f70bc3f28880db40853f2004b268cc69aa71d97909448a6139528af5fd00c31",
+      "source_sha256": "7f70bc3f28880db40853f2004b268cc69aa71d97909448a6139528af5fd00c31"
+    },
+    {
+      "path": "tests/test_typeset_linebreak.py",
+      "sha256": "6f56fcf06df662611d78e467886899721df05986898d0911133a8d964adc9ac9",
+      "source_sha256": "6f56fcf06df662611d78e467886899721df05986898d0911133a8d964adc9ac9"
+    },
+    {
+      "path": "tests/test_typeset_shape.py",
+      "sha256": "3c41cef94fd7cdccc4c6d1d2934e6f9d0bbebbae7cbe1ea7330704743986780b",
+      "source_sha256": "3c41cef94fd7cdccc4c6d1d2934e6f9d0bbebbae7cbe1ea7330704743986780b"
+    },
+    {
+      "path": "assets/fonts/LICENCES.md",
+      "sha256": "397ca512d09baa5bafa57e007928b54972b8f1d1731247cfc635ebd79d5decf9",
+      "source_sha256": "397ca512d09baa5bafa57e007928b54972b8f1d1731247cfc635ebd79d5decf9"
+    },
+    {
+      "path": "assets/fonts/devanagari/Mukta-Bold.ttf",
+      "sha256": "7d22891cd57507b04af95a67ffaf59b7073b3595a27d1cfbbcefb418de820a12",
+      "source_sha256": "7d22891cd57507b04af95a67ffaf59b7073b3595a27d1cfbbcefb418de820a12"
+    },
+    {
+      "path": "assets/fonts/devanagari/Mukta-Light.ttf",
+      "sha256": "161f2f22d33a1c75d9fb37d74ea99e8dbbe119cd5c102c83146fb032a552e8f2",
+      "source_sha256": "161f2f22d33a1c75d9fb37d74ea99e8dbbe119cd5c102c83146fb032a552e8f2"
+    },
+    {
+      "path": "assets/fonts/devanagari/Mukta-Regular.ttf",
+      "sha256": "2958e4af564507df2a856164df6f9978dacb03f999a4f34a0c269dc8a4de9688",
+      "source_sha256": "2958e4af564507df2a856164df6f9978dacb03f999a4f34a0c269dc8a4de9688"
+    },
+    {
+      "path": "assets/fonts/devanagari/Mukta-SemiBold.ttf",
+      "sha256": "f437fb098f8f29acb8628617cb2682f0780ef22fa8b0443de1f66090c36e510a",
+      "source_sha256": "f437fb098f8f29acb8628617cb2682f0780ef22fa8b0443de1f66090c36e510a"
+    },
+    {
+      "path": "assets/fonts/devanagari/NotoSansDevanagari[wdth,wght].ttf",
+      "sha256": "9ce7b04f60e363d8870e5997744cf85cf69d38a4d7d129d364d92a3b14b461d7",
+      "source_sha256": "9ce7b04f60e363d8870e5997744cf85cf69d38a4d7d129d364d92a3b14b461d7"
+    },
+    {
+      "path": "assets/fonts/devanagari/NotoSerifDevanagari[wdth,wght].ttf",
+      "sha256": "1191e07bfeb062d80e252eb85b0eafdfbda1e350707a2a60628668e8f677dbbb",
+      "source_sha256": "1191e07bfeb062d80e252eb85b0eafdfbda1e350707a2a60628668e8f677dbbb"
+    },
+    {
+      "path": "assets/fonts/devanagari/TiroDevanagariHindi-Italic.ttf",
+      "sha256": "eed07aca7291e34fa2c4f3e48be325b261f60516ecf835610fee30dade0f78ec",
+      "source_sha256": "eed07aca7291e34fa2c4f3e48be325b261f60516ecf835610fee30dade0f78ec"
+    },
+    {
+      "path": "assets/fonts/devanagari/TiroDevanagariHindi-Regular.ttf",
+      "sha256": "d2abcb4d352f0bfab91632df5d9c8173882073c182e662fa731a5a738e6681d7",
+      "source_sha256": "d2abcb4d352f0bfab91632df5d9c8173882073c182e662fa731a5a738e6681d7"
+    },
+    {
+      "path": "assets/fonts/devanagari/mukta-OFL.txt",
+      "sha256": "2ee5e8e47cd7d08f60bb9555f72b25912c9e81b13f5bc9a0551ddf943da6ca98",
+      "source_sha256": "2ee5e8e47cd7d08f60bb9555f72b25912c9e81b13f5bc9a0551ddf943da6ca98"
+    },
+    {
+      "path": "assets/fonts/devanagari/notosansdevanagari-OFL.txt",
+      "sha256": "a216f6f8d85c7228093e0ee5e258d9d377e6671f68acb4db1930b29583d0f331",
+      "source_sha256": "a216f6f8d85c7228093e0ee5e258d9d377e6671f68acb4db1930b29583d0f331"
+    },
+    {
+      "path": "assets/fonts/devanagari/notoserifdevanagari-OFL.txt",
+      "sha256": "a216f6f8d85c7228093e0ee5e258d9d377e6671f68acb4db1930b29583d0f331",
+      "source_sha256": "a216f6f8d85c7228093e0ee5e258d9d377e6671f68acb4db1930b29583d0f331"
+    },
+    {
+      "path": "assets/fonts/devanagari/tirodevanagarihindi-OFL.txt",
+      "sha256": "2ed6051706542c5d6d96480318152b17900bb6d4dbadb11d7d5d6464d8b3e0dd",
+      "source_sha256": "2ed6051706542c5d6d96480318152b17900bb6d4dbadb11d7d5d6464d8b3e0dd"
+    },
+    {
+      "path": "assets/fonts/latin/Archivo-Italic[wdth,wght].ttf",
+      "sha256": "305d13b4eb80e62f7d517f78d7c045250d977552a420f2dbed906f314e761305",
+      "source_sha256": "305d13b4eb80e62f7d517f78d7c045250d977552a420f2dbed906f314e761305"
+    },
+    {
+      "path": "assets/fonts/latin/ArchivoNarrow-Italic[wght].ttf",
+      "sha256": "147c09214be086bf1c70311ffb66f4f5a252e48f828f1d49e35ae56951016cc6",
+      "source_sha256": "147c09214be086bf1c70311ffb66f4f5a252e48f828f1d49e35ae56951016cc6"
+    },
+    {
+      "path": "assets/fonts/latin/ArchivoNarrow[wght].ttf",
+      "sha256": "adbe027f625c8393ae0f6e174e32e233dda485bc3eda5153ce428275394ef97f",
+      "source_sha256": "adbe027f625c8393ae0f6e174e32e233dda485bc3eda5153ce428275394ef97f"
+    },
+    {
+      "path": "assets/fonts/latin/Archivo[wdth,wght].ttf",
+      "sha256": "0e094a7d3c7c4c25cf1310c4b30014f1dae9332220b1c2c88f4fa996f0b05053",
+      "source_sha256": "0e094a7d3c7c4c25cf1310c4b30014f1dae9332220b1c2c88f4fa996f0b05053"
+    },
+    {
+      "path": "assets/fonts/latin/SourceSans3-Italic[wght].ttf",
+      "sha256": "39e3ab05ccd7cb94907c31005bb5bec1d5432f0b096a2b782976e217a540eb6c",
+      "source_sha256": "39e3ab05ccd7cb94907c31005bb5bec1d5432f0b096a2b782976e217a540eb6c"
+    },
+    {
+      "path": "assets/fonts/latin/SourceSans3[wght].ttf",
+      "sha256": "042fe2cc0b933e328410d7acbd0aa6a1873dca5aef81875f4bc214b08825c7b9",
+      "source_sha256": "042fe2cc0b933e328410d7acbd0aa6a1873dca5aef81875f4bc214b08825c7b9"
+    },
+    {
+      "path": "assets/fonts/latin/SourceSerif4-Italic[opsz,wght].ttf",
+      "sha256": "15fbc7e4679489a501998c3669272637a6646388ef7e4bd77eebb5bf967a1f42",
+      "source_sha256": "15fbc7e4679489a501998c3669272637a6646388ef7e4bd77eebb5bf967a1f42"
+    },
+    {
+      "path": "assets/fonts/latin/SourceSerif4[opsz,wght].ttf",
+      "sha256": "97b2d4da6e3cb494b5a1e66ae176914d852ccabef49e0c02c0df25f3e39aca0b",
+      "source_sha256": "97b2d4da6e3cb494b5a1e66ae176914d852ccabef49e0c02c0df25f3e39aca0b"
+    },
+    {
+      "path": "assets/fonts/latin/archivo-OFL.txt",
+      "sha256": "108b4e57c9c796d3d38d0428ca7ee39de47ad93187302718d9b2d8864b9b716b",
+      "source_sha256": "108b4e57c9c796d3d38d0428ca7ee39de47ad93187302718d9b2d8864b9b716b"
+    },
+    {
+      "path": "assets/fonts/latin/archivonarrow-OFL.txt",
+      "sha256": "b2087ef3fb91248e346600d19021249152a9688efea72905aa1996bb16a4c8de",
+      "source_sha256": "b2087ef3fb91248e346600d19021249152a9688efea72905aa1996bb16a4c8de"
+    },
+    {
+      "path": "assets/fonts/latin/sourcesans3-OFL.txt",
+      "sha256": "09746787287a289323b0ec3cff4d1a4a801331b82b7207c1e186f5d26619a392",
+      "source_sha256": "09746787287a289323b0ec3cff4d1a4a801331b82b7207c1e186f5d26619a392"
+    },
+    {
+      "path": "assets/fonts/latin/sourceserif4-OFL.txt",
+      "sha256": "5f94c3fd3a23131a417ab5a0c8452de57e70c3cfb9f604d88241f7065ebf9fd9",
+      "source_sha256": "5f94c3fd3a23131a417ab5a0c8452de57e70c3cfb9f604d88241f7065ebf9fd9"
+    },
+    {
+      "path": "requirements.lock",
+      "sha256": "25b294882e64a93ea35417890803ad4eeeebf7b4098a97d98446784ecf4de11c",
+      "source_sha256": "25b294882e64a93ea35417890803ad4eeeebf7b4098a97d98446784ecf4de11c"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "f53d1dd8e2f41aba45d2f529d08e7e5f2ba271c9ef10a922b31fb237e2d5dc3b",
+      "source_sha256": "f53d1dd8e2f41aba45d2f529d08e7e5f2ba271c9ef10a922b31fb237e2d5dc3b"
+    }
+  ]
+}

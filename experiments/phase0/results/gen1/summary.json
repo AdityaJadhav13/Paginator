@@ -1,0 +1,55 @@
+{
+ "schema": "pageinator.gen1.summary/2",
+ "generator": "gen1/2.8.3",
+ "lead_side": "right",
+ "body_styles": {
+  "12.0/13.0": 80,
+  "12.5/13.0": 22,
+  "13.0/13.5": 23,
+  "13.0/14.0": 13,
+  "13.0/15.0": 19,
+  "13.5/15.0": 13,
+  "14.0/16.0": 11
+ },
+ "span_counts_calibration": {
+  "0": {
+   "7": 3,
+   "6": 12,
+   "8": 9,
+   "5": 7,
+   "4": 8,
+   "3": 1
+  },
+  "1": {
+   "4": 29,
+   "6": 8,
+   "3": 17,
+   "5": 13,
+   "7": 3,
+   "2": 2,
+   "8": 5
+  },
+  "2": {
+   "3": 22,
+   "1": 41,
+   "2": 34,
+   "8": 4,
+   "4": 13,
+   "5": 6,
+   "7": 3,
+   "6": 6
+  }
+ },
+ "pages": 28,
+ "status": {
+  "generated": 24,
+  "skipped": 3,
+  "infeasible": 1
+ },
+ "skip_reasons": {
+  "fixed parts reach into the newshole": 3
+ },
+ "overset_lines": 0,
+ "problems": 0,
+ "retried_pages": 3
+}

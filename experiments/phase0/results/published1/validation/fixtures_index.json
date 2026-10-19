@@ -1,0 +1,15 @@
+{
+ "class": "GROUND_TRUTH_TOOL_VALIDATION_FIXTURE",
+ "chrome": "Google Chrome 154.0.8037.98",
+ "fixtures": [
+  "GT-A_left_natural",
+  "GT-B_left_ws1.5",
+  "GT-C_justify_tiro",
+  "GT-D_broadsheet_8col_justify",
+  "GT-E_manual_hyphen_justify",
+  "GT-F_mixed_script_left",
+  "GT-G_letterspacing_0.3pt",
+  "GT-H_hscale_0.9"
+ ],
+ "note": "Validates measurement tooling only. NOT newspaper evidence."
+}

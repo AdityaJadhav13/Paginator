@@ -1,0 +1,78 @@
+[project]
+name = "paginator"
+version = "0.1.0"
+description = "AI-Powered Editorial Layout & Pagination Engine"
+# Upper bound is deliberate. The venv was silently built on 3.14 before M0;
+# pip now refuses, so the mismatch cannot recur. Raise it only after the
+# C-extension deps below are confirmed to have wheels for the new interpreter.
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "pydantic>=2.7",
+    "uvicorn[standard]>=0.30",
+    # M1 typesetting core — spec §1.2, locked choices.
+    "uharfbuzz>=0.39",      # shaping; the only correct option for Devanagari
+    "freetype-py>=2.4",     # glyph metrics
+    "fonttools>=4.53",      # font loading, subsetting by glyph id
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "pytest-cov>=5.0",
+    "hypothesis>=6.100",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["paginator*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "a10: spec A10 performance assertions (5000 words under 250ms)",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplify
+]
+ignore = [
+    # `class X(str, Enum)` -> `StrEnum`. Declined deliberately: the two affected
+    # enums (ZoneName, LengthClass) cross the API boundary and are interpolated
+    # into exported HTML. StrEnum changes what `str(member)` and `f"{member}"`
+    # produce, and this engine's output is compared byte-for-byte by the golden
+    # tests from M10. No benefit here worth that risk.
+    "UP042",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+# The engine is the strict surface. Tests are checked separately and less
+# strictly — see the `types` target in the Makefile.
+files = ["paginator"]
+
+# These three ship no stubs and no py.typed marker. Scoped per-module rather
+# than relaxing globally, so our own code stays fully strict.
+[[tool.mypy.overrides]]
+module = ["uharfbuzz.*", "fontTools.*", "freetype.*"]
+ignore_missing_imports = true

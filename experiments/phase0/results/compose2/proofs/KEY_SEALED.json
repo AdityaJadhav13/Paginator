@@ -1,0 +1,689 @@
+{
+ "seed": 20261011,
+ "styles": {
+  "A": "PROOF_A_full_any_spacing_rules",
+  "B": "PROOF_B_hybrid_rules_h2.00",
+  "C": "PROOF_C_constrained_c2.00",
+  "D": "PROOF_D_ragged_rules"
+ },
+ "fonts_rule": "best serif & best sans by C2_HYBRID_rules justified % at 6-col width",
+ "fonts": {
+  "serif": "NotoSerifDeva-w87.5",
+  "sans": "NotoSansDeva-w87.5"
+ },
+ "grid_status": "PROVISIONAL \u2014 NOT the newsroom's real geometry. Replace with values measured by EXP-PUBLISHED-1 from production PDFs (house_profile.measured.json) as soon as they exist.",
+ "pages": [
+  {
+   "code": "P01",
+   "grid": "PROV-8col",
+   "font": "NotoSerifDeva-w87.5",
+   "style": "B",
+   "policy": "PROOF_B_hybrid_rules_h2.00",
+   "policy_settings": {
+    "name": "PROOF_B_hybrid_rules_h2.00",
+    "family": "HYBRID",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P02",
+   "grid": "PROV-8col",
+   "font": "NotoSerifDeva-w87.5",
+   "style": "D",
+   "policy": "PROOF_D_ragged_rules",
+   "policy_settings": {
+    "name": "PROOF_D_ragged_rules",
+    "family": "RAGGED",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P03",
+   "grid": "PROV-6col",
+   "font": "NotoSerifDeva-w87.5",
+   "style": "D",
+   "policy": "PROOF_D_ragged_rules",
+   "policy_settings": {
+    "name": "PROOF_D_ragged_rules",
+    "family": "RAGGED",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P04",
+   "grid": "PROV-8col",
+   "font": "NotoSerifDeva-w87.5",
+   "style": "C",
+   "policy": "PROOF_C_constrained_c2.00",
+   "policy_settings": {
+    "name": "PROOF_C_constrained_c2.00",
+    "family": "CONSTRAINED",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "none",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P05",
+   "grid": "PROV-8col",
+   "font": "NotoSansDeva-w87.5",
+   "style": "C",
+   "policy": "PROOF_C_constrained_c2.00",
+   "policy_settings": {
+    "name": "PROOF_C_constrained_c2.00",
+    "family": "CONSTRAINED",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "none",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P06",
+   "grid": "PROV-6col",
+   "font": "NotoSerifDeva-w87.5",
+   "style": "A",
+   "policy": "PROOF_A_full_any_spacing_rules",
+   "policy_settings": {
+    "name": "PROOF_A_full_any_spacing_rules",
+    "family": "HYBRID",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 50.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 236876.89,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 1000000.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P07",
+   "grid": "PROV-6col",
+   "font": "NotoSerifDeva-w87.5",
+   "style": "B",
+   "policy": "PROOF_B_hybrid_rules_h2.00",
+   "policy_settings": {
+    "name": "PROOF_B_hybrid_rules_h2.00",
+    "family": "HYBRID",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P08",
+   "grid": "PROV-6col",
+   "font": "NotoSansDeva-w87.5",
+   "style": "B",
+   "policy": "PROOF_B_hybrid_rules_h2.00",
+   "policy_settings": {
+    "name": "PROOF_B_hybrid_rules_h2.00",
+    "family": "HYBRID",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P09",
+   "grid": "PROV-6col",
+   "font": "NotoSansDeva-w87.5",
+   "style": "A",
+   "policy": "PROOF_A_full_any_spacing_rules",
+   "policy_settings": {
+    "name": "PROOF_A_full_any_spacing_rules",
+    "family": "HYBRID",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 50.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 236876.89,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 1000000.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P10",
+   "grid": "PROV-6col",
+   "font": "NotoSerifDeva-w87.5",
+   "style": "C",
+   "policy": "PROOF_C_constrained_c2.00",
+   "policy_settings": {
+    "name": "PROOF_C_constrained_c2.00",
+    "family": "CONSTRAINED",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "none",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P11",
+   "grid": "PROV-8col",
+   "font": "NotoSerifDeva-w87.5",
+   "style": "A",
+   "policy": "PROOF_A_full_any_spacing_rules",
+   "policy_settings": {
+    "name": "PROOF_A_full_any_spacing_rules",
+    "family": "HYBRID",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 50.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 236876.89,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 1000000.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P12",
+   "grid": "PROV-8col",
+   "font": "NotoSansDeva-w87.5",
+   "style": "A",
+   "policy": "PROOF_A_full_any_spacing_rules",
+   "policy_settings": {
+    "name": "PROOF_A_full_any_spacing_rules",
+    "family": "HYBRID",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 50.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 236876.89,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 1000000.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P13",
+   "grid": "PROV-6col",
+   "font": "NotoSansDeva-w87.5",
+   "style": "C",
+   "policy": "PROOF_C_constrained_c2.00",
+   "policy_settings": {
+    "name": "PROOF_C_constrained_c2.00",
+    "family": "CONSTRAINED",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "none",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P14",
+   "grid": "PROV-8col",
+   "font": "NotoSansDeva-w87.5",
+   "style": "D",
+   "policy": "PROOF_D_ragged_rules",
+   "policy_settings": {
+    "name": "PROOF_D_ragged_rules",
+    "family": "RAGGED",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P15",
+   "grid": "PROV-8col",
+   "font": "NotoSansDeva-w87.5",
+   "style": "B",
+   "policy": "PROOF_B_hybrid_rules_h2.00",
+   "policy_settings": {
+    "name": "PROOF_B_hybrid_rules_h2.00",
+    "family": "HYBRID",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  },
+  {
+   "code": "P16",
+   "grid": "PROV-6col",
+   "font": "NotoSansDeva-w87.5",
+   "style": "D",
+   "policy": "PROOF_D_ragged_rules",
+   "policy_settings": {
+    "name": "PROOF_D_ragged_rules",
+    "family": "RAGGED",
+    "algorithm": "DP",
+    "ws_min_hard": 0.8,
+    "ws_min_soft": 0.9,
+    "ws_max_soft": 1.33,
+    "ws_max_hard": 2.0,
+    "inword": "rules",
+    "inword_min": [
+     2,
+     2
+    ],
+    "emergency": true,
+    "ragged_zone": 0.2,
+    "tracking_max_milli_em": 0.0,
+    "last_line_min_frac": 0.15,
+    "visible_hyphen": true,
+    "token_breaks": true,
+    "max_consecutive_inword": 2,
+    "fallback_max_slack": null,
+    "weights": {
+     "soft_space": 100.0,
+     "ragged": 400.0,
+     "ragged_zone_excess": 100.0,
+     "hybrid_fallback": 50.0,
+     "shortfall": 400.0,
+     "hyphen": 30.0,
+     "hyphen_consecutive": 60.0,
+     "emergency": 10000.0,
+     "short_last_line": 10.0,
+     "tracking": 20.0,
+     "token_break": 15.0
+    }
+   }
+  }
+ ]
+}

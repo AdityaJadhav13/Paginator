@@ -1,0 +1,222 @@
+{
+  "pages": [
+    {
+      "page": 1,
+      "items": 721,
+      "glyph_runs": 711,
+      "glyphs": 11811,
+      "images": 2,
+      "ads": 0,
+      "rules_rects": 8,
+      "json_bytes": 326735
+    },
+    {
+      "page": 2,
+      "items": 474,
+      "glyph_runs": 463,
+      "glyphs": 7733,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 211248
+    },
+    {
+      "page": 3,
+      "items": 473,
+      "glyph_runs": 462,
+      "glyphs": 7714,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 210841
+    },
+    {
+      "page": 4,
+      "items": 220,
+      "glyph_runs": 209,
+      "glyphs": 3501,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 96093
+    },
+    {
+      "page": 5,
+      "items": 475,
+      "glyph_runs": 464,
+      "glyphs": 7709,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 210999
+    },
+    {
+      "page": 6,
+      "items": 474,
+      "glyph_runs": 463,
+      "glyphs": 7729,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 211044
+    },
+    {
+      "page": 7,
+      "items": 196,
+      "glyph_runs": 185,
+      "glyphs": 3105,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 85443
+    },
+    {
+      "page": 8,
+      "items": 459,
+      "glyph_runs": 448,
+      "glyphs": 7442,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 203507
+    },
+    {
+      "page": 9,
+      "items": 474,
+      "glyph_runs": 463,
+      "glyphs": 7702,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 210715
+    },
+    {
+      "page": 10,
+      "items": 222,
+      "glyph_runs": 211,
+      "glyphs": 3523,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 96792
+    },
+    {
+      "page": 11,
+      "items": 473,
+      "glyph_runs": 462,
+      "glyphs": 7731,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 211033
+    },
+    {
+      "page": 12,
+      "items": 472,
+      "glyph_runs": 461,
+      "glyphs": 7690,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 210171
+    },
+    {
+      "page": 13,
+      "items": 220,
+      "glyph_runs": 209,
+      "glyphs": 3500,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 96264
+    },
+    {
+      "page": 14,
+      "items": 475,
+      "glyph_runs": 464,
+      "glyphs": 7756,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 211804
+    },
+    {
+      "page": 15,
+      "items": 475,
+      "glyph_runs": 464,
+      "glyphs": 7752,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 211782
+    },
+    {
+      "page": 16,
+      "items": 219,
+      "glyph_runs": 208,
+      "glyphs": 3495,
+      "images": 2,
+      "ads": 1,
+      "rules_rects": 8,
+      "json_bytes": 95919
+    }
+  ],
+  "total_glyphs": 105893,
+  "glyphs_per_page_min_max": [
+    3105,
+    11811
+  ],
+  "geometry": {
+    "page_mm": [
+      318.0,
+      510.0
+    ],
+    "cols": 8,
+    "col_w_mm": 30.25,
+    "body": [
+      "Noto Serif Devanagari",
+      9.5,
+      11.2
+    ]
+  },
+  "caveats": [
+    "ragged text (no justification in oracle-v0)",
+    "synthetic page pattern",
+    "geometry not pilot's",
+    "images/ads are placeholders referencing renditions"
+  ],
+  "env": {
+    "captured_at_utc": "2026-10-07T17:52:39Z",
+    "hardware": {
+      "machine": "arm64",
+      "cpu": "Apple M4 Pro",
+      "cores_logical": 12,
+      "mem_bytes": 25769803776,
+      "model": "Mac16,8"
+    },
+    "os": "macOS-26.5.1-arm64-arm-64bit",
+    "python": "3.11.14",
+    "python_executable": "/Users/adityajadhav/Desktop/Paginator/tools/oracle/v0/.venv/bin/python",
+    "harfbuzz": "14.3.0",
+    "packages": {
+      "uharfbuzz": "0.56.0",
+      "fonttools": "4.63.0",
+      "pydantic": "2.13.4",
+      "freetype-py": "2.5.1"
+    },
+    "oracle": {
+      "id": "oracle-v0",
+      "source_commit": "4694f81fe484f2d14019899df050f580b63340e8",
+      "manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05"
+    },
+    "corpus": {
+      "path": "fixtures/typeset/v1/corpus/texts.json",
+      "sha256": "71b18a5e49718174ce33614adafa064371bb74f48f1e6a38c028d0379c134d82"
+    },
+    "conditions": {
+      "path": "fixtures/typeset/v1/conditions.json",
+      "sha256": "312d15a2e02ae2049a3132dfd0b74978c9685db73633eeed8ef0bc2b3820e807"
+    },
+    "power_note": "Laptop measurements: record AC power / low-power mode manually if relevant."
+  }
+}

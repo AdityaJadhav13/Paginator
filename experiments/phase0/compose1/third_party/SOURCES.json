@@ -1,0 +1,34 @@
+{
+  "hyph-mr": {
+    "file": "hyph-mr/hyph-mr.tex",
+    "url": "https://raw.githubusercontent.com/hyphenation/tex-hyphen/master/hyph-utf8/tex/generic/hyph-utf8/patterns/tex/hyph-mr.tex",
+    "upstream_repo_head_at_download": "5684c0f51c0b81133db2efbe60a408b4155a3ff5",
+    "downloaded": "2026-10-08",
+    "sha256": "dd033b789f381081fbf05a976e34790b566f40ddcd276790f581b15b62eca844",
+    "copyright": "Copyright (C) 2016 Santhosh Thottingal",
+    "licence": "MIT OR LGPL-3.0-or-later OR GPL-3.0-or-later (triple licence; MIT option is permissive)",
+    "version": "0.9.0 (2016-01-16)",
+    "maintenance": "No pattern changes since 2016 per file version; upstream origin https://github.com/santhoshtr/hyphenation/",
+    "nature": "33 generic Devanagari rules: break around independent vowels and consonants, after dependent vowels; never around virama or ZWJ; break around ZWNJ; never before anusvara/candrabindu/visarga/avagraha/accents. NOT dictionary-based, NOT morphology-aware.",
+    "coverage_gaps_found": [
+      "no rule for U+0931 ऱ (eyelash ra)",
+      "no rule for U+0945 ॅ / U+0949 ॉ (candra vowel signs)",
+      "no rule for U+0972 ॲ / U+0911 ऑ",
+      "no rule for nukta consonants U+0958–095F or U+093C"
+    ],
+    "published_minima": "lefthyphenmin=1, righthyphenmin=1",
+    "status": "INVESTIGATION USE ONLY. Production adoption: LICENCE REVIEW REQUIRED (counsel L10 confirmation of MIT election + notice) AND linguistic/editorial validation REQUIRED."
+  },
+  "hyph-en-us": {
+    "file": "hyph-en-us/hyph-en-us.tex",
+    "url": "https://raw.githubusercontent.com/hyphenation/tex-hyphen/master/hyph-utf8/tex/generic/hyph-utf8/patterns/tex/hyph-en-us.tex",
+    "upstream_repo_head_at_download": "5684c0f51c0b81133db2efbe60a408b4155a3ff5",
+    "downloaded": "2026-10-08",
+    "sha256": "f4ffcd96c5cbc886bdad23f95dcae8edc3cd3620eae62f7946eceda97c4e68f8",
+    "copyright": "Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken",
+    "licence": "All-permissive: copying and distribution with or without modification permitted provided notice preserved",
+    "version": "2005-05-30",
+    "published_minima": "lefthyphenmin=2, righthyphenmin=3",
+    "status": "INVESTIGATION USE; licence permissive (keep notice). Production adoption still subject to `18` review."
+  }
+}

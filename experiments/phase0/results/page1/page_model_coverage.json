@@ -1,0 +1,401 @@
+{
+ "schema": "pageinator.page1.page_model_coverage/1",
+ "tool": "page1-model/0.2.0",
+ "env": {
+  "python": "3.11.14",
+  "platform": "macOS-27.0.1",
+  "machine": "arm64",
+  "pdfminer.six": "20250506",
+  "pypdfium2": "4.30.1",
+  "pdfium": "133.0.6899.0"
+ },
+ "dataset_class": "PILOT_EVIDENCE (private; aggregates only)",
+ "samples": 15,
+ "skipped_excluded_samples": 1,
+ "models_sha256": "00cc60f25e7944badc68af4f7dfddf63101bf74d6d7dc8e4e2cbca0caccc1a35",
+ "totals": {
+  "pages": 68,
+  "coverage": {
+   "text_lines_total": 29633,
+   "text_lines_in_elements": 29633,
+   "body_lines_total": 23880,
+   "body_lines_in_stories": 23880,
+   "glyphs_total": 672075,
+   "glyphs_in_text_elements": 672075,
+   "text_lines_in_excluded_frames": 189,
+   "fragments_merged": 499,
+   "frames_promoted": 168,
+   "residual_text_elements": 109,
+   "residual_glyphs": 14722,
+   "lines_words_mismatch": 157,
+   "pct_text_lines_in_elements": 100.0,
+   "pct_body_lines_in_stories": 100.0,
+   "pct_glyphs_in_text_elements": 100.0
+  },
+  "stories": {
+   "total": 494,
+   "per_page": {
+    "n": 68,
+    "min": 1,
+    "p10": 3.0,
+    "median": 7.0,
+    "p90": 11.600000000000009,
+    "max": 18
+   },
+   "per_page_histogram": {
+    "1": 1,
+    "2": 1,
+    "3": 7,
+    "4": 4,
+    "5": 6,
+    "6": 11,
+    "7": 11,
+    "8": 7,
+    "9": 6,
+    "10": 4,
+    "11": 3,
+    "13": 4,
+    "14": 2,
+    "18": 1
+   },
+   "with_headline": 425,
+   "headless": 69,
+   "headless_with_parent": 49,
+   "complete": 292,
+   "incomplete": 202,
+   "jump_in": 17,
+   "jump_out": 40,
+   "confidence": {
+    "high": 314,
+    "medium": 114,
+    "low": 66
+   },
+   "pct_complete": 59.11,
+   "columns_per_story": {
+    "n": 494,
+    "min": 1,
+    "p10": 1.0,
+    "median": 3.0,
+    "p90": 5.0,
+    "max": 13
+   },
+   "paragraphs_per_story": {
+    "n": 494,
+    "min": 1,
+    "p10": 1.0,
+    "median": 3.0,
+    "p90": 7.0,
+    "max": 34
+   },
+   "checks_true": {
+    "ends_paragraph": 414,
+    "headline_content": 2,
+    "headline_geo": 39,
+    "headline_geo+content": 384,
+    "headline_none": 69,
+    "reading_order_geometric": 494,
+    "single_thread": 453,
+    "starts_paragraph": 472,
+    "transitions_consistent": 464,
+    "words_match": 429
+   }
+  },
+  "elements_by_kind": {
+   "ad": 33,
+   "body_frame": 1482,
+   "box": 657,
+   "byline": 63,
+   "caption": 9,
+   "crosshead": 169,
+   "deck": 57,
+   "folio": 191,
+   "furniture": 304,
+   "graphic": 327,
+   "headline": 468,
+   "image": 627,
+   "jump_line": 19,
+   "kicker": 44,
+   "other_text": 185,
+   "rule": 245
+  },
+  "paths": {
+   "pdfium": 3301,
+   "pdfminer_nondegenerate": 3301,
+   "paired": 3301,
+   "invisible_or_unpainted": 1
+  },
+  "threads": {
+   "blocks": 1608,
+   "threads": 556,
+   "block_links": 1052
+  },
+  "flow_accounting_ok_pages": 68,
+  "column_checks": {
+   "columns": 1418,
+   "flow_lines": 23880,
+   "lines_outside_column": 0,
+   "stories_columns_out_of_order": 0,
+   "column_order_violations": 0,
+   "stories_columns_reordered": 15,
+   "columns_wider_than_lines": 3,
+   "paragraphs": 1873,
+   "indents_gt_2em": 5
+  }
+ },
+ "by_split": {
+  "cal": {
+   "pages": 40,
+   "coverage": {
+    "text_lines_total": 17711,
+    "text_lines_in_elements": 17711,
+    "body_lines_total": 14621,
+    "body_lines_in_stories": 14621,
+    "glyphs_total": 399656,
+    "glyphs_in_text_elements": 399656,
+    "text_lines_in_excluded_frames": 95,
+    "fragments_merged": 268,
+    "frames_promoted": 101,
+    "residual_text_elements": 48,
+    "residual_glyphs": 6883,
+    "lines_words_mismatch": 105,
+    "pct_text_lines_in_elements": 100.0,
+    "pct_body_lines_in_stories": 100.0,
+    "pct_glyphs_in_text_elements": 100.0
+   },
+   "stories": {
+    "total": 267,
+    "per_page": {
+     "n": 40,
+     "min": 1,
+     "p10": 3.0,
+     "median": 6.0,
+     "p90": 11.0,
+     "max": 18
+    },
+    "per_page_histogram": {
+     "1": 1,
+     "3": 7,
+     "4": 3,
+     "5": 4,
+     "6": 6,
+     "7": 7,
+     "8": 4,
+     "9": 1,
+     "10": 2,
+     "11": 2,
+     "13": 1,
+     "14": 1,
+     "18": 1
+    },
+    "with_headline": 241,
+    "headless": 26,
+    "headless_with_parent": 21,
+    "complete": 167,
+    "incomplete": 100,
+    "jump_in": 7,
+    "jump_out": 15,
+    "confidence": {
+     "high": 171,
+     "medium": 52,
+     "low": 44
+    },
+    "pct_complete": 62.55,
+    "columns_per_story": {
+     "n": 267,
+     "min": 1,
+     "p10": 1.0,
+     "median": 3.0,
+     "p90": 6.0,
+     "max": 13
+    },
+    "paragraphs_per_story": {
+     "n": 267,
+     "min": 1,
+     "p10": 1.0,
+     "median": 3.0,
+     "p90": 7.400000000000006,
+     "max": 34
+    },
+    "checks_true": {
+     "ends_paragraph": 229,
+     "headline_content": 1,
+     "headline_geo": 19,
+     "headline_geo+content": 221,
+     "headline_none": 26,
+     "reading_order_geometric": 267,
+     "single_thread": 235,
+     "starts_paragraph": 259,
+     "transitions_consistent": 252,
+     "words_match": 226
+    }
+   },
+   "elements_by_kind": {
+    "ad": 16,
+    "body_frame": 900,
+    "box": 355,
+    "byline": 37,
+    "caption": 1,
+    "crosshead": 98,
+    "deck": 29,
+    "folio": 106,
+    "furniture": 121,
+    "graphic": 196,
+    "headline": 266,
+    "image": 363,
+    "jump_line": 6,
+    "kicker": 20,
+    "other_text": 75,
+    "rule": 102
+   },
+   "paths": {
+    "pdfium": 2004,
+    "pdfminer_nondegenerate": 2004,
+    "paired": 2004,
+    "invisible_or_unpainted": 1
+   },
+   "threads": {
+    "blocks": 958,
+    "threads": 314,
+    "block_links": 644
+   },
+   "flow_accounting_ok_pages": 40,
+   "column_checks": {
+    "columns": 848,
+    "flow_lines": 14621,
+    "lines_outside_column": 0,
+    "stories_columns_out_of_order": 0,
+    "column_order_violations": 0,
+    "stories_columns_reordered": 9,
+    "columns_wider_than_lines": 3,
+    "paragraphs": 1121,
+    "indents_gt_2em": 4
+   }
+  },
+  "test": {
+   "pages": 28,
+   "coverage": {
+    "text_lines_total": 11922,
+    "text_lines_in_elements": 11922,
+    "body_lines_total": 9259,
+    "body_lines_in_stories": 9259,
+    "glyphs_total": 272419,
+    "glyphs_in_text_elements": 272419,
+    "text_lines_in_excluded_frames": 94,
+    "fragments_merged": 231,
+    "frames_promoted": 67,
+    "residual_text_elements": 61,
+    "residual_glyphs": 7839,
+    "lines_words_mismatch": 52,
+    "pct_text_lines_in_elements": 100.0,
+    "pct_body_lines_in_stories": 100.0,
+    "pct_glyphs_in_text_elements": 100.0
+   },
+   "stories": {
+    "total": 227,
+    "per_page": {
+     "n": 28,
+     "min": 2,
+     "p10": 5.0,
+     "median": 8.0,
+     "p90": 13.0,
+     "max": 14
+    },
+    "per_page_histogram": {
+     "2": 1,
+     "4": 1,
+     "5": 2,
+     "6": 5,
+     "7": 4,
+     "8": 3,
+     "9": 5,
+     "10": 2,
+     "11": 1,
+     "13": 3,
+     "14": 1
+    },
+    "with_headline": 184,
+    "headless": 43,
+    "headless_with_parent": 28,
+    "complete": 125,
+    "incomplete": 102,
+    "jump_in": 10,
+    "jump_out": 25,
+    "confidence": {
+     "high": 143,
+     "medium": 62,
+     "low": 22
+    },
+    "pct_complete": 55.07,
+    "columns_per_story": {
+     "n": 227,
+     "min": 1,
+     "p10": 1.0,
+     "median": 2.0,
+     "p90": 5.0,
+     "max": 9
+    },
+    "paragraphs_per_story": {
+     "n": 227,
+     "min": 1,
+     "p10": 1.0,
+     "median": 3.0,
+     "p90": 6.0,
+     "max": 14
+    },
+    "checks_true": {
+     "ends_paragraph": 185,
+     "headline_content": 1,
+     "headline_geo": 20,
+     "headline_geo+content": 163,
+     "headline_none": 43,
+     "reading_order_geometric": 227,
+     "single_thread": 218,
+     "starts_paragraph": 213,
+     "transitions_consistent": 212,
+     "words_match": 203
+    }
+   },
+   "elements_by_kind": {
+    "ad": 17,
+    "body_frame": 582,
+    "box": 302,
+    "byline": 26,
+    "caption": 8,
+    "crosshead": 71,
+    "deck": 28,
+    "folio": 85,
+    "furniture": 183,
+    "graphic": 131,
+    "headline": 202,
+    "image": 264,
+    "jump_line": 13,
+    "kicker": 24,
+    "other_text": 110,
+    "rule": 143
+   },
+   "paths": {
+    "pdfium": 1297,
+    "pdfminer_nondegenerate": 1297,
+    "paired": 1297,
+    "invisible_or_unpainted": 0
+   },
+   "threads": {
+    "blocks": 650,
+    "threads": 242,
+    "block_links": 408
+   },
+   "flow_accounting_ok_pages": 28,
+   "column_checks": {
+    "columns": 570,
+    "flow_lines": 9259,
+    "lines_outside_column": 0,
+    "stories_columns_out_of_order": 0,
+    "column_order_violations": 0,
+    "stories_columns_reordered": 6,
+    "columns_wider_than_lines": 0,
+    "paragraphs": 752,
+    "indents_gt_2em": 1
+   }
+  }
+ }
+}

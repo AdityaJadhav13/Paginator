@@ -1,0 +1,299 @@
+{
+ "schema": "pageinator.compose2.fonts/1",
+ "upstream": "https://github.com/google/fonts (HEAD bd8f81d at download, 2026-10-11)",
+ "note": "Font list chosen as FREELY LICENSED Devanagari faces available to designers; NOT a claim about which fonts Marathi newspapers use (to be confirmed by the newsroom).",
+ "fonts": [
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/devanagari/Mukta-Bold.ttf",
+   "sha256": "7d22891cd57507b04af95a67ffaf59b7073b3595a27d1cfbbcefb418de820a12",
+   "family": "Mukta",
+   "style": "Bold",
+   "version": "Version 2.538;PS 1.002;hotconv 16.6.51;makeotf.lib2.5.65220; ttfautohint (v1.6)",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/devanagari/Mukta-Light.ttf",
+   "sha256": "161f2f22d33a1c75d9fb37d74ea99e8dbbe119cd5c102c83146fb032a552e8f2",
+   "family": "Mukta",
+   "style": "Light",
+   "version": "Version 2.538;PS 1.002;hotconv 16.6.51;makeotf.lib2.5.65220; ttfautohint (v1.6)",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/devanagari/Mukta-Regular.ttf",
+   "sha256": "2958e4af564507df2a856164df6f9978dacb03f999a4f34a0c269dc8a4de9688",
+   "family": "Mukta",
+   "style": "Regular",
+   "version": "Version 2.538;PS 1.001;hotconv 16.6.51;makeotf.lib2.5.65220; ttfautohint (v1.6)",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/devanagari/Mukta-SemiBold.ttf",
+   "sha256": "f437fb098f8f29acb8628617cb2682f0780ef22fa8b0443de1f66090c36e510a",
+   "family": "Mukta",
+   "style": "SemiBold",
+   "version": "Version 2.538;PS 1.002;hotconv 16.6.51;makeotf.lib2.5.65220; ttfautohint (v1.6)",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/devanagari/NotoSansDevanagari[wdth,wght].ttf",
+   "sha256": "9ce7b04f60e363d8870e5997744cf85cf69d38a4d7d129d364d92a3b14b461d7",
+   "family": "Noto Sans Devanagari",
+   "style": "Regular",
+   "version": "Version 2.006",
+   "axes": [
+    "wght",
+    "wdth"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/devanagari/NotoSerifDevanagari[wdth,wght].ttf",
+   "sha256": "1191e07bfeb062d80e252eb85b0eafdfbda1e350707a2a60628668e8f677dbbb",
+   "family": "Noto Serif Devanagari",
+   "style": "Regular",
+   "version": "Version 2.006",
+   "axes": [
+    "wght",
+    "wdth"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/devanagari/TiroDevanagariHindi-Italic.ttf",
+   "sha256": "eed07aca7291e34fa2c4f3e48be325b261f60516ecf835610fee30dade0f78ec",
+   "family": "Tiro Devanagari Hindi",
+   "style": "Italic",
+   "version": "Version 1.52",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/devanagari/TiroDevanagariHindi-Regular.ttf",
+   "sha256": "d2abcb4d352f0bfab91632df5d9c8173882073c182e662fa731a5a738e6681d7",
+   "family": "Tiro Devanagari Hindi",
+   "style": "Regular",
+   "version": "Version 1.52",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/latin/Archivo-Italic[wdth,wght].ttf",
+   "sha256": "305d13b4eb80e62f7d517f78d7c045250d977552a420f2dbed906f314e761305",
+   "family": "Archivo",
+   "style": "SemiBold Italic",
+   "version": "Version 2.001",
+   "axes": [
+    "wght",
+    "wdth"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": false
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/latin/ArchivoNarrow-Italic[wght].ttf",
+   "sha256": "147c09214be086bf1c70311ffb66f4f5a252e48f828f1d49e35ae56951016cc6",
+   "family": "Archivo Narrow",
+   "style": "Italic",
+   "version": "Version 3.002",
+   "axes": [
+    "wght"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": false
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/latin/ArchivoNarrow[wght].ttf",
+   "sha256": "adbe027f625c8393ae0f6e174e32e233dda485bc3eda5153ce428275394ef97f",
+   "family": "Archivo Narrow",
+   "style": "Regular",
+   "version": "Version 3.002",
+   "axes": [
+    "wght"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": false
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/latin/Archivo[wdth,wght].ttf",
+   "sha256": "0e094a7d3c7c4c25cf1310c4b30014f1dae9332220b1c2c88f4fa996f0b05053",
+   "family": "Archivo",
+   "style": "SemiBold",
+   "version": "Version 2.001",
+   "axes": [
+    "wght",
+    "wdth"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": false
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/latin/SourceSans3-Italic[wght].ttf",
+   "sha256": "39e3ab05ccd7cb94907c31005bb5bec1d5432f0b096a2b782976e217a540eb6c",
+   "family": "Source Sans 3",
+   "style": "ExtraLight Italic",
+   "version": "Version 3.052;hotconv 1.1.0;makeotfexe 2.6.0",
+   "axes": [
+    "wght"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": false
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/latin/SourceSans3[wght].ttf",
+   "sha256": "042fe2cc0b933e328410d7acbd0aa6a1873dca5aef81875f4bc214b08825c7b9",
+   "family": "Source Sans 3",
+   "style": "ExtraLight",
+   "version": "Version 3.052;hotconv 1.1.0;makeotfexe 2.6.0",
+   "axes": [
+    "wght"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": false
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/latin/SourceSerif4-Italic[opsz,wght].ttf",
+   "sha256": "15fbc7e4679489a501998c3669272637a6646388ef7e4bd77eebb5bf967a1f42",
+   "family": "Source Serif 4",
+   "style": "Italic",
+   "version": "Version 4.004;hotconv 1.0.116;makeotfexe 2.5.65601",
+   "axes": [
+    "wght",
+    "opsz"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": false
+  },
+  {
+   "source": "oracle-OFL",
+   "file": "tools/oracle/v0/assets/fonts/latin/SourceSerif4[opsz,wght].ttf",
+   "sha256": "97b2d4da6e3cb494b5a1e66ae176914d852ccabef49e0c02c0df25f3e39aca0b",
+   "family": "Source Serif 4",
+   "style": "Regular",
+   "version": "Version 4.004;hotconv 1.0.116;makeotfexe 2.5.65601",
+   "axes": [
+    "wght",
+    "opsz"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": false
+  },
+  {
+   "source": "compose2-OFL",
+   "file": "experiments/phase0/compose2/fonts/baloo2/Baloo2[wght].ttf",
+   "sha256": "d47a6852548059b1db49a1319d06d499d546c3fa2237cf9eee9c43c8abb025c2",
+   "family": "Baloo 2",
+   "style": "Regular",
+   "version": "Version 1.700",
+   "axes": [
+    "wght"
+   ],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "compose2-OFL",
+   "file": "experiments/phase0/compose2/fonts/hind/Hind-Regular.ttf",
+   "sha256": "01de158022f53077b52303e46de3b0ab5fb245222a7ffe25a2a57fdd9e969162",
+   "family": "Hind",
+   "style": "Regular",
+   "version": "Version 2.001;PS 1.0;hotconv 1.0.79;makeotf.lib2.5.61930; ttfautohint (v1.5.33-1714) -l 8 -r 50 -G 200 -x 13 -D latn -f deva -w G -W -c -X \"\"",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "compose2-OFL",
+   "file": "experiments/phase0/compose2/fonts/khand/Khand-Regular.ttf",
+   "sha256": "fb2b604a80f9fd6e3532b1f25c964bf56002240e2da0ea7a7265eec7bb4bc519",
+   "family": "Khand",
+   "style": "Regular",
+   "version": "Version 1.102;PS 1.0;hotconv 1.0.78;makeotf.lib2.5.61930; ttfautohint (v1.8.3)",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "compose2-OFL",
+   "file": "experiments/phase0/compose2/fonts/martel/Martel-Regular.ttf",
+   "sha256": "b733e56144115d5da6a6415d2971ab97b7262948d172e27309ad00ce9096b876",
+   "family": "Martel",
+   "style": "Regular",
+   "version": "Version 1.001; ttfautohint (v1.1) -l 5 -r 5 -G 72 -x 0 -D latn -f none -w gGD -W -c",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "compose2-OFL",
+   "file": "experiments/phase0/compose2/fonts/tirodevanagarimarathi/TiroDevanagariMarathi-Regular.ttf",
+   "sha256": "8e1d4edf924c0685f1383d0d37aa7c4662103d2e485e53b535b4528af5acd966",
+   "family": "Tiro Devanagari Marathi",
+   "style": "Regular",
+   "version": "Version 1.52",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  },
+  {
+   "source": "compose2-OFL",
+   "file": "experiments/phase0/compose2/fonts/yantramanav/Yantramanav-Regular.ttf",
+   "sha256": "823dbb5d9c73a2c192371bf73341a30291b5a416578362eb4607b9c5a5be9821",
+   "family": "Yantramanav",
+   "style": "Regular",
+   "version": "Version 1.001;PS 1.0;hotconv 1.0.72;makeotf.lib2.5.5900; ttfautohint (v1.3)",
+   "axes": [],
+   "fsType": 0,
+   "licence": "SIL OFL 1.1",
+   "devanagari": true
+  }
+ ]
+}
