@@ -1490,7 +1490,7 @@ def main():
                "fixed_problems": rep["fixed_problems"], "lead_side": lead_side,
                "newshole_box_mm": [ORIGIN, round(news_top, 3), round(x_hi, 3), round(news_bottom, 3)],
                "regions_mm": [[round(v, 3) for v in b] for b in rboxes], "ad_block_mm": ad_block,
-               "placed": [{"story": g.stories[i].id, "rank": g.stories[i].rank, "x": round(x, 2), "y": round(y, 2), "w": w, "h": round(h, 2),
+               "placed": [{"story": g.stories[i].id, "rank": g.stories[i].rank, "x": round(x, 2), "y": round(y, 2), "w": w, "w_mm": round(span_mm(w), 2), "h": round(h, 2),
                            "m": o["m"], "fit": o["fit"], "photo_cols": o["photo"]["k"] if o["photo"] else None} for i, x, y, w, h, o in placed],
                "head_ids": {s.id: s.head_ids for s in g.stories}, "deck_ids": {s.id: s.deck_ids for s in g.stories},
                "caption_ids": {s.id: s.caption["ids"] for s in g.stories if s.caption},
