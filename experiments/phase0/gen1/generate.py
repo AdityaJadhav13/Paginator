@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.8.4"
+GEN = "gen1/2.9.2"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -86,6 +86,8 @@ XH_KEEP = 2                                  # a crosshead needs room for this m
 XH_SPACE_L = 1.5                             # crosshead space above/below in body leadings: the house uses 1.0 with its own face;
                                              # the stand-in's taller vowel signs touch the next line at 1.0
 MAX_STORIES = 11
+RARE_STYLE_MIN = 2                           # body styles used at least this often are the fallback palette
+MAX_LEAD_RATIO = 1.3                         # … at a sensible leading (≤ 1.3 × size)
 LOOSE_GAP_MM = 30.0                          # a loose item joins a headline at most this far above it
 ICON_MM = 25.0
 BRIEF_WORDS = 60                             # a brief: at most this many words …
@@ -96,6 +98,8 @@ CHILD_SPLIT = 0.8                            # cost when a sidebar and its paren
 AD_STRIP_MM = 6.0                            # a bar this close above/below an ad block, as wide as it, belongs to the ad
 MIN_REGION_MM = 25.0                         # a strip of the newshole beside an ad block narrower than this is left empty
 LEAD_LOW = 2.0                               # cost when the lead story's region does not start at the top of the newshole
+LOOSE_JOIN_MM = 6.0                          # loose pieces of one column this close together are one item
+LOOSE_INSIDE = 0.8                           # a loose item at least this much inside the newshole is laid out with it
 LOOSE_INTRO_WORDS = 80                       # loose text this short inside a story's printed box is that story's (an intro)
 XH_FOLLOW_MM = 15.0                          # a loose crosshead joins a flow only if a paragraph starts this close below it
 HEAD_GROW = 1.25                             # a headline may grow this much to fill its measure (same number of lines)
@@ -109,6 +113,7 @@ HEAD_STEPS = ((1.0, 0.0), (0.85, 0.6), (0.72, 1.5))   # headline size × the spa
 MIN_PPI = 150                                # photos are never enlarged below this (or below the paper's own print, if lower)
 BODY_INK_TEST = "\u0915\u093f\u0902 \u0930\u094d\u0915\u0940\u0902 \u0911 \u0915\u0945 \u0907\u0901 \u0936\u094d\u0930\u0940"   # tall marks
 WHITE_MAX = 2                                # leadings of white space a module may leave at its column feet (> 1 costs extra)
+EDGE_TOP_MM = 15.0                           # … or one that ends within this distance below the newshole's top
 EDGE_MM = 60.0                               # fixed items shorter than this on the newshole's top/bottom edge move that edge
 DEVA = (chr(0x0900), chr(0x097F))
 
@@ -221,6 +226,7 @@ class Generator:
             return (-(he["size_pt"] if he else 0.0), order[s["id"]])
         main.sort(key=prio)
         self.stories = [Story(s, self.els, idx, photo_dir, r) for r, s in enumerate(main)]
+        self.ext_styles = False                          # True when the rarer house styles are in use (a fallback)
         self.extra_rows: dict = {}                       # (story, w, m, fit, style) → rows added after an overset render
         self._lines: dict = {}
         self._disp: dict = {}
@@ -1082,8 +1088,8 @@ def loose_stories(m, box, photo_ids, ad_block=None) -> list:
     ads = [e["bbox_mm"] for e in m["elements"] if e["kind"] == "ad"]
     x0, t, x1, b = box
 
-    def inside(bb):
-        return bb[0] >= x0 - 1 and bb[2] <= x1 + 1 and bb[1] >= t - 1 and bb[3] <= b + 1
+    def inside(bb):                                    # mostly inside (a rail may reach a few mm past the newshole's edge)
+        return inside_frac(bb, (x0, t, x1, b)) >= LOOSE_INSIDE
 
     def in_ad(bb):
         return any(a[0] - 0.5 <= bb[0] and bb[2] <= a[2] + 0.5 and a[1] - 0.5 <= bb[1] and bb[3] <= a[3] + 0.5 for a in ads)
@@ -1110,7 +1116,15 @@ def loose_stories(m, box, photo_ids, ad_block=None) -> list:
             group[sd["id"]].append(e); head_of[e["id"]] = sd["id"]
             group.pop(e["id"], None)
         elif e["id"] not in group:
-            group[e["id"]] = [e]
+            # no heading above: join the loose piece right above it in the same column (one box's lines), else alone
+            prev = next((g_ for g_ in reversed(list(group.values())) if g_[0]["kind"] not in ("headline", "kicker")
+                         and min(g_[-1]["bbox_mm"][2], e["bbox_mm"][2]) - max(g_[-1]["bbox_mm"][0], e["bbox_mm"][0])
+                         >= 0.8 * min(g_[-1]["bbox_mm"][2] - g_[-1]["bbox_mm"][0], e["bbox_mm"][2] - e["bbox_mm"][0])
+                         and 0 <= e["bbox_mm"][1] - g_[-1]["bbox_mm"][3] <= LOOSE_JOIN_MM), None)
+            if prev is not None:
+                prev.append(e)
+            else:
+                group[e["id"]] = [e]
     out = []
     for n, (gid, items) in enumerate(sorted(group.items(), key=lambda kv: (kv[1][0]["bbox_mm"][1], kv[0]))):
         heads = [e for e in items if e["kind"] == "headline"]
@@ -1154,7 +1168,7 @@ def styles_from(cal_models, min_count=10) -> dict:
             if s.get("parent_story") or not s.get("body_size_pt") or not s.get("body_leading_pt") or not deva(txt):
                 continue
             c[(round(s["body_size_pt"] * 2) / 2, round(s["body_leading_pt"] * 2) / 2)] += 1
-    out = {k: v for k, v in c.items() if v >= min_count}
+    out = {k: v for k, v in c.items() if v >= min_count and k[1] / k[0] <= MAX_LEAD_RATIO}
     if not out:
         sys.exit("no house body style with enough calibration stories")
     return out
@@ -1359,6 +1373,7 @@ def main():
     lead_side = opt.get("--lead-side") or lead_side_from(cal)
     assert lead_side in ("left", "right"), lead_side
     styles = styles_from(cal)
+    styles_ext = styles_from(cal, RARE_STYLE_MIN)       # rarer house styles (e.g. tight leading on dense pages): fallback only
     space_em = space_em_from(cal)
     print("house body styles (calibration editions):", styles, "word space em:", space_em)
     todo = names or [k for k, m in models.items() if m["split"] == "test"]
@@ -1390,7 +1405,8 @@ def main():
             # small fixed items on the newshole's top or bottom edge (a section logo, an emblem, a boxed notice at the foot):
             # move that edge clear of them, as a designer would; anything else inside makes the page irregular
             boxes = {e["id"]: e["bbox_mm"] for e in m["elements"]} | {s_["id"]: s_["bbox_mm"] for s_ in m["stories"] if s_.get("bbox_mm")}
-            top_i = [boxes[i] for i in intruders if boxes[i][1] <= news_top + 2 and boxes[i][3] - boxes[i][1] < EDGE_MM]
+            top_i = [boxes[i] for i in intruders if (boxes[i][1] <= news_top + 2 or boxes[i][3] <= news_top + EDGE_TOP_MM)
+                     and boxes[i][3] - boxes[i][1] < EDGE_MM]
             bot_i = [boxes[i] for i in intruders if boxes[i][3] >= news_bottom - 2 and boxes[i][3] - boxes[i][1] < EDGE_MM]
             if not intruders or not (top_i or bot_i):
                 break
@@ -1415,6 +1431,12 @@ def main():
         retries = []
         for attempt in range(RETRIES + 1):
             res, info = g.run(regions, span_prior, lead_side)
+            if res is None and not info.get("budget_hit") and len(styles_ext) > len(styles) and not g.ext_styles:
+                # no exact fit with the commonest styles: retry once with the house's rarer body styles too (they cost more)
+                g = Generator(cx, m, photo_dir, styles_ext, ids, space_em)
+                g.ext_styles = True
+                res, info = g.run(regions, span_prior, lead_side)
+                info["rare_styles"] = True
             if res is None:
                 break
             placed = [pl for k, tree in res[1] for pl in g.place(tree, ORIGIN + regions[k][0] * PITCH, regions[k][2])]
