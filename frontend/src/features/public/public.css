@@ -1,0 +1,636 @@
+/*
+ * Pageinator UI005 public surfaces (§9, §10.3).
+ *
+ * Consumes only existing --pg-* tokens plus the seven additions UI005 made
+ * to src/ui/tokens.css. No raw colour value, no physical-direction property,
+ * no !important, no viewport-unit type size, no shadow, no gradient.
+ *
+ * Separation is achieved with hairline rules rather than elevation: the site
+ * reads as editorial structure, not as stacked cards.
+ */
+
+/* ── Page root and vertical rhythm ──────────────────────────────────── */
+
+.pg-public {
+  /*
+   * One rhythm variable drives every band's block padding, so section
+   * weight steps consistently across the five verified widths (§21.1)
+   * instead of each section choosing its own spacing.
+   */
+  --pg-public-band-space: var(--pg-space-8);
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 48rem) {
+  .pg-public {
+    --pg-public-band-space: var(--pg-space-9);
+  }
+}
+
+@media (min-width: 64rem) {
+  .pg-public {
+    --pg-public-band-space: var(--pg-space-10);
+  }
+}
+
+@media (min-width: 90rem) {
+  .pg-public {
+    --pg-public-band-space: var(--pg-space-11);
+  }
+}
+
+/* ── Bands and the content measure ──────────────────────────────────── */
+
+.pg-public__band {
+  padding-block: var(--pg-public-band-space);
+  border-block-end: var(--pg-border-width) solid var(--pg-color-border-subtle);
+}
+
+.pg-public__band:last-child {
+  border-block-end: none;
+}
+
+.pg-public__band--subtle {
+  background-color: var(--pg-color-surface-subtle);
+}
+
+/*
+ * The ink band reuses --pg-color-text as a surface, exactly as the editor
+ * header in app/shell.css already does. It is not a new colour idea.
+ */
+.pg-public__band--ink {
+  background-color: var(--pg-color-text);
+  color: var(--pg-color-on-action);
+  border-block-end-color: var(--pg-color-text);
+}
+
+.pg-public__band--ink a {
+  color: var(--pg-color-on-action);
+}
+
+.pg-public__measure {
+  max-inline-size: var(--pg-content-measure);
+  margin-inline: auto;
+  padding-inline: var(--pg-space-5);
+  inline-size: 100%;
+}
+
+.pg-public__prose {
+  max-inline-size: var(--pg-reading-measure);
+}
+
+/*
+ * One flow rule instead of per-section margins: every direct child of a
+ * band's measure, and every stacked child inside a grid or split cell,
+ * inherits the same rhythm. Sections therefore separate consistently
+ * without any component choosing its own spacing.
+ *
+ * The `.pg-public` prefix is load-bearing: the typography classes below
+ * set `margin: 0`, and at equal specificity the later rule would win and
+ * collapse the whole page's vertical rhythm.
+ */
+.pg-public .pg-public__measure > * + * {
+  margin-block-start: var(--pg-space-6);
+}
+
+.pg-public .pg-public__grid > * > * + * {
+  margin-block-start: var(--pg-space-5);
+}
+
+.pg-public .pg-public__split-body > * + * {
+  margin-block-start: var(--pg-space-6);
+}
+
+/* A titled sub-block inside a section body (an h3 plus its prose). */
+.pg-public__block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+}
+
+/*
+ * Sidehead layout: the standing head sits in a narrow start column with
+ * the prose beside it, which is how a newspaper sets a section label. It
+ * also stops measure-constrained prose from leaving half the grid empty
+ * at laptop width and above.
+ */
+.pg-public__split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--pg-space-5);
+}
+
+@media (min-width: 64rem) {
+  .pg-public__split {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    gap: var(--pg-space-8);
+    align-items: start;
+  }
+}
+
+/* ── Editorial grid ─────────────────────────────────────────────────── */
+/*
+ * Spans only ever use `span N`, never explicit line placement, so grid
+ * items always flow in DOM order and visual order cannot diverge from
+ * reading order (AC-55).
+ */
+
+.pg-public__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--pg-space-6);
+}
+
+@media (min-width: 64rem) {
+  .pg-public__grid {
+    grid-template-columns: repeat(12, 1fr);
+    gap: var(--pg-space-7);
+  }
+
+  .pg-public__span-4 {
+    grid-column: span 4;
+  }
+
+  .pg-public__span-5 {
+    grid-column: span 5;
+  }
+
+  .pg-public__span-6 {
+    grid-column: span 6;
+  }
+
+  .pg-public__span-7 {
+    grid-column: span 7;
+  }
+
+  .pg-public__span-8 {
+    grid-column: span 8;
+  }
+
+  .pg-public__span-12 {
+    grid-column: span 12;
+  }
+}
+
+/* ── Typography ─────────────────────────────────────────────────────── */
+
+.pg-public__hero-title {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-700);
+  line-height: var(--pg-line-height-700);
+  font-weight: var(--pg-font-weight-bold);
+  margin: 0;
+  text-wrap: balance;
+}
+
+@media (min-width: 48rem) {
+  .pg-public__hero-title {
+    font-size: var(--pg-font-size-800);
+    line-height: var(--pg-line-height-800);
+  }
+}
+
+.pg-public__page-title {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-600);
+  line-height: var(--pg-line-height-600);
+  font-weight: var(--pg-font-weight-bold);
+  margin: 0;
+  text-wrap: balance;
+}
+
+@media (min-width: 48rem) {
+  .pg-public__page-title {
+    font-size: var(--pg-font-size-700);
+    line-height: var(--pg-line-height-700);
+  }
+}
+
+.pg-public__section-title {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-500);
+  line-height: var(--pg-line-height-500);
+  font-weight: var(--pg-font-weight-semibold);
+  margin: 0;
+  text-wrap: balance;
+}
+
+@media (min-width: 48rem) {
+  .pg-public__section-title {
+    font-size: var(--pg-font-size-600);
+    line-height: var(--pg-line-height-600);
+  }
+}
+
+.pg-public__item-title {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-400);
+  line-height: var(--pg-line-height-400);
+  font-weight: var(--pg-font-weight-semibold);
+  margin: 0;
+}
+
+.pg-public__lead {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-400);
+  line-height: var(--pg-line-height-400);
+  font-weight: var(--pg-font-weight-regular);
+  margin: 0;
+  max-inline-size: var(--pg-reading-measure);
+}
+
+.pg-public__body {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-300);
+  line-height: var(--pg-line-height-300);
+  margin: 0;
+  max-inline-size: var(--pg-reading-measure);
+}
+
+.pg-public__note {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-100);
+  line-height: var(--pg-line-height-100);
+  color: var(--pg-color-text-muted);
+  margin: 0;
+  max-inline-size: var(--pg-reading-measure);
+}
+
+/*
+ * --pg-color-text-muted is a light-surface token; on the ink band the
+ * subtle border colour is the readable muted value (it clears 4.5:1
+ * against --pg-color-text, which RB-08 verifies numerically).
+ */
+.pg-public__band--ink .pg-public__note,
+.pg-public__band--ink .pg-standing-head__label,
+.pg-public__band--ink .pg-capability {
+  color: var(--pg-color-border-subtle);
+}
+
+/* ── Standing head (§9.2) ───────────────────────────────────────────── */
+
+.pg-standing-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+}
+
+.pg-standing-head__label {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-100);
+  line-height: var(--pg-line-height-100);
+  font-weight: var(--pg-font-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--pg-color-text-muted);
+  margin: 0;
+}
+
+.pg-standing-head__rule {
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border);
+  block-size: 0;
+  margin: 0;
+}
+
+.pg-public__band--ink .pg-standing-head__rule {
+  border-block-start-color: var(--pg-color-border-subtle);
+}
+
+/* ── Capability availability note (§13.2) ───────────────────────────── */
+/*
+ * Deliberately typographic, not a coloured badge: a status light would
+ * read as a live signal, and roadmap availability is not a document state.
+ */
+.pg-capability {
+  display: block;
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-100);
+  line-height: var(--pg-line-height-100);
+  font-weight: var(--pg-font-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pg-color-text-muted);
+  margin: 0;
+}
+
+/* ── Primary call to action (§20.1) ─────────────────────────────────── */
+/*
+ * Reuses UI001's button classes on a router Link rather than restyling a
+ * second action treatment. On the ink band the action blue would not clear
+ * the 3:1 non-text contrast threshold against --pg-color-text, so the CTA
+ * inverts to a light surface there.
+ */
+.pg-public__cta {
+  text-decoration: none;
+}
+
+.pg-public__band--ink .pg-public__cta {
+  background-color: var(--pg-color-surface);
+  color: var(--pg-color-text);
+  border-color: var(--pg-color-surface);
+}
+
+.pg-public__band--ink .pg-public__cta:hover {
+  background-color: var(--pg-color-surface-subtle);
+  border-color: var(--pg-color-surface-subtle);
+}
+
+.pg-public__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-5);
+}
+
+.pg-public__actions a:not(.pg-public__cta) {
+  color: var(--pg-color-action);
+  font-size: var(--pg-font-size-300);
+}
+
+.pg-public__band--ink .pg-public__actions a:not(.pg-public__cta) {
+  color: var(--pg-color-on-action);
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────── */
+
+.pg-public__hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-6);
+}
+
+/*
+ * The qualification sits opposite the lead at laptop width and above,
+ * separated by a rule — earned asymmetry rather than a centred stack.
+ */
+.pg-public__hero-aside {
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border);
+  padding-block-start: var(--pg-space-4);
+}
+
+@media (min-width: 64rem) {
+  .pg-public__hero-aside {
+    border-block-start: none;
+    border-inline-start: var(--pg-border-width) solid var(--pg-color-border);
+    padding-block-start: 0;
+    padding-inline-start: var(--pg-space-6);
+  }
+}
+
+/* ── Stage sequence (homepage workflow band) ────────────────────────── */
+/*
+ * An editorial contents-page treatment: ordinal and name at the start,
+ * the sentence in the wide middle, availability at the end. Rules between
+ * rows, no boxes.
+ */
+
+.pg-public__sequence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pg-public__sequence-item {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--pg-space-2);
+  padding-block: var(--pg-space-5);
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+}
+
+.pg-public__band--ink .pg-public__sequence-item {
+  border-block-start-color: var(--pg-color-border);
+}
+
+@media (min-width: 64rem) {
+  .pg-public__sequence-item {
+    grid-template-columns: minmax(9rem, 2fr) minmax(0, 5fr) minmax(11rem, 2fr);
+    gap: var(--pg-space-6);
+    align-items: baseline;
+  }
+}
+
+.pg-public__sequence-name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--pg-space-3);
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-400);
+  line-height: var(--pg-line-height-400);
+  font-weight: var(--pg-font-weight-semibold);
+  margin: 0;
+}
+
+.pg-public__sequence-ordinal {
+  font-family: var(--pg-font-mono);
+  font-size: var(--pg-font-size-200);
+  font-weight: var(--pg-font-weight-regular);
+  color: var(--pg-color-border-subtle);
+}
+
+.pg-public__band--ink .pg-public__sequence-ordinal {
+  color: var(--pg-color-border);
+}
+
+/* ── Stage detail (features page) ───────────────────────────────────── */
+
+.pg-public__stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-4);
+  padding-block-start: var(--pg-space-6);
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+}
+
+.pg-public__stage--lead {
+  border-block-start-color: var(--pg-color-border);
+}
+
+.pg-public__stage--lead .pg-public__item-title {
+  font-size: var(--pg-font-size-500);
+  line-height: var(--pg-line-height-500);
+}
+
+.pg-public__constraint {
+  border-inline-start: var(--pg-border-width) solid var(--pg-color-border);
+  padding-inline-start: var(--pg-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-2);
+}
+
+.pg-public__constraint-label {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-100);
+  line-height: var(--pg-line-height-100);
+  font-weight: var(--pg-font-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--pg-color-text-muted);
+  margin: 0;
+}
+
+/* ── Plain editorial lists ──────────────────────────────────────────── */
+
+.pg-public__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-4);
+  max-inline-size: var(--pg-reading-measure);
+}
+
+.pg-public__list-item {
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  padding-block-start: var(--pg-space-4);
+}
+
+.pg-public__band--ink .pg-public__list-item {
+  border-block-start-color: var(--pg-color-border);
+}
+
+/* ── Pricing tiers (§16) ────────────────────────────────────────────── */
+/*
+ * Every tier carries identical border, background, radius and padding.
+ * No tier may be elevated, tinted, badged or ordered ahead of another.
+ */
+
+.pg-public__tiers {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--pg-space-6);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@media (min-width: 64rem) {
+  .pg-public__tiers {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.pg-public__tier {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-4);
+  padding: var(--pg-space-6);
+  background-color: var(--pg-color-surface);
+  border: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  border-radius: var(--pg-radius-md);
+}
+
+.pg-public__tier-price {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-500);
+  line-height: var(--pg-line-height-500);
+  font-weight: var(--pg-font-weight-semibold);
+  margin: 0;
+  padding-block: var(--pg-space-3);
+  border-block: var(--pg-border-width) solid var(--pg-color-border-subtle);
+}
+
+.pg-public__tier-scope {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+}
+
+.pg-public__tier-scope li {
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  padding-block-start: var(--pg-space-3);
+  font-size: var(--pg-font-size-300);
+  line-height: var(--pg-line-height-300);
+}
+
+/* ── Page geometry figure (§14) ─────────────────────────────────────── */
+
+.pg-public__figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-4);
+}
+
+.pg-public__figure svg {
+  inline-size: 100%;
+  block-size: auto;
+  max-inline-size: 26rem;
+  display: block;
+}
+
+/*
+ * The diagram's parts. Nothing here fills a region in a way that could read
+ * as rendered output: the columns are empty tint, the advertisement is an
+ * outline, and the only glyphs are the three legend labels.
+ */
+.pg-figure__page {
+  fill: var(--pg-color-surface);
+  stroke: var(--pg-color-border-subtle);
+}
+
+.pg-figure__margin {
+  fill: none;
+  stroke: var(--pg-color-border-subtle);
+  stroke-dasharray: 4 4;
+}
+
+.pg-figure__column {
+  fill: var(--pg-color-surface-subtle);
+}
+
+.pg-figure__ad {
+  fill: var(--pg-color-surface);
+  stroke: var(--pg-color-border);
+}
+
+.pg-figure__flow {
+  fill: none;
+  stroke: var(--pg-color-border);
+}
+
+.pg-figure__arrowhead {
+  fill: var(--pg-color-border);
+}
+
+.pg-figure__label {
+  fill: var(--pg-color-text-muted);
+  font-family: var(--pg-font-sans);
+}
+
+/* ── Contact form (§18) ─────────────────────────────────────────────── */
+
+.pg-public__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-5);
+  max-inline-size: var(--pg-reading-measure);
+}
+
+/* ── Overflow protection at 320 CSS pixels (§21.5) ──────────────────── */
+
+.pg-public h1,
+.pg-public h2,
+.pg-public h3,
+.pg-public p,
+.pg-public li {
+  overflow-wrap: anywhere;
+}
+
+/* ── Reduced motion (§9.4) ──────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-public *,
+  .pg-public *::before,
+  .pg-public *::after {
+    transition: none;
+  }
+}
