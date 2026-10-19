@@ -50,25 +50,32 @@ import run_compose3 as R3  # noqa: E402
 import run_head1 as RH  # noqa: E402
 
 sys.path.insert(0, str(HERE))
-from textfix import fix_bullet, fix_bullets_all, only_bullets  # noqa: E402,F401  (the last two: EXP-GEN-1)
+from textfix import dehyphenate, english_vocab, fix_bullet, fix_bullets_all, latin_text, only_bullets  # noqa: E402,F401  (fix_bullets_all, only_bullets: EXP-GEN-1)
 
 from fontTools.ttLib import TTFont  # noqa: E402
 
 K3 = H.K3
 MM = X.MM
 NBSP = "\u00a0"
-PAGE_MAKER = "page1-compose/2.7.1"
+PAGE_MAKER = "page1-compose/2.8.0"
 BLACK, WHITE = (0, 0, 0, 1), (0, 0, 0, 0)
 SERIF, SANS = "Noto Serif Devanagari", "Noto Sans Devanagari"
 BODY_AXES = {"wdth": 87.5}
 PLACEHOLDER = {"image": ("छायाचित्र", "PHOTO"), "graphic": ("चित्र", "GRAPHIC"), "ad": ("जाहिरात", "AD")}
 OBSTACLE_KINDS = ("image", "graphic", "ad")
+SMALL_BOX_LINES = 6           # a table-like box (table_like) that overflows when flowed is set line by line as printed
+MASTHEAD_PT = 60.0            # the masthead's lettering: page-head furniture at least this size (brand.py artwork replaces it)
 TEXT_KINDS = ("headline", "deck", "kicker", "byline", "crosshead", "caption", "jump_line", "folio", "furniture", "other_text")
 WRAP_GAP_MM = 1.5            # horizontal clearance beside an obstacle
 WRAP_GAP_V_MM = 1.0          # vertical clearance below/above an obstacle
+EN_MIN_LINE_MM = 25.0        # English words do not fit narrower runaround lines (EXP-ENG-1)
 MIN_LINE_MM = 15.0           # narrower than this beside an obstacle: the line moves below it instead
 ASC, DESC = 0.80, 0.30       # line box above/below the baseline, in ems (Devanagari marks included)
 INK_CLEAR_MM = 0.25          # display lines: required clearance between one line's lowest and the next line's highest ink
+HYPHENATE_ENGLISH = "--no-hyphenate" not in sys.argv    # EXP-ENG-1: English stories break words like print
+EN_HYPHEN_MIN = (2, 2)        # print's shortest fragments before / after an English line-end break (EXP-ENG-1 measure)
+EN_HYPHEN_PENALTY = 300.0     # in-word break penalty for English (sweep 30–3000 on the 8 pages: depth best up to 300); --en-hyphen-penalty
+EN_MAX_CONSECUTIVE = 3        # print runs at most 3 broken lines in a row, bar one 4
 HEAD_FILLED = 0.85            # a headline line print set to ≥ this share of its measure is filled to the measure
 HEAD_HSCALE_MAX = 1.18        # … stretching its letters by at most this much
 HEAD_GAP_EM = 0.5             # … and its word spaces by at most this much each
@@ -217,9 +224,24 @@ class Context:
         self.xh_below = (sp.get("crosshead_space_below") or {}).get("body_leadings", 1.0)
         self.indent_mm = pj.get("composer_defaults", {}).get("roles", {}).get("body", {}).get("first_line_indent_mm", 5.0)
         self.inputs = {"headlines.jsonl": _sha(hl), "house_profile.json": _sha(prof), "code": CODE_HASH}
+        # the paper's masthead artwork (brand.py; private), drawn in place of the masthead's lettering
+        bj = ds / "report" / "page1" / "brand" / "masthead.json"
+        self.masthead = json.loads(bj.read_text()) if bj.exists() else None
+        if self.masthead:
+            self.masthead["raw"] = gzip.decompress((bj.parent / "masthead.cmyk.gz").read_bytes())
+            self.inputs["masthead"] = _sha(bj)
+        self._en_vocab = None
         self.r_cal = None
         if size_mode == "paper":
             self.r_cal = self._paper_ratio()
+
+    @property
+    def en_vocab(self) -> set:
+        """English words print sets inside a line, over every page model (textfix.english_vocab)."""
+        if self._en_vocab is None:
+            self._en_vocab = english_vocab(json.loads(f.read_text(encoding="utf-8"))
+                                           for f in sorted((self.ds / "report" / "page1" / "pages").glob("*.json")))
+        return self._en_vocab
 
     def frames(self, sample: str, page: int) -> dict:
         if sample not in self._docs:
@@ -497,13 +519,19 @@ COPYFIT_STEPS = (0.99, 0.98, 0.97, 0.96)   # house per-story horizontal scale re
 def set_story(B: Builder, cx: Context, story: dict, words_width, els: dict, obstacles: list, meta: dict, rep: dict,
               fit: float = 1.0) -> dict:
     flow = story["flow"]
+    # English stories are hyphenated like print (EXP-ENG-1): set from the words print broke at line ends, made whole
+    english = HYPHENATE_ENGLISH and latin_text(b["text"] for b in flow if b["type"] == "para")
+    if english:
+        flow = [{**b, "text": dehyphenate(b["text"], cx.en_vocab)} if b["type"] == "para" else b for b in flow]
     paras = [b for b in flow if b["type"] == "para" and b["text"].strip()]
+    min_line = EN_MIN_LINE_MM if english else MIN_LINE_MM
     cols = story["columns"]
     out = {"story": story["id"], "printed_lines": sum(len(b["lines"]) for b in paras), "our_lines": 0, "overset_lines": 0, "overset_words": 0,
            "overset_chars": 0, "paragraphs": len(paras), "paragraphs_same_breaks": 0, "words": sum(len(b["text"].split()) for b in paras),
            "columns": [[round(c["x0_mm"], 2), round(c["top_mm"], 2), round(c["x1_mm"], 2), round(c["bottom_mm"], 2)] for c in cols]}
     if not paras:
         return out
+    mark = (len(B.items), len(B.lines))
     by_frame = {e["frame_id"]: e for e in els.values() if e["kind"] == "body_frame"}
 
     def printed_line(ref):
@@ -561,6 +589,12 @@ def set_story(B: Builder, cx: Context, story: dict, words_width, els: dict, obst
     k = (space_em * house_size * hscale / MM) / our_space          # house word space (nominal × horizontal scale)
     kind, prm = R3.candidates()[cx.body_choice]
     pol = R3.policy_for(cx.body_choice, kind, prm, k)
+    if english:
+        pol = replace(pol, inword="rules", inword_min=EN_HYPHEN_MIN, pattern_min=EN_HYPHEN_MIN, max_consecutive_inword=EN_MAX_CONSECUTIVE,
+                      compound_breaks=True)
+        if EN_HYPHEN_PENALTY is not None:
+            pol = replace(pol, weights=replace(pol.weights, hyphen=EN_HYPHEN_PENALTY))
+        out["hyphenate"] = True
     # obstacles the PRINTED lines of this story overlap are backgrounds (e.g. a shape behind a box), not wrap objects
     em_h = house_size / MM
     plines = [pl for b in paras for ln in b["lines"] if (pl := printed_line(ln["line_ref"]))]
@@ -599,17 +633,17 @@ def set_story(B: Builder, cx: Context, story: dict, words_width, els: dict, obst
         for ox0, ot, ox1, ob in obstacles:
             if ob <= top or ot >= bot or ox1 <= x0 or ox0 >= x1:
                 continue
-            if ox0 - WRAP_GAP_MM - x0 >= max(MIN_LINE_MM, 0.4 * (col["x1_mm"] - col["x0_mm"])) and ox0 > (x0 + x1) / 2 - 1:
+            if ox0 - WRAP_GAP_MM - x0 >= max(min_line, 0.4 * (col["x1_mm"] - col["x0_mm"])) and ox0 > (x0 + x1) / 2 - 1:
                 x1 = min(x1, ox0 - WRAP_GAP_MM)                       # obstacle on the right: narrower line
-            elif x1 - (ox1 + WRAP_GAP_MM) >= max(MIN_LINE_MM, 0.4 * (col["x1_mm"] - col["x0_mm"])) and ox1 < (x0 + x1) / 2 + 1:
+            elif x1 - (ox1 + WRAP_GAP_MM) >= max(min_line, 0.4 * (col["x1_mm"] - col["x0_mm"])) and ox1 < (x0 + x1) / 2 + 1:
                 x0 = max(x0, ox1 + WRAP_GAP_MM)                       # obstacle on the left
             else:
                 below = max(below or -1e9, ob)
         if below is not None:
             return "blocked", below
-        if x1 - x0 < MIN_LINE_MM:
+        if x1 - x0 < min_line:
             obs = [ob for ox0, ot, ox1, ob in obstacles if not (ob <= top or ot >= bot or ox1 <= col["x0_mm"] or ox0 >= col["x1_mm"])]
-            return ("blocked", max(obs)) if obs else (x0, x1)       # a column narrower than MIN_LINE_MM by itself
+            return ("blocked", max(obs)) if obs else (x0, x1)       # a column narrower than min_line by itself
         return x0, x1
 
     state = {"ci": 0, "y": cols[0]["first_baseline_mm"], "placed": 0}
@@ -711,7 +745,9 @@ def set_story(B: Builder, cx: Context, story: dict, words_width, els: dict, obst
                     out["overset_words"] += per_line[n_ln]
                     out["overset_chars"] += _line_chars(p, c, ln)
                     continue
-                B.body_line(p, c, ln, pos[0], state["y"], fkey, {**meta, "role": "body", "story": story["id"], "column": state["ci"]})
+                B.body_line(p, c, ln, pos[0], state["y"], fkey, {**meta, "role": "body", "story": story["id"], "column": state["ci"],
+                                                                  **({"hy": True} if ln.end_break == "inword" else
+                                                                     {"eb": ln.end_break} if ln.end_break in ("token", "emergency") else {})})
                 state["y"] += lead; state["placed"] += 1
             if not restart:
                 break
@@ -720,7 +756,40 @@ def set_story(B: Builder, cx: Context, story: dict, words_width, els: dict, obst
         pr_counts = [len(l["text"].split()) for l in b["lines"]]
         out["paragraphs_same_breaks"] += int(_cuts(pr_counts) == _cuts(per_line_all))
         prev_printed_base = base_of.get(b["lines"][-1]["line_ref"])
+    if out["overset_lines"] and table_like(paras) and not english and not out.get("unset_paragraphs"):
+        as_printed(B, story, paras, printed_line, cols, fkey, size, meta, out, mark)
     return out
+
+
+def table_like(paras) -> bool:
+    """A short box of short lines with figures (weather, rates): 2..SMALL_BOX_LINES printed lines of at most 4 words,
+    one with a digit. Prose, however short, is never set as printed."""
+    lines = [ln["text"] for b in paras for ln in b["lines"]]
+    return (2 <= len(lines) <= SMALL_BOX_LINES and all(len(t.split()) <= 4 for t in lines)
+            and any(ch.isdigit() for t in lines for ch in t))
+
+
+def as_printed(B, story, paras, printed_line, cols, fkey, size, meta, out, mark):
+    """A short story that overflows when flowed (a table-like box: weather, rates) is set line by line where print set
+    each line, a line wider than its printed extent set smaller (never below 85%). Only when the story stands where
+    print had it (every printed line inside one of its columns): a moved story keeps its flowed setting."""
+    pls = [(ln, printed_line(ln["line_ref"])) for b in paras for ln in b["lines"]]
+    if any(pl is None or _col_of(cols, (pl["x0_mm"] + pl["x1_mm"]) / 2, pl["baseline_mm"]) is None for _, pl in pls):
+        return
+    keep = []
+    for ln, pl in pls:
+        text = fix_bullet(" ".join(ln["text"].split()))
+        p = B.prepare(text, fkey, size)
+        width = sum(a for r in p.runs for a in r.x_advances_mm)
+        k = min(1.0, (pl["x1_mm"] - pl["x0_mm"] + 0.3) / width) if width else 1.0
+        if k < 0.85:
+            return
+        keep.append((text, size * k, pl))
+    del B.items[mark[0]:], B.lines[mark[1]:]
+    for text, sz, pl in keep:
+        B.text_line(text, fkey, sz, pl["x0_mm"], pl["baseline_mm"], meta={**meta, "role": "body", "story": story["id"],
+                    "column": _col_of(cols, (pl["x0_mm"] + pl["x1_mm"]) / 2, pl["baseline_mm"])})
+    out.update({"our_lines": len(keep), "overset_lines": 0, "overset_words": 0, "overset_chars": 0, "set_as_printed": True})
 
 
 def _chars(text: str) -> int:
@@ -760,8 +829,54 @@ def C_shape_nbsp(family: str, size: float, axes: dict = BODY_AXES) -> float:  # 
 
 
 # ------------------------------------------------------------------------------------------- page
+def masthead_box(model: dict):
+    """The masthead's area: page-head furniture of MASTHEAD_PT or more, grown by the text, graphics and boxes mostly
+    inside it (tagline, lettering panels); its foot is the rule under the lettering. None on pages without one.
+    Returns (box, ids of the elements the artwork replaces)."""
+    big = [e for e in model["elements"] if e["kind"] in ("furniture", "folio") and (e.get("size_pt") or 0) >= MASTHEAD_PT
+           and e["bbox_mm"][1] < 0.25 * model["page_h_mm"]]
+    if not big:
+        return None
+    box = [min(e["bbox_mm"][0] for e in big), min(e["bbox_mm"][1] for e in big), max(e["bbox_mm"][2] for e in big), max(e["bbox_mm"][3] for e in big)]
+
+    def share(b):
+        if b[3] - b[1] < 0.1 or b[2] - b[0] < 0.1:      # a hairline rule: give it a little thickness
+            cx_, cy_ = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+            b = (min(b[0], cx_ - 0.05), min(b[1], cy_ - 0.05), max(b[2], cx_ + 0.05), max(b[3], cy_ + 0.05))
+        a = max(1e-6, (b[2] - b[0]) * (b[3] - b[1]))
+        return max(0.0, min(b[2], box[2]) - max(b[0], box[0])) * max(0.0, min(b[3], box[3]) - max(b[1], box[1])) / a
+    kinds = set(TEXT_KINDS) | {"graphic", "box", "image"}
+    for _ in range(3):                                    # grow until stable (a panel brings in the tagline it holds)
+        part = [e for e in model["elements"] if e["kind"] in kinds and share(e["bbox_mm"]) >= 0.5]
+        new = [min([box[0]] + [e["bbox_mm"][0] for e in part]), min([box[1]] + [e["bbox_mm"][1] for e in part]),
+               max([box[2]] + [e["bbox_mm"][2] for e in part]), max([box[3]] + [e["bbox_mm"][3] for e in part])]
+        if new == box:
+            break
+        box = new
+    ids = [e["id"] for e in model["elements"] if e["kind"] in kinds | {"rule"} and share(e["bbox_mm"]) >= 0.8]
+    mid = (box[1] + box[3]) / 2
+    under = [min(r["bbox_mm"][1], r["bbox_mm"][3]) for r in model["elements"] if r["kind"] == "rule"
+             and mid < r["bbox_mm"][1] <= box[3] and r["bbox_mm"][2] - r["bbox_mm"][0] >= 0.8 * (box[2] - box[0])]
+    if under:
+        box[3] = min(under) - 0.5
+    els = {e["id"]: e for e in model["elements"]}
+    ids = [i for i in ids if els[i]["bbox_mm"][1] < box[3]]          # what starts under the rule (date, folio) stays
+    # text: the artwork replaces the lettering and the tagline above it; any other line in the area (an editor's
+    # name, an edition note) stays, and the artwork is fitted above it
+    top = min(e["bbox_mm"][1] for e in big)
+    keep = [i for i in ids if els[i]["kind"] in TEXT_KINDS and els[i] not in big and els[i]["bbox_mm"][3] > top + 1.0]
+    for i in keep:
+        box[3] = min(box[3], els[i]["bbox_mm"][1] - 0.5)
+    return box, [i for i in ids if i not in keep]
+
+
 def build(cx: Context, model: dict, photo_dir: Path | None = None) -> tuple[Builder, dict]:
     B = Builder(model["page_h_mm"])
+    mh = masthead_box(model) if cx.masthead else None
+    if mh:                                                # the artwork replaces the masthead's lettering and panels
+        mh_els = {e["id"]: e for e in model["elements"]}
+        gone = set(mh[1])
+        model = {**model, "elements": [e for e in model["elements"] if e["id"] not in gone]}
     photos = {}
     if photo_dir and (photo_dir / "index.json").exists():
         photos = json.loads((photo_dir / "index.json").read_text())["elements"]
@@ -808,6 +923,16 @@ def build(cx: Context, model: dict, photo_dir: Path | None = None) -> tuple[Buil
                     and min(b, te["bbox_mm"][3]) > max(t, te["bbox_mm"][1]) for te in model["elements"]):
                 fk = B.font(SANS, {"wght": 400.0}, 400)
                 B.text_line(f"{mr} · {en}", fk, 8.0, (x0 + x1) / 2, (t + b) / 2, (0, 0, 0, 0.5), "center", meta={**meta, "role": "placeholder"})
+    if mh:                                                # fitted into the masthead's area, centred, aspect kept
+        (x0, t, x1, b), a = mh[0], cx.masthead
+        k = min((x1 - x0) / a["width_px"], (b - t) / a["height_px"])
+        w, h = a["width_px"] * k, a["height_px"] * k
+        mx, my = (x0 + x1 - w) / 2, (t + b - h) / 2
+        B.items.append(X.Image(mx * MM, (B.page_h - my - h) * MM, w * MM, h * MM, a["width_px"], a["height_px"], a["raw"]))
+        rep["masthead"] = {"ids": mh[1], "box_mm": [round(v, 2) for v in (mx, my, mx + w, my + h)],
+                           "text_replaced": [i for i in mh[1] if (e := mh_els.get(i)) and e["kind"] in TEXT_KINDS
+                                             and (e.get("size_pt") or 0) < MASTHEAD_PT],      # taglines: the artwork has its own
+                           "ppi": round(a["width_px"] / (w / 25.4), 1)}
     for e in drawn:                                       # the printed photo / ad, converted to newsprint CMYK (photos.py)
         x0, t, x1, b = e["bbox_mm"]
         ph = photos[e["id"]]
@@ -895,6 +1020,11 @@ def main():
     out_dir, size_mode = None, "story"
     if "--out" in args:
         i = args.index("--out"); out_dir = Path(args[i + 1]).expanduser(); del args[i:i + 2]
+    if "--no-hyphenate" in args:
+        args.remove("--no-hyphenate")
+    if "--en-hyphen-penalty" in args:
+        global EN_HYPHEN_PENALTY
+        i = args.index("--en-hyphen-penalty"); EN_HYPHEN_PENALTY = float(args[i + 1]); del args[i:i + 2]
     use_photos = "--photos" in args
     if use_photos:
         args.remove("--photos")
@@ -942,7 +1072,7 @@ def main():
                     "stats": stats, "summary": summary, "stories": st_, "display": rep["display"], "problems": B.problems,
                     "skipped_in_ads": rep["skipped_in_ads"], "photos": rep.get("photos", 0), "run_in_skipped": rep["run_in_skipped"], "colour_conversions": rep["colour"],
                     "fonts": {k: {"family": MP.FONTS[k][0], "axes": MP.FONTS[k][1], "weight": MP.FONTS[k][2], "face_sha256": B.face_hash[k]} for k in B.fonts},
-                    "lines": B.lines}
+                    "masthead": rep.get("masthead"), "lines": B.lines}
         mp = pdf.with_suffix(".manifest.json")
         mp.write_text(json.dumps(manifest, ensure_ascii=False) + "\n", encoding="utf-8")
         pdf.chmod(0o600); mp.chmod(0o600)

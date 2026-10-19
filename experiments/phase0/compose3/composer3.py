@@ -82,12 +82,14 @@ class Policy:
     ws_max_hard: float = 2.00        # HARD: never exceed (FULL/HYBRID); cap for CONSTRAINED
     inword: str = "none"             # none | rules | ortho   (Marathi: rules = hyph-mr; English: hyph-en-us)
     inword_min: tuple[int, int] | None = None  # (left,right) minima in clusters; None = file's published minima
+    pattern_min: tuple[int, int] | None = None  # (left,right) minima applied to the pattern file; None = its published minima
     emergency: bool = True           # allow cluster-boundary break only for words wider than the measure
     ragged_zone: float = 0.20        # RAGGED/HYBRID: slack beyond this fraction of the measure is penalised hard
     tracking_max_milli_em: float = 0.0   # Latin-only exploratory per-line letter-spacing (expansion)
     last_line_min_frac: float = 0.15
     visible_hyphen: bool = True      # in-word break inserts a hyphen glyph (ASSUMPTION for Marathi)
     token_breaks: bool = True        # URL/email break points (compose2)
+    compound_breaks: bool = False    # a hyphenated compound may break after its own hyphen (English; no hyphen added)
     max_consecutive_inword: int | None = 2   # HARD: never more than this many consecutive in-word-broken lines
     fallback_max_slack: float | None = 0.35  # HARD: unjustified (ragged/semi) non-final lines may not be shorter than this fraction
     weights: Weights = field(default_factory=Weights)
@@ -189,6 +191,15 @@ def inword_points(p: Prepared, policy: Policy) -> dict[int, list[int]]:
             if pos_:
                 out[wi] = pos_
                 p.token_words.add(wi)
+    if policy.compound_breaks:
+        for wi, cl_idx in enumerate(p.words):
+            if wi in out:
+                continue
+            starts_ = [p.clusters[i].start for i in cl_idx]
+            pos_ = [k for k in range(2, len(cl_idx) - 1) if p.text[starts_[k] - 1] == "-" and p.text[starts_[k]].isalpha()]
+            if pos_:
+                out[wi] = pos_
+                p.token_words.add(wi)
     if policy.inword == "none":
         return out
     for wi, cl_idx in enumerate(p.words):
@@ -216,7 +227,7 @@ def inword_points(p: Prepared, policy: Policy) -> dict[int, list[int]]:
             core = word[core_s:core_e]
             if not core or any(not H.is_word_char(ch) for ch in core):
                 continue  # mixed tokens (URLs, numbers, emails) never hyphenate
-            pl, pr = H.PUBLISHED_MINIMA[hl]
+            pl, pr = policy.pattern_min or H.PUBLISHED_MINIMA[hl]
             offs = H.word_breaks(core, hl, pl, pr)
             abs_offs = {w0 + core_s + o for o in offs}
             lm, rm = policy.inword_min or (1, 1)
