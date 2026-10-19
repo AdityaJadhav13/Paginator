@@ -1,0 +1,125 @@
+/*
+ * Pageinator UI002 shell chrome — durable.
+ * Consumes only existing UI001 --pg-* tokens (src/ui/tokens.css);
+ * introduces no new raw colour/spacing value (UI001's own M-03
+ * correction pass established this rule — it applies here too).
+ * Uses only logical CSS properties, consistent with UI001 §9.
+ */
+
+.pg-shell {
+  min-block-size: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.pg-shell__header {
+  border-block-end: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  background-color: var(--pg-color-surface);
+  padding-block: var(--pg-space-4);
+}
+
+.pg-shell__header--editor {
+  background-color: var(--pg-color-text);
+  border-block-end-color: var(--pg-color-text);
+}
+
+.pg-shell__header--editor .pg-type-label,
+.pg-shell__header--editor a {
+  color: var(--pg-color-on-action);
+}
+
+.pg-shell__footer {
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  padding-block: var(--pg-space-5);
+  margin-block-start: auto;
+}
+
+.pg-shell__brand {
+  color: var(--pg-color-text);
+  text-decoration: none;
+}
+
+.pg-session-controls,
+.pg-auth-actions,
+.pg-auth-profiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-3);
+}
+
+.pg-session-controls--compact {
+  color: var(--pg-color-on-action);
+}
+
+.pg-shell__nav a {
+  color: var(--pg-color-action);
+  font-size: var(--pg-font-size-200);
+  text-decoration: none;
+}
+
+.pg-shell__nav a:hover {
+  text-decoration: underline;
+}
+
+/* ── Skip link — visually hidden until focused (§7.6, AC-15) ───────── */
+
+.pg-skip-link {
+  position: absolute;
+  inset-block-start: -999px;
+  inset-inline-start: var(--pg-space-3);
+  z-index: 100;
+  padding: var(--pg-space-2) var(--pg-space-4);
+  background-color: var(--pg-color-action);
+  color: var(--pg-color-on-action);
+  border-radius: var(--pg-radius-md);
+  text-decoration: none;
+}
+
+.pg-skip-link:focus-visible {
+  inset-block-start: var(--pg-space-3);
+}
+
+/* ── Breadcrumbs (§7.5) ─────────────────────────────────────────────── */
+
+.pg-breadcrumbs__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--pg-font-size-200);
+  color: var(--pg-color-text-muted);
+}
+
+.pg-breadcrumbs__item:not(:last-child)::after {
+  content: "/";
+  margin-inline-start: var(--pg-space-2);
+  color: var(--pg-color-border);
+}
+
+.pg-breadcrumbs__list a {
+  color: var(--pg-color-action);
+}
+
+/* ── Phone-width nav disclosure (§10.1, §10.3, AC-27) ───────────────── */
+
+.pg-shell__nav-toggle {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .pg-shell__nav-toggle {
+    display: inline-flex;
+  }
+
+  .pg-shell__nav {
+    display: none;
+  }
+
+  .pg-shell__nav--open {
+    display: block;
+  }
+}

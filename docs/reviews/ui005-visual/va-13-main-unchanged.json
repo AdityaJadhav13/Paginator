@@ -1,0 +1,167 @@
+{
+  "comparison": "main content area, pre-UI005 HEAD (port 4174) vs final UI005 build (port 4173)",
+  "viewport": "1280x800",
+  "routes": [
+    {
+      "route": "/login",
+      "identical": true,
+      "baseline": {
+        "firstChildClass": "pg-container",
+        "containerX": 64,
+        "containerWidth": 1152,
+        "paddingInlineStart": "16px",
+        "paddingBlockStart": "16px",
+        "maxInlineSize": "1152px",
+        "h1X": 80,
+        "h1Y": 117,
+        "h1Width": 1120,
+        "h1FontSize": "24px",
+        "h1FontFamily": "ui-sans-serif",
+        "mainInnerHTMLLength": 467
+      },
+      "current": {
+        "firstChildClass": "pg-container",
+        "containerX": 64,
+        "containerWidth": 1152,
+        "paddingInlineStart": "16px",
+        "paddingBlockStart": "16px",
+        "maxInlineSize": "1152px",
+        "h1X": 80,
+        "h1Y": 117,
+        "h1Width": 1120,
+        "h1FontSize": "24px",
+        "h1FontFamily": "ui-sans-serif",
+        "mainInnerHTMLLength": 467
+      }
+    },
+    {
+      "route": "/signup",
+      "identical": true,
+      "baseline": {
+        "firstChildClass": "pg-container",
+        "containerX": 64,
+        "containerWidth": 1152,
+        "paddingInlineStart": "16px",
+        "paddingBlockStart": "16px",
+        "maxInlineSize": "1152px",
+        "h1X": 80,
+        "h1Y": 117,
+        "h1Width": 1120,
+        "h1FontSize": "24px",
+        "h1FontFamily": "ui-sans-serif",
+        "mainInnerHTMLLength": 467
+      },
+      "current": {
+        "firstChildClass": "pg-container",
+        "containerX": 64,
+        "containerWidth": 1152,
+        "paddingInlineStart": "16px",
+        "paddingBlockStart": "16px",
+        "maxInlineSize": "1152px",
+        "h1X": 80,
+        "h1Y": 117,
+        "h1Width": 1120,
+        "h1FontSize": "24px",
+        "h1FontFamily": "ui-sans-serif",
+        "mainInnerHTMLLength": 467
+      }
+    },
+    {
+      "route": "/forgot-password",
+      "identical": true,
+      "baseline": {
+        "firstChildClass": "pg-container",
+        "containerX": 64,
+        "containerWidth": 1152,
+        "paddingInlineStart": "16px",
+        "paddingBlockStart": "16px",
+        "maxInlineSize": "1152px",
+        "h1X": 80,
+        "h1Y": 117,
+        "h1Width": 1120,
+        "h1FontSize": "24px",
+        "h1FontFamily": "ui-sans-serif",
+        "mainInnerHTMLLength": 467
+      },
+      "current": {
+        "firstChildClass": "pg-container",
+        "containerX": 64,
+        "containerWidth": 1152,
+        "paddingInlineStart": "16px",
+        "paddingBlockStart": "16px",
+        "maxInlineSize": "1152px",
+        "h1X": 80,
+        "h1Y": 117,
+        "h1Width": 1120,
+        "h1FontSize": "24px",
+        "h1FontFamily": "ui-sans-serif",
+        "mainInnerHTMLLength": 467
+      }
+    },
+    {
+      "route": "/verify",
+      "identical": true,
+      "baseline": {
+        "firstChildClass": "pg-container",
+        "containerX": 64,
+        "containerWidth": 1152,
+        "paddingInlineStart": "16px",
+        "paddingBlockStart": "16px",
+        "maxInlineSize": "1152px",
+        "h1X": 80,
+        "h1Y": 117,
+        "h1Width": 1120,
+        "h1FontSize": "24px",
+        "h1FontFamily": "ui-sans-serif",
+        "mainInnerHTMLLength": 467
+      },
+      "current": {
+        "firstChildClass": "pg-container",
+        "containerX": 64,
+        "containerWidth": 1152,
+        "paddingInlineStart": "16px",
+        "paddingBlockStart": "16px",
+        "maxInlineSize": "1152px",
+        "h1X": 80,
+        "h1Y": 117,
+        "h1Width": 1120,
+        "h1FontSize": "24px",
+        "h1FontFamily": "ui-sans-serif",
+        "mainInnerHTMLLength": 467
+      }
+    },
+    {
+      "route": "/onboarding",
+      "identical": true,
+      "baseline": {
+        "firstChildClass": "pg-container",
+        "containerX": 64,
+        "containerWidth": 1152,
+        "paddingInlineStart": "16px",
+        "paddingBlockStart": "16px",
+        "maxInlineSize": "1152px",
+        "h1X": 80,
+        "h1Y": 117,
+        "h1Width": 1120,
+        "h1FontSize": "24px",
+        "h1FontFamily": "ui-sans-serif",
+        "mainInnerHTMLLength": 276
+      },
+      "current": {
+        "firstChildClass": "pg-container",
+        "containerX": 64,
+        "containerWidth": 1152,
+        "paddingInlineStart": "16px",
+        "paddingBlockStart": "16px",
+        "maxInlineSize": "1152px",
+        "h1X": 80,
+        "h1Y": 117,
+        "h1Width": 1120,
+        "h1FontSize": "24px",
+        "h1FontFamily": "ui-sans-serif",
+        "mainInnerHTMLLength": 276
+      }
+    }
+  ],
+  "result": "PASS"
+}

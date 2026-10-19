@@ -1,0 +1,144 @@
+/*
+ * UI001 showcase styles — disposable demonstration only.
+ * These styles are not part of the durable UI foundation.
+ */
+
+/* ── Demo banner ────────────────────────────────────────────────────── */
+
+.pg-showcase__demo-banner {
+  background-color: var(--pg-status-simulated);
+  color: #FFFFFF;
+  padding: var(--pg-space-3) var(--pg-space-5);
+  font-size: var(--pg-font-size-200);
+  line-height: var(--pg-line-height-200);
+  font-family: var(--pg-font-sans);
+  text-align: center;
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 10;
+}
+
+/* ── Showcase root ──────────────────────────────────────────────────── */
+
+.pg-showcase {
+  min-block-size: 100vh;
+  background-color: var(--pg-color-canvas);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+
+.pg-showcase__header {
+  padding-block: var(--pg-space-7) var(--pg-space-5);
+  border-block-end: var(--pg-border-width) solid var(--pg-color-border-subtle);
+}
+
+/* ── Sections ───────────────────────────────────────────────────────── */
+
+.pg-showcase__section {
+  padding-block: var(--pg-space-5);
+  border-block-end: var(--pg-border-width) solid var(--pg-color-border-subtle);
+}
+
+.pg-showcase__section:last-of-type {
+  border-block-end: none;
+}
+
+.pg-showcase__section-heading {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-400);
+  line-height: var(--pg-line-height-400);
+  font-weight: var(--pg-font-weight-semibold);
+  color: var(--pg-color-text);
+  margin: 0 0 var(--pg-space-5);
+}
+
+/* ── Context cards ──────────────────────────────────────────────────── */
+
+.pg-showcase__context-card {
+  /* No override needed — Surface provides the base */
+}
+
+.pg-showcase__context-type {
+  color: var(--pg-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pg-showcase__context-id {
+  color: var(--pg-color-text-muted);
+  word-break: break-all;
+}
+
+.pg-showcase__context-qualification {
+  color: var(--pg-color-text-muted);
+  font-style: italic;
+}
+
+/* ── Capability cards ───────────────────────────────────────────────── */
+
+.pg-showcase__capability-card--allowed {
+  border-inline-start: 4px solid var(--pg-color-success);
+}
+
+.pg-showcase__capability-card--denied {
+  border-inline-start: 4px solid var(--pg-color-danger);
+}
+
+.pg-showcase__capability-icon {
+  font-size: var(--pg-font-size-300);
+  font-weight: var(--pg-font-weight-bold);
+}
+
+.pg-showcase__capability-disclaimer {
+  color: var(--pg-color-text-muted);
+  font-style: italic;
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  padding-block-start: var(--pg-space-2);
+}
+
+/* ── Scenario cards ─────────────────────────────────────────────────── */
+
+.pg-showcase__scenario-card {
+  /* Surface provides base styles */
+}
+
+.pg-showcase__scenario-title {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-300);
+  line-height: var(--pg-line-height-300);
+  font-weight: var(--pg-font-weight-semibold);
+  margin: 0;
+  color: var(--pg-color-text-muted);
+}
+
+/* ── Layout demo helpers ────────────────────────────────────────────── */
+
+.pg-showcase__layout-demo {
+  padding: var(--pg-space-4);
+  background-color: var(--pg-color-canvas);
+  border-radius: var(--pg-radius-sm);
+}
+
+.pg-showcase__layout-item {
+  padding: var(--pg-space-3) var(--pg-space-4);
+  background-color: var(--pg-color-surface);
+  border: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  border-radius: var(--pg-radius-sm);
+  font-size: var(--pg-font-size-200);
+  color: var(--pg-color-text-muted);
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────── */
+
+.pg-showcase__footer {
+  padding-block: var(--pg-space-6);
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  text-align: center;
+  color: var(--pg-color-text-muted);
+}
+
+/* ── Muted text helper ──────────────────────────────────────────────── */
+
+.pg-type--muted {
+  color: var(--pg-color-text-muted);
+}
