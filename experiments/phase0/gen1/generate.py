@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.9.5"
+GEN = "gen1/2.9.6"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -1219,6 +1219,12 @@ def newshole(m):
             # the ad's frame grows to take in fixed artwork that touches it, piece by piece: coloured bars with their text,
             # a promo strip (furniture text, boxes, graphics, rules) — it stays where print had it
             fixed_kinds = ("furniture", "box", "graphic", "image", "rule")
+            story_boxes = [st_["bbox_mm"] for st_ in m["stories"] if st_.get("bbox_mm")]
+
+            def holds_story(b):                            # a panel or box that holds story text is news, not ad artwork
+                area = max(1e-9, (b[2] - b[0]) * (b[3] - b[1]))
+                return any(max(0.0, min(b[2], o[2]) - max(b[0], o[0])) * max(0.0, min(b[3], o[3]) - max(b[1], o[1])) > 0.3 * min(area, (o[2] - o[0]) * (o[3] - o[1]))
+                           for o in story_boxes)
             changed = True
             while changed:
                 changed = False
@@ -1229,7 +1235,7 @@ def newshole(m):
                     xo = min(b[2], ad[2]) - max(b[0], ad[0])
                     near = (-1.0 <= ad[1] - b[3] <= AD_STRIP_MM or -1.0 <= b[1] - ad[3] <= AD_STRIP_MM)
                     wide_bar = e["kind"] == "other_text" and xo >= 0.8 * (ad[2] - ad[0]) and b[3] - b[1] <= 15.0
-                    if near and xo >= 0.5 * (b[2] - b[0]) and (e["kind"] in fixed_kinds or wide_bar):
+                    if near and xo >= 0.5 * (b[2] - b[0]) and (e["kind"] in fixed_kinds or wide_bar) and not holds_story(b):
                         ad = [min(ad[0], b[0]), min(ad[1], b[1]), max(ad[2], b[2]), max(ad[3], b[3])]
                         changed = True
             return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm")), ad), None
