@@ -49,7 +49,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.9.3"
+GEN = "gen1/2.9.5"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -1216,12 +1216,22 @@ def newshole(m):
             return (top, band_top - 3.0, None), None
         if len(ads) == 1 and ads[0][1] > top - 1:          # one ad block inside the news area: the newshole goes around it
             ad = list(ads[0])
-            for e in m["elements"]:                        # strips touching it (a coloured bar with its text) are the ad's frame
-                b = e["bbox_mm"]
-                if e["kind"] in ("furniture", "box", "other_text", "graphic") and min(b[2], ad[2]) - max(b[0], ad[0]) >= 0.8 * (ad[2] - ad[0]) \
-                        and (0 <= ad[1] - b[3] <= AD_STRIP_MM or 0 <= b[1] - ad[3] <= AD_STRIP_MM or (b[1] < ad[1] < b[3]) or (b[1] < ad[3] < b[3])) \
-                        and b[3] - b[1] <= 15.0:
-                    ad = [min(ad[0], b[0]), min(ad[1], b[1]), max(ad[2], b[2]), max(ad[3], b[3])]
+            # the ad's frame grows to take in fixed artwork that touches it, piece by piece: coloured bars with their text,
+            # a promo strip (furniture text, boxes, graphics, rules) — it stays where print had it
+            fixed_kinds = ("furniture", "box", "graphic", "image", "rule")
+            changed = True
+            while changed:
+                changed = False
+                for e in m["elements"]:
+                    b = e["bbox_mm"]
+                    if e["kind"] not in fixed_kinds + ("other_text",) or (b[0] >= ad[0] - 0.5 and b[2] <= ad[2] + 0.5 and b[1] >= ad[1] - 0.5 and b[3] <= ad[3] + 0.5):
+                        continue
+                    xo = min(b[2], ad[2]) - max(b[0], ad[0])
+                    near = (-1.0 <= ad[1] - b[3] <= AD_STRIP_MM or -1.0 <= b[1] - ad[3] <= AD_STRIP_MM)
+                    wide_bar = e["kind"] == "other_text" and xo >= 0.8 * (ad[2] - ad[0]) and b[3] - b[1] <= 15.0
+                    if near and xo >= 0.5 * (b[2] - b[0]) and (e["kind"] in fixed_kinds or wide_bar):
+                        ad = [min(ad[0], b[0]), min(ad[1], b[1]), max(ad[2], b[2]), max(ad[3], b[3])]
+                        changed = True
             return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm")), ad), None
         return None, "irregular ad shapes (more than one ad block)"
     return (top, max(s["bbox_mm"][3] for s in m["stories"] if s.get("bbox_mm")), None), None
