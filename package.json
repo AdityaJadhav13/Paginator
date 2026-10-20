@@ -16,7 +16,8 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc -b && pnpm --filter @pageinator/web typecheck",
     "test": "vitest run",
-    "test:private": "vitest run --project private"
+    "test:private": "PAGEINATOR_PRIVATE_RUN=1 vitest run --project private",
+    "check:oracle": "node tools/ts/check-oracle-manifest.ts"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "catalog:",
