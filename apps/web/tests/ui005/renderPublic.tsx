@@ -7,7 +7,7 @@
  */
 import { BrowserRouter } from "react-router";
 import { render } from "../../src/test/render.tsx";
-import { Ui004Routes } from "../../src/demo/ui004/routeTree.tsx";
+import { AppRoutes as Ui004Routes } from "../../src/root/AppRoot.tsx";
 import {
   createMockApplicationEnvironment,
   type MockSessionPreset,

@@ -7,7 +7,7 @@ import { StrictMode } from "react";
 import { BrowserRouter } from "react-router";
 import { render, screen, within } from "../../src/test/render.tsx";
 import userEvent from "@testing-library/user-event";
-import { Ui004Routes } from "../../src/demo/ui004/routeTree.tsx";
+import { AppRoutes as Ui004Routes } from "../../src/root/AppRoot.tsx";
 import { renderAt } from "./renderRoutes.tsx";
 
 describe("Skip link (AC-15)", () => {
