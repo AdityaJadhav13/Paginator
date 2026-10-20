@@ -4,7 +4,7 @@ Part of the product specification ([index](README.md)). Examples are fictional.
 
 ## 3. Design system
 
-`packages/ui`: today's `frontend/src/ui`, extended.
+`packages/ui`: today's `apps/web/src/ui` (`frontend/src/ui` before M0), extended.
 
 ### 3.1 Principles
 1. **Tells you what to do next.** Every screen answers this (OPC §58). Each screen has one primary action, top right.

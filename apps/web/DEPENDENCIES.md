@@ -8,6 +8,17 @@ section was added during UI002 implementation. This is an
 implementation-level record scoped to `frontend/`, not a project architecture
 document.
 
+> **Since M0 (2026-10-20)** this package is `apps/web` (`@pageinator/web`) in the
+> pnpm workspace. Installs use pnpm 11 and the root `pnpm-lock.yaml` (the
+> `package-lock.json` is gone); the workspace runs on Node 24 (root `engines`
+> `^24.15.0 || >=26.0.0`, `.nvmrc` 24.22.0), while this package keeps its own
+> `^22.22.2 || ^24.15.0 || >=26.0.0`. The `typescript` dev dependency became
+> `@typescript/native` (`npm:typescript@7.0.2`, from the workspace catalog), so
+> TypeScript 6 can serve typescript-eslint under the `typescript` name. Runtime
+> dependencies are unchanged, and so is the test count (1,249 in 35 files under
+> npm/Node 22 before the move and pnpm/Node 24 after it). The record below is
+> kept as written for UI001/UI002.
+
 ## Supported Node runtime
 
 ```
@@ -132,6 +143,17 @@ Given that, `@types/node` is approved as a **test-scoped** dependency:
   `@types/node` case above.
 
 ## Verification commands run under the selected runtime
+
+Today (from the repository root, Node 24.22.0):
+
+```
+pnpm install --frozen-lockfile
+pnpm --filter @pageinator/web typecheck
+pnpm exec vitest run --project @pageinator/web
+pnpm --filter @pageinator/web build
+```
+
+As recorded for UI001/UI002 (in `frontend/`, before the monorepo):
 
 ```
 node -v   # v22.22.3

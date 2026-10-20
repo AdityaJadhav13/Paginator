@@ -18,7 +18,7 @@ Sign in → Overview ("Today: Thu 12 Nov — 4 pages — deadline 23:30")
 
 ### 2.2 Sitemap (routes)
 
-**EXISTS:** routes 1–33 in `frontend/src/app/routes.ts`. New routes are marked ★.
+**EXISTS:** routes 1–33 in `apps/web/src/app/routes.ts` (`frontend/` before M0). New routes are marked ★.
 
 | Area | Route | Screen |
 |---|---|---|

@@ -33,26 +33,41 @@ export function floatToHex(x: number): string {
 }
 
 const HEX_FLOAT = /^([+-])?(?:0x)?([0-9a-f]*)(?:\.([0-9a-f]*))?(?:p([+-]?\d+))?$/i;
+const ASCII_SPACE = /^[ \t\n\v\f\r]+|[ \t\n\v\f\r]+$/g; // CPython strips ASCII whitespace only (Py_ISSPACE)
+const PRINTABLE_ASCII = /^[\x21-\x7e]*$/;
+
+function asciiLower(s: string): string {
+  let out = "";
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charCodeAt(i);
+    out += String.fromCharCode(c >= 65 && c <= 90 ? c + 32 : c);
+  }
+  return out;
+}
 
 /**
  * `float.fromhex(text)` for values whose hex mantissa has at most 53 significant bits (always true for text written
  * by float.hex()). Longer mantissas would need rounding and are rejected rather than guessed.
  */
 export function floatFromHex(text: string): number {
-  const t = text.trim().toLowerCase();
+  const stripped = text.replace(ASCII_SPACE, "");
+  // the grammar is printable ASCII, so only ASCII letters need lowering (and nothing non-ASCII can lower into it)
+  if (!PRINTABLE_ASCII.test(stripped)) throw new Error(`not a hex float: ${text}`);
+  const t = asciiLower(stripped);
   if (t === "nan" || t === "+nan" || t === "-nan") return Number.NaN;
   if (t === "inf" || t === "+inf" || t === "infinity" || t === "+infinity") return Infinity;
   if (t === "-inf" || t === "-infinity") return -Infinity;
   const m = HEX_FLOAT.exec(t);
   if (!m || ((m[2] ?? "") === "" && (m[3] ?? "") === "")) throw new Error(`not a hex float: ${text}`);
   const negative = m[1] === "-";
-  const intDigits = m[2] ?? "";
   const fracDigits = m[3] ?? "";
-  let mant = BigInt(`0x${intDigits}${fracDigits}`);
-  let e2 = Number(m[4] ?? "0") - 4 * fracDigits.length;
-  if (mant === 0n) return negative ? -0 : 0;
+  const digits = `${m[2] ?? ""}${fracDigits}`;
+  const significant = digits.replace(/0+$/, ""); // trailing zero digits carry no information
+  if (significant === "") return negative ? -0 : 0;
+  let mant = BigInt(`0x${significant}`);
+  let e2 = Number(m[4] ?? "0") - 4 * fracDigits.length + 4 * (digits.length - significant.length);
   while ((mant & 1n) === 0n) {
-    // trailing zero bits carry no information: drop them so any exactly representable value parses
+    // and neither do trailing zero bits (at most three here): drop them so any exactly representable value parses
     mant >>= 1n;
     e2 += 1;
   }

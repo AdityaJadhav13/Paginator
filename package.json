@@ -9,7 +9,7 @@
   },
   "scripts": {
     "ci": "pnpm run guard && pnpm run check:graph && pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test && pnpm --filter @pageinator/web build",
-    "guard": "node tools/ts/guard-private.ts && node tools/ts/check-frozen.ts",
+    "guard": "node tools/ts/guard-private.ts && node tools/ts/check-frozen.ts && node tools/ts/check-oracle-manifest.ts",
     "check:graph": "node tools/ts/check-graph.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -17,7 +17,8 @@
     "typecheck": "tsc -b && pnpm --filter @pageinator/web typecheck",
     "test": "vitest run",
     "test:private": "PAGEINATOR_PRIVATE_RUN=1 vitest run --project private",
-    "check:oracle": "node tools/ts/check-oracle-manifest.ts"
+    "check:oracle": "node tools/ts/check-oracle-manifest.ts",
+    "prepare": "node tools/ts/install-hooks.ts"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "catalog:",

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Privacy guard before every push: the working tree and every commit being pushed (tools/ts/guard-private.ts).
+# Installed by `pnpm install`, which runs `git config core.hooksPath .githooks` (tools/ts/install-hooks.ts).
+# The frozen-evidence guard is not run here: it needs the pull request's evidence-change label, so CI runs it.
+zero=0000000000000000000000000000000000000000
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue                      # deleting a remote branch: nothing to check
+  if [ "$remote_sha" != "$zero" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+    base=$remote_sha                                          # the branch exists there: check the new commits
+  else
+    base=$(git merge-base "$local_sha" origin/main 2>/dev/null || echo origin/main)
+  fi
+  echo "pre-push: privacy guard for $local_ref ($base..$local_sha)"
+  GUARD_BASE=$base GUARD_HEAD=$local_sha node tools/ts/guard-private.ts || status=1
+done
+exit $status

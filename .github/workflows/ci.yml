@@ -2,6 +2,7 @@ name: ci
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled] # labeled: the evidence-change approval re-runs it
   push:
     branches: [main]
 
@@ -10,7 +11,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }} # every push to main runs to the end
 
 jobs:
   guard:
@@ -23,14 +24,34 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-      - name: privacy guard
+      - name: base commit (pull request base, or the commit main was at before this push)
+        id: base
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            base="origin/$BASE_REF"
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] && git cat-file -e "$BEFORE^{commit}"; then
+            base="$BEFORE"
+          else
+            base="HEAD~1"
+          fi
+          echo "ref=$base" >> "$GITHUB_OUTPUT"
+      - name: privacy guard (every file and every commit since the base)
         env:
           PAGEINATOR_DENYLIST: ${{ secrets.PAGEINATOR_DENYLIST }}
+          # forks get no secrets: their pull requests are scanned without terms, and again on main after merging
+          GUARD_REQUIRE_DENYLIST: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && '1' || '0' }}
+          GUARD_BASE: ${{ steps.base.outputs.ref }}
         run: node tools/ts/guard-private.ts
       - name: frozen-evidence guard
         env:
           EVIDENCE_CHANGE_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'evidence-change') && '1' || '0' }}
-          GUARD_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
+          # on main the approval was given on the pull request; the oracle itself is checked on every push
+          FROZEN_SCOPE: ${{ github.event_name == 'pull_request' && 'all' || 'oracle' }}
+          GUARD_BASE: ${{ steps.base.outputs.ref }}
         run: node tools/ts/check-frozen.ts
 
   ts:
@@ -60,7 +81,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      - name: oracle files unchanged
+      - name: oracle files unchanged (its manifest, and every tracked file)
         run: node tools/ts/check-oracle-manifest.ts
       - name: oracle tests
         working-directory: tools/oracle/v0
@@ -69,4 +90,4 @@ jobs:
         run: |
           uv venv --python 3.11.14 .venv
           uv pip install --python .venv --require-hashes -r requirements.lock
-          .venv/bin/python -m pytest -q -p no:cacheprovider -m "not a10" tests/
+          .venv/bin/python -m pytest -p no:cacheprovider -m "not a10" tests/

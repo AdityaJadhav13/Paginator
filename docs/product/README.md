@@ -38,7 +38,7 @@
   - page rebuild (page1);
   - auto-layout (gen1).
 - **Frozen reference oracle:** `tools/oracle/v0`.
-- **A React UI foundation (`frontend/`):**
+- **A React UI foundation (`frontend/`, now `apps/web/`):**
   - tokens, 12 controls + 7 layout primitives, route shells, 31 route leaves (mostly placeholders), 5 public pages;
   - a mock session.
 - **Gate status today.**

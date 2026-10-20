@@ -5,7 +5,7 @@
  *
  * File contents are read via Vite's `import.meta.glob` (eager, raw)
  * rather than Node `fs`, following the pattern UI001's own
- * `boundary.test.ts` established (see `frontend/DEPENDENCIES.md`'s
+ * `boundary.test.ts` established (see `apps/web/DEPENDENCIES.md`'s
  * `@types/node` record for why this works for `.ts`/`.tsx` sources
  * specifically).
  */

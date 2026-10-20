@@ -40,4 +40,38 @@ describe("float.hex round trip", () => {
     expect(() => floatFromHex("0x1.0000000000000000p0")).not.toThrow();
     expect(() => floatFromHex("not a float")).toThrow();
   });
+
+  it("accepts the spellings CPython's float.fromhex accepts", () => {
+    const cases: [string, number][] = [
+      ["0x.8p1", 1],
+      ["0X1P-2", 0.25],
+      ["1.", 1],
+      ["1p3", 8],
+      ["+0x1p0", 1],
+      ["0x1.8", 1.5],
+      ["0x10p-4", 1],
+      ["0x1", 1],
+      [" \t0x1p0\n", 1],
+      ["0x0.0000000000001p-1022", 5e-324],
+      ["0x1.fffffffffffffp+1023", Number.MAX_VALUE],
+      [`0x1${"0".repeat(100_000)}p-400000`, 1],
+    ];
+    for (const [text, value] of cases) expect(floatFromHex(text)).toBe(value);
+    for (const text of ["inf", "+inf", "INF", "Infinity", "+infinity"]) expect(floatFromHex(text)).toBe(Infinity);
+    for (const text of ["-inf", "-Infinity"]) expect(floatFromHex(text)).toBe(-Infinity);
+    for (const text of ["nan", "-nan", "+NaN"]) expect(Number.isNaN(floatFromHex(text))).toBe(true);
+  });
+
+  it("rejects what CPython rejects", () => {
+    const bad = ["", " ", "0x", ".", "0x.p1", "0x1p", "0x1p+-1", "0x-1p0", "nan(1)", "1 p3", "0x1g", "0x1p1.5"];
+    // CPython strips ASCII whitespace only; other spaces and non-ASCII digits are not part of the grammar
+    bad.push(" 0x1p0", "0x1p0　", "﻿0x1p0", "0x１p0");
+    for (const text of bad) expect(() => floatFromHex(text), JSON.stringify(text)).toThrow();
+  });
+
+  it("rejects, rather than rounds, what needs more than 53 bits or falls off the subnormal grid", () => {
+    expect(() => floatFromHex("0x1.00000000000001p0")).toThrow(/53 bits/);
+    expect(() => floatFromHex("0x1p-1075")).toThrow(/subnormal/);
+    expect(() => floatFromHex("0x1p1024")).toThrow(/range/);
+  });
 });

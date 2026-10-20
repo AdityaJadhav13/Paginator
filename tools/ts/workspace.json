@@ -1,0 +1,5 @@
+{
+  "_comment": "Workspace package classes, read by eslint.config.js and tools/ts/check-graph.ts. Every package under packages/ is a KERNEL package (deterministic: no clock, host, I/O or engine-dependent maths; never depends on an app) unless its directory is listed under browserPackages.",
+  "browserPackages": ["ui", "icons", "render", "editor"],
+  "apps": ["@pageinator/web", "@pageinator/api", "@pageinator/worker", "@pageinator/kernel-cli"]
+}
