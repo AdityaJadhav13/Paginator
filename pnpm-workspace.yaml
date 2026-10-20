@@ -1,0 +1,25 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "tools/testkit"
+
+# Every version is pinned exactly (tools/ts/check-graph.ts fails on ^ or ~).
+catalog:
+  # TypeScript 7 (native) provides `tsc`; typescript-eslint needs the 6.x API (peer <6.1.0),
+  # served by the official compatibility package under the `typescript` name.
+  "@typescript/native": "npm:typescript@7.0.2"
+  typescript: "npm:@typescript/typescript6@6.0.2"
+  "@types/node": "24.19.2"
+  vitest: "5.0.1"
+  eslint: "10.12.0"
+  "@eslint/js": "10.0.1"
+  typescript-eslint: "8.71.2"
+  "@eslint-community/eslint-plugin-eslint-comments": "4.8.1"
+  eslint-config-prettier: "10.1.8"
+  globals: "17.13.0"
+  prettier: "3.9.10"
+
+overrides:
+  typescript: "npm:@typescript/typescript6@6.0.2"
+
+engineStrict: true

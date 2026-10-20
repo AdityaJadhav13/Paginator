@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "tools/testkit"
+    },
+    {
+      "path": "packages/pyshim"
+    },
+    {
+      "path": "packages/pyshim/test"
+    },
+    {
+      "path": "tools/ts"
+    }
+  ]
+}

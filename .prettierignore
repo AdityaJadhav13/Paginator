@@ -1,0 +1,16 @@
+# Prettier formats the new TypeScript workspace code only.
+# apps/web keeps its own style until M10 (its boundary tests read raw source).
+apps/web/
+docs/
+specs/
+experiments/
+fixtures/
+tools/oracle/
+tools/goldens/
+graphify-out/
+snap5/
+Logos/
+*.md
+pnpm-lock.yaml
+**/.tsbuild/
+**/node_modules/

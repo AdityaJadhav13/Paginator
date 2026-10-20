@@ -24,6 +24,11 @@ coverage/
 *.tsbuildinfo
 .vitest/
 
+# TypeScript build info and test reports
+.tsbuild/
+playwright-report/
+test-results/
+
 # Python environments and caches (experiments, oracle)
 .venv/
 venv/
