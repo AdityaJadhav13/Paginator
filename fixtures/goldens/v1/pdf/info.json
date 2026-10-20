@@ -1,0 +1,29 @@
+{
+ "counts": {
+  "by_kind": {
+   "cmyk": 5,
+   "name": 16,
+   "num": 1032,
+   "pdf_date": 207,
+   "ser": 1,
+   "subset_tag": 200,
+   "text_string": 10,
+   "tounicode": 6
+  },
+  "micro_files": 14,
+  "objects": 175,
+  "vectors": 1477
+ },
+ "environment": {
+  "fonttools": "4.63.0",
+  "harfbuzz": "14.3.0",
+  "machine": "arm64",
+  "oracle_manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05",
+  "platform": "macOS-27.0.1",
+  "python": "3.11.14",
+  "uharfbuzz": "0.56.0"
+ },
+ "schema": "pageinator.golden.pdf-info/1",
+ "writer": "pdfx1/1.0.0",
+ "zlib": "1.2.12"
+}

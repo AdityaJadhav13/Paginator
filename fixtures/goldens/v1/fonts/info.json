@@ -1,0 +1,36 @@
+{
+ "counts": {
+  "glyph_advances": 21543,
+  "instance_files": 13,
+  "instances": 19,
+  "licence_texts": 5,
+  "records": 23,
+  "requests": 24,
+  "sample_glyphs": 1008
+ },
+ "environment": {
+  "fonttools": "4.63.0",
+  "harfbuzz": "14.3.0",
+  "machine": "arm64",
+  "oracle_manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05",
+  "platform": "macOS-27.0.1",
+  "python": "3.11.14",
+  "uharfbuzz": "0.56.0"
+ },
+ "instance_files": [
+  "fixtures/fonts/v1/instances/114c433019119e01d55e0853cf7498a7b5d7c6ad22bfe57fd530b275a3eebace.ttf",
+  "fixtures/fonts/v1/instances/25c65ce4c630d8d5765c4f012f9974aa5bc4866bee93dae63882632630482224.ttf",
+  "fixtures/fonts/v1/instances/56bfcfe7e1fa22bb87a3fccbd67b776279f36a157238580600104ce828526158.ttf",
+  "fixtures/fonts/v1/instances/5fd7a210bb8cc1035f28744fbc3aacae0ca3481795cfa3bf552e23ad579cdeac.ttf",
+  "fixtures/fonts/v1/instances/6ecbd045c5c25fceffb00b1117cfb2525e8a429dfe4a37616db68c99ffbd82b0.ttf",
+  "fixtures/fonts/v1/instances/716bf2b5d7a91cff679be0dea3000fde54b90bcbcee5378d6b0341d65fdafc57.ttf",
+  "fixtures/fonts/v1/instances/87a286ea3cc87f7c93cd5ec311ca542123639d2f1d2125da9552241eab5f9418.ttf",
+  "fixtures/fonts/v1/instances/ad722e48911259cbce9bf1f06dd7b84582c7a443878f6e96b7b897bfbac949d7.ttf",
+  "fixtures/fonts/v1/instances/b4e3777d8d16df5595cbe9336011ce876fe74989185ca3bb9d4b5aa70a1dff33.ttf",
+  "fixtures/fonts/v1/instances/cedc0f5b93494df39fa441c51a6386ff477976481977040128304ee551a059d9.ttf",
+  "fixtures/fonts/v1/instances/de1a714523badc9e0403ffd18fb2d71c9f3da3b93f067bf4035ef9dcda003ccd.ttf",
+  "fixtures/fonts/v1/instances/e1a56f0c3ed3f9499c06dbdbd10f42a0e695ef5b3bb6e17ef51830ba1a446ce6.ttf",
+  "fixtures/fonts/v1/instances/fdfabfe2c999dd4a6b48a42538c1f397ae15df9c15acfdc01eb071dbaf0bffb3.ttf"
+ ],
+ "schema": "pageinator.golden.fonts/2"
+}

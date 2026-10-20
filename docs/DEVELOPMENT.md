@@ -39,6 +39,7 @@
 | `pnpm --filter @pageinator/web dev` | Run the web app |
 | `pnpm run guard` | Privacy guard, frozen-evidence guard and oracle check. Locally, on a branch stacked on another, set `GUARD_BASE=origin/<base>` |
 | `pnpm run check:oracle` | The frozen oracle: its manifest's SHA-256s, and every tracked file against `tools/ts/oracle-files.json` |
+| `tools/oracle/v0/.venv/bin/python tools/goldens/v1/gen_all.py --check` | The golden vectors regenerate byte for byte from the frozen oracle (reference machine; `PYTHONDONTWRITEBYTECODE=1`). See `tools/goldens/v1/README.md` |
 | `pnpm run test:private` | Private parity tests against pilot goldens (needs `PAGEINATOR_PRIVATE_GOLDENS`; fails, never skips, when missing) |
 
 ## Rules that keep the engine trustworthy

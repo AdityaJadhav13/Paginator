@@ -1,5 +1,5 @@
 {
-  "_comment": "Approved binary files of the public repository, by path and SHA-256 (tools/ts/guard-private.ts). fonts: the OFL fonts the frozen oracle and the experiments use; images: UI review screenshots of the mock app (no pilot content); pdfs: synthetic test pages; large: tracked evidence files over 5 MB. A value may be a list of SHA-256s when the history holds earlier approved versions. Adding an entry is a privacy decision: look at the file first.",
+  "_comment": "Approved binary files of the public repository, by path and SHA-256 (tools/ts/guard-private.ts). fonts: the OFL fonts the frozen oracle and the experiments use; images: UI review screenshots of the mock app (no pilot content); pdfs: synthetic test pages (the golden press test and the PDF writer's micro cases); large: tracked evidence files over 5 MB. A value may be a list of SHA-256s when the history holds earlier approved versions. Adding an entry is a privacy decision: look at the file first.",
   "fonts": {
     "experiments/phase0/compose2/fonts/baloo2/Baloo2[wght].ttf": "d47a6852548059b1db49a1319d06d499d546c3fa2237cf9eee9c43c8abb025c2",
     "experiments/phase0/compose2/fonts/hind/Hind-Regular.ttf": "01de158022f53077b52303e46de3b0ab5fb245222a7ffe25a2a57fdd9e969162",
@@ -7,6 +7,19 @@
     "experiments/phase0/compose2/fonts/martel/Martel-Regular.ttf": "b733e56144115d5da6a6415d2971ab97b7262948d172e27309ad00ce9096b876",
     "experiments/phase0/compose2/fonts/tirodevanagarimarathi/TiroDevanagariMarathi-Regular.ttf": "8e1d4edf924c0685f1383d0d37aa7c4662103d2e485e53b535b4528af5acd966",
     "experiments/phase0/compose2/fonts/yantramanav/Yantramanav-Regular.ttf": "823dbb5d9c73a2c192371bf73341a30291b5a416578362eb4607b9c5a5be9821",
+    "fixtures/fonts/v1/instances/114c433019119e01d55e0853cf7498a7b5d7c6ad22bfe57fd530b275a3eebace.ttf": "114c433019119e01d55e0853cf7498a7b5d7c6ad22bfe57fd530b275a3eebace",
+    "fixtures/fonts/v1/instances/25c65ce4c630d8d5765c4f012f9974aa5bc4866bee93dae63882632630482224.ttf": "25c65ce4c630d8d5765c4f012f9974aa5bc4866bee93dae63882632630482224",
+    "fixtures/fonts/v1/instances/56bfcfe7e1fa22bb87a3fccbd67b776279f36a157238580600104ce828526158.ttf": "56bfcfe7e1fa22bb87a3fccbd67b776279f36a157238580600104ce828526158",
+    "fixtures/fonts/v1/instances/5fd7a210bb8cc1035f28744fbc3aacae0ca3481795cfa3bf552e23ad579cdeac.ttf": "5fd7a210bb8cc1035f28744fbc3aacae0ca3481795cfa3bf552e23ad579cdeac",
+    "fixtures/fonts/v1/instances/6ecbd045c5c25fceffb00b1117cfb2525e8a429dfe4a37616db68c99ffbd82b0.ttf": "6ecbd045c5c25fceffb00b1117cfb2525e8a429dfe4a37616db68c99ffbd82b0",
+    "fixtures/fonts/v1/instances/716bf2b5d7a91cff679be0dea3000fde54b90bcbcee5378d6b0341d65fdafc57.ttf": "716bf2b5d7a91cff679be0dea3000fde54b90bcbcee5378d6b0341d65fdafc57",
+    "fixtures/fonts/v1/instances/87a286ea3cc87f7c93cd5ec311ca542123639d2f1d2125da9552241eab5f9418.ttf": "87a286ea3cc87f7c93cd5ec311ca542123639d2f1d2125da9552241eab5f9418",
+    "fixtures/fonts/v1/instances/ad722e48911259cbce9bf1f06dd7b84582c7a443878f6e96b7b897bfbac949d7.ttf": "ad722e48911259cbce9bf1f06dd7b84582c7a443878f6e96b7b897bfbac949d7",
+    "fixtures/fonts/v1/instances/b4e3777d8d16df5595cbe9336011ce876fe74989185ca3bb9d4b5aa70a1dff33.ttf": "b4e3777d8d16df5595cbe9336011ce876fe74989185ca3bb9d4b5aa70a1dff33",
+    "fixtures/fonts/v1/instances/cedc0f5b93494df39fa441c51a6386ff477976481977040128304ee551a059d9.ttf": "cedc0f5b93494df39fa441c51a6386ff477976481977040128304ee551a059d9",
+    "fixtures/fonts/v1/instances/de1a714523badc9e0403ffd18fb2d71c9f3da3b93f067bf4035ef9dcda003ccd.ttf": "de1a714523badc9e0403ffd18fb2d71c9f3da3b93f067bf4035ef9dcda003ccd",
+    "fixtures/fonts/v1/instances/e1a56f0c3ed3f9499c06dbdbd10f42a0e695ef5b3bb6e17ef51830ba1a446ce6.ttf": "e1a56f0c3ed3f9499c06dbdbd10f42a0e695ef5b3bb6e17ef51830ba1a446ce6",
+    "fixtures/fonts/v1/instances/fdfabfe2c999dd4a6b48a42538c1f397ae15df9c15acfdc01eb071dbaf0bffb3.ttf": "fdfabfe2c999dd4a6b48a42538c1f397ae15df9c15acfdc01eb071dbaf0bffb3",
     "tools/oracle/v0/assets/fonts/devanagari/Mukta-Bold.ttf": "7d22891cd57507b04af95a67ffaf59b7073b3595a27d1cfbbcefb418de820a12",
     "tools/oracle/v0/assets/fonts/devanagari/Mukta-Light.ttf": "161f2f22d33a1c75d9fb37d74ea99e8dbbe119cd5c102c83146fb032a552e8f2",
     "tools/oracle/v0/assets/fonts/devanagari/Mukta-Regular.ttf": "2958e4af564507df2a856164df6f9978dacb03f999a4f34a0c269dc8a4de9688",
@@ -57,7 +70,23 @@
     "docs/reviews/ui005-visual/signup-1280.png": "795ae3314fd8145a8eaf9334dc1bc1ab259cbe1dc6116a9e350e2a1958318077",
     "docs/reviews/ui005-visual/verify-1280.png": "795ae3314fd8145a8eaf9334dc1bc1ab259cbe1dc6116a9e350e2a1958318077"
   },
-  "pdfs": {},
+  "pdfs": {
+    "fixtures/goldens/v1/pdf/micro/composed.pdf": "1abb040680577dcfab51481d0ebcd95e8873ce64b6e94a869b3a4b9ffcda4d42",
+    "fixtures/goldens/v1/pdf/micro/deva.pdf": "2acf0c3ed837b558599e3411d9d97d318009853f0a9ca9976b1d7d08a0c534ce",
+    "fixtures/goldens/v1/pdf/micro/empty.pdf": "e097864d1d27614da245ee589840f3aab10241527230f0d54587fee0e6b54927",
+    "fixtures/goldens/v1/pdf/micro/hscale.pdf": "c1ea4042ee349640bfe8d0647b0b9fab7afb895a648f2393abd27a6f58c4b86d",
+    "fixtures/goldens/v1/pdf/micro/image.pdf": "15842d17b567dd983af988a0cf422746e8d7e9f552e84f79cb6fbd2b1aa57c03",
+    "fixtures/goldens/v1/pdf/micro/latin.pdf": "c67213189a125281d55c47a98a2aa567c285c52e665665ab1d484f8159aa576b",
+    "fixtures/goldens/v1/pdf/micro/no_actualtext.pdf": "712d39740a81c194b410a9cad5390c8f449de147e112cf2bb214daa8a43cf80f",
+    "fixtures/goldens/v1/pdf/micro/rects.pdf": "ad1b0b77679b058f36ccb21220ba2db710b8ddbb211a83af43dc5ede1c591391",
+    "fixtures/goldens/v1/pdf/micro/rules.pdf": "f752e7ad9e96af455b5de9bee1574ef0882777518d3ec78bede9f4e26096d615",
+    "fixtures/goldens/v1/pdf/micro/title_deva.pdf": "b9f36e42d50d35f018c879fa24ec83fc9755bb066a43b6f4b0a48732cf54b2bb",
+    "fixtures/goldens/v1/pdf/micro/title_escapes.pdf": "fd4ef6039e1a0042615ab8f555e5f2537820937fe6a077cb08488ff4decab281",
+    "fixtures/goldens/v1/pdf/micro/two_pages.pdf": "ec6d97008f625dc7b52eb56373817c512290cb2be58bf62bd7b57c1601d34400",
+    "fixtures/goldens/v1/pdf/micro/white_text.pdf": "592d27baecd474e4149591a11f0778b13ed09047b5ceb09d624ff331ab2787cd",
+    "fixtures/goldens/v1/pdf/micro/x1a_2001.pdf": "3223dfa00e9456055fe8390741856d1661607aa389901289020c86acd99aa7e8",
+    "fixtures/goldens/v1/press/pageinator_press_test_synthetic.pdf": "57be46b44e15d40ba4b877bc92434c1da87d8b349030a382566b2f2017bb3b93"
+  },
   "large": {
     "experiments/phase0/results/compose1/paragraphs.csv.gz": "3859275000da325bbdfbccb16222fab62e4eccd72acb01042a61196d0390c1b6",
     "experiments/phase0/results/compose1/signatures.json": "88ed057d247abc7054f97cf7d5d1e8b97cbebfbf14fad4ea1211bd6d18ffc0ae"
