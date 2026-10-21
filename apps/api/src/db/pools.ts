@@ -9,6 +9,7 @@ import { Kysely, PostgresDialect, sql } from "kysely";
 import { type IdentityStore, identityStore } from "./identity.ts";
 import type { DB } from "./schema.gen.ts";
 import { type Tenant, type Tx, withTenant } from "./tenant.ts";
+import { APP_OPTIONS, APP_TYPES } from "./parsers.ts";
 
 export type DatabaseSettings = {
   host: string;
@@ -91,7 +92,7 @@ export function openDatabase(settings: DatabaseSettings): Database {
     console.error(`A database connection (${role}) failed: ${error.message}`);
   };
   const report = (role: Role, error: Error) => listener(role, error);
-  const appPool = new Pool({ ...settingsFor(settings, "app"), max: 10 });
+  const appPool = new Pool({ ...settingsFor(settings, "app"), types: APP_TYPES, options: APP_OPTIONS, max: 10 });
   const authPool = new Pool({ ...settingsFor(settings, "auth"), max: 5 });
   watch(appPool, "app", report);
   watch(authPool, "auth", report);

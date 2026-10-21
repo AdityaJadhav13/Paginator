@@ -2,7 +2,7 @@
 // (docs/product/10-l2-newsroom-plan.md §3.6). The plan names kysely-codegen 0.20.0. It is not used: one of its
 // dependencies (argparse, through cosmiconfig and js-yaml) has the Python-2.0 licence, which tools/ts/check-licences.ts
 // does not allow. Each Postgres type maps to what pg returns for it. A type with no mapping stops the generator, so a
-// new column type gets a deliberate one (a date column also needs a parser: pg would return a Date at local midnight).
+// new column type gets a deliberate one (a date is read as its text: src/db/parsers.ts gives the app pool that parser).
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 import type { MigratorSettings } from "./migrate.ts";
@@ -23,6 +23,7 @@ export const TYPES: Readonly<Record<string, string>> = {
   uuid: "string",
   inet: "string",
   timestamptz: "Timestamp",
+  date: "string",
   jsonb: "Json",
 };
 

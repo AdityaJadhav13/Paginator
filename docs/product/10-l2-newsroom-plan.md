@@ -508,18 +508,19 @@ create policy pub_wall on app.story as restrictive                              
 | `publication_grant` | (org_id, publication_id, user_id) PK; roles text[] CHECK ⊆ the 9 publication roles; grants text[] CHECK ⊆ {page_approve, release_approve} | org | L2.1 |
 | `invitation_grant` | (org_id, invitation_id, publication_id) PK; roles; grants; applied_at | org | L2.1 |
 | `section` | id; org/pub; name; color_tag; position; archived_at | org+pub | L2.1 |
-| `edition` | id; org/pub; edition_date; desk_key; pages CHECK (4, 8, 16); back_page_ads; volume; issue; price; status; produced_in; UNIQUE (publication_id, edition_date) (zones later) | org+pub | L2.1 |
-| `story` | id; org/pub; edition_id NULL; desk_key UNIQUE per publication; status; current_rev; reporter_id; assignee_id; due_at; section_id; priority 1–4; page_pin; language; origin; desk_note; search_text (pg_trgm); deleted_at | org+pub | L2.1 |
-| `story_revision` | (story_id, rev) PK; org/pub; headline; kicker; deck; byline; body; body_format 'desk-text/1'; words; author_id; opened_at; closed_at | org+pub | L2.1 |
-| `story_status_change` | id; org/pub; story_id; from; to; by; at; comment_id | org+pub | L2.1 |
-| `story_photo` | story_id PK (one photo until the engine takes more); org/pub; asset_id; caption; credit | org+pub | L2.1 |
+| `edition` | id; org/pub; edition_date (2000–2999); desk_key; pages CHECK (4, 8, 16); back_page_ads; volume; issue; price; status (built with doc 04's planning, in_production, preflight, released, archived: open question); produced_in; UNIQUE (org_id, publication_id, edition_date) (zones later) | org+pub | L2.1 |
+| `story` | id; org/pub; edition_id NULL; desk_key UNIQUE per publication; status; current_rev; reporter_id; assignee_id; due_at; section_id; priority 1–4; page_pin; language; origin; desk_note; deleted_at. search_text (pg_trgm) is not built yet: pg_trgm's functions would fail check (a) (owned by the bootstrap superuser, no search_path, executable by PUBLIC), which first needs an allowance for extensions | org+pub | L2.1 |
+| `story_revision` | (org_id, publication_id, story_id, rev) PK; org/pub; headline; kicker; deck; byline; body; body_format 'desk-text/1'; words; author_id; opened_at; closed_at. Triggers: a closed revision refuses UPDATE, DELETE and TRUNCATE; a new revision is open and numbered max(rev) + 1; its keys never change | org+pub | L2.1 |
+| `story_status_change` | id; org/pub; story_id; from_status; to_status; changed_by (null: the system); changed_at; comment_id (`from` and `to` are reserved words) | org+pub | L2.1 |
+| `story_photo` | (org_id, publication_id, story_id) PK (one photo until the engine takes more); org/pub; asset_id (no foreign key until `asset` arrives, PR 18); caption; credit | org+pub | L2.1 |
 | `comment` | id; org/pub; target_type ('story'; 'page' from L2.4); target_id; parent_id; author_id; body; mentions uuid[]; resolved_at/by; deleted_at | org+pub | L2.1 |
 | `upload` | id; org/pub; user_id; purpose; key; declared_type; declared_bytes; status; expires_at | org+pub | L2.1 |
 | `asset` | id; org/pub; kind; desk_key; sha256; bytes; mime (sniffed); original_key; width_px; height_px; status; photographer; caption; credit; UNIQUE (org_id, sha256) where not deleted (dedupe within one organisation only) | org+pub | L2.1 |
 | `notification` | id; org_id; user_id; kind; target_type; target_id; data jsonb (ids only); read_at; emailed_at | org+user | L2.1 |
 | `audit_event` | id; org_id; publication_id NULL; actor_kind; actor_id; action; target_type; target_id; data jsonb (no story text); ip; user_agent; request_id; at | org | L2.1 |
-| `idempotency_key` | (user_id, key) PK; org_id; route; request_sha256; status; response jsonb; expires_at (24 h) | org | L2.1 |
-| `desk_bundle` | id; org/pub; edition_id; story_revisions jsonb [{story_id, rev}]; key; sha256; by; at | org+pub | L2.1 |
+| `idempotency_key` | (org_id, user_id, key) PK; route; request_sha256; status (running, done); response_status; response jsonb; expires_at (24 h) | org + user (restrictive: a user's own keys only) | L2.1 |
+| `desk_bundle` | id; org/pub; edition_id; key (exactly `orgs/<org>/pubs/<pub>/desk-bundles/<uuid>.zip`, UNIQUE (org_id, key)); sha256; created_by; created_at | org+pub | L2.1 |
+| `desk_bundle_revision` | (org_id, publication_id, bundle_id, story_id) PK; rev; keys to `desk_bundle` and to `story_revision`, so a bundle names only its own publication's revisions | org+pub | L2.1 |
 | `rendition` | asset_id; purpose; params_hash; key; width_px; height_px; UNIQUE (asset_id, purpose, params_hash) | org+pub | L2.2 |
 | `import_job` | id; org/pub; kind 'docx'; state; result_key; counts | org+pub | L2.2 |
 | `engine_event` | id bigserial; org_id; kind; ref_id; payload jsonb; created_at; processed_at; error | org (+ consumer flag) | L2.2 |
@@ -533,6 +534,11 @@ create policy pub_wall on app.story as restrictive                              
 | `page_lock` | (run_id, page_no) PK; holder_id; heartbeat_at; expires_at | org+pub | L2.4 |
 | `page_approval`, `release`, `release_file`, `delivery`, `preflight_run`, `preflight_issue`, `preflight_override` | As doc 04 §3 "Production", bound to PDF SHA-256s and page revisions | org+pub | L2.5 |
 | `advertiser`, `ad_booking`, `ad_artwork`, `ad_placement`, `flatplan_page` | As doc 04 §3 "Advertisements", restricted to the engine's slots | org+pub | L2.6 |
+
+**Keys and ids (as built in PR 16).**
+- Every unique key of a content table includes `org_id` and `publication_id`. A unique key is checked before the walls' foreign keys, so a key without them would tell a writer whether a row it cannot see exists.
+- Ids are made by the database (`uuidv7()`): the API never accepts an id from a client. A trigger (`app.server_id`) replaces any id `pgn_app` sends, so the global `id` primary keys cannot be used to probe for another tenant's rows.
+- Text limits are the Desk's (lines 2,000 characters, bodies 200,000), counted in characters. `@pageinator/desk-text`'s `cleanText` refuses a number, which the Desk would write as text with Python's `str()`: JavaScript cannot tell `1.0` from `1`.
 
 **Simplification from doc 04.** In L2 a story belongs to at most one edition at a time (`story.edition_id`), which matches the Desk's per-edition articles. Doc 04's `EditionStory` join table arrives with zoned editions, through expand/contract migrations.
 
@@ -1142,7 +1148,7 @@ Rules for every PR:
 | 13 | web 2: sign-in screens | Sign in (with "Keep me signed in") · invitation and sign-up · verify · forgot and reset · two-step verify | ~380 | 12 |
 | 14 | web 3: Account → Security | TOTP setup with QR (qrcode 1.5.4) · backup codes · devices and sign-out | ~300 | 13 |
 | 15 | desk-text | `packages/desk-text` (port of `blocks`, `body_words`, `is_brief`, `clean_text`, the paste parser) · a Python vector generator run in the oracle venv on fictional text · parity test | ~350 | 4 |
-| 16 | content schema | Migrations for `section`, `edition`, `story`, `story_revision` (with the closed-revision trigger), `story_status_change`, `story_photo`, `comment`, `idempotency_key`, `desk_bundle`, with RLS; (b) covers them automatically | ~350 | 6, 15 |
+| 16 | content schema | Migrations for `section`, `edition`, `story`, `story_revision` (with the closed-revision trigger), `story_status_change`, `story_photo`, `comment`, `idempotency_key`, `desk_bundle` and `desk_bundle_revision`, with RLS; server-made ids; keys with `org_id` and `publication_id` (§3.3); (b) covers them automatically. Not yet: `search_text`/pg_trgm, the `asset` foreign key (PR 18) | ~350 | 6, 15 |
 | 17 | stories API | Create, read, list, update with revisions and `baseRevision` · transitions (§5.4) · assignment · paste · idempotency middleware · role-matrix tests · the endpoint tenancy generator (c) | ~400 | 16, 9 |
 | 18 | photos (originals) | @aws-sdk/client-s3, s3-presigned-post and s3-request-presigner 3.1153.0 · presign, complete and sniff · assets · story photo · downloads · storage tests (d) · `dev-buckets.ts` | ~400 | 17 |
 | 19 | comments, notifications, live updates | Comments · notifications with §11 defaults · SSE over LISTEN/NOTIFY with authorised fan-out (test (f)); the streams end in a `preClose` hook, so a stop does not wait the whole grace period · send-back and invitation-accepted emails | ~400 | 17 |

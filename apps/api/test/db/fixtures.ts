@@ -90,7 +90,116 @@ export const FIXTURES: Fixture[] = [
       target_id: pub.id,
     }),
   },
+  // the content tables (migrations 2026_11_20_*): one of each per publication, naming the rows above
+  {
+    table: "section",
+    per: "publication",
+    row: (org, pub) => ({ ...inPub(org, pub), id: childId(pub, 1), name: "शहर (fictional)", color_tag: "blue" }),
+  },
+  {
+    table: "edition",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      id: childId(pub, 2),
+      edition_date: "2026-10-21",
+      desk_key: "2026-10-21",
+      pages: 8,
+    }),
+  },
+  {
+    table: "story",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      id: childId(pub, 3),
+      edition_id: childId(pub, 2),
+      section_id: childId(pub, 1),
+      desk_key: "a-0123456789",
+      reporter_id: org.user,
+      language: pub.primary_language,
+    }),
+  },
+  {
+    table: "story_revision",
+    per: "publication",
+    // open, as a revision is while its author edits it (a closed one refuses every change, whoever makes it)
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      story_id: childId(pub, 3),
+      rev: 1,
+      headline: "काल्पनिकनगरात पाऊस (fictional)",
+      body: "पहिला परिच्छेद.",
+      words: 2,
+      author_id: org.user,
+    }),
+  },
+  {
+    table: "comment",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      id: childId(pub, 4),
+      target_id: childId(pub, 3),
+      author_id: org.user,
+      body: "Check the date (fictional).",
+    }),
+  },
+  {
+    table: "story_status_change",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      story_id: childId(pub, 3),
+      from_status: "draft",
+      to_status: "filed",
+      changed_by: org.user,
+      comment_id: childId(pub, 4),
+    }),
+  },
+  {
+    table: "story_photo",
+    per: "publication",
+    row: (org, pub) => ({ ...inPub(org, pub), story_id: childId(pub, 3), asset_id: childId(pub, 5) }),
+  },
+  {
+    table: "desk_bundle",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      id: childId(pub, 6),
+      edition_id: childId(pub, 2),
+      key: `orgs/${org.id}/pubs/${pub.id}/desk-bundles/${childId(pub, 9)}.zip`,
+      sha256: "0".repeat(64),
+      created_by: org.user,
+    }),
+  },
+  {
+    table: "desk_bundle_revision",
+    per: "publication",
+    row: (org, pub) => ({ ...inPub(org, pub), bundle_id: childId(pub, 6), story_id: childId(pub, 3), rev: 1 }),
+  },
+  {
+    table: "idempotency_key",
+    per: "org",
+    row: (org) => ({
+      org_id: org.id,
+      user_id: org.user,
+      key: id(`${org.id.slice(-1)}c1`),
+      route: "POST /orgs/{o}/pubs/{p}/stories",
+      request_sha256: "0".repeat(64),
+    }),
+  },
 ];
+
+function inPub(org: Org, pub: Pub): { org_id: string; publication_id: string } {
+  return { org_id: org.id, publication_id: pub.id };
+}
+
+/** The n-th fixed id under a publication (its id's last three digits, then n), so rows can name each other. */
+export function childId(pub: Pub, n: number): string {
+  return id(`${pub.id.slice(-3)}${n.toString(16).padStart(9, "0")}`);
+}
 
 /** The statement that inserts row into app.<table>. */
 export function insertion(table: string, row: Record<string, unknown>): { text: string; values: unknown[] } {

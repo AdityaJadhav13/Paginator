@@ -26,6 +26,18 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   org_settings: ["INSERT", "SELECT", "UPDATE"],
   person: ["INSERT", "SELECT", "UPDATE"],
   publication: ["INSERT", "SELECT", "UPDATE"],
+  // the content tables (migrations 2026_11_20_*): only a story's photo is ever deleted, and status changes and
+  // bundles only grow; closed revisions refuse every change by trigger
+  comment: ["INSERT", "SELECT", "UPDATE"],
+  desk_bundle: ["INSERT", "SELECT"],
+  desk_bundle_revision: ["INSERT", "SELECT"],
+  edition: ["INSERT", "SELECT", "UPDATE"],
+  idempotency_key: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  section: ["INSERT", "SELECT", "UPDATE"],
+  story: ["INSERT", "SELECT", "UPDATE"],
+  story_photo: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  story_revision: ["INSERT", "SELECT", "UPDATE"],
+  story_status_change: ["INSERT", "SELECT"],
 };
 
 /** pgn_auth's rights on each identity table: Better Auth's own (it reads and writes them as it needs), and ours,
