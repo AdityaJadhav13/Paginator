@@ -26,6 +26,9 @@
 - **Sessions:**
   - stored in the database, using HttpOnly, Secure, SameSite=Lax cookies;
   - CSRF protection with a double-submit token on every mutating request;
+    - *Note 2026-10-20: ADR-025 (PROPOSED) would replace the token, once it is accepted (decision D-7), with an
+      `Origin` check plus the `X-Pageinator: 1` header. The L2 app serves everything from one origin with JSON bodies
+      only; ADR-025 explains why the protection is equal.*
   - 12 h idle timeout and 30 day absolute timeout;
   - revoked on password change.
   - Users can see and revoke their devices.
