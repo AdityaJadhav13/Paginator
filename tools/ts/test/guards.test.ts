@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
-import { versionBlockProblems } from "../check-graph.ts";
+import { graphProblems, versionBlockProblems } from "../check-graph.ts";
 import { changedPaths, frozenProblems } from "../check-frozen.ts";
 import { type Allowlist, denylistTerms, runGuard } from "../guard-private.ts";
 import { sha256Bytes } from "../lib.ts";
@@ -219,6 +219,39 @@ describe("catalog check", () => {
       'pnpm-workspace.yaml:8: d: "^1.0.0" is not an exact version',
       'pnpm-workspace.yaml:9: cannot read this line as "name: version": just words',
       'pnpm-workspace.yaml:11: e: "latest" is not an exact version',
+    ]);
+  });
+});
+
+describe("dependency graph", () => {
+  function workspaceRepo(deps: Record<string, string[]>): string {
+    const dir = repo();
+    write(dir, "package.json", JSON.stringify({ name: "root" }));
+    write(dir, "pnpm-workspace.yaml", "packages:\n  - packages/*\n");
+    const workspace = { browserPackages: ["ui"], sharedPackages: ["contracts"], apps: ["@pageinator/api"] };
+    write(dir, "tools/ts/workspace.json", JSON.stringify(workspace));
+    write(dir, "tools/testkit/package.json", JSON.stringify({ name: "@pageinator/testkit" }));
+    for (const [name, on] of Object.entries(deps)) {
+      const dependencies = Object.fromEntries(on.map((d) => [`@pageinator/${d}`, "workspace:*"]));
+      write(dir, `packages/${name}/package.json`, JSON.stringify({ name: `@pageinator/${name}`, dependencies }));
+    }
+    return dir;
+  }
+
+  it("keeps kernel packages off browser and shared packages", () => {
+    const dir = workspaceRepo({ pyshim: ["contracts", "ui", "testkit"], contracts: [], ui: ["contracts"] });
+    expect(graphProblems(dir).problems.sort()).toEqual([
+      "@pageinator/pyshim must not depend on @pageinator/contracts (kernel packages never depend on browser or shared packages)",
+      "@pageinator/pyshim must not depend on @pageinator/ui (kernel packages never depend on browser or shared packages)",
+    ]);
+  });
+
+  it("keeps every package, kernel or not, off apps", () => {
+    const dir = workspaceRepo({ pyshim: ["api"], contracts: ["api"], ui: ["api"] });
+    expect(graphProblems(dir).problems.sort()).toEqual([
+      "@pageinator/contracts must not depend on @pageinator/api (packages never depend on apps or server modules)",
+      "@pageinator/pyshim must not depend on @pageinator/api (packages never depend on apps or server modules)",
+      "@pageinator/ui must not depend on @pageinator/api (packages never depend on apps or server modules)",
     ]);
   });
 });

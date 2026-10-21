@@ -50,6 +50,8 @@ const BANNED: [string, string][] = [
   ["type T = Record<number, string>;\nexport type { T };", "no-restricted-syntax"],
   ['import { readFileSync } from "node:fs";\nvoid readFileSync;', "no-restricted-imports"],
   ['import web from "@pageinator/web";\nvoid web;', "no-restricted-imports"],
+  ['import { ErrorEnvelope } from "@pageinator/contracts";\nvoid ErrorEnvelope;', "no-restricted-imports"],
+  ['import ui from "@pageinator/ui/button";\nvoid ui;', "no-restricted-imports"],
 ];
 
 const ALLOWED = [
@@ -71,9 +73,16 @@ describe("kernel determinism rules", () => {
     expect(await restricted(code, KERNEL)).toEqual([]);
   });
 
-  it("does not apply to browser packages, tests or tools", async () => {
+  it("does not apply to browser or shared packages, apps, tests or tools", async () => {
     const code = 'Math.pow(2, 3);\n[1].sort();\n"A".toLowerCase();';
-    for (const file of ["packages/ui/src/x.ts", "packages/pyshim/test/x.test.ts", "tools/ts/x.ts"]) {
+    const files = [
+      "packages/ui/src/x.ts",
+      "packages/contracts/src/x.ts",
+      "apps/api/src/x.ts",
+      "packages/pyshim/test/x.test.ts",
+      "tools/ts/x.ts",
+    ];
+    for (const file of files) {
       expect(await restricted(code, file), file).toEqual([]);
     }
   });

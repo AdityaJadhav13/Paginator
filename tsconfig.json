@@ -11,6 +11,12 @@
       "path": "packages/pyshim/test"
     },
     {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/contracts/test"
+    },
+    {
       "path": "tools/ts"
     }
   ]

@@ -1,14 +1,15 @@
 // Dependency-graph check for the workspace (reads package.json files; independent of any generated graph).
 //   - every external version is exact (no ^ ~ * ranges, tags, URLs or file: paths); catalog and override entries too;
-//   - kernel packages never depend on apps or server modules (every package under packages/ is a kernel package
-//     unless tools/ts/workspace.json lists it as a browser package);
+//   - packages never depend on apps or server modules;
+//   - kernel packages never depend on browser or shared packages either (every package under packages/ is a kernel
+//     package unless tools/ts/workspace.json lists it as a browser or shared package);
 //   - no dependency cycles between @pageinator packages.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { REPO, fail } from "./lib.ts";
 
 type Manifest = { name: string; [field: string]: unknown };
-type Workspace = { browserPackages: string[]; apps: string[] };
+type Workspace = { browserPackages: string[]; sharedPackages: string[]; apps: string[] };
 const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 const EXACT = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 const VERSION_BLOCKS = new Set(["catalog:", "overrides:"]);
@@ -58,13 +59,12 @@ export function versionBlockProblems(yamlText: string): string[] {
 export function graphProblems(repo: string): { problems: string[]; packages: number } {
   const workspace = JSON.parse(readFileSync(join(repo, "tools/ts/workspace.json"), "utf8")) as Workspace;
   const apps = new Set(workspace.apps);
+  const notKernelDirs = new Set([...workspace.browserPackages, ...workspace.sharedPackages]);
   const all = manifests(repo);
-  const kernel = new Set(
-    all
-      .filter(
-        ([dir]) => dir.startsWith("packages/") && !workspace.browserPackages.includes(dir.slice("packages/".length)),
-      )
-      .map(([, m]) => m.name),
+  const inPackages = all.filter(([dir]) => dir.startsWith("packages/"));
+  const packages = new Set(inPackages.map(([, m]) => m.name));
+  const notKernel = new Set(
+    inPackages.filter(([dir]) => notKernelDirs.has(dir.slice("packages/".length))).map(([, m]) => m.name),
   );
   const problems: string[] = [];
   const edges = new Map<string, string[]>();
@@ -75,8 +75,13 @@ export function graphProblems(repo: string): { problems: string[]; packages: num
       for (const [name, spec] of Object.entries(entries)) {
         if (!specOk(spec)) problems.push(`${dir}/package.json ${field}.${name}: "${spec}" is not an exact version`);
         if (name.startsWith("@pageinator/")) deps.push(name);
-        if (kernel.has(m.name) && (apps.has(name) || name.startsWith("@pageinator/module-"))) {
-          problems.push(`${m.name} must not depend on ${name} (kernel packages never depend on apps or modules)`);
+        if (!packages.has(m.name)) continue;
+        if (apps.has(name) || name.startsWith("@pageinator/module-")) {
+          problems.push(`${m.name} must not depend on ${name} (packages never depend on apps or server modules)`);
+        } else if (!notKernel.has(m.name) && notKernel.has(name)) {
+          problems.push(
+            `${m.name} must not depend on ${name} (kernel packages never depend on browser or shared packages)`,
+          );
         }
       }
     }

@@ -5,6 +5,7 @@
 |---|---|
 | `apps/web` | The React application (`@pageinator/web`) |
 | `packages/*` | Engine packages (`@pageinator/pyshim`, and from M1 `harfbuzz`, `fonts`, `shape`, `hyphenate`, `compose`, `headline`, `document`, `pdf`, `kernel`) |
+| `packages/contracts` | Zod schemas shared by the API and the web app (not a kernel package): the error envelope and its codes |
 | `tools/testkit` | Test-only helpers: repository paths, Python-flavoured JSONL |
 | `tools/ts` | Repository guards: privacy, frozen evidence, dependency graph, oracle manifest |
 | `infra/docker` | Local development services (`compose.dev.yml`) and the database's first-start SQL (roles only) |
@@ -35,7 +36,7 @@
 | Command | Does |
 |---|---|
 | `pnpm run ci` | Everything CI runs: guards, dependency graph, lint, format check, typecheck, tests, web build |
-| `pnpm test` | All tests: web (jsdom), kernel (node) |
+| `pnpm test` | All tests: web (jsdom), kernel (node), api with the shared contracts (node) |
 | `pnpm run typecheck` | `tsc -b` (TypeScript 7) for packages, plus the web app's own typecheck |
 | `pnpm run lint` / `pnpm run format` | ESLint (with the kernel determinism rules) and Prettier |
 | `pnpm --filter @pageinator/web dev` | Run the web app |
@@ -69,7 +70,9 @@ The ports keep clear of 5432 (a native Postgres), 5433 (another local project), 
 
 ## Rules that keep the engine trustworthy
 - **Kernel packages are deterministic.**
-  - Every package under `packages/` is a kernel package unless `tools/ts/workspace.json` lists it as a browser package.
+  - Every package under `packages/` is a kernel package unless `tools/ts/workspace.json` lists it as a browser or
+    shared package. Kernel packages never depend on browser or shared packages, and no package depends on an app
+    (`tools/ts/check-graph.ts` checks the manifests; ESLint checks what kernel code imports).
   - No clock, randomness, I/O, `Math.pow`/`log`/`round`, `**`, default `sort()`, locale or Unicode-table functions
     (`toLowerCase`, `trim`, `normalize`, `localeCompare` …), `\s` or `\p{…}` in regular expressions, or regular
     expressions built at run time.

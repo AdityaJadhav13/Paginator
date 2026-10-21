@@ -10,10 +10,12 @@ import comments from "@eslint-community/eslint-plugin-eslint-comments/configs";
 import prettier from "eslint-config-prettier";
 import globals from "globals";
 
-// Every package under packages/ is a kernel package unless tools/ts/workspace.json lists it as a browser package.
+// Every package under packages/ is a kernel package unless tools/ts/workspace.json lists it as a browser or shared
+// package.
 const workspace = JSON.parse(readFileSync(new URL("./tools/ts/workspace.json", import.meta.url), "utf8"));
 const KERNEL_SRC = ["packages/*/src/**/*.ts"];
-const NOT_KERNEL = workspace.browserPackages.map((dir) => `packages/${dir}/**`);
+const NOT_KERNEL_DIRS = [...workspace.browserPackages, ...workspace.sharedPackages];
+const NOT_KERNEL = NOT_KERNEL_DIRS.map((dir) => `packages/${dir}/**`);
 const SORT_MESSAGE =
   "Default sort compares UTF-16 units; call sort/toSorted directly with a comparator (pyshim cmpCodePoints).";
 // locale-, engine- or Unicode-version-dependent string and number methods (Python's semantics come from pyshim)
@@ -98,6 +100,12 @@ export default defineConfig(
     // Pageinator Desk's screens: plain browser modules, no build step
     files: ["tools/desk/static/**/*.js"],
     languageOptions: { globals: globals.browser, sourceType: "module" },
+  },
+  {
+    // the API runs on Node; its module-boundary rules (docs/product/10-l2-newsroom-plan.md §2.1) arrive with its
+    // first modules
+    files: ["apps/api/**/*.ts"],
+    languageOptions: { globals: globals.node },
   },
   {
     files: KERNEL_SRC,
@@ -200,6 +208,10 @@ export default defineConfig(
               message: "Kernel packages do no I/O.",
             },
             { group: workspace.apps, message: "Kernel packages never depend on apps." },
+            {
+              group: NOT_KERNEL_DIRS.map((dir) => `@pageinator/${dir}`),
+              message: "Kernel packages never depend on browser or shared packages.",
+            },
           ],
         },
       ],
