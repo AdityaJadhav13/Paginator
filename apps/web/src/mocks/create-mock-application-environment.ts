@@ -5,33 +5,42 @@ import {
   type MockSessionController,
 } from "./create-mock-session-environment.ts";
 import type {
-  SimulatedSessionService,
+  AccountService,
+  ServiceEnvironment,
+  SessionService,
   UserQueryService,
+  WorkspaceAccessService,
   WorkspaceQueryService,
 } from "../services/index.ts";
 import type { MockScenarioController } from "./scenarios.ts";
 
-export interface MockApplicationEnvironment {
+/** The whole app on test doubles: the placeholder workspace's fictional data and the session double. */
+export interface MockApplicationEnvironment extends ServiceEnvironment {
   readonly users: UserQueryService;
   readonly workspace: WorkspaceQueryService;
-  readonly session: SimulatedSessionService;
+  readonly session: SessionService;
+  readonly account: AccountService;
+  readonly access: WorkspaceAccessService;
   readonly scenarios: MockScenarioController;
   readonly sessionController: MockSessionController;
   readonly invalidatePendingSessionMutations: () => void;
   readonly getSessionMutationGeneration: () => number;
+  readonly onSignedOut: (listener: () => void) => () => void;
   reset(): void;
 }
 
 export function createMockApplicationEnvironment(
   options: CreateMockServiceEnvironmentOptions = {}
 ): MockApplicationEnvironment {
-  const services = createMockServiceEnvironment(options);
-  const sessionEnvironment = createMockSessionEnvironment(services.users);
+  const { users, workspace, scenarios, intercept } = createMockServiceEnvironment(options);
+  const sessionEnvironment = createMockSessionEnvironment({ intercept });
   return {
-    ...services,
+    users,
+    workspace,
+    scenarios,
     ...sessionEnvironment,
     reset() {
-      services.scenarios.reset();
+      scenarios.reset();
       sessionEnvironment.sessionController.reset();
     },
   };

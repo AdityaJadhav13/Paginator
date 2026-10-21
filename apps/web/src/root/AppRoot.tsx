@@ -9,9 +9,18 @@ import { NotFoundPage } from "../app/NotFoundPage.tsx";
 import { RouteAnnouncer } from "../app/RouteAnnouncer.tsx";
 import { WorkspaceRouteProvider } from "../app/contracts/route-context.ts";
 import { PATTERNS, ROUTE_LABELS, OWNING_UNIT } from "../app/routes.ts";
+import { createApiEnvironment } from "../api/environment.ts";
+import { AccountProvider } from "../features/auth/account-context.tsx";
+import { ForgotPasswordScreen } from "../features/auth/ForgotPasswordScreen.tsx";
+import { InvitationScreen } from "../features/auth/InvitationScreen.tsx";
+import { ResetPasswordScreen } from "../features/auth/ResetPasswordScreen.tsx";
 import { SessionProvider } from "../features/auth/SessionProvider.tsx";
-import { AuthRouteScreen } from "../features/auth/AuthRouteScreen.tsx";
-import { createMockApplicationEnvironment, type MockApplicationEnvironment } from "../mocks/index.ts";
+import { SignedOutRedirect } from "../features/auth/SignedOutRedirect.tsx";
+import { SignInScreen } from "../features/auth/SignInScreen.tsx";
+import { SignUpScreen } from "../features/auth/SignUpScreen.tsx";
+import { VerifyEmailScreen } from "../features/auth/VerifyEmailScreen.tsx";
+import { I18nProvider } from "../i18n/index.ts";
+import type { ServiceEnvironment } from "../services/index.ts";
 import { PlaceholderScreen } from "../demo/ui002/PlaceholderScreen.tsx";
 import { Container } from "../ui/index.ts";
 import { HomePage, FeaturesPage, PricingPage, SecurityPage, ContactPage } from "../features/public/index.ts";
@@ -27,8 +36,7 @@ function placeholder(key: LabeledRouteKey) {
 /**
  * UI005 §20.4 moved the content measure out of PublicShell's <main> so the
  * public surfaces can render full-width bands. Every other public-shell
- * route supplies the measure here instead, which keeps rows 6-10 (auth and
- * onboarding) rendering exactly as they did before.
+ * route supplies the measure here instead.
  */
 function measured(element: ReactNode) {
   return <Container>{element}</Container>;
@@ -47,73 +55,85 @@ function WorkspaceBoundary({ editor = false }: { readonly editor?: boolean }) {
   );
 }
 
-const EnvironmentContext = createContext<MockApplicationEnvironment | null>(null);
+const EnvironmentContext = createContext<ServiceEnvironment | null>(null);
 function useEnvironment() {
   const value = useContext(EnvironmentContext);
-  if (!value) throw new Error("UI004 environment is unavailable.");
+  if (!value) throw new Error("The service environment is unavailable.");
   return value;
 }
 
-export function AppRoutes({ environment }: { readonly environment?: MockApplicationEnvironment }) {
-  const [ownedEnvironment] = useState(() => createMockApplicationEnvironment());
+/**
+ * The route tree. It runs on the real API (src/api) unless a test passes the
+ * test double (src/mocks).
+ */
+export function AppRoutes({ environment }: { readonly environment?: ServiceEnvironment }) {
+  const [ownedEnvironment] = useState(() => environment ?? createApiEnvironment());
   const activeEnvironment = environment ?? ownedEnvironment;
   return (
-    <EnvironmentContext.Provider value={activeEnvironment}>
-      <SessionProvider
-        session={activeEnvironment.session}
-        users={activeEnvironment.users}
-        invalidatePendingMutations={activeEnvironment.invalidatePendingSessionMutations}
-      >
-        <RouteAnnouncer />
-        <Routes>
-          <Route element={<PublicShell />}>
-            <Route path={PATTERNS.home} element={<HomePage />} />
-            <Route path={PATTERNS.features} element={<FeaturesPage />} />
-            <Route path={PATTERNS.pricing} element={<PricingPage />} />
-            <Route path={PATTERNS.security} element={<SecurityPage />} />
-            <Route path={PATTERNS.contact} element={<ContactPage />} />
-            <Route path={PATTERNS.login} element={measured(<AuthRouteScreen kind="login" />)} />
-            <Route path={PATTERNS.signup} element={measured(<AuthRouteScreen kind="signup" />)} />
-            <Route path={PATTERNS.forgotPassword} element={measured(<AuthRouteScreen kind="forgot-password" />)} />
-            <Route path={PATTERNS.verify} element={measured(<AuthRouteScreen kind="verify" />)} />
-            <Route path={PATTERNS.onboarding} element={measured(placeholder("onboarding"))} />
-            <Route path="*" element={measured(<NotFoundPage />)} />
-          </Route>
+    <I18nProvider>
+      <EnvironmentContext.Provider value={activeEnvironment}>
+        <AccountProvider account={activeEnvironment.account}>
+          <SessionProvider
+            session={activeEnvironment.session}
+            access={activeEnvironment.access}
+            invalidatePendingMutations={activeEnvironment.invalidatePendingSessionMutations}
+            onSignedOut={activeEnvironment.onSignedOut}
+          >
+            <RouteAnnouncer />
+            <SignedOutRedirect />
+            <Routes>
+              <Route element={<PublicShell />}>
+                <Route path={PATTERNS.home} element={<HomePage />} />
+                <Route path={PATTERNS.features} element={<FeaturesPage />} />
+                <Route path={PATTERNS.pricing} element={<PricingPage />} />
+                <Route path={PATTERNS.security} element={<SecurityPage />} />
+                <Route path={PATTERNS.contact} element={<ContactPage />} />
+                <Route path={PATTERNS.login} element={<SignInScreen />} />
+                <Route path={PATTERNS.signup} element={<SignUpScreen />} />
+                <Route path={PATTERNS.forgotPassword} element={<ForgotPasswordScreen />} />
+                <Route path={PATTERNS.resetPassword} element={<ResetPasswordScreen />} />
+                <Route path={PATTERNS.verify} element={<VerifyEmailScreen />} />
+                <Route path={PATTERNS.invitation} element={<InvitationScreen />} />
+                <Route path={PATTERNS.onboarding} element={measured(placeholder("onboarding"))} />
+                <Route path="*" element={measured(<NotFoundPage />)} />
+              </Route>
 
-          <Route path={PATTERNS.workspaceRoot} element={<WorkspaceBoundary />}>
-            <Route path={PATTERNS.orgSettings} element={placeholder("orgSettings")} />
-            <Route path={PATTERNS.orgBilling} element={placeholder("orgBilling")} />
-            <Route path={PATTERNS.orgStorage} element={placeholder("orgStorage")} />
-            <Route path={PATTERNS.pubOverview} element={placeholder("pubOverview")} />
-            <Route path={PATTERNS.pubEditions} element={placeholder("pubEditions")} />
-            <Route path={PATTERNS.pubStories} element={placeholder("pubStories")} />
-            <Route path={PATTERNS.pubMedia} element={placeholder("pubMedia")} />
-            <Route path={PATTERNS.pubAds} element={placeholder("pubAds")} />
-            <Route path={PATTERNS.pubTemplates} element={placeholder("pubTemplates")} />
-            <Route path={PATTERNS.pubNewsroom} element={placeholder("pubNewsroom")} />
-            <Route path={PATTERNS.pubSources} element={placeholder("pubSources")} />
-            <Route path={PATTERNS.pubArchive} element={placeholder("pubArchive")} />
-            <Route path={PATTERNS.pubArchiveRelease} element={placeholder("pubArchiveRelease")} />
-            <Route path={PATTERNS.pubBrand} element={placeholder("pubBrand")} />
-            <Route path={PATTERNS.pubPrintProfiles} element={placeholder("pubPrintProfiles")} />
-            <Route path={PATTERNS.pubTeam} element={placeholder("pubTeam")} />
-            <Route path={PATTERNS.editionLayout} element={<EditionWorkspaceLayout />}>
-              <Route index element={<Navigate to={PATTERNS.editionContent} replace />} />
-              <Route path={PATTERNS.editionContent} element={placeholder("editionContent")} />
-              <Route path={PATTERNS.editionGenerate} element={placeholder("editionGenerate")} />
-              <Route path={PATTERNS.editionPreflight} element={placeholder("editionPreflight")} />
-              <Route path={PATTERNS.editionExport} element={placeholder("editionExport")} />
-            </Route>
-          </Route>
+              <Route path={PATTERNS.workspaceRoot} element={<WorkspaceBoundary />}>
+                <Route path={PATTERNS.orgSettings} element={placeholder("orgSettings")} />
+                <Route path={PATTERNS.orgBilling} element={placeholder("orgBilling")} />
+                <Route path={PATTERNS.orgStorage} element={placeholder("orgStorage")} />
+                <Route path={PATTERNS.pubOverview} element={placeholder("pubOverview")} />
+                <Route path={PATTERNS.pubEditions} element={placeholder("pubEditions")} />
+                <Route path={PATTERNS.pubStories} element={placeholder("pubStories")} />
+                <Route path={PATTERNS.pubMedia} element={placeholder("pubMedia")} />
+                <Route path={PATTERNS.pubAds} element={placeholder("pubAds")} />
+                <Route path={PATTERNS.pubTemplates} element={placeholder("pubTemplates")} />
+                <Route path={PATTERNS.pubNewsroom} element={placeholder("pubNewsroom")} />
+                <Route path={PATTERNS.pubSources} element={placeholder("pubSources")} />
+                <Route path={PATTERNS.pubArchive} element={placeholder("pubArchive")} />
+                <Route path={PATTERNS.pubArchiveRelease} element={placeholder("pubArchiveRelease")} />
+                <Route path={PATTERNS.pubBrand} element={placeholder("pubBrand")} />
+                <Route path={PATTERNS.pubPrintProfiles} element={placeholder("pubPrintProfiles")} />
+                <Route path={PATTERNS.pubTeam} element={placeholder("pubTeam")} />
+                <Route path={PATTERNS.editionLayout} element={<EditionWorkspaceLayout />}>
+                  <Route index element={<Navigate to={PATTERNS.editionContent} replace />} />
+                  <Route path={PATTERNS.editionContent} element={placeholder("editionContent")} />
+                  <Route path={PATTERNS.editionGenerate} element={placeholder("editionGenerate")} />
+                  <Route path={PATTERNS.editionPreflight} element={placeholder("editionPreflight")} />
+                  <Route path={PATTERNS.editionExport} element={placeholder("editionExport")} />
+                </Route>
+              </Route>
 
-          <Route path={PATTERNS.editionEditor} element={<WorkspaceBoundary editor />}>
-            <Route index element={<EditorRouteContent />} />
-          </Route>
-          <Route path={`${PATTERNS.editionEditor}/*`} element={<ScopedNotFoundShell editor />} />
-          <Route path="/org/:orgId/*" element={<ScopedNotFoundShell />} />
-        </Routes>
-      </SessionProvider>
-    </EnvironmentContext.Provider>
+              <Route path={PATTERNS.editionEditor} element={<WorkspaceBoundary editor />}>
+                <Route index element={<EditorRouteContent />} />
+              </Route>
+              <Route path={`${PATTERNS.editionEditor}/*`} element={<ScopedNotFoundShell editor />} />
+              <Route path="/org/:orgId/*" element={<ScopedNotFoundShell />} />
+            </Routes>
+          </SessionProvider>
+        </AccountProvider>
+      </EnvironmentContext.Provider>
+    </I18nProvider>
   );
 }
 

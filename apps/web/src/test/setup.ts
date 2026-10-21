@@ -25,7 +25,8 @@ expect.extend(matchers);
  * resynchronize state if the dialog is ever closed by the user agent
  * without the component's own involvement (see its H-04 fix).
  */
-if (!HTMLDialogElement.prototype.showModal) {
+// (a test that runs in the node environment has no DOM, and needs no polyfill)
+if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {
   HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
     this.setAttribute("open", "");
   };

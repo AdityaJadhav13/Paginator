@@ -23,14 +23,11 @@ function controlledEnvironment() {
 async function expectPuneSession(environment: MockApplicationEnvironment) {
   await expect(environment.session.getSession()).resolves.toMatchObject({
     ok: true,
-    value: {
-      status: "signed-in",
-      session: {
-        userId: "user-demo-sahyadri-editor",
-        activeOrganizationId: "org-demo-sahyadri",
-        activePublicationId: "pub-demo-pune-daily",
-      },
-    },
+    value: { status: "signed-in", session: { user: { id: "user-demo-sahyadri-editor" } } },
+  });
+  await expect(environment.access.getAccess({ userId: "user-demo-sahyadri-editor" })).resolves.toMatchObject({
+    ok: true,
+    value: { activeOrganizationId: "org-demo-sahyadri", activePublicationId: "pub-demo-pune-daily" },
   });
 }
 
@@ -58,13 +55,14 @@ describe("WorkspaceRouteProvider stale side-effect protection", () => {
     renderUi004(URDU, undefined, environment);
     await waitFor(() => expect(releases).toHaveLength(1));
 
-    await environment.session.signIn({ userId: "user-demo-konkan-reviewer" });
+    const { reviewer } = environment.sessionController.fixtures.accounts;
+    await environment.session.signIn({ email: reviewer.email, password: reviewer.password, rememberMe: true });
     releases[0]!();
     await act(async () => {});
 
     await expect(environment.session.getSession()).resolves.toMatchObject({
       ok: true,
-      value: { status: "signed-in", session: { userId: "user-demo-konkan-reviewer" } },
+      value: { status: "signed-in", session: { user: { id: "user-demo-konkan-reviewer" } } },
     });
   });
 
@@ -111,15 +109,15 @@ describe("WorkspaceRouteProvider stale side-effect protection", () => {
     );
     await screen.findByRole("heading", { level: 1, name: "Overview" });
     await waitFor(async () => {
-      await expect(environment.session.getSession()).resolves.toMatchObject({
+      await expect(environment.access.getAccess({ userId: "user-demo-sahyadri-editor" })).resolves.toMatchObject({
         ok: true,
-        value: { session: { activeOrganizationId: "org-demo-konkan" } },
+        value: { activeOrganizationId: "org-demo-konkan" },
       });
     });
 
-    // Delay the identity lookup the provider performs while committing the
-    // organization step, so a reset can land before the publication step.
-    environment.scenarios.setScenario({ mode: "latency", delayMs: 1, operations: ["user.get"] });
+    // Delay the workspace change the provider commits for the new route, so a
+    // reset can land while it is in flight.
+    environment.scenarios.setScenario({ mode: "latency", delayMs: 1, operations: ["access.select"] });
     await act(async () => {
       window.history.pushState(null, "", URDU);
       window.dispatchEvent(new PopStateEvent("popstate"));
@@ -148,7 +146,7 @@ describe("WorkspaceRouteProvider stale side-effect protection", () => {
       <BrowserRouter>
         <SessionProvider
           session={environment.session}
-          users={environment.users}
+          access={environment.access}
           invalidatePendingMutations={environment.invalidatePendingSessionMutations}
         >
           <Routes>
@@ -176,9 +174,9 @@ describe("WorkspaceRouteProvider stale side-effect protection", () => {
     releases[0]!();
     await act(async () => {});
 
-    await expect(environment.session.getSession()).resolves.toMatchObject({
+    await expect(environment.access.getAccess({ userId: "user-demo-sahyadri-editor" })).resolves.toMatchObject({
       ok: true,
-      value: { status: "signed-in", session: { activePublicationId: "pub-demo-urdu-evening" } },
+      value: { activePublicationId: "pub-demo-urdu-evening" },
     });
   });
 });

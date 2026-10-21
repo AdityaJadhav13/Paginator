@@ -6,11 +6,21 @@ import { MAIN_LANDMARK_ID, paths } from "../routes.ts";
 import { useWorkspaceRouteContext } from "../contracts/route-context.ts";
 import { ProtectedRouteState } from "../../features/auth/ProtectedRouteState.tsx";
 import { SignedInSessionControls } from "../../features/auth/SessionStatus.tsx";
+import { LanguageScope } from "../../i18n/index.ts";
 
+/** The placeholder editor exists in English only (plan §2.6). */
 export function EditorShell() {
+  return (
+    <LanguageScope language="en">
+      <EditorShellContent />
+    </LanguageScope>
+  );
+}
+
+function EditorShellContent() {
   const { state, retry } = useWorkspaceRouteContext();
   if (state.status !== "allowed") {
-    return <div className="pg-shell pg-shell--editor"><SkipLink /><main id={MAIN_LANDMARK_ID} tabIndex={-1}><Container><ProtectedRouteState state={state} retry={retry} /></Container></main></div>;
+    return <div className="pg-shell pg-shell--editor" lang="en"><SkipLink /><main id={MAIN_LANDMARK_ID} tabIndex={-1}><Container><ProtectedRouteState state={state} retry={retry} /></Container></main></div>;
   }
   const { organization, publication, edition } = state.context;
   if (!publication || !edition) return null;

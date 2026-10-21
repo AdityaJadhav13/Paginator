@@ -11,8 +11,12 @@ export type {
 } from "./scenarios.ts";
 export {
   createMockSessionEnvironment,
+  type CreateMockSessionEnvironmentOptions,
+  type MockAuthOperation,
+  type MockMail,
   type MockSessionController,
   type MockSessionEnvironment,
+  type MockSessionFixtures,
   type MockSessionPreset,
 } from "./create-mock-session-environment.ts";
 export {

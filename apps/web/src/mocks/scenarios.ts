@@ -5,6 +5,12 @@ export const MOCK_OPERATIONS = [
   "publication.list",
   "publication.get",
   "edition.get",
+  // the session test double (create-mock-session-environment.ts)
+  "session.get",
+  "session.signIn",
+  "session.signOut",
+  "access.get",
+  "access.select",
 ] as const;
 
 export type MockOperation = (typeof MOCK_OPERATIONS)[number];

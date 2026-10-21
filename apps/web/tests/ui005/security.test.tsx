@@ -71,22 +71,26 @@ describe("Security claims are truthful and provisional", () => {
     for (const denial of [
       "No certification, audit, attestation or third-party assessment of any kind.",
       "No penetration test and no compliance programme.",
-      "No encryption-at-rest claim, because nothing is at rest.",
+      "No encryption-at-rest claim.",
       "No availability commitment, no service-level agreement and no incident-response programme.",
-      "No data-processing agreement and no sub-processor list, because no data is processed.",
+      "No data-processing agreement and no sub-processor list.",
     ]) {
       expect(main).toHaveTextContent(denial);
     }
   });
 
-  it("states that nothing is transmitted or stored and no credential exists (AC-32)", async () => {
+  it("states what sign-in sends and keeps, now that it is real (AC-32, L2 plan PR 12)", async () => {
     const main = await securityMain();
 
-    expect(main).toHaveTextContent("This build runs entirely in your browser.");
-    expect(main).toHaveTextContent("Nothing is transmitted.");
+    expect(main).toHaveTextContent("Signing in goes to Pageinator's own server");
+    expect(main).toHaveTextContent("cookies that page scripts cannot read");
     expect(main).toHaveTextContent(
-      "There is no account, credential or session token."
+      "Sign-in gives the same answer for a wrong email address and a wrong password."
     );
+    // the simulation's old statements are gone, because they are no longer true
+    expect(main).not.toHaveTextContent("This build runs entirely in your browser.");
+    expect(main).not.toHaveTextContent("Nothing is transmitted.");
+    expect(main).not.toHaveTextContent("There is no account, credential or session token.");
   });
 
   it("labels the tenancy model as intent rather than an implemented control", async () => {

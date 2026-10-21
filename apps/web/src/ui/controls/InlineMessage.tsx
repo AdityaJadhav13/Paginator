@@ -12,6 +12,11 @@ export interface InlineMessageProps {
    * Messages present on initial render must not set this to true.
    */
   live?: boolean;
+  /**
+   * The icon's accessible name, in the page's language. Defaults to the English
+   * name of the variant ("Information", "Success", "Warning", "Error").
+   */
+  iconLabel?: string;
   className?: string;
 }
 
@@ -42,6 +47,7 @@ export function InlineMessage({
   heading,
   children,
   live = false,
+  iconLabel,
   className,
 }: InlineMessageProps) {
   return (
@@ -56,7 +62,7 @@ export function InlineMessage({
         .filter(Boolean)
         .join(" ")}
     >
-      <span className="pg-inline-message__icon" aria-label={VARIANT_LABELS[variant]}>
+      <span className="pg-inline-message__icon" aria-label={iconLabel ?? VARIANT_LABELS[variant]}>
         {VARIANT_ICONS[variant]}
       </span>
       <div className="pg-inline-message__body">

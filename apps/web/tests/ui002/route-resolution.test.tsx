@@ -19,7 +19,7 @@ describe("Deep link resolves the correct shell", () => {
   const cases: Array<{ path: string; shell: "public" | "workspace" | "editor"; h1: string }> = [
     { path: "/", shell: "public", h1: "Newspaper production, end to end" },
     { path: "/features", shell: "public", h1: "What Pageinator is being built to do" },
-    { path: "/login", shell: "public", h1: "Already using a simulated session" },
+    { path: "/login", shell: "public", h1: "You are signed in" },
     { path: "/onboarding", shell: "public", h1: "Onboarding" },
     { path: "/org/org-demo-sahyadri/settings", shell: "workspace", h1: "Organization settings" },
     {

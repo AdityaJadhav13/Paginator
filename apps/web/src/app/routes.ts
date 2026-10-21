@@ -35,7 +35,9 @@ export const PATTERNS = {
   login: "/login",
   signup: "/signup",
   forgotPassword: "/forgot-password",
+  resetPassword: "/reset-password",
   verify: "/verify",
+  invitation: "/invite/:invitationId",
   onboarding: "/onboarding",
 
   // Workspace root (layout route)
@@ -84,7 +86,9 @@ export const paths = {
   login: () => "/login",
   signup: () => "/signup",
   forgotPassword: () => "/forgot-password",
+  resetPassword: () => "/reset-password",
   verify: () => "/verify",
+  invitation: (invitationId: string) => `/invite/${encodeURIComponent(invitationId)}`,
   onboarding: () => "/onboarding",
 
   orgSettings: (orgId: string) => `/org/${orgId}/settings`,

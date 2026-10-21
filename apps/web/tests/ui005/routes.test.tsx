@@ -25,15 +25,16 @@ describe("The five public surfaces render (AC-01, AC-02)", () => {
 });
 
 describe("Route ownership is preserved (AC-03, AC-04)", () => {
+  // The sign-in screens (L2 plan PR 13) replaced UI004's simulated ones on the same paths.
   const authRoutes: Array<[string, string]> = [
     ["/login", "Sign in"],
-    ["/signup", "Sign up"],
-    ["/forgot-password", "Forgot password"],
-    ["/verify", "Verify"],
+    ["/signup", "Create an account"],
+    ["/forgot-password", "Forgot your password?"],
+    ["/verify", "Confirm your email address"],
   ];
 
   for (const [path, title] of authRoutes) {
-    it(`"${path}" still renders the UI004 auth surface`, async () => {
+    it(`"${path}" renders its sign-in screen`, async () => {
       renderPublic(path, "signed-out");
       expect(
         await screen.findByRole("heading", { level: 1, name: title })

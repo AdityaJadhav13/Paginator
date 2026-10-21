@@ -1,3 +1,10 @@
+/**
+ * Who is signed in, for every screen: the session service's answer (the real one over the API, or the test double),
+ * then, where something provides it, the placeholder workspace's access for that person.
+ *
+ * Every operation is numbered; an answer that arrives after a newer operation began is dropped, so a slow sign-in
+ * can never overwrite a later sign-out. A failed sign-in leaves the state as it was: the form shows why.
+ */
 import {
   createContext,
   useCallback,
@@ -9,202 +16,213 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  ApiProblem,
   ServiceError,
   ServiceResult,
+  SessionDto,
+  SessionService,
   SessionSnapshot,
-  SimulatedRole,
-  SimulatedSessionDto,
-  SimulatedSessionService,
-  UserDto,
-  UserQueryService,
+  SignInInput,
+  WorkspaceAccessDto,
+  WorkspaceAccessService,
+  WorkspaceRole,
 } from "../../services/index.ts";
 
-export interface SimulatedProfileView {
-  readonly user: UserDto;
-}
+/** Why the session could not be read: the API's problem, or the placeholder workspace's error. */
+export type SessionProblem =
+  | { readonly source: "session"; readonly problem: ApiProblem }
+  | { readonly source: "workspace"; readonly error: ServiceError };
 
 export type SessionViewState =
   | { readonly status: "loading" }
-  | { readonly status: "signed-out"; readonly profiles: readonly SimulatedProfileView[] }
+  /** `expired`: the API ended the session (401 signed_out), not the person. */
+  | { readonly status: "signed-out"; readonly expired: boolean }
   | {
       readonly status: "ready";
-      readonly session: SimulatedSessionDto;
-      readonly user: UserDto;
-      readonly profiles: readonly SimulatedProfileView[];
+      readonly session: SessionDto;
+      /** The placeholder workspace this person may open, or null (always null in the deployed app, until `/me`). */
+      readonly workspace: WorkspaceAccessDto | null;
     }
-  | { readonly status: "denied"; readonly error: Extract<ServiceError, { code: "denied" }> }
-  | {
-      readonly status: "temporary-failure";
-      readonly error: Extract<ServiceError, { code: "temporary-failure" }>;
-      readonly assertive: boolean;
-    };
+  | { readonly status: "unavailable"; readonly reason: SessionProblem; readonly assertive: boolean };
 
 interface SessionContextValue {
   readonly state: SessionViewState;
   readonly intentionalSignOut: boolean;
+  /** Reads the session again, showing the loading state. */
   retry(): Promise<void>;
-  signIn(userId: string): Promise<ServiceResult<SessionSnapshot>>;
-  signOut(): Promise<ServiceResult<SessionSnapshot>>;
-  selectOrganization(organizationId: string): Promise<ServiceResult<SessionSnapshot>>;
-  selectPublication(
-    organizationId: string,
-    publicationId: string
-  ): Promise<ServiceResult<SessionSnapshot>>;
+  /** Reads the session again quietly (after a confirmation link or a password reset). */
+  refresh(): Promise<void>;
+  signIn(input: SignInInput): Promise<ServiceResult<SessionSnapshot, ApiProblem>>;
+  signOut(): Promise<ServiceResult<SessionSnapshot, ApiProblem>>;
+  /** The API answered 401 signed_out: the session ended on the server. */
+  expire(): void;
+  selectOrganization(organizationId: string): Promise<ServiceResult<WorkspaceAccessDto>>;
+  selectPublication(organizationId: string, publicationId: string): Promise<ServiceResult<WorkspaceAccessDto>>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-function errorState(error: ServiceError, assertive: boolean): SessionViewState {
-  if (error.code === "temporary-failure") {
-    return { status: "temporary-failure", error, assertive };
-  }
-  if (error.code === "denied") return { status: "denied", error };
-  return {
-    status: "denied",
-    error: {
-      code: "denied",
-      displayMessage: "This demonstration action is not available in the current context.",
-      qualification: "Demonstration only — production authorization is not evaluated here",
-    },
-  };
-}
+const NOT_SIGNED_IN: Extract<ServiceError, { code: "denied" }> = {
+  code: "denied",
+  displayMessage: "This demonstration action is not available in the current context.",
+  qualification: "Demonstration only — production authorization is not evaluated here",
+};
 
 export interface SessionProviderProps {
-  readonly session: SimulatedSessionService;
-  readonly users: UserQueryService;
+  readonly session: SessionService;
+  /** The placeholder workspace's access; without it, a signed-in person has no workspace. */
+  readonly access?: WorkspaceAccessService;
   readonly invalidatePendingMutations?: () => void;
+  /** Subscribes to the API's 401 signed_out answers (ServiceEnvironment.onSignedOut). */
+  readonly onSignedOut?: (listener: () => void) => () => void;
   readonly children: ReactNode;
 }
 
 export function SessionProvider({
   session,
-  users,
+  access,
   invalidatePendingMutations,
+  onSignedOut,
   children,
 }: SessionProviderProps) {
   const [state, setState] = useState<SessionViewState>({ status: "loading" });
   const [intentionalSignOut, setIntentionalSignOut] = useState(false);
-  const profilesRef = useRef<readonly SimulatedProfileView[]>([]);
   const requestRef = useRef(0);
   const mountedRef = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const isCurrent = useCallback(
     (request: number) => mountedRef.current && request === requestRef.current,
     []
   );
 
-  const resolveSnapshot = useCallback(
+  /** The state a session snapshot leads to, unless a newer operation began meanwhile. */
+  const settle = useCallback(
     async (snapshot: SessionSnapshot, request: number, assertive: boolean) => {
-      // A superseded request must not keep issuing service calls: after
-      // teardown, retry, or a newer mutation, further lookups are both
-      // wasted work and a forbidden post-unmount side effect.
       if (!isCurrent(request)) return;
-      let profiles = profilesRef.current;
-      if (profiles.length === 0) {
-        const profileResult = await session.listProfiles();
-        if (!profileResult.ok) {
-          if (isCurrent(request)) setState(errorState(profileResult.error, assertive));
-          return;
-        }
-        const userResults = await Promise.all(
-          profileResult.value.map((profile) => users.getUser({ userId: profile.userId }))
-        );
-        const failed = userResults.find((result) => !result.ok);
-        if (failed && !failed.ok) {
-          if (isCurrent(request)) setState(errorState(failed.error, assertive));
-          return;
-        }
-        profiles = userResults.flatMap((result) =>
-          result.ok ? [{ user: result.value }] : []
-        );
-        if (!isCurrent(request)) return;
-        profilesRef.current = profiles;
-      }
-
       if (snapshot.status === "signed-out") {
-        if (isCurrent(request)) setState({ status: "signed-out", profiles });
+        setState({ status: "signed-out", expired: false });
         return;
       }
-
+      if (!access) {
+        setState({ status: "ready", session: snapshot.session, workspace: null });
+        return;
+      }
+      const result = await access.getAccess({ userId: snapshot.session.user.id });
       if (!isCurrent(request)) return;
-      const userResult = await users.getUser({ userId: snapshot.session.userId });
-      if (!userResult.ok) {
-        if (isCurrent(request)) setState(errorState(userResult.error, assertive));
-        return;
-      }
-      if (isCurrent(request)) {
-        setState({
-          status: "ready",
-          session: snapshot.session,
-          user: userResult.value,
-          profiles,
-        });
-      }
+      setState(
+        result.ok
+          ? { status: "ready", session: snapshot.session, workspace: result.value }
+          : { status: "unavailable", reason: { source: "workspace", error: result.error }, assertive }
+      );
     },
-    [isCurrent, session, users]
+    [access, isCurrent]
   );
 
-  const loadSession = useCallback(async (assertive: boolean, invalidate: boolean) => {
-    const request = ++requestRef.current;
-    if (invalidate) invalidatePendingMutations?.();
-    if (mountedRef.current) setState({ status: "loading" });
-    const result = await session.getSession();
-    if (!result.ok) {
-      if (isCurrent(request)) setState(errorState(result.error, assertive));
-      return;
-    }
-    await resolveSnapshot(result.value, request, assertive);
-  }, [invalidatePendingMutations, isCurrent, resolveSnapshot, session]);
-
-  const retry = useCallback(
-    () => loadSession(true, true),
-    [loadSession]
+  const load = useCallback(
+    async (options: { readonly assertive: boolean; readonly invalidate: boolean; readonly showLoading: boolean }) => {
+      const request = ++requestRef.current;
+      if (options.invalidate) invalidatePendingMutations?.();
+      if (options.showLoading && mountedRef.current) setState({ status: "loading" });
+      const result = await session.getSession();
+      if (!isCurrent(request)) return;
+      if (!result.ok) {
+        setState({
+          status: "unavailable",
+          reason: { source: "session", problem: result.error },
+          assertive: options.assertive,
+        });
+        return;
+      }
+      await settle(result.value, request, options.assertive);
+    },
+    [invalidatePendingMutations, isCurrent, session, settle]
   );
 
   useEffect(() => {
     mountedRef.current = true;
-    void loadSession(false, false);
+    void load({ assertive: false, invalidate: false, showLoading: true });
     return () => {
       mountedRef.current = false;
       requestRef.current += 1;
       invalidatePendingMutations?.();
     };
-  }, [invalidatePendingMutations, loadSession]);
+  }, [invalidatePendingMutations, load]);
 
-  const perform = useCallback(
-    async (operation: () => Promise<ServiceResult<SessionSnapshot>>) => {
+  const expire = useCallback(() => {
+    requestRef.current += 1;
+    invalidatePendingMutations?.();
+    setIntentionalSignOut(false);
+    setState({ status: "signed-out", expired: true });
+  }, [invalidatePendingMutations]);
+
+  useEffect(() => onSignedOut?.(expire), [onSignedOut, expire]);
+
+  const signIn = useCallback(
+    async (input: SignInInput) => {
+      setIntentionalSignOut(false);
       const request = ++requestRef.current;
-      if (mountedRef.current) setState({ status: "loading" });
-      const result = await operation();
-      if (!result.ok) {
-        if (isCurrent(request)) setState(errorState(result.error, true));
-        return result;
-      }
-      await resolveSnapshot(result.value, request, true);
+      const result = await session.signIn(input);
+      if (result.ok) await settle(result.value, request, true);
       return result;
     },
-    [isCurrent, resolveSnapshot]
+    [session, settle]
+  );
+
+  const signOut = useCallback(async () => {
+    setIntentionalSignOut(true);
+    const request = ++requestRef.current;
+    const result = await session.signOut();
+    if (!isCurrent(request)) return result;
+    if (!result.ok) {
+      // still signed in: the control that asked shows why
+      setIntentionalSignOut(false);
+      return result;
+    }
+    setState({ status: "signed-out", expired: false });
+    return result;
+  }, [isCurrent, session]);
+
+  const select = useCallback(
+    async (change: (userId: string) => Promise<ServiceResult<WorkspaceAccessDto>>) => {
+      const current = stateRef.current;
+      if (current.status !== "ready" || !current.workspace) {
+        return { ok: false as const, error: { ...NOT_SIGNED_IN } };
+      }
+      const request = ++requestRef.current;
+      setState({ status: "loading" });
+      const result = await change(current.session.user.id);
+      if (!isCurrent(request)) return result;
+      setState(
+        result.ok
+          ? { status: "ready", session: current.session, workspace: result.value }
+          : { status: "unavailable", reason: { source: "workspace", error: result.error }, assertive: true }
+      );
+      return result;
+    },
+    [isCurrent]
   );
 
   const value = useMemo<SessionContextValue>(
     () => ({
       state,
       intentionalSignOut,
-      retry,
-      signIn: (userId) => {
-        setIntentionalSignOut(false);
-        return perform(() => session.signIn({ userId }));
-      },
-      signOut: async () => {
-        setIntentionalSignOut(true);
-        return perform(() => session.signOut());
-      },
+      retry: () => load({ assertive: true, invalidate: true, showLoading: true }),
+      refresh: () => load({ assertive: true, invalidate: false, showLoading: false }),
+      signIn,
+      signOut,
+      expire,
       selectOrganization: (organizationId) =>
-        perform(() => session.selectOrganization({ organizationId })),
+        access
+          ? select((userId) => access.selectOrganization({ userId, organizationId }))
+          : Promise.resolve({ ok: false, error: { ...NOT_SIGNED_IN } }),
       selectPublication: (organizationId, publicationId) =>
-        perform(() => session.selectPublication({ organizationId, publicationId })),
+        access
+          ? select((userId) => access.selectPublication({ userId, organizationId, publicationId }))
+          : Promise.resolve({ ok: false, error: { ...NOT_SIGNED_IN } }),
     }),
-    [intentionalSignOut, perform, retry, session, state]
+    [access, expire, intentionalSignOut, load, select, signIn, signOut, state]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -216,10 +234,10 @@ export function useSession(): SessionContextValue {
   return value;
 }
 
-export function activeRole(session: SimulatedSessionDto): SimulatedRole {
+/** The person's role in the active organisation of their placeholder workspace. */
+export function activeRole(workspace: WorkspaceAccessDto): WorkspaceRole {
   return (
-    session.access.find(
-      (grant) => grant.organizationId === session.activeOrganizationId
-    )?.role ?? "reviewer"
+    workspace.access.find((grant) => grant.organizationId === workspace.activeOrganizationId)?.role ??
+    "reviewer"
   );
 }

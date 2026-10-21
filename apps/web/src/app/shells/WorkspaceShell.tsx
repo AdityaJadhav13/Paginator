@@ -9,6 +9,7 @@ import { useWorkspaceRouteContext } from "../contracts/route-context.ts";
 import { ProtectedRouteState } from "../../features/auth/ProtectedRouteState.tsx";
 import { SignedInSessionControls } from "../../features/auth/SessionStatus.tsx";
 import { useSession } from "../../features/auth/SessionProvider.tsx";
+import { LanguageScope } from "../../i18n/index.ts";
 
 const SEGMENT_LABEL_KEY: Record<string, keyof typeof ROUTE_LABELS> = {
   settings: "orgSettings", billing: "orgBilling", storage: "orgStorage",
@@ -19,7 +20,16 @@ const SEGMENT_LABEL_KEY: Record<string, keyof typeof ROUTE_LABELS> = {
   content: "editionContent", generate: "editionGenerate", preflight: "editionPreflight", export: "editionExport",
 };
 
+/** The placeholder workspace exists in English only (plan §2.6: dev-only until each screen is built). */
 export function WorkspaceShell() {
+  return (
+    <LanguageScope language="en">
+      <WorkspaceShellContent />
+    </LanguageScope>
+  );
+}
+
+function WorkspaceShellContent() {
   const { state, retry } = useWorkspaceRouteContext();
   const session = useSession();
   const navigate = useNavigate();
@@ -78,7 +88,7 @@ export function WorkspaceShell() {
         </Inline>
         <CollapsibleNav ariaLabel={publication ? "Publication" : "Organization"}><Stack gap="3"><Cluster gap="4"><Field label="Organization"><Select value={organization.id} onChange={async (event) => {
           const result = await session.selectOrganization(event.target.value);
-          if (result.ok && result.value.status === "signed-in") navigate(paths.pubOverview(result.value.session.activeOrganizationId, result.value.session.activePublicationId));
+          if (result.ok) navigate(paths.pubOverview(result.value.activeOrganizationId, result.value.activePublicationId));
         }}>{resolution.organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}</Select></Field>
         {publication && <Field label="Publication"><Select value={publication.id} onChange={(event) => navigate(paths.pubOverview(organization.id, event.target.value))}>{resolution.publications.map((pub) => <option key={pub.id} value={pub.id}>{pub.name}</option>)}</Select></Field>}<SignedInSessionControls /></Cluster><Cluster gap="4">{(publication ? pubNavItems : orgNavItems).map(([label, to]) => <Link key={to} to={to}>{label}</Link>)}</Cluster></Stack></CollapsibleNav>
         <Breadcrumbs items={breadcrumbItems} />
