@@ -17,6 +17,9 @@
 - [06-print-archive-notifications.md](06-print-archive-notifications.md): §9, §10, §11
 - [07-roles-settings-mobile.md](07-roles-settings-mobile.md): §12, §13
 - [08-architecture-and-build.md](08-architecture-and-build.md): §14, §15, §16, §17
+- [09-launch-plan.md](09-launch-plan.md): the launch plan (2026-10-20): grow the Desk into the product with open-source parts; replaces the order of §15
+- [10-l2-newsroom-plan.md](10-l2-newsroom-plan.md): the L2 "newsroom" plan (proposal, 2026-10-20, awaiting the owner's decisions): accounts and the story desk first, then hosted photos, layout, the page editor, release and ads
+- [11-fix-before-launch.md](11-fix-before-launch.md): the minor findings left for the end, fixed before launch (owner decision 2026-10-21)
 
 ## 0. Context
 

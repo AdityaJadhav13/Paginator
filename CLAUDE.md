@@ -1,7 +1,7 @@
 ## Project rules
 
-- **Product source of truth:** `docs/product/` (specification and build plan). **Architecture:** `docs/architecture/v2/` (gates G0–G7 in doc 13; ADR-023 TS kernel with a Python oracle; ADR-024 units). **Setup:** `docs/DEVELOPMENT.md`.
-- **Gates decide what may be built.** The editor comes after G1 plus the engine and renderer memos. The backend comes after G0 and the full G2. Screens are built when their gate opens. Never show a feature in the real product before it works.
+- **Product source of truth:** `docs/product/` (specification and build plan; the build order is `09-launch-plan.md`). **Architecture:** `docs/architecture/v2/` (gates G0–G7 in doc 13; ADR-023 TS kernel with a Python oracle; ADR-024 units). **Setup:** `docs/DEVELOPMENT.md`.
+- **Gates decide what may be released, not what may be built** (owner decision 2026-10-20, `docs/product/09-launch-plan.md`). Build in the launch plan's order: grow the Desk (`tools/desk`) into the product. G0–G2 decide when a real edition may be printed with the Desk, and G3 onwards when other papers may be offered the product. Never show a feature in the real product before it works.
 - **Public repository.**
   - Pilot newspaper content, fonts, colour profiles, artwork and review answers stay in `~/PageinatorPrivate`.
   - Only aggregates and fictional examples go into the repo.
