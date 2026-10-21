@@ -95,6 +95,11 @@ export default defineConfig(
     languageOptions: { globals: globals.node },
   },
   {
+    // Pageinator Desk's screens: plain browser modules, no build step
+    files: ["tools/desk/static/**/*.js"],
+    languageOptions: { globals: globals.browser, sourceType: "module" },
+  },
+  {
     files: KERNEL_SRC,
     ignores: NOT_KERNEL,
     rules: {

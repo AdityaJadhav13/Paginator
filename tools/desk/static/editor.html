@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Page editor · Pageinator Desk</title>
+    <link rel="stylesheet" href="/static/editor.css" />
+    <script type="module" src="/static/editor.js"></script>
+  </head>
+  <body>
+    <header class="ed-top">
+      <a class="ed-back" id="back" href="/">← Desk</a>
+      <div class="ed-title"><strong id="title">Page</strong> <span class="muted" id="subtitle"></span></div>
+      <div class="ed-tools" role="toolbar" aria-label="Page tools">
+        <button type="button" id="prev" title="Previous page (Page Up)" aria-label="Previous page">‹</button>
+        <button type="button" id="next" title="Next page (Page Down)" aria-label="Next page">›</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button type="button" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>↶</button>
+        <button type="button" id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled>↷</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button type="button" id="alt" title="The same stories, laid out another way (you can undo it)">
+          Try another layout
+        </button>
+        <button type="button" id="refresh" title="Set the page again with the articles' current text">
+          Update text
+        </button>
+        <span class="sep" aria-hidden="true"></span>
+        <button type="button" id="zoom-out" title="Zoom out (−)" aria-label="Zoom out">−</button>
+        <button type="button" id="zoom-fit" title="Fit the page (0)">Fit</button>
+        <button type="button" id="zoom-in" title="Zoom in (+)" aria-label="Zoom in">+</button>
+        <span class="zoom" id="zoom-label" aria-live="polite">100%</span>
+      </div>
+      <div class="ed-save">
+        <span class="save-state" id="save-state"></span>
+        <button type="button" class="primary" id="save" title="Make this page's print file (Ctrl+S)">Save page</button>
+      </div>
+    </header>
+    <div class="ed-notice" id="notice" hidden>
+      <p id="notice-text"></p>
+      <button type="button" id="notice-close" aria-label="Close this message">×</button>
+    </div>
+    <div class="sr-only" id="announce" aria-live="polite"></div>
+    <div class="sr-only" id="alert" role="alert"></div>
+    <main class="ed-main">
+      <aside class="ed-left" aria-label="Stories">
+        <h2>On this page</h2>
+        <ul id="on-page" class="story-list"></ul>
+        <h2>Other stories <span class="muted small">(click to bring in)</span></h2>
+        <input type="search" id="pool-search" placeholder="Search headlines" aria-label="Search other stories" />
+        <ul id="pool" class="story-list pool"></ul>
+      </aside>
+      <div class="ed-center">
+        <section class="ed-canvas-wrap" id="wrap" aria-label="The page">
+          <canvas
+            id="canvas"
+            tabindex="0"
+            aria-label="The page. Select a story with a click, move it by dragging, resize it with its handles; double-click it or press Enter to change its text."
+          ></canvas>
+          <div class="ed-busy" id="busy" hidden>Setting the page…</div>
+        </section>
+        <section class="ed-story" id="story" aria-labelledby="story-head" hidden>
+          <div class="ed-story-head">
+            <h2 id="story-head">Text of <span id="story-title"></span></h2>
+            <span id="story-fit" class="fit"></span>
+            <span id="story-state" class="muted small"></span>
+            <button type="button" id="story-close" aria-label="Close the story text (Esc)">×</button>
+          </div>
+          <div id="story-articles" class="ed-story-body"></div>
+        </section>
+      </div>
+      <aside class="ed-right" aria-label="Selected story">
+        <div id="props-empty" class="muted">Select a story on the page to change it.</div>
+        <div id="props" hidden>
+          <h2 id="p-headline"></h2>
+          <p id="p-fit" class="fit"></p>
+          <div class="field">
+            <span class="label">Width</span>
+            <div class="seg" id="p-width" role="group" aria-label="Width in columns"></div>
+          </div>
+          <div class="field two">
+            <label>Height <input type="number" id="p-height" min="10" step="0.5" /> mm</label>
+            <label>From top <input type="number" id="p-y" step="0.5" /> mm</label>
+          </div>
+          <div class="field">
+            <span class="label">Column</span>
+            <div class="seg" id="p-col" role="group" aria-label="First column"></div>
+          </div>
+          <div class="buttons">
+            <button
+              type="button"
+              id="p-text"
+              title="Type this story's text; the page is set again as you pause (Enter)"
+            >
+              Edit text
+            </button>
+            <button type="button" id="p-fit-height" title="The height the text needs at this width">
+              Fit height to text
+            </button>
+            <button type="button" id="p-swap" title="Then click another story to exchange places">Swap with…</button>
+            <button type="button" id="p-remove" class="danger" title="Back to the other stories (Delete)">
+              Remove from page
+            </button>
+          </div>
+        </div>
+        <h2 class="problems-title">Checks</h2>
+        <ul id="problems" class="problems"></ul>
+        <p class="muted small help">
+          Drag a story to move it; drag its right or bottom edge, or its corner, to resize. The left and right arrows
+          move the selected story by a column, up and down by half a millimetre (with Shift, 5 mm); Delete takes it off
+          the page. Double-click a story, or press Enter, to type its text: the page is set again when you pause. Every
+          change is set by the same engine that makes the print file, and kept as you go; <strong>Save page</strong>
+          makes the page's PDF and checks it.
+        </p>
+      </aside>
+    </main>
+  </body>
+</html>

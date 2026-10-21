@@ -8,6 +8,7 @@
 | `tools/testkit` | Test-only helpers: repository paths, Python-flavoured JSONL |
 | `tools/ts` | Repository guards: privacy, frozen evidence, dependency graph, oracle manifest |
 | `tools/oracle/v0` | **Frozen** Python reference oracle (never edited) |
+| `tools/desk` | **Pageinator Desk**: the owner's internal, local layout desk on the Phase-0 engines (not the product; see its README) |
 | `experiments/phase0`, `fixtures/typeset/v1` | **Frozen** Phase-0 evidence and golden vectors (changes need the `evidence-change` approval) |
 | `docs/product` | The product specification and build plan |
 | `docs/architecture/v2` | Architecture, gates G0–G7 and ADRs (ADR-023: TS kernel with a Python oracle; ADR-024: units) |
