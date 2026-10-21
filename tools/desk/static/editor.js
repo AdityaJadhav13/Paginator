@@ -11,7 +11,21 @@
  * new text and saving wait for the changes on their way and allow no edits until they are answered. Every request is
  * made for the page shown when it started; an answer for a page the editor has left is dropped. Every change carries
  * the page's revision: a change made on an older view of the page (another window or tab changed it) is refused,
- * and the editor shows the page again as it is. */
+ * and the editor shows the page again as it is.
+ *
+ * The view (zoom, scrolling, the rulers) is the screen's alone: it never changes the page or what it prints. */
+
+import {
+  clampZoom,
+  fitScale,
+  fitWidthZoom,
+  gridColumns,
+  rulerLabel,
+  rulerSteps,
+  rulerTicks,
+  unionBox,
+  zoomToRect,
+} from "./editor-view.js";
 
 const $ = (sel) => document.querySelector(sel);
 const PT_PER_MM = 72 / 25.4;
@@ -19,6 +33,9 @@ const HANDLE_PX = 7;
 const DRAG_MIN_MM = 0.8; // a smaller pointer move is a click, not a drag
 const SAME_MM = 0.01;
 const MIN_H_MM = 10;
+const RULER_PX = 20; // the rulers along the top and left of the view
+const ZOOM_MARGIN_PX = 32; // room around a story zoomed to
+const PREFS_KEY = "pageinator-desk.editor.v1"; // the editor's choices kept in this browser (the rulers)
 const BAD = new Set(["overlap", "outside", "over", "cannot_set", "overset", "unset"]); // the print file would show these
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 const params = new URLSearchParams(location.search);
@@ -34,8 +51,12 @@ const S = {
   selected: null, // story key
   undo: [],
   redo: [],
-  zoom: 1,
-  view: { s: 1, ox: 0, oy: 0 },
+  zoom: 1, // a multiple of the scale at which the whole page fits the view
+  view: { s: 1, ox: 0, oy: 0 }, // px per mm, and where the page's top-left corner is (px)
+  fitTo: null, // what the view was fitted to and fits again when its size changes: "width", or a box (mm) zoomed to;
+  // null: the whole page, at the zoom chosen
+  rulers: readPrefs().rulers !== false, // shown unless hidden in this browser
+  pointer: null, // the pointer over the view (px), marked on the rulers
   glyphs: new Map(), // "face:gid" -> Path2D
   upem: new Map(), // face -> units per em
   images: new Map(), // raster key -> HTMLImageElement
@@ -158,7 +179,8 @@ async function openPage() {
     title();
     tellDesk(); // opening can mark the page changed (its revision moved)
     sayOpened(entry, data, later);
-    fit();
+    if (S.fitTo !== "width") S.fitTo = null; // a story zoomed to was on another page
+    refit();
   } catch (e) {
     if (gen === S.gen) showProblem(e.message);
   } finally {
@@ -726,15 +748,23 @@ function size() {
   return { w: r.width, h: r.height, dpr };
 }
 
+/** The scale (px per mm) at which the whole page fits a view of w × h px: the zoom is a multiple of it. */
+const pageFit = (w, h) => fitScale(w, h, S.data.grid.page_w_mm, S.data.grid.page_h_mm);
+
+/** The page at the zoom chosen: centred across the view, and at its top once it is taller than the view. */
 function fit() {
   if (!S.data) return;
   const { w, h } = size();
   const g = S.data.grid;
-  const s = Math.min((w - 48) / g.page_w_mm, (h - 48) / g.page_h_mm) * S.zoom;
+  const s = pageFit(w, h) * S.zoom;
   S.view = { s, ox: (w - g.page_w_mm * s) / 2, oy: Math.max(24, (h - g.page_h_mm * s) / 2) };
   if (S.zoom > 1) S.view.oy = 24;
-  $("#zoom-label").textContent = `${Math.round(S.zoom * 100)}%`;
+  zoomLabel();
   invalidate();
+}
+
+function zoomLabel() {
+  $("#zoom-label").textContent = `${Math.round(S.zoom * 100)}%`;
 }
 
 function drawContent(w, h, dpr) {
@@ -857,6 +887,123 @@ function draw() {
     ctx.font = "12px system-ui, sans-serif";
     ctx.fillText(`${S.drag.ghost.w} col × ${Math.round(S.drag.ghost.h)} mm`, x0 + 6, y0 - 6);
   }
+  drawRulers(w, h);
+}
+
+let frame = 0;
+
+/** The view drawn again at the next frame (once, however often it is asked for), from the page drawing it keeps. */
+function redraw() {
+  if (frame) return;
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    draw();
+  });
+}
+
+const RULER = {
+  ground: "#e5e7eb", // over the pasteboard
+  page: "#fafafa", // along the page
+  column: "rgba(139, 92, 246, 0.18)", // a column of the grid (the violet of the page's column guides)
+  number: "#5b21b6",
+  tick: "#6b7280",
+  text: "#374151",
+  edge: "#b9bfc8",
+  pointer: "#e11d48",
+};
+const TICK_PX = { major: RULER_PX, mid: 8, minor: 4 };
+const RULER_FONT = "9px system-ui, -apple-system, sans-serif";
+
+/** The rulers along the top and left of the view, when shown: mm from the page's top-left corner, the grid's columns
+ * numbered at their centres on the top one, and where the pointer is. They are drawn from the view itself, last, so
+ * they follow every scroll and zoom; they cover the view's edges, never the page's content. */
+function drawRulers(w, h) {
+  if (!S.rulers) return;
+  const R = RULER_PX;
+  const g = S.data.grid;
+  const { s, ox, oy } = S.view;
+  const steps = rulerSteps(s);
+  ctx.save();
+  ctx.font = RULER_FONT;
+  ctx.textBaseline = "top";
+
+  // top: across the page, with its columns
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(R, 0, w - R, R);
+  ctx.clip();
+  ctx.fillStyle = RULER.ground;
+  ctx.fillRect(R, 0, w - R, R);
+  ctx.fillStyle = RULER.page;
+  ctx.fillRect(ox, 0, g.page_w_mm * s, R);
+  const cols = gridColumns(g);
+  ctx.fillStyle = RULER.column;
+  for (const c of cols) ctx.fillRect(ox + c.x0 * s, 0, (c.x1 - c.x0) * s, R);
+  const across = rulerTicks((R - ox) / s - steps.major, (w - ox) / s, steps);
+  ctx.fillStyle = RULER.tick;
+  ctx.beginPath();
+  for (const t of across) ctx.rect(Math.round(ox + t.mm * s), R - TICK_PX[t.kind], 1, TICK_PX[t.kind]);
+  ctx.fill();
+  ctx.fillStyle = RULER.text;
+  ctx.textAlign = "left";
+  for (const t of across) if (t.label !== null) ctx.fillText(rulerLabel(t.label), Math.round(ox + t.mm * s) + 3, 1);
+  ctx.font = "600 10px system-ui, -apple-system, sans-serif";
+  ctx.textAlign = "center";
+  for (const c of cols) {
+    const x = ox + c.mid * s;
+    const room = ctx.measureText(String(c.n)).width + 6;
+    if (room > (c.x1 - c.x0) * s) continue; // too narrow to number at this zoom
+    ctx.fillStyle = RULER.page; // the number on a patch of its column, over the ticks
+    ctx.fillRect(x - room / 2, 9, room, R - 10);
+    ctx.fillStyle = RULER.column;
+    ctx.fillRect(x - room / 2, 9, room, R - 10);
+    ctx.fillStyle = RULER.number;
+    ctx.fillText(String(c.n), x, 9);
+  }
+  ctx.restore();
+
+  // left: down the page (numbers turned to read upwards)
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, R, R, h - R);
+  ctx.clip();
+  ctx.fillStyle = RULER.ground;
+  ctx.fillRect(0, R, R, h - R);
+  ctx.fillStyle = RULER.page;
+  ctx.fillRect(0, oy, R, g.page_h_mm * s);
+  const down = rulerTicks((R - oy) / s - steps.major, (h - oy) / s, steps);
+  ctx.fillStyle = RULER.tick;
+  ctx.beginPath();
+  for (const t of down) ctx.rect(R - TICK_PX[t.kind], Math.round(oy + t.mm * s), TICK_PX[t.kind], 1);
+  ctx.fill();
+  ctx.fillStyle = RULER.text;
+  ctx.textAlign = "right";
+  for (const t of down) {
+    if (t.label === null) continue;
+    ctx.save();
+    ctx.translate(1, Math.round(oy + t.mm * s) + 3);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText(rulerLabel(t.label), 0, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // the corner (the unit), the rulers' inner edges, and where the pointer is
+  ctx.fillStyle = RULER.ground;
+  ctx.fillRect(0, 0, R, R);
+  ctx.fillStyle = RULER.text;
+  ctx.textAlign = "center";
+  ctx.fillText("mm", R / 2, 6);
+  ctx.fillStyle = RULER.edge;
+  ctx.fillRect(0, R - 1, w, 1);
+  ctx.fillRect(R - 1, 0, 1, h);
+  const p = S.pointer;
+  if (p && p[0] >= R && p[1] >= R && p[0] < w && p[1] < h) {
+    ctx.fillStyle = RULER.pointer;
+    ctx.fillRect(Math.round(p[0]), 0, 1, R - 1);
+    ctx.fillRect(0, Math.round(p[1]), R - 1, 1);
+  }
+  ctx.restore();
 }
 
 // ------------------------------------------------------------------------------------------- pointer and keys
@@ -867,12 +1014,22 @@ function cancelDrag() {
   requestAnimationFrame(draw);
 }
 
+/** Whether a point of the view (px) is on a ruler: the rulers are for reading, so a click there does nothing. */
+const onRuler = (px, py) => S.rulers && (px < RULER_PX || py < RULER_PX);
+
+/** Where the pointer is over the view (px; null: not over it), for the rulers' markers. */
+function pointAt(p) {
+  S.pointer = p;
+  if (S.rulers && S.data) redraw();
+}
+
 canvas.addEventListener("pointerdown", (e) => {
   if (!S.data || e.button !== 0 || S.drag) return; // one pointer at a time
   canvas.focus();
   const r = canvas.getBoundingClientRect();
   const px = e.clientX - r.left;
   const py = e.clientY - r.top;
+  if (onRuler(px, py)) return;
   const h = hit(px, py);
   if (S.swapping) {
     const from = S.selected;
@@ -901,7 +1058,8 @@ canvas.addEventListener("pointermove", (e) => {
   const px = e.clientX - r.left;
   const py = e.clientY - r.top;
   if (!S.drag) {
-    const h = S.data ? hit(px, py) : null;
+    pointAt([px, py]); // a drag draws the view itself, at every move
+    const h = S.data && !onRuler(px, py) ? hit(px, py) : null;
     canvas.style.cursor = S.swapping
       ? "crosshair"
       : !h
@@ -916,6 +1074,7 @@ canvas.addEventListener("pointermove", (e) => {
     return;
   }
   if (e.pointerId !== S.drag.pointer) return;
+  S.pointer = [px, py];
   const dx = (px - S.drag.start[0]) / S.view.s;
   const dy = (py - S.drag.start[1]) / S.view.s;
   if (Math.abs(dx) + Math.abs(dy) < DRAG_MIN_MM) {
@@ -953,9 +1112,11 @@ canvas.addEventListener("pointerup", (e) => {
 
 canvas.addEventListener("pointercancel", cancelDrag); // the browser took the pointer (a gesture, a dialog)
 canvas.addEventListener("lostpointercapture", cancelDrag); // after pointerup the drag is already over
+canvas.addEventListener("pointerleave", () => pointAt(null));
 canvas.addEventListener("dblclick", (e) => {
   const r = canvas.getBoundingClientRect();
-  const h = S.data && hit(e.clientX - r.left, e.clientY - r.top);
+  const [px, py] = [e.clientX - r.left, e.clientY - r.top];
+  const h = S.data && !onRuler(px, py) && hit(px, py);
   if (h) openText(h.story);
 });
 
@@ -996,9 +1157,14 @@ window.addEventListener("keydown", (e) => {
   if (mod || e.altKey) return; // the browser's own shortcuts (Ctrl and +/-/0 zoom the browser)
   if (e.code === "Equal" || e.code === "NumpadAdd") return zoomBy(1.25);
   if (e.code === "Minus" || e.code === "NumpadSubtract") return zoomBy(0.8);
-  if (e.code === "Digit0" || e.code === "Numpad0") {
-    S.zoom = 1;
-    return fit();
+  if (e.code === "Digit0" || e.code === "Numpad0") return fitPage();
+  // Shift+1 the whole page, Shift+2 the selected story, Shift+3 the page's width, Shift+R the rulers; not during a drag
+  // (a drag is measured in the view it started in)
+  const view = e.shiftKey && !S.drag ? VIEW_KEYS.get(e.code) : undefined;
+  if (view) {
+    e.preventDefault();
+    if (!e.repeat) view();
+    return;
   }
   if (e.key === "PageDown") return goPage(ID.page + 1);
   if (e.key === "PageUp") return goPage(ID.page - 1);
@@ -1023,9 +1189,96 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+// ------------------------------------------------------------------------------------------- view (zoom and rulers)
+
 function zoomBy(f) {
-  S.zoom = Math.max(0.5, Math.min(8, S.zoom * f));
+  S.zoom = clampZoom(S.zoom * f);
+  S.fitTo = null;
   fit();
+}
+
+/** The whole page in the view (Shift+1, 0, Fit). */
+function fitPage() {
+  S.zoom = 1;
+  S.fitTo = null;
+  fit();
+}
+
+/** The page's width fills the view (Shift+3), and fills it again when the view changes size. */
+function fitWidth() {
+  if (!S.data) return;
+  const { w, h } = size();
+  S.zoom = clampZoom(fitWidthZoom(w, h, S.data.grid.page_w_mm, S.data.grid.page_h_mm));
+  S.fitTo = "width";
+  fit();
+}
+
+/** The selected story fills the view, with a margin (Shift+2). It stays in view when the view changes size (the story
+ * panel opening, the window) until you zoom or scroll yourself. */
+function zoomToSelection() {
+  if (!S.data) return;
+  const box = unionBox(S.modules.filter((m) => m.story === S.selected).map(boxOf)); // one story is selected at a time
+  if (!box) return say("Select a story on the page first: Shift+2 zooms to it.");
+  showBox(box);
+}
+
+/** The view fitted around a box on the page (mm), inside the rulers. */
+function showBox(box) {
+  if (!S.data) return;
+  const { w, h } = size();
+  const r = S.rulers ? RULER_PX : 0;
+  const v = zoomToRect(box, { x0: r, y0: r, x1: w, y1: h }, pageFit(w, h), ZOOM_MARGIN_PX);
+  if (!v) return;
+  S.zoom = v.zoom;
+  S.view = { s: v.s, ox: v.ox, oy: v.oy };
+  S.fitTo = box;
+  zoomLabel();
+  invalidate();
+}
+
+/** The view after its size changed: the page, its width or the story zoomed to, fitted again. */
+function refit() {
+  if (S.fitTo === "width") fitWidth();
+  else if (S.fitTo) showBox(S.fitTo);
+  else fit();
+}
+
+/** Shows or hides the rulers (Shift+R), and keeps the choice in this browser. */
+function toggleRulers() {
+  S.rulers = !S.rulers;
+  writePrefs({ rulers: S.rulers });
+  showRulers();
+}
+
+function showRulers() {
+  $("#rulers").setAttribute("aria-pressed", S.rulers ? "true" : "false");
+  $("#wrap").classList.toggle("rulers", S.rulers);
+  redraw();
+}
+
+const VIEW_KEYS = new Map([
+  ["Digit1", fitPage],
+  ["Digit2", zoomToSelection],
+  ["Digit3", fitWidth],
+  ["KeyR", toggleRulers],
+]);
+
+/** The editor's choices kept in this browser ({rulers}); the editor works the same without them. */
+function readPrefs() {
+  try {
+    const value = JSON.parse(localStorage.getItem(PREFS_KEY) || "null");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePrefs(change) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ ...readPrefs(), ...change }));
+  } catch {
+    // storage is blocked or full: the choice lasts while the page is open
+  }
 }
 
 canvas.addEventListener(
@@ -1038,22 +1291,22 @@ canvas.addEventListener(
       const [mx, my] = toMm(e.clientX - r.left, e.clientY - r.top);
       const f = Math.exp(-e.deltaY / 300);
       const before = S.view.s;
-      S.zoom = Math.max(0.5, Math.min(8, S.zoom * f));
+      S.zoom = clampZoom(S.zoom * f);
       const { w, h } = size();
-      const g = S.data.grid;
-      const s = Math.min((w - 48) / g.page_w_mm, (h - 48) / g.page_h_mm) * S.zoom;
+      const s = pageFit(w, h) * S.zoom;
       S.view = { s, ox: e.clientX - r.left - mx * s, oy: e.clientY - r.top - my * s };
-      if (before !== s) $("#zoom-label").textContent = `${Math.round(S.zoom * 100)}%`;
+      if (before !== s) zoomLabel();
     } else {
       S.view = { ...S.view, ox: S.view.ox - e.deltaX, oy: S.view.oy - e.deltaY };
     }
+    S.fitTo = null; // zoomed or scrolled by hand: a change of size keeps the zoom, not this place
     invalidate();
   },
   { passive: false },
 );
 
 // the page fills the space left to it (the window, or the story panel opening or resized)
-new ResizeObserver(() => fit()).observe($("#wrap"));
+new ResizeObserver(refit).observe($("#wrap"));
 
 // ------------------------------------------------------------------------------------------- panels
 
@@ -1109,6 +1362,7 @@ function tools() {
   const moving = S.switching || S.working; // a save's result stays on screen until it is done
   $("#prev").disabled = moving || ID.page <= 1;
   $("#next").disabled = moving || (S.pages ? ID.page >= S.pages : false);
+  $("#zoom-sel").disabled = !S.data || !S.modules.some((m) => m.story === S.selected); // the view only: never busy
 }
 
 function renderPanels() {
@@ -1298,6 +1552,7 @@ function swapWith(story) {
 /** The save state beside the button. Read aloud only when a save ends (not at every move: that would be noise). */
 function setSaved(text) {
   $("#save-state").textContent = text;
+  $("#save-state").title = text; // the slot shows two lines at most: the whole status on hover
   if (text.startsWith("Saved")) say(text);
 }
 
@@ -1394,6 +1649,7 @@ function title() {
   $("#title").textContent = `Page ${ID.page}`;
   const parts = [ID.edition, S.pages ? `${S.pages} pages` : "", S.run ? `layout of ${when(S.run.started)}` : ""];
   $("#subtitle").textContent = parts.filter(Boolean).join(" · ");
+  $("#subtitle").title = $("#subtitle").textContent; // cut short when the toolbar needs the room
   document.title = `Page ${ID.page} · ${ID.edition} · Pageinator Desk`;
 }
 
@@ -1681,10 +1937,10 @@ $("#redo").addEventListener("click", redo);
 $("#save").addEventListener("click", savePage);
 $("#zoom-in").addEventListener("click", () => zoomBy(1.25));
 $("#zoom-out").addEventListener("click", () => zoomBy(0.8));
-$("#zoom-fit").addEventListener("click", () => {
-  S.zoom = 1;
-  fit();
-});
+$("#zoom-fit").addEventListener("click", fitPage);
+$("#zoom-width").addEventListener("click", fitWidth);
+$("#zoom-sel").addEventListener("click", zoomToSelection);
+$("#rulers").addEventListener("click", toggleRulers);
 $("#prev").addEventListener("click", () => goPage(ID.page - 1));
 $("#next").addEventListener("click", () => goPage(ID.page + 1));
 $("#pool-search").addEventListener("input", renderPanels);
@@ -1726,8 +1982,9 @@ for (const [id, keyName] of [
   });
 }
 if (MAC)
-  for (const b of document.querySelectorAll("[title*='Ctrl']"))
+  for (const b of document.querySelectorAll("[title*='Ctrl+'], [title*='Shift+']"))
     b.title = b.title.replaceAll("Ctrl+", "⌘").replaceAll("Shift+", "⇧");
+showRulers();
 $("#back").href = `/?edition=${encodeURIComponent(ID.edition)}&step=run`;
 $("#back").addEventListener("click", (e) => {
   if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return; // another tab or window

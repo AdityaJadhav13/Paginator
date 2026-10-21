@@ -26,6 +26,25 @@ The owner decided on 2026-10-21:
 | DESK-5 | `engine/deskcommon.py` `error_text` | Unexpected errors are still shown with their Python class name (for example `KeyError: …`). Damaged files are now said in plain words | Rare; the message is still true |
 | DESK-6 | `deskserver/press.py` `DAMAGED` | When a file cannot be read, the advice is "put the file back from a backup, or lay the edition out again". A new layout fails until the file is back, so the advice could name the file | The page is never offered as current meanwhile |
 
+## Page editor view: rulers and zoom (L1-1, `tools/desk/static/editor.js`)
+
+These come from the feature's code review and its independent verification, 2026-10-21. "Pre-existing" means the behaviour was already in the editor before this feature.
+
+| # | What | Why it can wait |
+|---|---|---|
+| VIEW-1 | Zoom to selection remembers the story's box from the moment of Shift+2. If the story is then moved, resized or undone, a later window resize centres on where it was. Fix: keep the story's key and recompute its box on resize | Shift+2 again fixes it; view only |
+| VIEW-2 | Ruler ticks are drawn 0–1 px past their true position (`Math.round` plus a 1 px line), and look soft at a device pixel ratio of 1.5 | Under a pixel; view only |
+| VIEW-3 | Numbers whose tick lies under the ruler corner are drawn and clipped, leaving stubs (a lone "0" from "120", "−3" from "−300") | Cosmetic |
+| VIEW-4 | + , − and 0 still change the zoom during a drag (pre-existing). The move sent on release is then computed at the new scale. Ctrl+wheel behaves the same | Rare; the engine sets every move and undo restores it |
+| VIEW-5 | + and − zoom about the page's top centre, so after Shift+2 the story leaves the view (pre-existing). Fix: zoom about the view's centre | Shift+2 again brings it back |
+| VIEW-6 | Any resize of the view (the story panel opening, the window) puts a scrolled page back at its top (pre-existing). Fix: keep the millimetre point at the view's centre on resize | The header no longer changes height, so ordinary edits do not trigger it |
+| VIEW-7 | Fit page and fit width centre the page in the whole view, not in the area beside the left ruler (the page sits about 10 px off-centre) | Cosmetic |
+| VIEW-8 | Shift+2 with nothing selected tells only screen readers; a sighted user sees nothing happen (the Story button is greyed) | Minor |
+| VIEW-9 | At 1280 px the edition name in the header is cut short (its tooltip has the full text) | Cosmetic |
+| VIEW-10 | Tests: the view maths is tested (`tools/desk/test/test_editor_view.mjs`), but the editor's wiring (keys, guards, saved choice, resize) is not. No CI job runs any Desk test, Python or JS | Checked by hand and in a browser for this feature; PR 3 of the L2 plan adds the Desk's CI job |
+| VIEW-11 | Small items:<br>• the comment at `fit()` describes the top placement wrongly;<br>• `aria-keyshortcuts` is missing on Fit, Width, Story and Rulers | Cosmetic |
+| VIEW-12 | Spec items not built yet (05 §8.5, §8.12):<br>• moving or resetting the ruler origin;<br>• guides pulled from the rulers;<br>• a units menu;<br>• the absolute 10–800 % zoom range;<br>• Shift+0 = actual size (today "100 %" and Shift+0 mean the whole page) | Not claimed by the Desk; needed for the product's editor |
+
 ## Licence check (`tools/ts/check-licences.ts`)
 
 | # | What | Why it can wait |

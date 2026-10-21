@@ -26,9 +26,65 @@
         </button>
         <span class="sep" aria-hidden="true"></span>
         <button type="button" id="zoom-out" title="Zoom out (−)" aria-label="Zoom out">−</button>
-        <button type="button" id="zoom-fit" title="Fit the page (0)">Fit</button>
+        <button type="button" id="zoom-fit" title="Fit the page (Shift+1 or 0)">Fit</button>
         <button type="button" id="zoom-in" title="Zoom in (+)" aria-label="Zoom in">+</button>
         <span class="zoom" id="zoom-label" aria-live="polite">100%</span>
+        <button
+          type="button"
+          id="zoom-width"
+          class="icon"
+          title="Fit the page's width (Shift+3)"
+          aria-label="Fit the page's width"
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <path
+              d="M2 3v10M14 3v10M5 8h6M7 6 5 8l2 2M9 6l2 2-2 2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          id="zoom-sel"
+          class="icon"
+          title="Zoom to the selected story (Shift+2)"
+          aria-label="Zoom to the selected story"
+          disabled
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <path
+              d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <rect x="5.5" y="5.5" width="5" height="5" rx="0.5" fill="currentColor" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          id="rulers"
+          class="icon"
+          title="Show or hide the rulers (Shift+R)"
+          aria-label="Rulers"
+          aria-pressed="true"
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <path
+              d="M1.5 1.5h13v4h-9v9h-4zM8 5.5v-2M11 5.5v-2M5.5 8h-2M5.5 11h-2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.25"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
       </div>
       <div class="ed-save">
         <span class="save-state" id="save-state"></span>
@@ -110,6 +166,10 @@
           the page. Double-click a story, or press Enter, to type its text: the page is set again when you pause. Every
           change is set by the same engine that makes the print file, and kept as you go; <strong>Save page</strong>
           makes the page's PDF and checks it.
+        </p>
+        <p class="muted small help">
+          Shift+2 zooms to the selected story, Shift+1 shows the whole page and Shift+3 its width; Shift+R shows or
+          hides the rulers (millimetres from the page's top-left corner, with the columns numbered).
         </p>
       </aside>
     </main>

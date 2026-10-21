@@ -54,13 +54,23 @@ input {
   border-bottom: 1px solid var(--border);
 }
 .ed-back {
+  flex: none;
   color: var(--accent);
   text-decoration: none;
   font-weight: 600;
+  white-space: nowrap;
 }
 .ed-title {
   flex: 0 1 auto;
+  display: flex;
+  gap: 0.3em;
+  min-width: 0;
   white-space: nowrap;
+}
+#subtitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ed-tools {
   display: flex;
@@ -80,9 +90,27 @@ input {
   color: var(--text);
   cursor: pointer;
 }
+.ed-tools button,
+.ed-save button {
+  flex: none;
+  white-space: nowrap; /* the page's title gives way when the header is narrow, not the buttons */
+}
 .ed-tools button:disabled {
   opacity: 0.4;
   cursor: default;
+}
+.ed-tools button[aria-pressed="true"] {
+  background: #eef2ff;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ed-tools button.icon {
+  width: 34px;
+  padding: 0;
+}
+.ed-tools button.icon svg {
+  display: block;
+  margin: auto;
 }
 .ed-tools .sep {
   width: 1px;
@@ -97,11 +125,22 @@ input {
   font-variant-numeric: tabular-nums;
 }
 .ed-save {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 10px;
 }
 .save-state {
+  /* a slot of its own, at most two lines: the header's height never follows the status (else the page view would
+     be fitted again at every change). 16em holds every status the editor shows in two lines; the tooltip has it too */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  width: 16em;
+  max-height: 2.5em;
+  line-height: 1.25;
+  text-align: right;
   color: var(--muted);
   font-size: 13px;
 }
@@ -357,6 +396,9 @@ button.row {
   padding: 6px 14px;
   border-radius: 999px;
   font-size: 13px;
+}
+.ed-canvas-wrap.rulers .ed-busy {
+  top: 32px; /* below the top ruler */
 }
 
 #p-headline {

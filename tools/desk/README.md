@@ -57,6 +57,12 @@ never in this repository.
      text still fits its box. The page itself is never set with browser text.
    - **Checks** list overlaps, text that does not fit, stories outside the news area or over an ad, and empty space.
    - **Try another layout** lays out the same stories another way; **Update text** sets the articles' current text.
+   - **Rulers and zoom:** rulers along the top and left give millimetres from the page's top-left corner, number the
+     grid's columns and mark where the pointer is; Shift+R shows or hides them, and the browser remembers it. Shift+2
+     zooms to the selected story, Shift+1 (or 0, or **Fit**) shows the whole page, Shift+3 its width, and − and + zoom
+     out and in. Fit width, zoom to the story and the rulers also have buttons after the zoom percentage; each
+     button's tooltip names its key. These keys do nothing while you type in a text box. The view never changes what
+     the page prints.
    - **Save page** writes the page's PDF/X-1a file, checks it with the independent checker (and for two lines touching
      in ink, as the layout runs do) and remakes the edition PDF and the press ZIP. A story brought from another page leaves that page then, and that page is marked
      "needs saving". The Desk does not offer the press files as current while any page is changed and not saved,
@@ -102,3 +108,4 @@ never in this repository.
 The contract between them is in [`CONTRACT.md`](CONTRACT.md). Tests:
 - `experiments/phase0/pdfx1/.venv/bin/python -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py`
 - `tools/oracle/v0/.venv/bin/python -m unittest tools/desk/test/test_engine.py`
+- `node --test tools/desk/test/test_editor_view.mjs` (the page editor's ruler and zoom arithmetic)

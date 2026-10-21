@@ -98,14 +98,14 @@ Each phase ends with something the newsroom uses on real work.
   - past-edition import;
   - an independent PDF/X-1a check on every page;
   - **the page editor**: select, move, resize, swap, remove and add stories on the grid; undo and redo; every change
-    set by the engine and kept; "Save page" makes and checks the print file.
-- **To add:**
+    set by the engine and kept; "Save page" makes and checks the print file;
   - "Try another layout" for one page;
-  - move a story to another page;
   - edit a story's text from the editor, with the page set again;
-  - lock a story in place;
-  - photo crop and focal point;
   - rulers and zoom to selection.
+- **To add:**
+  - move a story to another page;
+  - lock a story in place;
+  - photo crop and focal point.
 - **Inputs:** the house fonts (the owner provides the files and the licence); Word (.docx) import; Marathi labels on
   every screen.
 - **Owner:** one press test (a Desk page with photos and a real ad). This also completes gate G2.
@@ -140,7 +140,7 @@ stays the reference.
 
 ## 5. Order of the next work
 1. **Now:**
-   - L1 editor additions (try another layout, move between pages, text edits from the editor);
+   - L1 editor additions (lock a story in place, photo crop and focal point, move a story to another page);
    - the licence check (done: `pnpm run check:licences`);
    - the house fonts as soon as they arrive.
 2. **Then:** the L2 backend on the stack chosen in §3.1, starting with accounts and the story desk.
