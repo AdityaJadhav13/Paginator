@@ -8,9 +8,10 @@
     "node": "^24.15.0 || >=26.0.0"
   },
   "scripts": {
-    "ci": "pnpm run guard && pnpm run check:graph && pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test && pnpm --filter @pageinator/web build",
+    "ci": "pnpm run guard && pnpm run check:graph && pnpm run check:licences && pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test && pnpm --filter @pageinator/web build",
     "guard": "node tools/ts/guard-private.ts && node tools/ts/check-frozen.ts && node tools/ts/check-oracle-manifest.ts",
     "check:graph": "node tools/ts/check-graph.ts",
+    "check:licences": "node tools/ts/check-licences.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

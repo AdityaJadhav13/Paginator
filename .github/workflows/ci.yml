@@ -66,6 +66,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check:graph
+      - run: pnpm run check:licences
       - run: pnpm run lint
       - run: pnpm run format:check
       - run: pnpm run typecheck
