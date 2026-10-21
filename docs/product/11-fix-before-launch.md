@@ -86,6 +86,27 @@ a crop prints byte for byte as before, and a crop prints exactly the window the 
 | CROP-10 | the server's save API | A save made through the API (not the editor) after a photo is replaced, without Update text, prints the old photo with its crop | The page stays stale, so not "press ready"; `refresh` drops the crop; the editor always runs Update text before a save |
 | CROP-11 | `test/test_engine.py` | No unit test runs gen1's real render end to end with a crop (the tests run gen1's own crop lines and a gen1-shaped page) | Checked on the real engine: byte-identical PDFs without a crop, the exact window with one |
 
+## Page editor: move a story to another page (L1-4)
+
+From the feature's code review and its independent verification, 2026-10-22. The blocking items were fixed before the
+merge:
+- a move holds the run's save lock;
+- a page with no free place refuses the move;
+- a page whose stories overlap, or stand outside the news area, is never press-ready.
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| MOVE-1 | `deskserver/api.py` `_move` | An unexpected engine error that comes back as a 400 also takes the target's "needs saving" mark back, as a refusal does | The engine answers an error only after taking the story back off the target |
+| MOVE-2 | `engine/deskedit.py` `give_back` | It puts the target back in memory before writing its edit file; a failed write leaves the file with the story | The story is then in both pages' edits, which any save settles; the PDFs stay consistent |
+| MOVE-3 | `CONTRACT.md` `move` row | "Refused before anything is written" overstates it: the target's `sync()` can write text another page set | That write is a change of its own, covered by the stale rule |
+| MOVE-4 | `deskserver/editing.py` `before_move` | The target's earlier `needs_save_reason` is replaced by the move's | The page stays "needs saving" either way; only the words are lost |
+| MOVE-5 | `deskserver/api.py` `_move` | A story already on the target ("already") still marks the target "needs saving" | It holds unsaved changes anyway (the story was brought in); one extra save at most |
+| MOVE-6 | `static/editor.js` `moveToPage` | After a 500 when both pages were written, the editor has no undo entry for the move | The page is shown again as it is; the move can be undone by hand |
+| MOVE-7 | `deskserver/editing.py` `note_revs` | It reads `status.json` even when no revision in the answer is a whole number | Performance only |
+| MOVE-8 | `test/test_engine.py`, the fake engine | No end-to-end test of `receive` → `_depth` → `apply`, and the fake engine never answers "cannot be set at its width" | Each part has its own test; checked on the real engine |
+| MOVE-9 | `deskserver/editing.py`, `press.py`, `static/editor.js` | Found by the verification:<br>• `pages_with_repeats` under-reports after a take (an older path);<br>• the "moved here" reason is lost when a save ends mid-move;<br>• the wording misleads after an undo and a source save;<br>• the source is not marked after a kill until it is reopened;<br>• the page picker defaults to page 1 | Each page that needs saving stays "to save", so the press files are never offered as current |
+| MOVE-10 | `package.json` `ci` | The local `pnpm run ci` does not run `test:desk` (the CI workflow's `desk` job does) | CI runs them; run `pnpm run test:desk` by hand meanwhile |
+
 ## Desk: noticed while checking L1-2 (not caused by it)
 
 | # | Where | What | Why it can wait |

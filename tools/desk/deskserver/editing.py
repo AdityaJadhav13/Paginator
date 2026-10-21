@@ -13,6 +13,9 @@ Pages and the press files:
   page and records all of it in the run's status.json. If any step fails, the page stays marked "needs saving";
 - a page is not saved while one of its stories is also on another page and locked there (the save would take it off
   that page): the save is refused before any page is marked, and the engine refuses it too, before it writes anything;
+- a story moved to another page leaves its page at once and prints on the other page only once that page is saved:
+  the other page is marked "needs saving" before the engine is asked (an engine or server that stops part-way leaves
+  it marked; a move the engine refuses takes the mark back), and both pages are marked from the engine's one answer;
 - the press files count as current only when no article is printed on two pages and every page prints what the
   edition holds now (press.py);
 - every change carries the page's revision: a change made on an older view of the page (another window or tab
@@ -36,6 +39,7 @@ from PIL import Image
 
 from . import jobs
 from .engine_client import EngineClient
+from .press import OUTSIDE_WORDS, OVERLAP_WORDS, PLACEMENT
 from .press import deskprinted  # the engine's own record of what a page prints (press puts the engine on the path)
 from .util import DeskError, atomic_file, read_json, write_json
 
@@ -173,6 +177,11 @@ class EditService:
     def refresh(self, session: str, base_rev=None) -> dict:
         return self._session_call(session, {"cmd": "refresh", "base_rev": base_rev}, OPEN_TIMEOUT_S)
 
+    def move(self, session: str, story: str, to: int, base_rev=None) -> dict:
+        """A story of the page moved to page to (the engine opens that page if need be: the open timeout)."""
+        return self._session_call(session, {"cmd": "move", "story": story, "page": to, "base_rev": base_rev},
+                                  OPEN_TIMEOUT_S)
+
     # ---- what the browser draws with
     def glyphs(self, face: str, gids: list[int]) -> dict:
         """Outlines of the glyphs (SVG path data in font units, y up) of a font instance the engine cached."""
@@ -231,6 +240,8 @@ refresh_stale = jobs.refresh_stale
 
 
 UNFINISHED = "The last save of this page did not finish: save it again."
+NOT_PLACED_EDITED = ("Taken off the pages in the editor, or moved to a page not saved yet: bring it back onto a page, or "
+                     "save the page it moved to.")
 _save_locks: dict[str, threading.Lock] = {}
 _saving: dict[str, int] = {}                         # edition id → saves in progress (it is not deleted meanwhile)
 _save_guard = threading.Lock()
@@ -261,25 +272,93 @@ def is_saving(eid: str) -> bool:
         return eid in _saving
 
 
-def note_rev(run_dir: Path, page: int, rev) -> None:
+def placement(problems) -> list | None:
+    """The kinds of problem in an answer of the engine that a print file must never have (press.PLACEMENT): [] when
+    there are none, None when the answer has no list of problems (nothing to note)."""
+    if problems is None:
+        return None
+    if not isinstance(problems, list):
+        return ["unreadable"]                            # fail closed: counts as a problem (press.placement_problems)
+    return sorted({p.get("kind") for p in problems if isinstance(p, dict) and p.get("kind") in PLACEMENT}) + (
+        ["unreadable"] if not all(isinstance(p, dict) for p in problems) else [])
+
+
+def note_rev(run_dir: Path, page: int, rev, problems=None) -> None:
     """Every answer of the editor carries the page's revision (the caller holds the edition's lock). Another revision
     than the one the page's PDF was made from (0: the automatic layout) means the page changed since, by the editor or
     by the engine itself (text another page set, a story whose articles were deleted): the page is marked "changed, not
-    saved". The newest revision seen is kept too ("rev_seen"), so a save of an older one leaves the mark."""
-    if not isinstance(rev, int) or isinstance(rev, bool):
-        return
+    saved". The newest revision seen is kept too ("rev_seen"), so a save of an older one leaves the mark. problems: the
+    answer's problems; stories over each other or outside the news area are kept ("layout_problems_now"), so the press
+    files are never current while the page shows them."""
+    note_revs(run_dir, {page: rev}, {page: problems})
+
+
+def note_revs(run_dir: Path, revs: dict, problems: dict | None = None) -> None:
+    """note_rev for every {page: revision} of one answer of the engine (a move changes two pages), with status.json
+    read and written once (the caller holds the edition's lock). problems: {page: the answer's problems} for the
+    pages the answer shows."""
     status = read_json(run_dir / "status.json")
-    entry = next((p for p in _pages(status) if p.get("page") == page), None)
-    if entry is None:
-        return
-    changed = rev > int(entry.get("rev_seen") or 0)
-    if changed:
-        entry["rev_seen"] = rev
-    if not entry.get("edited_unsaved") and rev != int(entry.get("pdf_rev") or 0):
-        entry["edited_unsaved"] = changed = True
+    pages = _pages(status)
+    changed = False
+    for page, kinds in ((page, placement(probs)) for page, probs in (problems or {}).items()):
+        entry = next((p for p in pages if p.get("page") == page), None)
+        if entry is not None and kinds is not None and entry.get("layout_problems_now") != kinds:
+            entry["layout_problems_now"] = kinds
+            changed = True
+    for page, rev in revs.items():
+        if not isinstance(rev, int) or isinstance(rev, bool):
+            continue
+        entry = next((p for p in pages if p.get("page") == page), None)
+        if entry is None:
+            continue
+        if rev > int(entry.get("rev_seen") or 0):
+            entry["rev_seen"] = rev
+            changed = True
+        if not entry.get("edited_unsaved") and rev != int(entry.get("pdf_rev") or 0):
+            entry["edited_unsaved"] = changed = True
     if changed:
         status.update(press_state(status))
         write_json(run_dir / "status.json", status)
+
+
+MOVED_HERE = "A story was moved here from page {page}: check its place and save the page."
+MARK_KEYS = ("needs_save", "needs_save_reason")
+
+
+def before_move(run_dir: Path, page: int, to: int) -> dict | None:
+    """Before the engine moves a story from page to page to (the caller holds the edition's lock): page to is marked
+    "needs saving" with why (the editor says it when that page is opened), so an engine that stops part-way, or a
+    server that stops before the answer is marked, leaves it marked: the engine writes that page first, and the story
+    prints there only once it is saved. → what unmark_move needs to take the mark back if the engine refuses the move
+    (None: no such page in the status)."""
+    status = read_json(run_dir / "status.json")
+    pages = _pages(status)
+    entry = next((p for p in pages if p.get("page") == to), None)
+    if entry is None:
+        return None
+    mark = {"page": to, "reason": MOVED_HERE.format(page=page), "before": {k: entry[k] for k in MARK_KEYS if k in entry}}
+    entry.update(needs_save=True, needs_save_reason=mark["reason"])      # the entry itself: the list keeps its order
+    status.update(press_state(status))
+    write_json(run_dir / "status.json", status)
+    return mark
+
+
+def unmark_move(run_dir: Path, mark: dict | None) -> None:
+    """The engine refused the move, so it changed neither page: before_move's mark is taken back (the caller holds the
+    edition's lock), unless something else marked the page since (its reason is not the move's any more)."""
+    if not mark:
+        return
+    status = read_json(run_dir / "status.json")
+    entry = next((p for p in _pages(status) if p.get("page") == mark["page"]), None)
+    if entry is None or entry.get("needs_save") is not True or entry.get("needs_save_reason") != mark["reason"]:
+        return
+    for k in MARK_KEYS:
+        if k in mark["before"]:
+            entry[k] = mark["before"][k]
+        else:
+            entry.pop(k, None)
+    status.update(press_state(status))
+    write_json(run_dir / "status.json", status)
 
 
 def _warnings(problems: list) -> list[str]:
@@ -293,9 +372,9 @@ def _warnings(problems: list) -> list[str]:
     if any(p.get("kind") == "touch" for p in problems):
         out.append("two lines of a story touch in ink somewhere: check the page")
     if any(p.get("kind") == "overlap" for p in problems):
-        out.append("stories overlap on the page")
+        out.append(OVERLAP_WORDS)
     if any(p.get("kind") == "outside" for p in problems):
-        out.append("a story is outside the news area or over an advertisement")
+        out.append(OUTSIDE_WORDS)
     for p in problems:
         if p.get("kind") == "empty":
             out.append(f"About {round((p.get('mm2') or 0) / 100)} cm² of the news area is left empty: add a short item or a photo")
@@ -388,6 +467,8 @@ def after_save(run_dir: Path, page: int, saved: dict, verdict: dict, error: str 
                  edited_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"), articles=saved.get("articles") or [], pdf_rev=rev,
                  warnings=deskprinted.unset(saved.get("printed"), _edition(run_dir)) + _warnings(saved.get("problems") or []))
     entry["printed"] = saved["printed"] if isinstance(saved.get("printed"), dict) else None   # none: never "current"
+    kinds = placement(saved.get("problems"))
+    entry["layout_problems"] = entry["layout_problems_now"] = ["unreadable"] if kinds is None else kinds
     if error:
         entry.update(needs_save=True, needs_save_reason=error)
     else:
@@ -424,5 +505,5 @@ def _recount_not_placed(run_dir: Path, status: dict, pages: list[dict]) -> None:
         aid = a.get("id")
         if aid and aid not in placed:
             out.append({"article": aid, "reason": "Deleted from the edition after the layout."} if aid not in live else
-                       before.get(aid) or {"article": aid, "reason": "Taken off the pages in the editor: bring it back onto a page."})
+                       before.get(aid) or {"article": aid, "reason": NOT_PLACED_EDITED})
     status["not_placed"] = out

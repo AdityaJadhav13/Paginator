@@ -40,6 +40,7 @@ STATIC_TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=
 STATIC_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 FILE_TYPES = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".zip": "application/zip"}
 RUN_FILE = re.compile(r"page-\d{2}\.(?:pdf|png|thumb\.png)|edition\.pdf|press-files\.zip")
+STORY_KEY = re.compile(r"d[0-9a-f]{10}|dbriefs\d{1,3}")             # a story of a run: an article's, or short items'
 PHOTO_JPG = re.compile(r"(p-[0-9a-f]{10})\.jpg")
 AD_JPG = re.compile(r"([a-z0-9-]{1,40})\.jpg")
 QUIET = re.compile(r"/api/editions/[^/]+/runs/[^/]+|/files/.*")    # polled by the UI: logged only when they fail
@@ -88,6 +89,7 @@ ROUTES = [(method, re.compile(pattern), name, body) for method, pattern, name, b
     ("POST", r"/api/editions/([^/]+)/runs/([^/]+)/pages/(\d{1,2})/save", "edit_save", "json"),
     ("POST", r"/api/editions/([^/]+)/runs/([^/]+)/pages/(\d{1,2})/alternative", "edit_alternative", "json"),
     ("POST", r"/api/editions/([^/]+)/runs/([^/]+)/pages/(\d{1,2})/refresh", "edit_refresh", "json"),
+    ("POST", r"/api/editions/([^/]+)/runs/([^/]+)/pages/(\d{1,2})/move-story", "edit_move", "json"),
     ("GET", r"/api/glyphs/([0-9a-f]{24})", "glyphs", None),
     ("GET", r"/files/rasters/([0-9a-f]{24})\.jpg", "raster_file", None),
 ]]
@@ -357,7 +359,7 @@ class Api:
     def _changed(self, eid: str, rid: str, page: int, res: dict) -> dict:
         """The engine's answer for a page: marked changed when its revision is not the one its PDF was made from."""
         with self.store.lock(eid):
-            editing.note_rev(self.store.run_dir(eid, rid), page, res.get("rev"))
+            editing.note_rev(self.store.run_dir(eid, rid), page, res.get("rev"), res.get("problems"))
         return res
 
     @staticmethod
@@ -396,6 +398,51 @@ class Api:
         with self._page_work(req):
             eid, rid, page = self._edit_page(req)
             return self._changed(eid, rid, page, self.desk.editing.refresh(f"{eid}/{rid}/{page}", self._rev(req.json())))
+
+    def edit_move(self, req: Request) -> dict:
+        with self._page_work(req):
+            return self._move(req)
+
+    def _move(self, req: Request) -> dict:
+        """A story of this page moved to another page of the run at once (the engine's move). Checked first, so a
+        refusal here marks and writes nothing. The page it goes to is marked "needs saving" before the engine is asked
+        (an engine that stops part-way leaves it marked; a refusal by the engine takes the mark back), then both pages
+        are marked from the engine's one answer, under one lock of the edition. The whole move holds the run's save
+        lock, as a save does: a save of either page, or another move, never runs in between (a save ending meanwhile
+        would clear the mark; another move's refusal would put back a mark from before this one)."""
+        eid, rid, page = self._edit_page(req)
+        body = req.json()
+        story, to = body.get("story"), body.get("to")
+        if not isinstance(story, str) or not STORY_KEY.fullmatch(story):
+            raise DeskError(400, "Say which story to move.")
+        if not isinstance(to, int) or isinstance(to, bool):
+            raise DeskError(400, "Say which page to move the story to, as a page number.")
+        base_rev = self._rev(body)
+        if to == page:
+            raise DeskError(400, "The story is on this page already: choose another page.")
+        target = next((p for p in self.store.run_status(eid, rid).get("pages") or []
+                       if isinstance(p, dict) and p.get("page") == to), None)
+        if target is None:
+            raise DeskError(400, f"This layout has no page {to}.")
+        if target.get("state") != "done":
+            raise DeskError(400, f"Page {to} was not laid out in this layout: a story cannot move there.")
+        run_dir = self.store.run_dir(eid, rid)
+        with editing.save_lock(run_dir):                    # as a save: one at a time in a run (then the edition's lock)
+            with self.store.lock(eid):
+                mark = editing.before_move(run_dir, page, to)
+            try:
+                res = self.desk.editing.move(f"{eid}/{rid}/{page}", story, to, base_rev)
+            except DeskError as e:
+                if e.status in (400, 409):                  # the engine refused it: neither page changed
+                    with self.store.lock(eid):
+                        editing.unmark_move(run_dir, mark)
+                    raise
+                raise DeskError(e.status, f"{e.message} Page {to} stays marked “needs saving” until it is saved: open "
+                                          "it to see whether the story reached it.") from None
+            moved = res.get("moved") if isinstance(res.get("moved"), dict) else {}
+            with self.store.lock(eid):
+                editing.note_revs(run_dir, {page: res.get("rev"), to: moved.get("rev")}, {page: res.get("problems")})
+        return res
 
     def edit_save(self, req: Request) -> dict:
         """The page's PDF, its check and the run's press files. The edition's lock is held only while status.json is

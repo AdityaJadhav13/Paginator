@@ -57,6 +57,12 @@ never in this repository.
      text still fits its box. The page itself is never set with browser text.
    - **Checks** list overlaps, text that does not fit, stories outside the news area or over an ad, and empty space.
    - **Try another layout** lays out the same stories another way; **Update text** sets the articles' current text.
+   - **Move to page** (in the story panel, or "Move to page ▸" in the story's menu) takes the story off this page at
+     once and puts it on the page you choose: at its width, at the depth its text needs there, at the first free place;
+     a page with no free place for it refuses the move (make room there first). It prints there once that page is saved, and the press
+     files are not offered as current until both pages are saved; the notice has **Go to page N**, and that page says
+     a story was moved to it. Undo brings it back (the next save of either page takes it off the other). A move never
+     changes an article's page pin; it says when the next layout would put the story back.
    - **Lock a story in place:** Shift+L, the **Lock in place** button in the story panel, or the story's menu (a
      right-click on it, Ctrl+click on a Mac, or Shift+F10) locks the selected story for this layout, or unlocks it. A locked story keeps its
      place, width and height and stays on the page; it shows a padlock and a dashed outline:
@@ -94,7 +100,7 @@ never in this repository.
    - **Save page** writes the page's PDF/X-1a file, checks it with the independent checker (and for two lines touching
      in ink, as the layout runs do) and remakes the edition PDF and the press ZIP. A story brought from another page leaves that page then, and that page is marked
      "needs saving". The Desk does not offer the press files as current while any page is changed and not saved,
-     fails the check, or prints an article that is also on another page. Each page records what its PDF prints; when
+     fails the check, prints an article that is also on another page, or has stories over each other or outside the news area. Each page records what its PDF prints; when
      an article is corrected or deleted (also while a layout is running), or the issue number, price or an ad changes,
      the pages that print it need saving until they are saved with the new content. **Save page** first sets the
      edition's current text, folio and ads on the page; if that changes the page, you check it and save again.

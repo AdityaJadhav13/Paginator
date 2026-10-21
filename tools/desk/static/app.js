@@ -3571,6 +3571,10 @@ function pressNotReady(status) {
     .map(int)
     .filter((n) => n !== null);
   if (twice.length) parts.push(t("press.repeats", { n: twice.length, pages: twice.join(", ") }));
+  const over = arr(status.pages_with_overlaps)
+    .map(int)
+    .filter((n) => n !== null);
+  if (over.length) parts.push(t("press.overlaps", { n: over.length, pages: over.join(", ") }));
   const failed = arr(status.pages)
     .filter((p) => isObj(p) && str(p.state) === "failed")
     .map((p) => int(p.page));

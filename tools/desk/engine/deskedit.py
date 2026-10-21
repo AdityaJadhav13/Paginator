@@ -13,6 +13,10 @@ kept apart from its place.
 - **Nothing moves on its own.** Overlaps, boxes outside the news area and empty news space are reported.
 - **Moving a story from another page.** The move is part of this page's edits until this page is saved; saving takes
   the story off the other page, so an undo before saving never loses a story.
+- **Moving a story to another page** (move_to). The story leaves this page at once and joins the other page's edits: at
+  its width, at the depth its text needs there, at the first free place; a page with no free place for it refuses the
+  move (a story is never put over another). The other page is written first, and a failure on this page takes the
+  story back off it, so the story is never in no page's edits. Each page prints it only once that page is saved.
 - **Edited article text.** Text refreshed from the articles is kept for the run (edit-articles.json), so a restart
   never brings the old text back, and every open page of the run takes it before its next change. An article deleted
   since the layout leaves the page. Each article keeps the story it was laid out in and each story its place in the
@@ -68,6 +72,14 @@ NO_FILL_AROUND = "no other layout fills the space around the locked stories exac
 ZOOM_MAX = 4.0                                           # a crop enlarges its photo in the frame at most this much
 CROP_BAD = "a photo crop must give the photo's id, a focus point (two numbers) and a zoom (a number)"
 CROP_LOST = "the photo of {name} could not be found on the page to crop it: nothing was changed"
+MOVE_NOT_HERE = "{name} is not on this page"
+MOVE_NO_PAGE = "this layout has no page {page!r}"
+MOVE_SAME_PAGE = "{name} is on this page already: choose another page"
+MOVE_NOT_LAID_OUT = "page {page} was not laid out in this layout: a story cannot move there"
+MOVE_LOCKED_THERE = "{name} is also on page {page}, locked there: unlock it there to move it"
+MOVE_CANNOT_SET = "{name} cannot be set {w} {cols} wide on page {page}: change its width here, then move it"
+MOVE_NO_ROOM = ("there is no free place on page {page} for {name} ({w} {cols} × {h:g} mm): make room there, or narrow it "
+                "here, then move it")
 
 
 def _r(v: float) -> float:
@@ -857,6 +869,138 @@ class PageSession:
                 sess.modules, sess.rev = keep, rev
             changed[n] = [a for m in keep for a in self.built.article_of.get(m["story"], [])]
         return changed
+
+    # ---- moving a story to another page (push)
+    def move_to(self, story: str, to, base_rev, open_page) -> dict:
+        """The story leaves this page at once and goes into page to's edits (receive). Refused, before anything is
+        written: an older view of this page, a story not on it, a page that is not another page of this layout or was
+        not laid out, a story locked here, or one also on a third page and locked there. The other page is written
+        first; if this page then cannot be set without the story, the story leaves the other page again (give_back), so
+        it is never in no page's edits. A page with no free place for it refuses the move (receive), before anything is
+        written. open_page(n) → page n's session (opened if need be). → this page drawn, plus "moved": {story, page, rev
+        (that page's revision now), module (the story there), placed ("free": at a free place; "already": it was there
+        already, brought in and not saved there yet), pinned (the page its article is pinned to, when that is not the
+        page it moved to, else None: the next layout puts it back there)}."""
+        self.check_rev(base_rev)
+        m = next((x for x in self.modules if x["story"] == story), None)
+        if m is None:
+            raise ValueError(MOVE_NOT_HERE.format(name=self._name(story)))
+        if not isinstance(to, int) or isinstance(to, bool) or not 1 <= to <= self.pages:
+            raise ValueError(MOVE_NO_PAGE.format(page=to))
+        if to == self.page:
+            raise ValueError(MOVE_SAME_PAGE.format(name=self._name(story)))
+        if is_locked(m):
+            raise ValueError(LOCKED_MOVE.format(name=self._name(story)))
+        if not (self.run_dir / f"page-{to:02d}.manifest.json").is_file():
+            raise ValueError(MOVE_NOT_LAID_OUT.format(page=to))
+        held = [n for n in range(1, self.pages + 1) if n not in (self.page, to)
+                and any(x["story"] == story and is_locked(x) for x in self.page_modules(n))]
+        if held:                                 # the other page could not take it, nor be saved with it
+            raise ValueError(MOVE_LOCKED_THERE.format(name=self._name(story), page=held[0]))
+        pinned = self._pinned(story, to)
+        target = open_page(to)
+        placed, module, before = target.receive(m)
+        try:
+            drawn = self.apply([x for x in self.modules if x["story"] != story])
+        except Exception:
+            if before is not None:
+                target.give_back(before)
+            raise
+        return {**drawn, "moved": {"story": story, "page": to, "rev": target.rev, "module": module, "placed": placed,
+                                   "pinned": pinned}}
+
+    def receive(self, m: dict) -> tuple[str, dict, tuple | None]:
+        """A story moved here from another page (move_to), m its module there: at its width, at the depth its text
+        needs here (_depth), at the first free place (free_spot); unlocked, with the other attributes it had
+        (set_modules takes them as for any change). With no free place for it the move is refused before anything is
+        written: a story is never put over another (the press files would print them over each other). Set and written
+        as a change of this page (apply: its locks are checked, and a page that cannot be set with it stays as it was).
+        → (placed: "free" | "already", the story's module here, what give_back puts back: this page's stories and
+        revision before, None when nothing changed). A story already here (brought in, not saved yet) stays as it is:
+        "already"."""
+        self.sync()
+        key = m["story"]
+        here = next((n for n in self.modules if n["story"] == key), None)
+        if here is not None:
+            return "already", here, None
+        self._ensure_options(key)
+        w = int(m["w"])
+        h = self.snap({**m, "h": self._depth({**m, "h": self.snap(m)["h"]})})["h"]     # on this page's grid
+        spot = self.free_spot(w, h)
+        if spot is None:
+            raise ValueError(MOVE_NO_ROOM.format(page=self.page, name=self._name(key), w=w,
+                                                 cols="column" if w == 1 else "columns", h=h))
+        x, y = spot
+        before = (list(self.modules), self.rev)
+        self.apply(self.modules + [{**m, "x": x, "y": y, "w": w, "h": h, "locked": False}])
+        return "free", next(n for n in self.modules if n["story"] == key), before
+
+    def give_back(self, before: tuple) -> None:
+        """A move whose own page could not be set without the story: this page goes back to its stories and revision
+        before receive (no answer has shown that revision), so the story is on its own page only, as before."""
+        self.modules, self.rev = before
+        self._write_edit()
+
+    def _depth(self, m: dict) -> float:
+        """The height m's story needs on this page at its width, as Fit height to text: from its height to the nearest
+        one an option at that width fills (its height when one fills it already), with the story at its rank here (the
+        page's order with it in it, so its options are those of that rank). Refused when it cannot be set at that width
+        here (it would print nothing)."""
+        key, w = m["story"], int(m["w"])
+        kept = self.modules
+        self.modules = kept + [m]
+        try:
+            g = self.generator()
+            i = next(i for i, s in enumerate(g.stories) if s.id == key)
+            if key in self.partial:
+                self._measure(key, DG.rank_class(i), w)
+            o, fit, by = self.pick(g.stories[i], w, m["h"])
+        finally:
+            self.modules = kept
+        if o is None:
+            raise ValueError(MOVE_CANNOT_SET.format(name=self._name(key), w=w, cols="column" if w == 1 else "columns",
+                                                    page=self.page))
+        return m["h"] + by if fit == "over" else m["h"] - by if fit == "short" else m["h"]
+
+    def free_spot(self, w: int, h: float) -> tuple[float, float] | None:
+        """The first place for a module w columns wide and h high on this page as it is now: top to bottom in the
+        editor's half-millimetre steps from the news area's top, then left to right by column; inside one of the
+        template's regions and clear of every story and of the ads and pictures the page keeps (nothing reaches into
+        them, not even by the half millimetre the checks allow). → (x, y) mm, or None when no place is free."""
+        top = self.tpl.news_top
+        steps = int(math.floor((self.tpl.news_bottom - top) / SNAP_MM + 1e-9))
+        hk = _round(h / SNAP_MM)
+        span = G.span_mm(w)
+        regions = [G.region_box(r) for r in self.tpl.regions]
+        boxes = [(x["x"], x["y"], x["x"] + G.span_mm(int(x["w"])), x["y"] + x["h"]) for x in self.modules]
+        boxes += [tuple(f) for f in self.fixed_boxes]
+        for yk in range(steps - hk + 1):
+            y0, y1 = top + yk * SNAP_MM, top + (yk + hk) * SNAP_MM
+            for col in range(G.NCOL - w + 1):
+                x0 = G.ORIGIN + col * G.PITCH
+                x1 = x0 + span
+                if (any(x0 >= r[0] - SAME_MM and x1 <= r[2] + SAME_MM and y0 >= r[1] - SAME_MM and y1 <= r[3] + SAME_MM
+                        for r in regions)
+                        and not any(min(x1, b[2]) - max(x0, b[0]) > SAME_MM and min(y1, b[3]) - max(y0, b[1]) > SAME_MM
+                                    for b in boxes)):
+                    return _r(x0), _r(y0)
+        return None
+
+    def _pinned(self, key: str, to: int) -> int | None:
+        """The page the story's article is pinned to in the edition now, when that is not page to (the next layout
+        puts it back there), else None. A column of short items has no pin of its own. The layout's own pin when the
+        edition's articles cannot be read."""
+        it = next((i for i in self.built.items if i["key"] == key), None)
+        if it is None or it["brief"]:
+            return None
+        try:
+            live = read_json(self.edition_dir / "articles.json", {"articles": []}).get("articles") or []
+            by_id = {a.get("id"): a for a in live if isinstance(a, dict)}
+            pins = [by_id[a].get("page") for a in self.built.article_of.get(key, []) if a in by_id]
+        except Exception:  # noqa: BLE001 — a warning never refuses a move: the layout's own pin then
+            pins = [it.get("pin")]
+        pin = next((p for p in pins if isinstance(p, int) and not isinstance(p, bool) and 1 <= p <= self.pages), None)
+        return pin if pin != to else None
 
     # ---- other layouts and fresh text
     def alternative(self, variant: int, base_rev=None) -> dict:

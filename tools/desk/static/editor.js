@@ -89,6 +89,7 @@ const S = {
   dirty: false, // the page has changes its print file does not have yet
   leaving: false,
   noticeKind: "",
+  noticeAct: null, // what the notice's button does ("Go to page 5"), or null
   pages: null,
   run: null, // the run's status (when it was laid out)
 };
@@ -672,10 +673,12 @@ function pressText(r) {
   const save = r.pages_to_save || [];
   const fail = r.pages_failing_check || [];
   const twice = r.pages_with_repeats || [];
+  const over = r.pages_with_overlaps || [];
   const out = [];
   if (save.length) out.push(`${pages(save)} still to save`);
   if (fail.length) out.push(`${pages(fail)} not passing the PDF/X-1a check`);
   if (twice.length) out.push(`${pages(twice)} print the same article: take it off one of them`);
+  if (over.length) out.push(`${pages(over)} have stories over each other or outside the news area: move them apart`);
   return `The press files are not current yet: ${out.join("; ") || "not every page is done"}.`;
 }
 
@@ -913,6 +916,64 @@ function swap(a, b) {
   );
   S.selected = b;
   renderPanels();
+}
+
+/** The run's other pages a story can move to: [{page, done}] (done: laid out in this layout). */
+const otherPages = () =>
+  ((S.run && S.run.pages) || [])
+    .filter((p) => p && Number.isInteger(p.page) && p.page !== ID.page)
+    .map((p) => ({ page: p.page, done: p.state === "done" }))
+    .sort((a, b) => a.page - b.page);
+
+/** Why the story cannot move to another page now ("" when it can). */
+function moveOff(story) {
+  if (lockedHere(story)) return `${cap(nameOf(story))} is locked: unlock it (${SHIFT}L) to move it to another page.`;
+  if (!otherPages().some((p) => p.done)) return "No other page of this layout was laid out.";
+  return "";
+}
+
+/** The story taken off this page at once and put on page n (the engine finds its place there): one undo step. The page
+ * it goes to prints it once that page is saved; until then the press files are not offered as current. */
+function moveToPage(story, n) {
+  if (!canEdit() || !S.modules.some((m) => m.story === story)) return;
+  if (lockedHere(story)) return refuseLocked(story, "move it to another page");
+  const name = nameOf(story);
+  return exclusive(`Moving ${name} to page ${n}…`, async (gen, url) => {
+    const before = copy(S.modules);
+    let data;
+    try {
+      data = await api("POST", `${url}/move-story`, { story, to: n, rev: rev() });
+    } catch (e) {
+      if (e.status !== 409 && gen === S.gen) await resync(gen); // the page as the engine has it (it may have moved)
+      throw e;
+    }
+    if (!(await accept(data, gen))) return;
+    pushUndo(before);
+    S.redo = [];
+    S.edits += 1;
+    S.dirty = true;
+    setSaved("Changed · not saved");
+    tellDesk(); // both pages are "to save" now
+    notice(movedText(data.moved || {}, name, n), "moved", { label: `Go to page ${n}`, act: () => goPage(n) });
+  });
+}
+
+/** What a move did, in words. */
+function movedText(mv, name, n) {
+  const m = mv.module;
+  const where = m
+    ? ` (${m.w} ${m.w === 1 ? "column" : "columns"} × ${Math.round(m.h)} mm, column ${colOf(m.x) + 1}, ` +
+      `${Math.round(m.y)} mm from the top)`
+    : "";
+  const said = [
+    mv.placed === "already"
+      ? `${cap(name)} was already on page ${n} (brought in there); it is now only there.`
+      : `${cap(name)} moved to page ${n}${where}.`,
+    `It prints there once page ${n} is saved; save this page too.`,
+  ];
+  if (mv.pinned) said.push(`It is pinned to page ${mv.pinned} in its article: the next layout puts it back there.`);
+  said.push("Undo brings it back here.");
+  return said.join(" ");
 }
 
 /** The story's height set to what its text needs at its width (the story panel, the menu). */
@@ -1700,6 +1761,7 @@ function menuItems(story) {
     { label: "Edit text", key: "Enter", act: () => openText(story) },
     { label: "Fit height to text", act: () => fitHeight(story), off: held("change its size") || fits },
     { label: "Swap with…", act: startSwapping, off: held("move it") },
+    { label: "Move to page", key: "▸", sub: true, act: () => showMenu("move"), off: moveOff(story) },
     { label: locked ? "Unlock" : "Lock in place", key: `${SHIFT}L`, act: () => toggleLock(story) },
     { label: "Crop photo", key: "A", act: () => cropPhoto(story), off: noPhoto },
     { label: "Set focal point", act: () => focalPoint(story), off: noPhoto },
@@ -1714,12 +1776,43 @@ function menuItems(story) {
   ];
 }
 
+/** The pages a story can move to, as the menu's second level (Left or "Back" returns to the first). */
+function movePageItems(story) {
+  return [
+    { label: "Back", key: "◂", sub: true, act: () => showMenu("main") },
+    ...otherPages().map(({ page, done }) => ({
+      label: `Page ${page}`,
+      act: () => moveToPage(story, page),
+      off: done ? "" : `Page ${page} was not laid out in this layout: a story cannot move there.`,
+    })),
+  ];
+}
+
+const levelItems = () => (M.level === "move" ? movePageItems(M.story) : menuItems(M.story));
+
+/** The open menu shows another level ("main" or "move"), the focus on its first item that acts. */
+function showMenu(level) {
+  M.level = level;
+  M.items = levelItems();
+  $("#menu").setAttribute(
+    "aria-label",
+    level === "move" ? `Move ${headOf(M.story)} to page` : `Story ${headOf(M.story)}`,
+  );
+  renderMenu();
+  placeMenu();
+  const first = M.items.findIndex((it, i) => !it.off && (level !== "move" || i > 0));
+  menuFocus(
+    level === "move" ? (first < 0 ? 0 : first) : M.items.findIndex((it) => it.sub && it.label === "Move to page"),
+  );
+}
+
 /** The menu of a story (or of the page: story null) at a point of the view (px), kept inside the view. */
 function openMenu(story, at) {
   closeMenu();
   if (!S.data) return;
   if (S.swapping) stopSwapping();
   M.story = story;
+  M.level = "main";
   M.items = menuItems(story);
   M.at = at;
   M.open = true;
@@ -1745,6 +1838,7 @@ function renderMenu() {
           tabindex: "-1",
           class: it.danger ? "danger" : null,
           "aria-disabled": it.off ? "true" : null,
+          "aria-haspopup": it.sub && it.label !== "Back" ? "menu" : null,
           title: it.off || null,
           "data-i": i,
         },
@@ -1772,7 +1866,7 @@ function placeMenu() {
 function refreshMenu() {
   if (!M.open) return;
   if (M.story && !S.modules.some((m) => m.story === M.story)) return closeMenu();
-  const items = menuItems(M.story);
+  const items = levelItems();
   const shown = (list) => list.map((it) => `${it.label}\t${it.off || ""}`).join("\n");
   const changed = shown(items) !== shown(M.items);
   M.items = items;
@@ -1796,6 +1890,7 @@ function closeMenu() {
   const inside = $("#menu").contains(document.activeElement);
   M.open = false;
   M.story = null;
+  M.level = "main";
   M.items = [];
   $("#menu").hidden = true;
   $("#menu").replaceChildren();
@@ -1811,6 +1906,7 @@ function menuFocus(i) {
 function menuAct(i) {
   const it = M.items[i];
   if (!it) return;
+  if (it.sub && !it.off) return it.act(); // another level of the menu: it stays open
   closeMenu();
   if (it.off) return notice(it.off, "lock");
   it.act();
@@ -1830,6 +1926,15 @@ $("#menu").addEventListener("keydown", (e) => {
   if (to !== undefined) {
     e.preventDefault();
     return menuFocus(to);
+  }
+  const it = M.items[i];
+  if (e.key === "ArrowRight" && it && it.sub && it.label !== "Back" && !it.off) {
+    e.preventDefault();
+    return it.act();
+  }
+  if (e.key === "ArrowLeft" && M.level === "move") {
+    e.preventDefault();
+    return showMenu("main");
   }
   if (e.key === "Escape" || e.key === "Tab" || e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
     e.preventDefault();
@@ -2157,6 +2262,29 @@ function renderPanels() {
     );
     for (const id of ["#p-height", "#p-y", "#p-fit-height", "#p-swap", "#p-remove"]) $(id).disabled = locked;
     photoPanel(m);
+    const pick = $("#p-move-to");
+    const pages = otherPages();
+    const shown = pages.map((p) => `${p.page}:${p.done}`).join(",");
+    if (pick.dataset.pages !== shown) {
+      const was = pick.value;
+      pick.replaceChildren(
+        ...pages.map((p) =>
+          el(
+            "option",
+            { value: String(p.page), disabled: !p.done },
+            `Page ${p.page}${p.done ? "" : " (not laid out)"}`,
+          ),
+        ),
+      );
+      pick.dataset.pages = shown;
+      const keep = pages.find((p) => p.done && String(p.page) === was) || pages.find((p) => p.done);
+      if (keep) pick.value = String(keep.page);
+    }
+    const off = moveOff(m.story);
+    pick.disabled = !!off;
+    $("#p-move").disabled = !!off;
+    $("#p-move").title =
+      off || "The story leaves this page now and goes onto that page; it prints there once that page is saved";
     if (!typing.has("#p-height")) $("#p-height").value = Math.round(m.h * 2) / 2;
     if (!typing.has("#p-y")) $("#p-y").value = Math.round(m.y * 2) / 2;
   }
@@ -2304,12 +2432,16 @@ function setSaved(text) {
 }
 
 /** A longer message under the toolbar (what changed, what to do next); kind marks who may clear it. Screen readers
- * hear it from a live region that is always there (an error assertively). */
-function notice(text, kind = "") {
+ * hear it from a live region that is always there (an error assertively). action: {label, act}, a button beside it
+ * ("Go to page 5"); every other message takes it away. */
+function notice(text, kind = "", action = null) {
   $("#notice-text").textContent = text || "";
   $("#notice").hidden = !text;
   $("#notice").classList.toggle("error", kind === "error");
   S.noticeKind = text ? kind : "";
+  S.noticeAct = text && action ? action.act : null;
+  $("#notice-action").hidden = !S.noticeAct;
+  $("#notice-action").textContent = S.noticeAct ? action.label : "";
   say(text || "", kind === "error");
 }
 
@@ -2695,6 +2827,15 @@ $("#prev").addEventListener("click", () => goPage(ID.page - 1));
 $("#next").addEventListener("click", () => goPage(ID.page + 1));
 $("#pool-search").addEventListener("input", renderPanels);
 $("#notice-close").addEventListener("click", () => notice(""));
+$("#p-move").addEventListener("click", () => {
+  const n = Number($("#p-move-to").value);
+  if (S.selected && Number.isInteger(n) && n > 0) moveToPage(S.selected, n);
+});
+$("#notice-action").addEventListener("click", () => {
+  const act = S.noticeAct;
+  notice("");
+  if (act) act();
+});
 $("#p-remove").addEventListener("click", () => S.selected && removeStory(S.selected));
 $("#p-swap").addEventListener("click", startSwapping);
 $("#p-text").addEventListener("click", () => S.selected && openText(S.selected));

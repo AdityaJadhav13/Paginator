@@ -205,6 +205,42 @@ textarea:focus-visible {
 .ed-notice[hidden] {
   display: none;
 }
+.ed-notice button.action {
+  border-color: currentColor;
+  padding: 0 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.ed-notice button.action[hidden] {
+  display: none;
+}
+.move-to {
+  display: flex;
+  gap: 6px;
+}
+.move-to select,
+.move-to button {
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.move-to select {
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+}
+.move-to button {
+  padding: 0 12px;
+  cursor: pointer;
+}
+.move-to select:disabled,
+.move-to button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 .ed-main {
   flex: 1;
   display: grid;

@@ -742,6 +742,27 @@ class EditEngine:
         """The photos a generator measuring a story reads (the folder the stories' photos come from)."""
         return b.photo_dir
 
+    def session_for(self, eid, run, page, reload: bool = False):
+        """A page's editing session: opened when it is not open yet (or again, with reload) and made the most recently
+        used; the least recently used page closes when more than MAX_SESSIONS are open (it opens again on its next
+        request). The ids are checked first. → (the session's key, the session)."""
+        import deskedit as DE
+        eid = check_id(EDITION_ID, eid, "edition id")
+        run = check_id(RUN_ID, run, "run id")
+        page = int(page)
+        key = f"{eid}/{run}/{page}"
+        ed_dir = self.home / "editions" / eid
+        if key not in self.sessions or reload:
+            self.sessions[key] = DE.PageSession(self, self.home, ed_dir, ed_dir / "runs" / run, page)
+        self.touch(key)
+        while len(self.sessions) > MAX_SESSIONS:               # the oldest page closes (it reopens on use)
+            self.sessions.pop(next(iter(self.sessions)))
+        return key, self.sessions[key]
+
+    def touch(self, key: str) -> None:
+        """The open page key is the most recently used (last): idle measuring follows it, and it closes last."""
+        self.sessions[key] = self.sessions.pop(key)
+
 
 MAX_SESSIONS = 12                                         # open pages kept in the edit service (each holds its typesetting)
 IDLE_AFTER_S = 2.0                                        # quiet time before the service measures in the background
@@ -749,7 +770,8 @@ IDLE_AFTER_S = 2.0                                        # quiet time before th
 
 def cmd_edit_service(home: Path, args) -> dict:
     """Serves page-editing sessions: one JSON request per line on stdin, one JSON answer per line on stdout:
-    {"id", "cmd": "open"|"set"|"state"|"export"|"close"|"ping", …} → {"id", "ok", "result"|"error"}."""
+    {"id", "cmd": "open"|"set"|"state"|"draw"|"export"|"alternative"|"refresh"|"move"|"close"|"ping", …} →
+    {"id", "ok", "result"|"error"}. A move opens the page the story goes to if it is not open."""
     import deskedit as DE
     cfg = config(home)
     eng = EditEngine(home, cfg)
@@ -782,26 +804,27 @@ def cmd_edit_service(home: Path, args) -> dict:
                 res = {"pong": True}
             elif cmd == "open":
                 DE.request_ok(req, ("edition", "run", "page"))
-                eid = check_id(EDITION_ID, req["edition"], "edition id")
-                run = check_id(RUN_ID, req["run"], "run id")
-                page = int(req["page"])
-                key = f"{eid}/{run}/{page}"
-                ed_dir = home / "editions" / eid
-                if key not in sessions or req.get("reload"):
-                    sessions[key] = DE.PageSession(eng, home, ed_dir, ed_dir / "runs" / run, page)
-                sessions[key] = sessions.pop(key)                       # most recently used last
-                while len(sessions) > MAX_SESSIONS:                     # the oldest page closes (it reopens on use)
-                    sessions.pop(next(iter(sessions)))
-                sessions[key].sync()
-                res = {"session": key, **sessions[key].draw()}
-            elif cmd in ("set", "state", "draw", "export", "close", "alternative", "refresh"):
+                key, s = eng.session_for(req["edition"], req["run"], req["page"], bool(req.get("reload")))
+                s.sync()
+                res = {"session": key, **s.draw()}
+            elif cmd in ("set", "state", "draw", "export", "close", "alternative", "refresh", "move"):
                 DE.request_ok(req, ("session",))
                 s = sessions.get(req["session"])
                 if s is None:
                     raise ValueError("this page is not open: open it again")
                 if cmd != "close":
                     s.sync()                                            # text another page set reaches this one first
-                if cmd == "set":
+                if cmd == "move":                                       # to another page of the run, opened if need be
+                    DE.request_ok(req, ("story", "page"))
+                    eid, run, _ = req["session"].split("/")
+                    eng.touch(req["session"])                           # opening the other page never closes this one
+                    try:
+                        res = s.move_to(req["story"], req["page"], req.get("base_rev"),
+                                        lambda n: eng.session_for(eid, run, n)[1])
+                    finally:
+                        if req["session"] in sessions:
+                            eng.touch(req["session"])                   # the page asked for is the last used again
+                elif cmd == "set":
                     res = s.apply(req.get("modules") or [], req.get("base_rev"))
                 elif cmd == "state":
                     res = s.state()

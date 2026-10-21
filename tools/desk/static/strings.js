@@ -819,6 +819,19 @@ const TABLE = {
     "pages {pages} print the same article: take it off one of them in the page editor",
     "पाने {pages} वर एकच बातमी छापली जाते: पान संपादनात ती त्यांपैकी एका पानावरून काढा",
   ],
+  // stories over each other, or outside the news area or over an ad (deskserver/press.py pages_with_overlaps)
+  "press.overlaps": [
+    {
+      one: "page {pages} has stories over each other or outside the news area: move them apart in the page editor and save it",
+      other:
+        "pages {pages} have stories over each other or outside the news area: move them apart in the page editor and save them",
+    },
+    {
+      one: "पान {pages} वर बातम्या एकमेकींवर येतात किंवा बातम्यांच्या जागेबाहेर जातात: पान संपादनात त्या वेगळ्या करा आणि पान जतन करा",
+      other:
+        "पाने {pages} वर बातम्या एकमेकींवर येतात किंवा बातम्यांच्या जागेबाहेर जातात: पान संपादनात त्या वेगळ्या करा आणि पाने जतन करा",
+    },
+  ],
   "press.failed": [
     { one: "page {pages} could not be laid out", other: "pages {pages} could not be laid out" },
     { one: "पान {pages} ची मांडणी होऊ शकली नाही", other: "पाने {pages} ची मांडणी होऊ शकली नाही" },

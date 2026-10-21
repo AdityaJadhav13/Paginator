@@ -1199,6 +1199,297 @@ class CropRenderTest(unittest.TestCase):
         self.assertNotIn("crops", s.printed(both, s2._apply_crops(B2, n_fixed, g, placed)))
         self.assertEqual(DP_.stale({**rec, "crops": {"a-0000000001": "anything"}}, {a["id"]: a for a in s.articles},
                                    set(), {}, {}), [])                           # recorded, never compared
+# ------------------------------------------------------------------------------------------- moving a story (white box)
+class MoveCase(LockCase):
+    """Pages of the fictional four-page run as page sessions without the engine (as LockCase), sharing one engine, so a
+    story can move from one to another. Pages 1, 2 and 3 were laid out; page 4 was not."""
+
+    def setUp(self):
+        super().setUp()
+        self.engine = types.SimpleNamespace(sessions={}, cached_options=lambda b, k: {})
+        self.opened: list[int] = []
+        for n in (1, 2, 3):
+            DE.write_json(self.run / f"page-{n:02d}.manifest.json", {"template_role": "inside", "placed": []})
+
+    def page(self, n: int, modules: list, depth=None):
+        s = DEd.PageSession.__new__(DEd.PageSession)
+        s.page, s.pages, s.run_dir, s.rev, s.edition_dir = n, 4, self.run, 3, self.run.parent.parent
+        s.edit_path = self.run / f"page-{n:02d}.edit.json"
+        s.modules, s.origin, s.built = [dict(m) for m in modules], {}, self.built()
+        s.tpl = types.SimpleNamespace(news_top=TOP, news_bottom=FOOT, regions=[(0, G.NCOL, TOP, FOOT)], model={})
+        s.engine, s.fixed_boxes = self.engine, []
+        s.options, s.partial, s.extra_rows, s.keep = {}, set(), {}, []
+        s.draw = lambda: {"rev": s.rev, "modules": s.modules}     # setting the page itself is not under test here
+        s.sync = lambda: None
+        s._depth = (lambda m: m["h"]) if depth is None else depth
+        s._write_edit()
+        return s
+
+    def opener(self, *sessions):
+        """open_page for move_to: the session of page n, noted as opened."""
+        by = {s.page: s for s in sessions}
+
+        def open_page(n):
+            self.opened.append(n)
+            return by[n]
+        return open_page
+
+    def edits(self) -> dict:
+        """Every page's edit file: (its stories, its revision)."""
+        return {p.name: ([m["story"] for m in DE.read_json(p)["modules"]], DE.read_json(p)["rev"])
+                for p in sorted(self.run.glob("page-*.edit.json"))}
+
+
+class MoveTest(MoveCase):
+    """move_to: the story leaves this page at once and joins the other page's edits, the other page written first."""
+
+    A = mod("dA", 0, TOP, 3, 120.5)
+    B = mod("dB", 3, TOP, 5, 200.0)
+    C = mod("dC", 0, TOP, 4, 100.0)
+
+    def test_the_story_leaves_this_page_and_the_other_page_is_written_first(self):
+        src, dst = self.page(1, [self.A, self.B]), self.page(2, [self.C])
+        seen = []
+        real = src.apply
+
+        def apply(modules, base_rev=None):                        # what page 2's file holds when page 1 is changed
+            seen.append(DE.read_json(dst.edit_path)["modules"][-1]["story"])
+            return real(modules, base_rev)
+        src.apply = apply
+        res = src.move_to("dB", 2, 3, self.opener(dst))
+        self.assertEqual(seen, ["dB"])
+        self.assertEqual((self.opened, [m["story"] for m in src.modules], src.rev, res["rev"]), ([2], ["dA"], 4, 4))
+        self.assertEqual(self.edits(), {"page-01.edit.json": (["dA"], 4), "page-02.edit.json": (["dC", "dB"], 4)})
+        self.assertEqual(res["moved"], {"story": "dB", "page": 2, "rev": 4, "placed": "free", "pinned": None,
+                                        "module": mod("dB", 0, 130.0, 5, 200.0)})     # the first free place: under dC
+
+    def with_photos(self, s):
+        """dB has photo p-0000000002 and dC photo p-0000000003 (L1-3: a crop is kept only for its story's own photo)."""
+        for k, pid in (("dB", "p-0000000002"), ("dC", "p-0000000003")):
+            s.built.story_of[k]["images"] = [pid]
+        s.built.photos_idx = {"p-0000000002": {"width_px": 2000, "height_px": 1500},
+                              "p-0000000003": {"width_px": 1600, "height_px": 1200}}
+        return s
+
+    def test_it_keeps_its_width_comes_unlocked_and_brings_its_crop(self):
+        crop = {"photo": "p-0000000002", "focus": [0.3, 0.6], "zoom": 1.5}
+        src = self.with_photos(self.page(1, [self.A, {**self.B, "crop": crop}]))
+        dst = self.with_photos(self.page(2, [self.C], depth=lambda m: 151.2))  # the depth its text needs there
+        res = src.move_to("dB", 2, None, self.opener(dst))
+        self.assertEqual(res["moved"]["module"], {**mod("dB", 0, 130.0, 5, 151.0), "crop": crop})   # on the grid
+        self.assertEqual(DE.read_json(dst.edit_path)["modules"][-1], {**mod("dB", 0, 130.0, 5, 151.0), "crop": crop})
+
+    def test_a_crop_never_lands_on_another_picture_there(self):
+        other = {"photo": "p-0000000003", "focus": [0.2, 0.2], "zoom": 2.0}      # dC's photo, not dB's
+        src = self.with_photos(self.page(1, [self.A, {**self.B, "crop": other}]))
+        dst = self.with_photos(self.page(2, [{**self.C, "crop": {**other, "focus": [0.9, 0.1]}}]))
+        res = src.move_to("dB", 2, None, self.opener(dst))
+        self.assertIsNone(res["moved"]["module"]["crop"])                            # dropped, never applied
+        self.assertEqual([m["crop"] for m in DE.read_json(dst.edit_path)["modules"]],
+                         [{**other, "focus": [0.9, 0.1]}, None])                    # dC keeps its own crop
+
+    def test_refusals_write_nothing_and_open_no_other_page(self):
+        self.other_page(3, [mod("dD", 0, TOP, 2, 100.0), mod("dA", 2, TOP, 3, 100.0, locked=True)])
+        src = self.page(1, [{**self.A, "locked": False}, {**self.B, "locked": True}, mod("dD", 0, 200.0, 3, 100.0)])
+        dst = self.page(2, [self.C])
+        locked_there = "“Fictional headline A” is also on page 3, locked there: unlock it there to move it"
+        for story, to, base_rev, says in (
+                ("dB", 2, None, "“Fictional headline B” is locked: unlock it (Shift+L) to move it"),
+                ("dA", 1, None, "“Fictional headline A” is on this page already: choose another page"),
+                ("dA", 4, None, "page 4 was not laid out in this layout: a story cannot move there"),
+                ("dA", 5, None, "this layout has no page 5"),
+                ("dA", 0, None, "this layout has no page 0"),
+                ("dA", True, None, "this layout has no page True"),
+                ("dA", "2", None, "this layout has no page '2'"),
+                ("dC", 2, None, "“Fictional headline C” is not on this page"),
+                ("dA", 2, 2, DEd.STALE),
+                ("dA", 2, None, locked_there)):
+            with self.subTest(story=story, to=to):
+                before = ([dict(m) for m in src.modules], src.rev, [dict(m) for m in dst.modules], dst.rev, self.files())
+                with self.assertRaises(ValueError) as e:
+                    src.move_to(story, to, base_rev, self.opener(dst))
+                self.assertEqual(str(e.exception), says)
+                self.assertEqual(([dict(m) for m in src.modules], src.rev, [dict(m) for m in dst.modules], dst.rev,
+                                  self.files()), before)
+                self.assertEqual(self.opened, [])
+        self.other_page(3, [mod("dD", 0, TOP, 2, 100.0), mod("dA", 2, TOP, 3, 100.0)])   # unlocked there: it may move
+        src.move_to("dD", 2, None, self.opener(dst))
+        self.assertEqual([m["story"] for m in dst.modules], ["dC", "dD"])
+
+    def test_a_story_already_on_the_other_page_only_leaves_this_one(self):
+        src = self.page(1, [self.A, self.B])
+        dst = self.page(2, [self.C, {**mod("dB", 0, 300.0, 2, 100.0), "locked": True}])   # brought there, locked there
+        before = (DE.read_json(dst.edit_path), dst.edit_path.stat().st_mtime_ns)
+        res = src.move_to("dB", 2, None, self.opener(dst))
+        self.assertEqual((res["moved"]["placed"], res["moved"]["rev"], res["moved"]["module"]),
+                         ("already", 3, {**mod("dB", 0, 300.0, 2, 100.0), "locked": True}))
+        self.assertEqual((DE.read_json(dst.edit_path), dst.edit_path.stat().st_mtime_ns), before)     # untouched
+        self.assertEqual(([m["story"] for m in src.modules], src.rev), (["dA"], 4))
+
+    def test_a_failed_change_of_this_page_takes_the_story_back_off_the_other_page(self):
+        src, dst = self.page(1, [self.A, self.B]), self.page(2, [self.C])
+        files = {p: p.read_bytes() for p in (src.edit_path, dst.edit_path)}
+
+        def cannot():
+            raise RuntimeError("a fictional failure while setting the page")
+        src.draw = cannot
+        with self.assertRaises(RuntimeError):
+            src.move_to("dB", 2, None, self.opener(dst))
+        self.assertEqual(([m["story"] for m in src.modules], src.rev), (["dA", "dB"], 3))
+        self.assertEqual(([m["story"] for m in dst.modules], dst.rev), (["dC"], 3))    # its revision as before, too
+        self.assertEqual({p: p.read_bytes() for p in files}, files)
+
+    def test_the_other_page_that_cannot_take_it_changes_nothing(self):
+        src, dst = self.page(1, [self.A, self.B]), self.page(2, [self.C])
+
+        def cannot():
+            raise RuntimeError("a fictional failure while setting page 2")
+        dst.draw = cannot
+        before = self.edits()
+        with self.assertRaises(RuntimeError):
+            src.move_to("dB", 2, None, self.opener(dst))
+        self.assertEqual((self.edits(), [m["story"] for m in src.modules], dst.modules), (before, ["dA", "dB"], [self.C]))
+
+    def test_a_page_with_no_free_place_refuses_the_move_and_nothing_is_written(self):
+        full = [mod("dC", 0, TOP, 8, FOOT - TOP - 150.0), mod("dD", 0, FOOT - 150.0, 4, 150.0)]   # 150 mm left, 4 wide
+        src, dst = self.page(1, [self.A, self.B]), self.page(2, full)
+        before = ([dict(m) for m in src.modules], src.rev, [dict(m) for m in dst.modules], dst.rev, self.files())
+        with self.assertRaises(ValueError) as e:
+            src.move_to("dB", 2, None, self.opener(dst))
+        self.assertEqual(str(e.exception), "there is no free place on page 2 for “Fictional headline B” (5 columns × "
+                                           "200 mm): make room there, or narrow it here, then move it")
+        self.assertEqual(([dict(m) for m in src.modules], src.rev, [dict(m) for m in dst.modules], dst.rev, self.files()),
+                         before)                                     # never over another story
+        res = src.move_to("dA", 2, None, self.opener(dst))           # 3 columns × 120.5 mm fits beside dD
+        self.assertEqual((res["moved"]["placed"], res["moved"]["module"]), ("free", mod("dA", 4, FOOT - 150.0, 3, 120.5)))
+
+    def test_a_page_pin_is_said_never_changed(self):
+        DE.write_json(self.run.parent.parent / "articles.json", {"articles": [
+            {"id": "a-0000000001", "page": 1}, {"id": "a-0000000002", "page": 2}, {"id": "a-0000000005", "page": 1}]})
+        for story, to, pinned in (("dA", 2, 1), ("dB", 2, None), ("dbriefs1", 2, None), ("dC", 3, None)):
+            with self.subTest(story=story):
+                src = self.page(1, [mod(story, 0, TOP, 2, 100.0)])
+                dst = self.page(to, [])
+                self.assertEqual(src.move_to(story, to, None, self.opener(dst))["moved"]["pinned"], pinned)
+        (self.run.parent.parent / "articles.json").write_text("{damaged")        # the layout's own pin, then
+        src = self.page(1, [mod("dA", 0, TOP, 2, 100.0)])
+        src.built.items[0]["pin"] = 3
+        self.assertEqual(src.move_to("dA", 2, None, self.opener(self.page(2, [])))["moved"]["pinned"], 3)
+
+
+class FreeSpotTest(MoveCase):
+    """The first free place: top to bottom, then left to right; inside the news area, clear of stories and ads."""
+
+    def test_top_to_bottom_then_left_to_right(self):
+        s = self.page(2, [])
+        self.assertEqual(s.free_spot(3, 100.0), (col_x(0), TOP))
+        s.modules = [mod("dA", 0, TOP, 3, 100.0), mod("dB", 3, TOP, 5, 200.0)]
+        self.assertEqual(s.free_spot(3, 100.0), (col_x(0), 130.0))           # under dA
+        self.assertEqual(s.free_spot(5, 100.0), (col_x(0), 230.0))           # under both
+        s.modules = [mod("dA", 0, TOP, 3, 100.0), mod("dB", 5, TOP, 3, 200.0)]
+        self.assertEqual(s.free_spot(2, 300.0), (col_x(3), TOP))             # between them, at the top
+
+    def test_ads_and_pictures_the_page_keeps_are_never_covered(self):
+        s = self.page(2, [])
+        s.fixed_boxes = [[col_x(0), 400.2, col_x(0) + G.span_mm(8), FOOT]]   # an ad across the foot, off the grid
+        self.assertEqual(s.free_spot(8, 370.0), (col_x(0), TOP))             # 30 … 400: above it
+        self.assertIsNone(s.free_spot(8, 371.0))                             # would reach into it
+
+    def test_off_grid_edges_and_regions(self):
+        s = self.page(2, [mod("dA", 0, TOP, 8, 107.23)])                    # its foot at 137.23 (below an ad, say)
+        self.assertEqual(s.free_spot(4, 100.0), (col_x(0), 137.5))          # the next half millimetre, never into it
+        s = self.page(2, [])
+        s.tpl.regions = [(0, 4, TOP, FOOT), (4, 4, TOP, FOOT)]              # as beside an ad block
+        self.assertEqual(s.free_spot(4, 100.0), (col_x(0), TOP))
+        self.assertIsNone(s.free_spot(5, 100.0))                             # wider than either region
+
+    def test_no_place_is_free_on_a_full_page(self):
+        s = self.page(2, [mod("dA", 0, TOP, 8, 400.0)])
+        self.assertIsNone(s.free_spot(1, 71.0))
+        self.assertEqual(s.free_spot(1, 70.0), (col_x(0), 430.0))
+
+
+class DepthTest(MoveCase):
+    """The depth a moved story's text needs on the page it goes to: as Fit height to text, at its rank there."""
+
+    def target(self, fit: str, by: float):
+        t = self.page(2, [mod("dA", 0, TOP, 3, 100.0), mod("dC", 3, TOP, 3, 100.0)])
+        t._depth = DEd.PageSession._depth.__get__(t)
+        self.asked = []
+
+        def generator():                                         # the page's order with the story in it: dA, dB, dC
+            keys = sorted(m["story"] for m in t.modules)
+            return types.SimpleNamespace(stories=[types.SimpleNamespace(id=k) for k in keys])
+
+        def pick(s, w, h):
+            self.asked.append((s.id, w, h, sorted(m["story"] for m in t.modules)))
+            return (None if fit == "none" else {"option": 1}), fit, by
+        t.generator, t.pick = generator, pick
+        t._measure = lambda key, cls, w: self.asked.append(("measured", key, cls, w))
+        return t
+
+    def test_over_short_and_fitting(self):
+        for fit, by, depth in (("over", 12.5, 162.5), ("short", 20.0, 130.0), ("fits", 0.0, 150.0)):
+            with self.subTest(fit=fit):
+                t = self.target(fit, by)
+                self.assertEqual(t._depth(mod("dB", 0, TOP, 4, 150.0)), depth)
+                self.assertEqual(self.asked, [("dB", 4, 150.0, ["dA", "dB", "dC"])])   # set at its rank on the page
+                self.assertEqual([m["story"] for m in t.modules], ["dA", "dC"])        # the page itself unchanged
+
+    def test_a_story_measured_only_in_part_is_measured_at_its_rank_here_first(self):
+        t = self.target("fits", 0.0)
+        t.partial = {"dB"}
+        t._depth(mod("dB", 0, TOP, 4, 150.0))
+        self.assertEqual(self.asked[0], ("measured", "dB", DG.rank_class(1), 4))
+
+    def test_a_story_that_cannot_be_set_at_its_width_there_is_refused(self):
+        t = self.target("none", 0.0)
+        with self.assertRaises(ValueError) as e:
+            t._depth(mod("dB", 0, TOP, 1, 150.0))
+        self.assertEqual(str(e.exception), "“Fictional headline B” cannot be set 1 column wide on page 2: change its "
+                                           "width here, then move it")
+        self.assertEqual([m["story"] for m in t.modules], ["dA", "dC"])
+
+
+class SessionForTest(unittest.TestCase):
+    """The edit service's open pages: the most recently used last, the least recently used closed past MAX_SESSIONS, so
+    opening the page a story moves to never closes the page it moves from (the service makes that one the last used
+    first)."""
+
+    class Page:
+        made = 0
+
+        def __init__(self, engine, home, ed_dir, run_dir, page):
+            type(self).made += 1
+            self.run_dir, self.page, self.n = run_dir, page, type(self).made
+
+    def setUp(self):
+        self.real = DEd.PageSession
+        DEd.PageSession = self.Page
+        self.eng = DE.EditEngine.__new__(DE.EditEngine)
+        self.eng.home, self.eng.sessions = Path("/nonexistent-desk-home"), {}
+
+    def tearDown(self):
+        DEd.PageSession = self.real
+
+    def test_open_reuse_reload_and_the_least_recently_used_closes(self):
+        rid = "r-20261021-120000"
+        key, s = self.eng.session_for("2026-10-21", rid, 3)
+        self.assertEqual((key, s.page, s.run_dir.name), (f"2026-10-21/{rid}/3", 3, rid))
+        self.assertIs(self.eng.session_for("2026-10-21", rid, "3")[1], s)                    # open already
+        self.assertIsNot(self.eng.session_for("2026-10-21", rid, 3, reload=True)[1], s)       # opened again
+        for n in range(1, DE.MAX_SESSIONS + 1):
+            self.eng.session_for("2026-10-21", rid, n)
+        self.assertEqual(len(self.eng.sessions), DE.MAX_SESSIONS)
+        source = f"2026-10-21/{rid}/1"                           # the least recently used now
+        self.eng.touch(source)                                   # as the service does before a move
+        self.eng.session_for("2026-10-21", rid, 13)
+        self.assertIn(source, self.eng.sessions)
+        self.assertNotIn(f"2026-10-21/{rid}/2", self.eng.sessions)
+        self.assertEqual(list(self.eng.sessions)[-2:], [source, f"2026-10-21/{rid}/13"])
+        for bad in (("../x", rid, 1), ("2026-10-21", "r-1", 1)):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                self.eng.session_for(*bad)
 
 
 # ------------------------------------------------------------------------------------------- a run's own pictures

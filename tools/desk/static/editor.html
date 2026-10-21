@@ -93,6 +93,7 @@
     </header>
     <div class="ed-notice" id="notice" hidden>
       <p id="notice-text"></p>
+      <button type="button" id="notice-action" class="action" hidden></button>
       <button type="button" id="notice-close" aria-label="Close this message">×</button>
     </div>
     <div class="sr-only" id="announce" aria-live="polite"></div>
@@ -203,6 +204,19 @@
               Remove from page
             </button>
           </div>
+          <div class="field">
+            <label class="label" for="p-move-to">Move to page</label>
+            <div class="move-to">
+              <select id="p-move-to"></select>
+              <button
+                type="button"
+                id="p-move"
+                title="The story leaves this page now and goes onto that page; it prints there once that page is saved"
+              >
+                Move
+              </button>
+            </div>
+          </div>
         </div>
         <h2 class="problems-title">Checks</h2>
         <ul id="problems" class="problems"></ul>
@@ -225,6 +239,11 @@
           <strong>Set focal point</strong>, and click its subject: the frame keeps it as near its centre as it can when
           the story is resized or laid out again. V or Esc stops; <strong>Reset crop</strong> prints the photo as the
           layout crops it.
+        </p>
+        <p class="muted small help">
+          <strong>Move to page</strong> (here or in the story's menu) takes the story off this page at once and puts it
+          on the page you choose, at the first free place there (a page with no free place for it refuses it); it prints
+          there once that page is saved, so save both pages. Undo brings it back here.
         </p>
         <p class="muted small help">
           Shift+2 zooms to the selected story, Shift+1 shows the whole page and Shift+3 its width; Shift+R shows or
