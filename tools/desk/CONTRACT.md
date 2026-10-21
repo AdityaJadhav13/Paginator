@@ -9,7 +9,7 @@ Three parts:
 
 | Part | Runs in | Files |
 |---|---|---|
-| **UI** | the browser, served by the server | `tools/desk/static/` (`index.html`, `app.js`, `app.css`; the page editor `editor.html`, `editor.js`, `editor.css`, and `editor-view.js`, its view's arithmetic: rulers and zoom): plain HTML, CSS and JavaScript. No build step, no framework, no network access beyond the local server |
+| **UI** | the browser, served by the server | `tools/desk/static/` (`index.html`, `app.js`, `app.css`, `strings.js`, the main screen's words in English and Marathi, and `paste.js`, "Paste several" read as the server reads it; the page editor `editor.html`, `editor.js`, `editor.css`, and `editor-view.js`, its view's arithmetic: rulers and zoom): plain HTML, CSS and JavaScript. No build step, no framework, no network access beyond the local server |
 | **Server** | `experiments/phase0/pdfx1/.venv/bin/python` (has Pillow with littleCMS, pypdfium2, pikepdf) | `tools/desk/server.py` (+ `tools/desk/deskserver/`): Python standard library `http.server`; storage, uploads, photo conversion, job runner, previews, merging |
 | **Engine** | `tools/oracle/v0/.venv/bin/python` (the frozen oracle environment: HarfBuzz, fontTools) | `tools/desk/engine/`: turns articles into pages with gen1; command-line only |
 

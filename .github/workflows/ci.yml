@@ -119,5 +119,5 @@ jobs:
         run: experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py
       - name: engine tests
         run: tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py
-      - name: page editor view tests
-        run: node --test tools/desk/test/test_editor_view.mjs
+      - name: browser module tests (page editor view, words, paste)
+        run: node --test tools/desk/test/*.mjs

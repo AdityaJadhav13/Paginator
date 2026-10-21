@@ -102,6 +102,13 @@ never in this repository.
      stories. Changing a photo or ad in the edition later does not change it until Update text (or Save page) brings
      it. Layouts made by older versions of the Desk cannot be edited: lay the edition out again.
 
+## Languages
+
+The main screen is in English or Marathi: **English / मराठी** at the top right. The browser remembers the choice, and
+switching keeps what you are typing. The words are in `static/strings.js`; the Marathi is a first draft that a native
+editor checks (its `REVIEW` list). The articles, headlines and the server's messages are shown as they are (the
+server's messages in English for now). The page editor is still in English.
+
 ## Limits
 
 - **Fonts.** The type uses the free stand-in fonts the experiments use; the paper's own fonts come later.
@@ -142,7 +149,9 @@ The contract between them is in [`CONTRACT.md`](CONTRACT.md).
 The tests use fictional data only and need nothing from `~/PageinatorPrivate`.
 - `experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py`
 - `tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py`
-- `node --test tools/desk/test/test_editor_view.mjs` (the page editor's ruler and zoom arithmetic)
+- `node --test tools/desk/test/*.mjs`: the page editor's ruler and zoom arithmetic (`test_editor_view.mjs`), the main
+  screen's words in English and Marathi (`test_strings.mjs`), and the paste preview read as the server reads it
+  (`test_paste.mjs`)
 
 CI builds both environments from hashed locks with Python 3.11.14 (the commands are in `docs/DEVELOPMENT.md`, Setup):
 the server's from `tools/desk/requirements.lock` (the exact versions of `experiments/phase0/pdfx1/requirements.txt`),

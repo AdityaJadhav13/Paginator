@@ -110,6 +110,29 @@ From the feature's code review and its independent verification, 2026-10-22.
 | CI-9 | The 3 ColorSync tests run only on macOS; the fake engine is still not a shared fixture (the rest of PR 3) | Covered on macOS |
 | CI-10 | Python licences for the L2.2 review: the macOS pikepdf wheel bundles GnuTLS, GMP, Nettle and other LGPL libraries without their licence texts; pypdfium2 carries `LicenseRef-PdfiumThirdParty`; the engine environment has MPL-2.0 packages (certifi, hypothesis, pathspec) | The Desk runs locally; reviewed before the hosted engine (L2.2) |
 
+## Desk: Marathi labels (L1-5a, `tools/desk/static/strings.js`, `app.js`, `index.html`)
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| MR-1 | `index.html` noscript, `strings.js` `api.unreadable` | "पान" is used for the web page, while everywhere else it means a newspaper page; use another word (for example "स्क्रीन") | Wording; the native editor reviews every entry |
+| MR-2 | `strings.js` `arts.placement`, `arts.placementAt` | "…मांडणीतील पाने दाखवली आहेत" says pages are shown, not where each article went | Wording; on the REVIEW list |
+| MR-3 | `strings.js` `paste.byline` | Marked GLOSSARY, but the glossary's term for byline is "वार्ताहर नाव"; "वार्ताहर:" is the marker the server reads, so it belongs on the REVIEW list | Bookkeeping only; the marker itself is right |
+| MR-4 | `strings.js` `count.article`, `count.story` | Both are "बातमी": the needs panel's stories (not short items) and all articles read the same in Marathi | The panel labels them separately (बातम्या / छोट्या बातम्या) |
+| MR-5 | `app.js` `changeLang` | A switch made in another tab re-renders this tab, but a dialog open here keeps its old language until it is opened again | Rare; nothing typed is lost |
+| MR-6 | `app.js` search box | Its pending search is flushed only by `changeLang`; any other full redraw within its 150 ms pause still works from the old query | The next keystroke or redraw catches up |
+| MR-7 | `strings.js` `run.engineSetup` | Wraps the server's English reason in a Marathi sentence without marking the reason `lang="en"` | Screen-reader voice only |
+| MR-8 | `app.js` `langFor` | A message with any Devanagari is marked `mr` as a whole, also when most of it is English (a server reason quoting a headline) | Screen-reader voice only |
+| MR-9 | `strings.js` English entries | Small English changes came with the catalogue: "A paper of 8 pages", "it/its" in one-item forms, "Ad spaces filled: 2 of 3", "1 ad space of 3 has no image" | Better English; nothing else depends on it |
+| MR-10 | `app.js` Word import note | Repeated problem lines are no longer merged when they are the Desk's own (each is a function now) | Only when the same file is chosen twice |
+| MR-11 | `index.html` | Static labels are empty until `app.js` runs (a moment on the local server) | No flash of a wrong language; the noscript text is bilingual |
+| MR-12 | `test/` | No test redraws the real DOM (switch, typed input kept); that is checked only by the browser runs of the builder and the verifier | The catalogue and paste parsing have `node:test` tests |
+| MR-13 | `app.js` toasts, live announcer | A toast or an announcement made just before a switch stays in the old language | They vanish within seconds |
+| MR-14 | `app.js` ad upload | An upload error shown on an ad card disappears when the language changes (the step is drawn again) | Upload again to see it |
+| MR-15 | server and engine messages | Shown in English in Marathi mode (status, progress, reasons, warnings) | Planned as a later step |
+| MR-16 | `strings.js` `arts.deleteMessage` | "with its photo" also when the article has none | Wording |
+| MR-17 | paste dialog | An error from an earlier paste stays until the next submit or reopening | Wording of state, nothing lost |
+| MR-18 | `strings.js` `res.pagePdf` | Gives "पान 1 · पहिले ची PDF": the postposition after the role reads badly | Wording; on the REVIEW list |
+
 ## Licence check (`tools/ts/check-licences.ts`)
 
 | # | What | Why it can wait |

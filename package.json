@@ -18,7 +18,7 @@
     "typecheck": "tsc -b && pnpm --filter @pageinator/web typecheck",
     "test": "vitest run",
     "test:private": "PAGEINATOR_PRIVATE_RUN=1 vitest run --project private",
-    "test:desk": "experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py && tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py && node --test tools/desk/test/test_editor_view.mjs",
+    "test:desk": "experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py && tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py && node --test tools/desk/test/*.mjs",
     "check:oracle": "node tools/ts/check-oracle-manifest.ts",
     "prepare": "node tools/ts/install-hooks.ts"
   },
