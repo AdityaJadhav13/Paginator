@@ -17,6 +17,12 @@
       "path": "packages/contracts/test"
     },
     {
+      "path": "packages/desk-text"
+    },
+    {
+      "path": "packages/desk-text/test"
+    },
+    {
       "path": "apps/api"
     },
     {
