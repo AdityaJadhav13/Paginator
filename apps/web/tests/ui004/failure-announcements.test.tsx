@@ -2,16 +2,16 @@ import { describe, expect, it } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { screen } from "../../src/test/render.tsx";
 import { createMockApplicationEnvironment } from "../../src/mocks/index.ts";
-import { renderUi004 } from "./renderUi004.tsx";
+import { renderUi004, signInWithForm } from "./renderUi004.tsx";
 
 const PUNE = "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview";
 
 describe("UI004 temporary-failure announcements", () => {
   it("keeps initial session and workspace failures non-live", async () => {
     const sessionEnvironment = createMockApplicationEnvironment();
-    sessionEnvironment.scenarios.setScenario({ mode: "failure", operations: ["user.get"] });
+    sessionEnvironment.scenarios.setScenario({ mode: "failure", operations: ["session.get"] });
     const sessionView = renderUi004("/login", undefined, sessionEnvironment);
-    expect(await screen.findByText("The demonstration service is temporarily unavailable. Try again.")).toBeInTheDocument();
+    expect(await screen.findByText("Something went wrong on our side")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     sessionView.unmount();
 
@@ -22,15 +22,16 @@ describe("UI004 temporary-failure announcements", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("announces a user-triggered session failure assertively", async () => {
+  it("announces a user-triggered sign-in failure assertively", async () => {
     const environment = createMockApplicationEnvironment();
     renderUi004("/login", "signed-out", environment);
-    const profile = await screen.findByRole("button", { name: "Sahyadri Demo Editor" });
-    environment.scenarios.setScenario({ mode: "failure", operations: ["user.get"] });
-    await userEvent.setup().click(profile);
+    await screen.findByLabelText("Email address");
+    environment.scenarios.setScenario({ mode: "failure", operations: ["session.signIn"] });
+    await signInWithForm(userEvent.setup(), environment.sessionController.fixtures.accounts.editor);
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("The demonstration service is temporarily unavailable. Try again.");
+    expect(alert).toHaveTextContent("Something went wrong on our side");
+    expect(alert).toHaveTextContent("Reference: mock-request");
     expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 

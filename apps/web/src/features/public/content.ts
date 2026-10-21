@@ -18,7 +18,9 @@ export type ContentSource =
   | "PHASE_15_UI_FIRST"
   | "IMPLEMENTATION_ROADMAP"
   | "DECISION_REGISTER"
-  | "UI005_SPEC";
+  | "UI005_SPEC"
+  /** docs/product/10-l2-newsroom-plan.md: real sign-in, by invitation (L2.1). */
+  | "L2_PLAN";
 
 export interface ContentRecord {
   /** Stable, kebab-case. Referenced literally by at least one component. */
@@ -34,15 +36,15 @@ const RECORDS: readonly ContentRecord[] = [
   // ── Shared: calls to action ──────────────────────────────────────────
   {
     id: "cta-primary-signed-out",
-    text: "Enter the demonstration",
-    source: "UI005_SPEC",
-    sourceRef: "§20.1 primary CTA table",
+    text: "Sign in to your newsroom",
+    source: "L2_PLAN",
+    sourceRef: "§4.1 email and password sign-in, by invitation",
   },
   {
     id: "cta-primary-signed-in",
-    text: "Open your demonstration workspace",
+    text: "Open Pageinator",
     source: "UI005_SPEC",
-    sourceRef: "§20.1 primary CTA table",
+    sourceRef: "§20.1 primary CTA table; the destination follows the session (L2 plan §10 PR 12)",
   },
   {
     id: "cta-secondary-workflow",
@@ -78,7 +80,7 @@ const RECORDS: readonly ContentRecord[] = [
   // ── Shared: closing band ─────────────────────────────────────────────
   {
     id: "closing-standing",
-    text: "The demonstration",
+    text: "This build",
     source: "UI005_SPEC",
     sourceRef: "§12 region 7",
   },
@@ -90,15 +92,15 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "closing-body",
-    text: "It runs entirely in your browser. Nothing is sent, nothing is stored and nothing is charged.",
-    source: "DECISION_REGISTER",
-    sourceRef: "D10 labeled UI simulation",
+    text: "Sign-in is real and by invitation; everything else still runs in your browser. Nothing is charged.",
+    source: "L2_PLAN",
+    sourceRef: "§4.1 Better Auth sign-in, invitation only; §2.6 placeholders stay dev-only",
   },
 
   // ── Shared: the standing simulation qualification ────────────────────
   {
     id: "qualification-standing",
-    text: "This is a working demonstration. No content is published, composed, validated, or printed by it today.",
+    text: "This build is still being made. No content is published, composed, validated, or printed by it today.",
     source: "DECISION_REGISTER",
     sourceRef: "D10 no live publishing/backend/AI/payment capability",
   },
@@ -118,27 +120,27 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "today-lead",
-    text: "Three things in this build are real and operable. Everything else is an explicitly labeled placeholder.",
-    source: "DECISION_REGISTER",
-    sourceRef: "D10 labeled UI simulation",
+    text: "Signing in is real in this build. The newsroom screens are still to come.",
+    source: "L2_PLAN",
+    sourceRef: "§10 PRs 12–13 sign-in; PR 20 onward the newsroom screens",
   },
   {
     id: "today-item-sign-in",
-    text: "A fictional sign-in that selects one of two demonstration profiles. No credentials are requested and no account is created.",
-    source: "UI005_SPEC",
-    sourceRef: "§7.3 item 1",
+    text: "Sign-in with an email address and a password, in English or Marathi. No account can be created from this site yet.",
+    source: "L2_PLAN",
+    sourceRef: "§4.1 sign-in; §4.3 sign-up only by invitation (PR 10)",
   },
   {
-    id: "today-item-navigation",
-    text: "Scoped navigation across two fictional organizations and three fictional publications, one of which reads right to left.",
-    source: "UI005_SPEC",
-    sourceRef: "§7.3 item 2",
+    id: "today-item-email-links",
+    text: "Password reset and email confirmation, each through a link sent by email.",
+    source: "L2_PLAN",
+    sourceRef: "§4.1 sendResetPassword, sendVerificationEmail",
   },
   {
-    id: "today-item-placeholders",
-    text: "A workspace in which every feature surface is a labeled placeholder naming the unit that will build it.",
-    source: "UI005_SPEC",
-    sourceRef: "§7.3 item 3",
+    id: "today-item-no-workspace",
+    text: "No newsroom screen is open to a signed-in person yet.",
+    source: "L2_PLAN",
+    sourceRef: "§2.6 placeholder routes stay dev-only; §5.2 /me (PR 9)",
   },
   {
     id: "today-closing",
@@ -332,9 +334,9 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "home-provisional-security-body",
-    text: "This build holds no customer data, transmits nothing and carries no certification of any kind.",
-    source: "PHASE_15_UI_FIRST",
-    sourceRef: "Route map: no invented certifications",
+    text: "Sign-in accounts (a name, an email address and a hashed password), their sessions and their sign-in events are kept on Pageinator's server. This build carries no certification of any kind.",
+    source: "L2_PLAN",
+    sourceRef: "§4.1 identity schema, argon2id passwords, sessions; §3.4 auth events; route map: no invented certifications",
   },
 
   // ── Features page ────────────────────────────────────────────────────
@@ -572,9 +574,9 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "security-lead-2",
-    text: "Pageinator holds no customer data today.",
-    source: "DECISION_REGISTER",
-    sourceRef: "D10 no backend capability in initial backlog",
+    text: "Pageinator keeps sign-in accounts on its own server. No newspaper's stories, pages or files are stored yet.",
+    source: "L2_PLAN",
+    sourceRef: "§4.1 accounts; §10 PRs 16–18 stories and photos not yet built",
   },
   {
     id: "security-true-standing",
@@ -590,27 +592,27 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "security-true-1",
-    text: "This build runs entirely in your browser. There is no server, no database and no identity provider behind it.",
-    source: "DECISION_REGISTER",
-    sourceRef: "D10 labeled UI simulation",
+    text: "Signing in goes to Pageinator's own server, which checks the email address and the password.",
+    source: "L2_PLAN",
+    sourceRef: "§4.1 Better Auth on the API",
   },
   {
     id: "security-true-2",
-    text: "All fictional data lives in memory for the duration of a page view. Reloading the page discards it.",
-    source: "MASTER_BUILD_SPEC",
-    sourceRef: "§5 fixtures are deterministic and resettable",
+    text: "The workspace screens are still placeholders on fictional test data, and no signed-in person can open them yet.",
+    source: "L2_PLAN",
+    sourceRef: "§2.6 placeholder routes stay dev-only; §5.2 /me (PR 9)",
   },
   {
     id: "security-true-3",
-    text: "Nothing is transmitted. Nothing is written to local storage, session storage, IndexedDB or a cookie.",
-    source: "MASTER_BUILD_SPEC",
-    sourceRef: "§5 no real credentials, network crawling or cloud uploads",
+    text: "A signed-in browser keeps its session in cookies that page scripts cannot read. Your language choice is kept in this browser's local storage.",
+    source: "L2_PLAN",
+    sourceRef: "§4.5 HttpOnly, Secure, SameSite=Lax session cookie",
   },
   {
     id: "security-true-4",
-    text: "There is no account, credential or session token. Signing in selects a fictional profile and nothing else.",
-    source: "MASTER_BUILD_SPEC",
-    sourceRef: "§5 no real credentials",
+    text: "Sign-in gives the same answer for a wrong email address and a wrong password. A password-reset request gets the same answer whether or not the address has an account.",
+    source: "L2_PLAN",
+    sourceRef: "§4.6 the answer is always generic; 03 §5.1 no account enumeration",
   },
   {
     id: "security-intent-standing",
@@ -674,7 +676,7 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "security-nonleak-body-2",
-    text: "That is a property of the simulation's interface, checked by its own tests. It is not a production authorization control.",
+    text: "That is a property of the placeholder workspace, checked by its own tests. It is not a production authorization control.",
     source: "UI005_SPEC",
     sourceRef: "§17.2 block 4",
   },
@@ -704,9 +706,9 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "security-limit-encryption",
-    text: "No encryption-at-rest claim, because nothing is at rest.",
-    source: "DECISION_REGISTER",
-    sourceRef: "D10 no backend capability",
+    text: "No encryption-at-rest claim.",
+    source: "L2_PLAN",
+    sourceRef: "§8 hosting not yet decided or deployed",
   },
   {
     id: "security-limit-availability",
@@ -716,9 +718,9 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "security-limit-processing",
-    text: "No data-processing agreement and no sub-processor list, because no data is processed.",
-    source: "DECISION_REGISTER",
-    sourceRef: "D10 no backend capability",
+    text: "No data-processing agreement and no sub-processor list.",
+    source: "L2_PLAN",
+    sourceRef: "§8 hosting not yet decided or deployed",
   },
   {
     id: "security-report-standing",

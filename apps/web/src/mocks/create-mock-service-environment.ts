@@ -29,6 +29,11 @@ export interface MockServiceEnvironment {
   readonly users: UserQueryService;
   readonly workspace: WorkspaceQueryService;
   readonly scenarios: MockScenarioController;
+  /**
+   * For the environment's other doubles (the session's): waits out a latency scenario on `operation`, then says
+   * whether a failure or a denial scenario applies to it.
+   */
+  readonly intercept: (operation: MockOperation) => Promise<"failure" | "denial" | undefined>;
 }
 
 const UNAVAILABLE_MESSAGES: Readonly<Record<UnavailableResource, string>> = {
@@ -92,9 +97,7 @@ export function createMockServiceEnvironment(
   let seed: MockSeedSnapshot = createCanonicalSeed();
   let scenario: MockScenario = { mode: "normal" };
 
-  async function scenarioResult<T>(
-    operation: MockOperation
-  ): Promise<ServiceResult<T> | undefined> {
+  async function intercept(operation: MockOperation): Promise<"failure" | "denial" | undefined> {
     const activeScenario = scenario;
     if (!scenarioApplies(activeScenario, operation)) {
       return undefined;
@@ -103,10 +106,20 @@ export function createMockServiceEnvironment(
       await delay(activeScenario.delayMs);
       return undefined;
     }
-    if (activeScenario.mode === "failure") {
+    return activeScenario.mode === "failure" ? "failure" : "denial";
+  }
+
+  async function scenarioResult<T>(
+    operation: MockOperation
+  ): Promise<ServiceResult<T> | undefined> {
+    const outcome = await intercept(operation);
+    if (outcome === "failure") {
       return temporaryFailure<T>();
     }
-    return denied<T>();
+    if (outcome === "denial") {
+      return denied<T>();
+    }
+    return undefined;
   }
 
   const users: UserQueryService = {
@@ -216,5 +229,5 @@ export function createMockServiceEnvironment(
     },
   };
 
-  return { users, workspace, scenarios };
+  return { users, workspace, scenarios, intercept };
 }

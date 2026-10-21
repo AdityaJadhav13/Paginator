@@ -8,8 +8,8 @@ import { t } from "./content.ts";
 
 const ITEMS = [
   "today-item-sign-in",
-  "today-item-navigation",
-  "today-item-placeholders",
+  "today-item-email-links",
+  "today-item-no-workspace",
 ] as const;
 
 export function TodayList() {

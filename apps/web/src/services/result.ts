@@ -6,9 +6,13 @@ export type UnavailableResource =
   | "publication"
   | "edition";
 
-export type ServiceResult<T> =
+/**
+ * A service's answer. The placeholder workspace services fail with `ServiceError`; the real ones (session, account)
+ * with an `ApiProblem` (problem.ts).
+ */
+export type ServiceResult<T, E = ServiceError> =
   | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: ServiceError };
+  | { readonly ok: false; readonly error: E };
 
 export type ServiceError =
   | {

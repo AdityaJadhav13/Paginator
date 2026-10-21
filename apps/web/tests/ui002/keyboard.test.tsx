@@ -9,6 +9,7 @@ import { render, screen, within } from "../../src/test/render.tsx";
 import userEvent from "@testing-library/user-event";
 import { AppRoutes as Ui004Routes } from "../../src/root/AppRoot.tsx";
 import { renderAt } from "./renderRoutes.tsx";
+import { createMockApplicationEnvironment } from "../../src/mocks/index.ts";
 
 describe("Skip link (AC-15)", () => {
   it("is the first Tab stop and targets a focusable <main>", async () => {
@@ -115,7 +116,7 @@ describe("Focus after navigation (AC-16)", () => {
     render(
       <StrictMode>
         <BrowserRouter>
-          <Ui004Routes />
+          <Ui004Routes environment={createMockApplicationEnvironment()} />
         </BrowserRouter>
       </StrictMode>
     );

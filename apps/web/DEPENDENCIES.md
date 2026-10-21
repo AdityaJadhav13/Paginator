@@ -18,6 +18,12 @@ document.
 > dependencies are unchanged, and so is the test count (1,249 in 35 files under
 > npm/Node 22 before the move and pnpm/Node 24 after it). The record below is
 > kept as written for UI001/UI002.
+>
+> **L2-E (2026-10-22):** one development dependency on a workspace package, not
+> from npm: `@pageinator/contracts` (`workspace:*`), so the tests check the web's
+> reading of API errors against the API's own `ErrorEnvelope` schema and error
+> codes. The app imports nothing from it at run time; runtime dependencies are
+> unchanged.
 
 ## Supported Node runtime
 

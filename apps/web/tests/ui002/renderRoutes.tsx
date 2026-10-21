@@ -11,13 +11,18 @@
 import { BrowserRouter } from "react-router";
 import { render } from "../../src/test/render.tsx";
 import { AppRoutes as Ui004Routes } from "../../src/root/AppRoot.tsx";
+import { createMockApplicationEnvironment } from "../../src/mocks/index.ts";
 
-/** Renders the app with the browser at `path`, as a fresh deep link would. */
+/**
+ * Renders the app with the browser at `path`, as a fresh deep link would, on
+ * the test double (signed in as the fictional Sahyadri editor): the app's own
+ * default is the real API.
+ */
 export function renderAt(path: string) {
   window.history.pushState(null, "", path);
   return render(
     <BrowserRouter>
-      <Ui004Routes />
+      <Ui004Routes environment={createMockApplicationEnvironment()} />
     </BrowserRouter>
   );
 }

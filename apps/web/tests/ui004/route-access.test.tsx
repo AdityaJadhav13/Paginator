@@ -1,25 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "../../src/test/render.tsx";
+import { screen, waitFor } from "../../src/test/render.tsx";
 import userEvent from "@testing-library/user-event";
 import { createMockApplicationEnvironment } from "../../src/mocks/index.ts";
-import { renderUi004 } from "./renderUi004.tsx";
+import { renderUi004, signInWithForm } from "./renderUi004.tsx";
 
 const PUNE = "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview";
+const { accounts } = createMockApplicationEnvironment().sessionController.fixtures;
 
 describe("UI004 auth and public routes", () => {
-  it("shows two fictional login profiles without credential fields", async () => {
+  it("asks for an email address and a password, with Keep me signed in, and offers no social sign-in", async () => {
     renderUi004("/login", "signed-out");
     expect(await screen.findByRole("heading", { level: 1, name: "Sign in" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "Demonstration identity and role" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /Demo (Editor|Reviewer)/ })).toHaveLength(2);
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/password|email|token/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Email address")).toHaveAttribute("type", "email");
+    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
+    expect(screen.getByRole("checkbox", { name: "Keep me signed in" })).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: /google|microsoft/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/demonstration identity/i)).not.toBeInTheDocument();
   });
 
   it("signs in as reviewer and replaces the route with the canonical workspace", async () => {
     const view = renderUi004("/login", "signed-out");
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Konkan Demo Reviewer" }));
+    await signInWithForm(user, accounts.reviewer);
     expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/org/org-demo-konkan/pub/pub-demo-ratnagiri-tide/overview");
     expect(view.container).toHaveTextContent("Konkan Demo Reviewer");
@@ -28,27 +30,18 @@ describe("UI004 auth and public routes", () => {
     expect(screen.queryByText("Sahyadri Media Cooperative")).not.toBeInTheDocument();
   });
 
-  it("implements fictional signup, verify, and non-sending recovery actions", async () => {
-    const user = userEvent.setup();
-    const signup = renderUi004("/signup", "signed-out");
-    await user.click(await screen.findByRole("button", { name: "Start fictional signup" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Onboarding" })).toBeInTheDocument();
-    signup.unmount();
-
-    const verify = renderUi004("/verify", "signed-out");
-    await user.click(await screen.findByRole("button", { name: "Continue with verified fictional profile" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
-    verify.unmount();
-
-    renderUi004("/forgot-password", "signed-out");
-    await user.click(await screen.findByRole("button", { name: "Preview fictional recovery" }));
-    expect(screen.getByText(/No message was sent/)).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/forgot-password");
+  it("offers sign-up only by invitation: /signup explains, and has no account form", async () => {
+    renderUi004("/signup", "signed-out");
+    expect(await screen.findByRole("heading", { level: 1, name: "Create an account" })).toBeInTheDocument();
+    expect(screen.getByText(/accounts are made by invitation/)).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
   });
 
-  it("recovery action performs no network, persistence, form, cookie, or mail navigation", async () => {
-    renderUi004("/forgot-password", "signed-out");
-    const action = await screen.findByRole("button", { name: "Preview fictional recovery" });
+  it("recovery goes only through the account service: no page submit, cookie, storage or mail link", async () => {
+    const { environment } = renderUi004("/forgot-password", "signed-out");
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Email address"), accounts.editor.email);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const xhrSpy = vi.spyOn(XMLHttpRequest.prototype, "open");
     const storageSpy = vi.spyOn(Storage.prototype, "setItem");
@@ -57,10 +50,12 @@ describe("UI004 auth and public routes", () => {
     const websocket = vi.fn();
     vi.stubGlobal("WebSocket", websocket);
     try {
-      fireEvent.click(action);
-      expect(await screen.findByText(/No message was sent/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Send link" }));
+      expect(await screen.findByText(/a link is on its way/)).toBeInTheDocument();
       for (const spy of [fetchSpy, xhrSpy, storageSpy, submitSpy, cookieSpy, websocket]) expect(spy).not.toHaveBeenCalled();
       expect(document.querySelector("a[href^='mailto:']")).not.toBeInTheDocument();
+      expect(environment.sessionController.outbox()).toEqual([{ kind: "reset", to: accounts.editor.email }]);
+      expect(window.location.pathname).toBe("/forgot-password");
     } finally {
       vi.unstubAllGlobals();
       vi.restoreAllMocks();
@@ -91,13 +86,13 @@ describe("UI004 protected access", () => {
   it("accepts canonical internal returnTo and rejects unsafe or unknown targets", async () => {
     const user = userEvent.setup();
     const accepted = renderUi004(`/login?returnTo=${encodeURIComponent(PUNE)}`, "signed-out");
-    await user.click(await screen.findByRole("button", { name: "Sahyadri Demo Editor" }));
+    await signInWithForm(user, accounts.editor);
     expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
     expect(window.location.pathname).toBe(PUNE);
     accepted.unmount();
 
     renderUi004("/login?returnTo=https%3A%2F%2Fevil.example", "signed-out");
-    await user.click(await screen.findByRole("button", { name: "Sahyadri Demo Editor" }));
+    await signInWithForm(user, accounts.editor);
     await screen.findByRole("heading", { level: 1, name: "Overview" });
     expect(window.location.pathname).toBe(PUNE);
   });
@@ -158,7 +153,7 @@ describe("UI004 protected access", () => {
     expect(window.location.pathname).toContain("pub-demo-urdu-evening");
     expect(container.querySelector(".pg-shell--workspace")).toHaveAttribute("dir", "rtl");
     expect(container.querySelector(".pg-shell--workspace")).toHaveAttribute("lang", "ur-IN");
-    expect(await environment.session.getSession()).toMatchObject({ ok: true, value: { session: { activePublicationId: "pub-demo-urdu-evening" } } });
+    expect(await environment.access.getAccess({ userId: "user-demo-sahyadri-editor" })).toMatchObject({ ok: true, value: { activePublicationId: "pub-demo-urdu-evening" } });
   });
 
   it("switches organizations to the grant's canonical publication and role", async () => {
@@ -168,13 +163,14 @@ describe("UI004 protected access", () => {
     await waitFor(() => expect(container).toHaveTextContent("reviewer"));
     expect(screen.getByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/org/org-demo-konkan/pub/pub-demo-ratnagiri-tide/overview");
-    expect(await environment.session.getSession()).toMatchObject({ ok: true, value: { session: { activeOrganizationId: "org-demo-konkan", activePublicationId: "pub-demo-ratnagiri-tide" } } });
+    expect(await environment.access.getAccess({ userId: "user-demo-sahyadri-editor" })).toMatchObject({ ok: true, value: { activeOrganizationId: "org-demo-konkan", activePublicationId: "pub-demo-ratnagiri-tide" } });
   });
 
-  it("switches fictional profile, filtered options, role, and route together", async () => {
+  it("signing in as another person switches the options, role and route together", async () => {
     const { container } = renderUi004(PUNE);
-    const profile = await screen.findByRole("combobox", { name: "Demonstration identity and role" });
-    await userEvent.setup().selectOptions(profile, "user-demo-konkan-reviewer");
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+    await signInWithForm(user, accounts.reviewer);
     await waitFor(() => expect(window.location.pathname).toBe("/org/org-demo-konkan/pub/pub-demo-ratnagiri-tide/overview"));
     await waitFor(() => expect(container).toHaveTextContent("Konkan Demo Reviewer"));
     expect(container).toHaveTextContent("reviewer");

@@ -99,3 +99,16 @@ The owner decided on 2026-10-21:
 | L2-58 | `packages/desk-text/test/vectors` | Add realistic fictional fixtures: a WhatsApp export, a Word paste, nukta and ZWJ in a byline | The vectors already cover each rule on its own |
 | L2-59 | small items | Import order in `packages/desk-text/src/paste.ts`; an index on `desk_bundle (org_id, publication_id, edition_id)`; `updated_at` is never set by the database; no size limit on `idempotency_key.response` | Style and performance only; nothing writes these yet |
 | L2-60 | `tools/desk/engine/desk_engine.py:80`, `desksamples.py:122` (a Desk item, outside L2) | The engine counts briefs with `<= BRIEF_WORDS` and no `0 <`, unlike `deskarticles.is_brief` | Both read the private dataset's printed stories (setup's statistics, and sample articles), not the newsroom's own; neither decides how an article is laid out |
+| L2-61 | invitation contract (PR 10, `apps/web/src/api/account-service.ts`) | Agree the header name `X-Pageinator-Invitation`, the invitation answer's shape and the sign-up refusal text with the API, and put the header name in `@pageinator/contracts` | Both sides use the same name today; the API reads it from `INVITATION_HEADER` |
+| L2-62 | `apps/web` API client | A 409 `request_in_progress` is shown as "cannot be used" | No endpoint answers it before PR 17 |
+| L2-63 | `apps/web` public page | `today-item-sign-in` claims Marathi, which is unreviewed | The catalogue's Marathi is a first draft for the desk's review |
+| L2-64 | `apps/web` demo | The demo "Access unavailable" text is reachable in the real app | It says nothing untrue |
+| L2-65 | `apps/web` styles | Dead CSS: `.pg-auth-actions`, `.pg-auth-profiles` | Unused rules only |
+| L2-66 | `apps/web/src/api/client.ts` | Headers given in different letter cases are not merged into one | The client's callers use one spelling each |
+| L2-67 | `apps/web` session | "Session expired" is not a live region, so a screen reader does not announce it | The page also moves focus to the sign-in form |
+| L2-68 | `apps/web` `/verify?confirmed=1` | The confirmation message can be shown by a crafted link | It changes nothing; the session decides what the person sees |
+| L2-69 | `apps/web` verification | A cookie is set but an error shown when get-session fails right after | A reload signs the person in |
+| L2-70 | `apps/web` tests | The 320 px layout evidence lives only in scratch scripts: make it a test | Checked by hand for L2-E |
+| L2-71 | `apps/web` forms | A synthetic triple-click sends three POSTs | Real clicks are guarded; the per-address limits cap the rest |
+| L2-72 | `apps/web` and the API limit | `get-session` counts against the 60 per minute per-address limit | The web asks once per screen |
+| L2-73 | `src/modules/identity/routes.ts` | `get-session` returns `session.token` in its JSON (readable by page scripts, though not usable alone without the signed cookie): strip it in the forwarder | The cookie is HttpOnly and signed; the bare token is not a session |

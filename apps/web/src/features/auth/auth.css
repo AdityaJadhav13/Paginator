@@ -1,0 +1,65 @@
+/*
+ * The sign-in screens (03 §5.1): a centred card, fluid down to 320 CSS pixels. UI001 tokens only, logical
+ * properties only.
+ *
+ * Marathi (02 §3.1): Devanagari text is never below 13 px, and its lines are generous (about 1.6 times the size),
+ * so in Marathi every text role here takes the next line-height step.
+ */
+
+.pg-auth {
+  display: flex;
+  justify-content: center;
+  padding-block: var(--pg-space-7);
+}
+
+.pg-auth__card {
+  inline-size: 100%;
+  max-inline-size: var(--pg-auth-measure);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.pg-auth__card form {
+  margin: 0;
+}
+
+.pg-auth__links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-auth__hint {
+  margin: 0;
+  color: var(--pg-color-text-muted);
+}
+
+.pg-shell--auth .pg-shell__header {
+  padding-block: var(--pg-space-3);
+}
+
+/* ── Marathi line heights ─────────────────────────────────────────── */
+
+.pg-shell--auth:lang(mr) .pg-type-page-title {
+  line-height: var(--pg-line-height-600);
+}
+
+.pg-shell--auth:lang(mr) p,
+.pg-shell--auth:lang(mr) .pg-type-body,
+.pg-shell--auth:lang(mr) .pg-checkbox__label,
+.pg-shell--auth:lang(mr) .pg-inline-message__heading {
+  line-height: var(--pg-line-height-400);
+}
+
+.pg-shell--auth:lang(mr) .pg-type-body-small,
+.pg-shell--auth:lang(mr) .pg-field__label,
+.pg-shell--auth:lang(mr) .pg-field__description,
+.pg-shell--auth:lang(mr) .pg-field__error,
+.pg-shell--auth:lang(mr) .pg-inline-message__text,
+.pg-shell--auth:lang(mr) .pg-progress__label,
+.pg-shell--auth:lang(mr) .pg-button--sm {
+  line-height: var(--pg-line-height-300);
+}

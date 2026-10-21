@@ -284,7 +284,7 @@ describe("No dead copy (AC-15)", () => {
       // Signed in: the signed-in CTA label.
       const inn = renderPublic(path);
       await screen.findByRole("heading", { level: 1, name: heading });
-      await screen.findAllByText("Open your demonstration workspace");
+      await screen.findAllByText("Open Pageinator");
       harvest(inn.container);
       inn.unmount();
     }
@@ -473,6 +473,36 @@ describe("Rendered text is governed, including across interpolation (AC-13, AC-1
     const allowed = governedStrings();
     expect(allowed.has("Reserved for")).toBe(false);
     expect(allowed.has("Reserved for UI009.")).toBe(true);
+  });
+});
+
+describe("Statements real sign-in made untrue stay gone (L2 plan PR 12)", () => {
+  const NO_LONGER_TRUE = [
+    "transmits nothing",
+    "holds no customer data",
+    "Nothing is transmitted",
+    "runs entirely in your browser",
+    "lives in memory",
+    "simulation's interface",
+    "No real accounts",
+  ];
+
+  for (const { path, heading } of PUBLIC_ROUTES) {
+    for (const preset of ["signed-out", undefined] as const) {
+      it(`"${path}" (${preset ?? "signed in"}) says none of them`, async () => {
+        const { container } = renderPublic(path, preset);
+        await screen.findByRole("heading", { level: 1, name: heading });
+        const text = container.textContent ?? "";
+        for (const phrase of NO_LONGER_TRUE) {
+          expect(text, `"${path}" still says "${phrase}"`).not.toContain(phrase);
+        }
+      });
+    }
+  }
+
+  it("keeps them out of every content record too", () => {
+    const corpus = ALL_RECORDS.map((record) => record.text).join(" ");
+    for (const phrase of NO_LONGER_TRUE) expect(corpus).not.toContain(phrase);
   });
 });
 

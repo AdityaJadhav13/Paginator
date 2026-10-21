@@ -1,0 +1,197 @@
+/**
+ * The catalogue's meta-test (docs/product/10-l2-newsroom-plan.md §10, PR 12): the same keys in English and Marathi,
+ * no empty value, the same `{name}` placeholders in both, every key the code uses exists, the glossary seeds are
+ * 02 §3.9's own words, every API error code has its text, and the Marathi review list accounts for every string.
+ */
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { ERROR_CODES } from "@pageinator/contracts";
+import {
+  CATALOGUE_KEYS,
+  CATALOGUES,
+  LANGUAGES,
+  REVIEW,
+  REVIEWED,
+  formatMessage,
+  isCatalogueKey,
+  placeholdersOf,
+  translator,
+} from "../../src/i18n/index.ts";
+
+const DEVANAGARI = /[ऀ-ॿ]/;
+
+/** Every code the plan's error table names (§5.1), with those the API answers with today. */
+const PLAN_ERROR_CODES = [
+  "invalid_request",
+  "signed_out",
+  "not_allowed",
+  "two_step_required",
+  "bad_origin",
+  "not_found",
+  "story_changed",
+  "invalid_transition",
+  "edition_exists",
+  "file_too_large",
+  "request_too_large",
+  "not_json",
+  "not_a_picture",
+  "slow_down",
+  "server_error",
+  "idempotency_key_reused",
+  "request_in_progress",
+];
+
+const sourceFiles = import.meta.glob(["/src/**/*.{ts,tsx}", "!/src/i18n/en.ts", "!/src/i18n/mr.ts"], {
+  eager: true,
+  query: "?raw",
+  import: "default",
+}) as Record<string, string>;
+
+/** String literals in the source that are shaped like catalogue keys. */
+function keyLiterals(): Map<string, string> {
+  const found = new Map<string, string>();
+  const prefixes = [...new Set(CATALOGUE_KEYS.map((key) => key.split(".")[0]))].join("|");
+  const literal = new RegExp(`["'\`]((?:${prefixes})\\.[A-Za-z0-9_.]+)["'\`]`, "g");
+  for (const [path, source] of Object.entries(sourceFiles)) {
+    for (const match of source.matchAll(literal)) {
+      if (!/\.(css|ts|tsx|js|json)$/.test(match[1]!)) found.set(match[1]!, path); // not a file name
+    }
+  }
+  return found;
+}
+
+describe("Key parity", () => {
+  it("has the same keys in English and Marathi", () => {
+    expect(Object.keys(CATALOGUES.mr).sort()).toEqual(Object.keys(CATALOGUES.en).sort());
+    expect(CATALOGUE_KEYS.length).toBeGreaterThan(200);
+  });
+
+  it("has no empty or blank value in either language", () => {
+    for (const language of LANGUAGES) {
+      for (const key of CATALOGUE_KEYS) {
+        expect(CATALOGUES[language][key].trim(), `${language} ${key}`).not.toBe("");
+      }
+    }
+  });
+
+  it("has the same placeholders in both languages", () => {
+    for (const key of CATALOGUE_KEYS) {
+      expect(placeholdersOf(CATALOGUES.mr[key]).sort(), key).toEqual(placeholdersOf(CATALOGUES.en[key]).sort());
+    }
+  });
+
+  it("writes every Marathi string in Devanagari, and no English one", () => {
+    for (const key of CATALOGUE_KEYS) {
+      expect(CATALOGUES.mr[key], `mr ${key}`).toMatch(DEVANAGARI);
+      expect(CATALOGUES.en[key], `en ${key}`).not.toMatch(DEVANAGARI);
+    }
+  });
+
+  it("uses only placeholders that are whole words in braces, never left unformatted", () => {
+    for (const language of LANGUAGES) {
+      for (const key of CATALOGUE_KEYS) {
+        const text = CATALOGUES[language][key];
+        const params = Object.fromEntries(placeholdersOf(text).map((name) => [name, "X"]));
+        expect(formatMessage(text, params), `${language} ${key}`).not.toMatch(/[{}]/);
+      }
+    }
+  });
+});
+
+describe("Keys the code uses", () => {
+  it("exist in the catalogue", () => {
+    const missing = [...keyLiterals()].filter(([key]) => !isCatalogueKey(key)).map(([key, path]) => `${path}: ${key}`);
+    expect(missing).toEqual([]);
+  });
+
+  it("are every key but the glossary seeds and the error codes (no dead strings)", () => {
+    const used = new Set(keyLiterals().keys());
+    const unused = CATALOGUE_KEYS.filter(
+      (key) => !used.has(key) && !key.startsWith("glossary.") && !key.startsWith("error."),
+    );
+    expect(unused).toEqual([]);
+  });
+
+  it("has the text for every error code the API answers with, and those the plan names", () => {
+    for (const code of [...ERROR_CODES, ...PLAN_ERROR_CODES]) {
+      expect(isCatalogueKey(`error.${code}`), code).toBe(true);
+    }
+  });
+});
+
+describe("Glossary seeds (02 §3.9)", () => {
+  /** The §3.9 table, as (English, Marathi) pairs: "Page / Pages" is two, "Zoom in / out" is "Zoom in" and "Zoom out". */
+  function glossaryFromSpec(): Array<[string, string]> {
+    const doc = readFileSync(resolve(__dirname, "../../../../docs/product/02-design-system.md"), "utf8");
+    const section = doc.slice(doc.indexOf("### 3.9"));
+    const rows = section
+      .split("\n")
+      .filter((line) => line.startsWith("|") && !line.includes("---"))
+      .slice(1)
+      .map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()));
+    const expand = (cell: string): string[] => {
+      const parts = cell.split(" / ");
+      const first = parts[0]!.split(" ");
+      return parts.map((part, index) => {
+        if (index === 0) return part;
+        const words = part.split(" ");
+        return words.length < first.length ? [...first.slice(0, first.length - words.length), ...words].join(" ") : part;
+      });
+    };
+    const pairs: Array<[string, string]> = [];
+    for (const row of rows) {
+      for (const [english, marathi] of [[row[0], row[1]], [row[2], row[3]]] as Array<[string, string]>) {
+        const englishParts = expand(english.replace(/ \([^)]*\)$/, ""));
+        const marathiParts = expand(marathi);
+        englishParts.forEach((part, index) => pairs.push([part, marathiParts[index] ?? marathiParts[0]!]));
+      }
+    }
+    return pairs;
+  }
+
+  it("holds every pair of the spec's table, in its own words", () => {
+    const spec = glossaryFromSpec();
+    const seeds = CATALOGUE_KEYS.filter((key) => key.startsWith("glossary.")).map((key) => [
+      CATALOGUES.en[key].replace(/\{\w+\}/g, "N"),
+      CATALOGUES.mr[key].replace(/\{\w+\}/g, "N"),
+    ]);
+    expect(spec.length).toBe(70);
+    expect(seeds.length).toBe(spec.length);
+    for (const pair of spec) {
+      expect(seeds, `${pair[0]} / ${pair[1]}`).toContainEqual(pair);
+    }
+  });
+});
+
+describe("The Marathi review list", () => {
+  it("holds every Marathi string that no native editor has approved, which today is all of them", () => {
+    expect(Object.keys(REVIEWED)).toEqual([]);
+    expect(REVIEW.map((item) => item.key)).toEqual([...CATALOGUE_KEYS]);
+    expect(REVIEW.filter((item) => item.source === "glossary")).toHaveLength(70);
+    for (const item of REVIEW) {
+      expect(item.marathi).toBe(CATALOGUES.mr[item.key]);
+      expect(item.english).toBe(CATALOGUES.en[item.key]);
+    }
+  });
+
+  it("keeps an approval only while the approved text is unchanged", () => {
+    for (const [key, review] of Object.entries(REVIEWED)) {
+      expect(isCatalogueKey(key)).toBe(true);
+      expect(review?.by.trim()).not.toBe("");
+      expect(review?.on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+});
+
+describe("Formatting", () => {
+  it("replaces each placeholder with its value, in both languages", () => {
+    expect(translator("en")("invite.join", { organization: "The Sahyadri Daily" })).toBe("Join The Sahyadri Daily");
+    expect(translator("mr")("invite.join", { organization: "द सह्याद्री डेली" })).toBe("द सह्याद्री डेली मध्ये सामील व्हा");
+    expect(translator("en")("verify.wait", { seconds: 42 })).toBe("You can send it again in 42 seconds.");
+  });
+
+  it("refuses to leave a placeholder without a value", () => {
+    expect(() => formatMessage("Join {organization}", {})).toThrow(/organization/);
+  });
+});

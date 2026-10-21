@@ -7,8 +7,8 @@ import { describe, it, expect } from "vitest";
 import { screen, within } from "../../src/test/render.tsx";
 import { PUBLIC_ROUTES, renderPublic } from "./renderPublic.tsx";
 
-const SIGNED_OUT_LABEL = "Enter the demonstration";
-const SIGNED_IN_LABEL = "Open your demonstration workspace";
+const SIGNED_OUT_LABEL = "Sign in to your newsroom";
+const SIGNED_IN_LABEL = "Open Pageinator";
 const SIGNED_IN_DESTINATION = "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview";
 
 function ctaLinks(container: HTMLElement): HTMLAnchorElement[] {

@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Reset links (/reset-password?token=…) and invitation links (/invite/<id>) carry secrets: never in a Referer -->
+    <meta name="referrer" content="no-referrer" />
     <title>Pageinator</title>
   </head>
   <body>

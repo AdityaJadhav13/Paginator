@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import axe from "axe-core";
 import userEvent from "@testing-library/user-event";
 import { screen } from "../../src/test/render.tsx";
+import { createMockApplicationEnvironment } from "../../src/mocks/index.ts";
 import { renderUi004 } from "./renderUi004.tsx";
 
 async function seriousViolations(container: HTMLElement) {
@@ -24,11 +25,16 @@ describe("UI004 accessibility and responsive contract", () => {
     }
   });
 
-  it("supports keyboard-only fictional sign-in", async () => {
+  it("supports keyboard-only sign-in", async () => {
+    const { editor } = createMockApplicationEnvironment().sessionController.fixtures.accounts;
     renderUi004("/login", "signed-out");
-    const button = await screen.findByRole("button", { name: "Sahyadri Demo Editor" });
-    button.focus();
-    await userEvent.setup().keyboard("{Enter}");
+    const email = await screen.findByLabelText("Email address");
+    email.focus();
+    const user = userEvent.setup();
+    await user.keyboard(editor.email);
+    await user.tab();
+    expect(screen.getByLabelText("Password")).toHaveFocus();
+    await user.keyboard(`${editor.password}{Enter}`);
     expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toHaveFocus();
   });
 

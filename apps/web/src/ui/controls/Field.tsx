@@ -15,6 +15,8 @@ export interface FieldProps {
    * Conveys required state both semantically (required attr) and visibly.
    */
   required?: boolean;
+  /** The visible required affordance, in the page's language. Defaults to "(required)". */
+  requiredLabel?: string;
   className?: string;
   /** Single native control child. Field injects id, aria-describedby, aria-invalid, required. */
   children: React.ReactElement;
@@ -30,6 +32,7 @@ export function Field({
   description,
   errors = [],
   required = false,
+  requiredLabel = "(required)",
   className,
   children,
 }: FieldProps) {
@@ -57,7 +60,7 @@ export function Field({
         {required && (
           <span className="pg-field__required" aria-hidden="true">
             {" "}
-            (required)
+            {requiredLabel}
           </span>
         )}
       </label>

@@ -29,6 +29,8 @@ export interface InvalidContext {
 export type WorkspaceRouteState =
   | { readonly status: "loading" }
   | { readonly status: "signed-out"; readonly returnTo: string }
+  /** The session itself could not be read (offline, or the API failed). */
+  | { readonly status: "session-unavailable" }
   | { readonly status: "allowed"; readonly context: ResolvedContext }
   | { readonly status: "inaccessible" }
   | { readonly status: "invalid-context"; readonly invalid: InvalidContext }
@@ -98,12 +100,20 @@ export function WorkspaceRouteProvider({
       });
       return;
     }
-    if (currentSession.status === "denied" || currentSession.status === "temporary-failure") { setState(currentSession); return; }
+    if (currentSession.status === "unavailable") {
+      const { reason } = currentSession;
+      if (reason.source === "session") setState({ status: "session-unavailable" });
+      else if (reason.error.code === "temporary-failure") setState({ status: "temporary-failure", error: reason.error, assertive: currentSession.assertive });
+      else if (reason.error.code === "denied") setState({ status: "denied", error: reason.error });
+      else setState({ status: "inaccessible" });
+      return;
+    }
 
+    const workspaceAccess = currentSession.workspace;
     const organizationId = params.orgId;
     const publicationId = params.pubId;
-    const grant = currentSession.session.access.find((candidate) => candidate.organizationId === organizationId);
-    if (!organizationId || !grant) { setState({ status: "inaccessible" }); return; }
+    const grant = workspaceAccess?.access.find((candidate) => candidate.organizationId === organizationId);
+    if (!workspaceAccess || !organizationId || !grant) { setState({ status: "inaccessible" }); return; }
     if (publicationId && !grant.publicationIds.includes(publicationId)) { setState({ status: "inaccessible" }); return; }
 
     const assertiveFailure = revision > 0 || (
@@ -129,10 +139,10 @@ export function WorkspaceRouteProvider({
       }
       if (!isCurrent()) return;
       const organization = organizationResult.value;
-      const organizations = organizationsResult.value.filter((candidate) => currentSession.session.access.some((candidateGrant) => candidateGrant.organizationId === candidate.id));
+      const organizations = organizationsResult.value.filter((candidate) => workspaceAccess.access.some((candidateGrant) => candidateGrant.organizationId === candidate.id));
 
       if (!publicationId) {
-        if (currentSession.session.activeOrganizationId !== organizationId) {
+        if (workspaceAccess.activeOrganizationId !== organizationId) {
           if (!isCurrent()) return;
           await session.selectOrganization(organizationId);
           return;
@@ -170,7 +180,7 @@ export function WorkspaceRouteProvider({
         if (!release) { if (isCurrent()) setState({ status: "invalid-context", invalid: { status: "invalid", level: "release", organization, publication } }); return; }
       }
 
-      if (currentSession.session.activeOrganizationId !== organizationId || currentSession.session.activePublicationId !== publicationId) {
+      if (workspaceAccess.activeOrganizationId !== organizationId || workspaceAccess.activePublicationId !== publicationId) {
         // One atomic mutation: selectPublication sets both the active
         // organization and publication. Splitting it into an organization
         // step followed by a publication step would open an await window

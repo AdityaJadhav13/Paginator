@@ -1,9 +1,13 @@
 /**
  * PublicShell (UI002 §7.1). Wraps the public route family (§6 rows
  * 1–10). `/onboarding` renders through the same shell in a
- * pre-context variant that omits the sign-in/sign-up affordance — the
- * only shell-variant rule in UI002; it does not require a fourth
- * shell.
+ * pre-context variant that omits the sign-in/sign-up affordance.
+ *
+ * The sign-in screens (03 §5.1) render in the shell's sign-in variant:
+ * the logo and the language switch on top, the card, and the notice,
+ * in the language the person chose. The public pages exist in English
+ * only for now, so their whole shell is an English scope (`lang="en"`)
+ * whatever the interface language is.
  */
 import { Outlet, Link, useLocation } from "react-router";
 import { Container, Inline, Cluster, Stack } from "../../ui/index.ts";
@@ -12,6 +16,8 @@ import { CollapsibleNav } from "../CollapsibleNav.tsx";
 import { MAIN_LANDMARK_ID, paths, ROUTE_LABELS } from "../routes.ts";
 import { SignedInSessionControls } from "../../features/auth/SessionStatus.tsx";
 import { useSession } from "../../features/auth/SessionProvider.tsx";
+import { isAuthPath } from "../../features/auth/return-to.ts";
+import { LanguageScope, LanguageSwitch, useI18n } from "../../i18n/index.ts";
 
 /** The five public destinations the footer's Secondary navigation lists. */
 const SECONDARY_NAV = [
@@ -34,14 +40,42 @@ const SECONDARY_NAV = [
  */
 const SECONDARY_NAV_LINK_CLASS = "pg-button pg-button--quiet pg-type-body-small";
 
-export function PublicShell() {
+/** The sign-in screens' chrome: logo and language switch, the card, the notice. */
+function SignInChrome() {
+  const { language, t } = useI18n();
+  return (
+    <div className="pg-shell pg-shell--public pg-shell--auth" lang={language}>
+      <SkipLink label={t("shell.skipLink")} />
+      <header className="pg-shell__header">
+        <Container>
+          <Cluster gap="4" justify="space-between">
+            <Link to={paths.home()} className="pg-shell__brand pg-type-section-title" lang="en">
+              Pageinator
+            </Link>
+            <LanguageSwitch />
+          </Cluster>
+        </Container>
+      </header>
+      <main id={MAIN_LANDMARK_ID} tabIndex={-1}>
+        <Outlet />
+      </main>
+      <footer className="pg-shell__footer">
+        <Container>
+          <p className="pg-type-body-small">{t("shell.notice")}</p>
+        </Container>
+      </footer>
+    </div>
+  );
+}
+
+function PublicChrome() {
   const location = useLocation();
   const isOnboarding = location.pathname === paths.onboarding();
-  const isAuthRoute = [paths.login(), paths.signup(), paths.forgotPassword(), paths.verify()].includes(location.pathname);
   const { state } = useSession();
+  const { t } = useI18n();
 
   return (
-    <div className="pg-shell pg-shell--public">
+    <div className="pg-shell pg-shell--public" lang="en">
       <SkipLink />
       <header className="pg-shell__header">
         <Container>
@@ -58,8 +92,8 @@ export function PublicShell() {
                 <Link to={paths.contact()}>{ROUTE_LABELS.contact}</Link>
               </Cluster>
             </CollapsibleNav>
-            {!isOnboarding && !isAuthRoute && state.status === "ready" && <SignedInSessionControls />}
-            {!isOnboarding && !isAuthRoute && state.status !== "ready" && (
+            {!isOnboarding && state.status === "ready" && <SignedInSessionControls />}
+            {!isOnboarding && state.status !== "ready" && (
               <Cluster gap="3" justify="end">
                 <Link to={paths.login()}>{ROUTE_LABELS.login}</Link>
                 <Link to={paths.signup()}>{ROUTE_LABELS.signup}</Link>
@@ -73,7 +107,7 @@ export function PublicShell() {
        * each route's own regions, because the public surfaces render
        * full-width bands that cannot live inside a constrained container.
        * Routes that previously relied on the shell's Container now wrap
-       * themselves in one at their route element, so rows 6–10 are unchanged.
+       * themselves in one at their route element.
        */}
       <main id={MAIN_LANDMARK_ID} tabIndex={-1}>
         <Outlet />
@@ -81,15 +115,8 @@ export function PublicShell() {
       <footer className="pg-shell__footer">
         <Container>
           {/*
-           * UI005 §20.4 edit 2: conventional public-site footer navigation.
-           *
-           * Built entirely from UI001 primitives and their existing classes,
-           * so this shell change needs no stylesheet of its own: `Cluster`
-           * supplies the wrapping row and tokenized gap, `Stack` the
-           * separation from the notice below, and the quiet-button classes
-           * the tokenized link colour and size — the same reuse of
-           * `pg-button` on a router `Link` that the public primary call to
-           * action already relies on.
+           * UI005 §20.4 edit 2: conventional public-site footer navigation,
+           * built entirely from UI001 primitives and their existing classes.
            */}
           <Stack gap="4">
             <Cluster as="nav" aria-label="Secondary" gap="5">
@@ -99,12 +126,20 @@ export function PublicShell() {
                 </Link>
               ))}
             </Cluster>
-            <p className="pg-type-caption">
-              Pageinator is a fictional product simulation. No real accounts, payments, or press services exist here.
-            </p>
+            <p className="pg-type-caption">{t("shell.notice")}</p>
           </Stack>
         </Container>
       </footer>
     </div>
+  );
+}
+
+export function PublicShell() {
+  const location = useLocation();
+  if (isAuthPath(location.pathname)) return <SignInChrome />;
+  return (
+    <LanguageScope language="en">
+      <PublicChrome />
+    </LanguageScope>
   );
 }
