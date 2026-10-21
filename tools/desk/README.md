@@ -119,7 +119,17 @@ never in this repository.
 | Server | `experiments/phase0/pdfx1/.venv` (Pillow + littleCMS, pypdfium2, pikepdf) | `server.py`, `deskserver/` |
 | Engine | `tools/oracle/v0/.venv` (the frozen oracle environment) | `engine/` |
 
-The contract between them is in [`CONTRACT.md`](CONTRACT.md). Tests:
-- `experiments/phase0/pdfx1/.venv/bin/python -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py`
-- `tools/oracle/v0/.venv/bin/python -m unittest tools/desk/test/test_engine.py`
+The contract between them is in [`CONTRACT.md`](CONTRACT.md).
+
+## Tests
+
+`pnpm run test:desk` runs the three suites from the repository root, and CI's `desk` job runs the same three commands.
+The tests use fictional data only and need nothing from `~/PageinatorPrivate`.
+- `experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py`
+- `tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py`
 - `node --test tools/desk/test/test_editor_view.mjs` (the page editor's ruler and zoom arithmetic)
+
+CI builds both environments from hashed locks with Python 3.11.14 (the commands are in `docs/DEVELOPMENT.md`, Setup):
+the server's from `tools/desk/requirements.lock` (the exact versions of `experiments/phase0/pdfx1/requirements.txt`),
+the engine's from the frozen oracle's `tools/oracle/v0/requirements.lock`. CI runs on Linux, where three server tests
+skip: they need the colour profiles that come with macOS (`/System/Library/ColorSync/Profiles`).

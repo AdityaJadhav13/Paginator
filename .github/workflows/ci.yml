@@ -92,3 +92,32 @@ jobs:
           uv venv --python 3.11.14 .venv
           uv pip install --python .venv --require-hashes -r requirements.lock
           .venv/bin/python -m pytest -p no:cacheprovider -m "not a10" tests/
+
+  desk:
+    name: pageinator desk tests
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: server environment (the pdfx1 pins, hashed in tools/desk/requirements.lock)
+        run: |
+          # the lock must pin exactly the versions of the frozen pdfx1 environment
+          grep -oE '^[a-z0-9._-]+==[^ ]+' tools/desk/requirements.lock | diff - experiments/phase0/pdfx1/requirements.txt
+          uv venv --python 3.11.14 experiments/phase0/pdfx1/.venv
+          uv pip install --python experiments/phase0/pdfx1/.venv --require-hashes -r tools/desk/requirements.lock
+      - name: engine environment (the frozen oracle's, as in the oracle job)
+        working-directory: tools/oracle/v0
+        run: |
+          uv venv --python 3.11.14 .venv
+          uv pip install --python .venv --require-hashes -r requirements.lock
+      - name: server and Word import tests
+        run: experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py
+      - name: engine tests
+        run: tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py
+      - name: page editor view tests
+        run: node --test tools/desk/test/test_editor_view.mjs

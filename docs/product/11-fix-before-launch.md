@@ -74,6 +74,23 @@ refuses every change to a locked story before anything is written.
 | DESK-7 | `engine/deskedit.py` Update text | The first Update text in a layout writes `edit-articles.json` even when nothing changed (the edition's articles have `is_brief`/`words` keys the run lacks), so a save refused for a lock is not entirely write-free | PDFs, page edit files and status stay unchanged |
 | DESK-8 | `edit-service.log` in the Desk home | Every engine refusal writes a traceback that includes the headline | The log is in the private Desk home, never in the repository; trim it before the hosted engine (L2.3) |
 
+## Desk tests in CI (`.github/workflows/ci.yml` job `desk`)
+
+From the feature's code review and its independent verification, 2026-10-22.
+
+| # | What | Why it can wait |
+|---|---|---|
+| CI-1 | `setup-uv` has no pinned `version` in the `desk` and `oracle` jobs; uv is the tool that checks the hashes | The hashes are still checked |
+| CI-2 | No `timeout-minutes` on the job: a hang would run for 6 hours | Rare; costs runner time only |
+| CI-3 | `actions/checkout` keeps the (read-only) token in `.git/config`; set `persist-credentials: false` in every job | The token is read-only |
+| CI-4 | The setup-uv cache key may be shared between `desk` and `oracle` (the default glob does not match the lock files); set `cache-suffix` or `cache-dependency-glob` | Correctness is unaffected |
+| CI-5 | `docs/DEVELOPMENT.md` step 4 runs `uv venv` on a venv most developers already have; say "if it does not exist yet" or use `--clear` | Wording |
+| CI-6 | The pin check (`grep -oE '^[a-z0-9._-]+=='…`) misses an extra package whose name has capitals; add `-i`, or compare `uv pip freeze` with `requirements.txt` after the install | Needs a hand edit of the lock, and the package must still match its hash |
+| CI-7 | Add "pageinator desk tests" to the required checks in branch protection (a repository setting) | Settings, not code |
+| CI-8 | Say in the README that pypdfium2 4.30.1 is yanked but deliberately pinned (frozen evidence), so the uv warning in the log is expected | Wording |
+| CI-9 | The 3 ColorSync tests run only on macOS; the fake engine is still not a shared fixture (the rest of PR 3) | Covered on macOS |
+| CI-10 | Python licences for the L2.2 review: the macOS pikepdf wheel bundles GnuTLS, GMP, Nettle and other LGPL libraries without their licence texts; pypdfium2 carries `LicenseRef-PdfiumThirdParty`; the engine environment has MPL-2.0 packages (certifi, hypothesis, pathspec) | The Desk runs locally; reviewed before the hosted engine (L2.2) |
+
 ## Licence check (`tools/ts/check-licences.ts`)
 
 | # | What | Why it can wait |
