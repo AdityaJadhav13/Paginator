@@ -39,12 +39,13 @@
 |---|---|
 | `pnpm run ci` | Everything CI runs: guards, dependency graph, lint, format check, typecheck, tests, web build |
 | `pnpm test` | All tests but the database's: web (jsdom), kernel (node), api with the shared contracts (node) |
-| `pnpm run test:db` | The API's database and tenancy tests (`apps/api/test/db`, `apps/api/test/tenancy`) on the local Postgres (`pnpm dev:up` first). Each file works in a clone of a freshly migrated template database; the run drops them all. It reads `.env.dev`, and fails, never skips, without the database |
+| `pnpm run test:db` | The API's database and tenancy tests (`apps/api/test/db`, `apps/api/test/tenancy`) on the local Postgres, and one email through Mailpit (`pnpm dev:up` first). Each file works in a clone of a freshly migrated template database; the run drops them all. It reads `.env.dev`, and fails, never skips, without them |
 | `pnpm run typecheck` | `tsc -b` (TypeScript 7) for packages, plus the web app's own typecheck |
 | `pnpm run lint` / `pnpm run format` | ESLint (with the kernel determinism rules) and Prettier |
 | `pnpm --filter @pageinator/web dev` | Run the web app |
-| `pnpm --filter @pageinator/api dev` | Run the API on `http://127.0.0.1:8780` (`/healthz`, `/readyz`), restarting on changes, with the settings of `.env.dev`. Its settings (`PGN_*`) are read and checked by `apps/api/src/config.ts`: the database's place (`PGN_DB_HOST`, `PGN_DB_PORT`, `PGN_DB_NAME`, by default the local Postgres) and the passwords of `pgn_app`, `pgn_auth` and `pgn_listen`, which have no default. Behind any proxy, `PGN_TRUST_PROXY` must name it |
+| `pnpm --filter @pageinator/api dev` | Run the API on `http://127.0.0.1:8780` (`/healthz`, `/readyz`), restarting on changes, with the settings of `.env.dev`. Its settings (`PGN_*`) are read and checked by `apps/api/src/config.ts`: the database's place (`PGN_DB_HOST`, `PGN_DB_PORT`, `PGN_DB_NAME`, by default the local Postgres) and the passwords of `pgn_app`, `pgn_auth` and `pgn_listen`, which have no default; the sign-in secret `PGN_AUTH_SECRET` (no default) and the public origin `PGN_PUBLIC_ORIGIN` (by default the first of `PGN_ALLOWED_ORIGINS`); email through `PGN_SMTP_HOST`, `PGN_SMTP_PORT`, `PGN_SMTP_TLS` and `PGN_MAIL_FROM` (by default Mailpit on 127.0.0.1:51025). Behind any proxy, `PGN_TRUST_PROXY` must name it |
 | `pnpm --filter @pageinator/api db:migrate` | Applies the pending migrations (`apps/api/src/db/migrations`, forward only) as `pgn_migrator` acting as `pgn_owner`; needs `PGN_MIGRATOR_PASSWORD` (from `.env.dev` when it exists; the environment wins) |
+| `pnpm --filter @pageinator/api db:identity-schema` | Prints the SQL Better Auth needs to bring schema `identity` up to date for our configuration (`src/modules/identity/auth.ts`): after a Better Auth upgrade or a new plugin, keep it in `apps/api/src/db/identity/` and run it from a new migration. `pnpm run test:db` fails while Better Auth expects something no migration made |
 | `pnpm --filter @pageinator/api db:codegen` | Rewrites `apps/api/src/db/schema.gen.ts` from the migrated database; with `--check` it only fails when the file differs. `pnpm run test:db` makes the same comparison |
 | `pnpm run guard` | Privacy guard, frozen-evidence guard and oracle check. Locally, on a branch stacked on another, set `GUARD_BASE=origin/<base>` |
 | `pnpm run check:oracle` | The frozen oracle: its manifest's SHA-256s, and every tracked file against `tools/ts/oracle-files.json` |
@@ -73,6 +74,21 @@ ports listen on 127.0.0.1 only:
 | Mailpit 1.31.6 (`mail`) | web `http://127.0.0.1:58025`, SMTP `127.0.0.1:51025` | Catches every email |
 
 The ports keep clear of 5432 (a native Postgres), 5433 (another local project), 8765 (the Desk) and Vite's 5173.
+
+## Supply chain
+- **Every dependency is pinned exactly** in the `pnpm-workspace.yaml` catalog (`pnpm run check:graph` refuses ranges),
+  and every installed package must have an allowed licence (`pnpm run check:licences`).
+- **No version younger than 7 days.** `minimumReleaseAge: 10080` (minutes) in `pnpm-workspace.yaml` makes pnpm refuse
+  any version, direct or transitive, published less than 7 days ago. Every install also re-checks the lockfile against
+  the rule, `--frozen-lockfile` included, so a fresh version cannot slip in through a lockfile made elsewhere.
+  `minimumReleaseAgeIgnoreMissingTime: false` makes a registry answer without publish times fail the install, instead
+  of letting the package through unchecked.
+- **An exception** (a security fix needed at once, for example) is an entry in `minimumReleaseAgeExclude`:
+  - exact versions only, `name@1.2.3` (several: `name@1.2.3 || 1.2.4`). A bare name would switch the rule off for that
+    package for good, so it is never used;
+  - each entry carries a comment: why it is needed, when the version was published, and the date after which the
+    entry can go;
+  - it is reviewed like code, and listed in `docs/product/11-fix-before-launch.md` until it is removed.
 
 ## Rules that keep the engine trustworthy
 - **Kernel packages are deterministic.**

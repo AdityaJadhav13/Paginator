@@ -28,6 +28,19 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   publication: ["INSERT", "SELECT", "UPDATE"],
 };
 
+/** pgn_auth's rights on each identity table: Better Auth's own (it reads and writes them as it needs), and ours,
+ * with auth_event append-only. A table missing here is a problem. Identity tables have no row-level security: no other
+ * role may use the schema at all (plan §3.1, ADR-025's identity zone). */
+export const IDENTITY_RIGHTS: Readonly<Record<string, readonly string[]>> = {
+  user: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  session: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  account: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  verification: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  rateLimit: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  auth_event: ["INSERT", "SELECT"],
+  sign_in_failure: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+};
+
 /** The schemas each login role may use; none may create anything anywhere. */
 export const SCHEMA_USAGE: Readonly<Record<string, readonly string[]>> = {
   pgn_migrator: [],
@@ -50,13 +63,17 @@ export const APP_FUNCTIONS = ["current_org", "current_pubs", "current_user"];
 
 const RIGHTS = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN"];
 
-export type CatalogOptions = { rights?: Readonly<Record<string, readonly string[]>> };
+export type CatalogOptions = {
+  rights?: Readonly<Record<string, readonly string[]>>;
+  identityRights?: Readonly<Record<string, readonly string[]>>;
+};
 
 const same = (a: readonly string[], b: readonly string[]) => [...a].sort().join(",") === [...b].sort().join(",");
 
 /** (a) Row-level security, roles, ownership and rights, read from the catalog (as the superuser). */
 export async function catalogProblems(su: Client, options: CatalogOptions = {}): Promise<string[]> {
   const rights = options.rights ?? APP_RIGHTS;
+  const identityRights = options.identityRights ?? IDENTITY_RIGHTS;
   const problems: string[] = [];
   const add = (problem: string) => problems.push(problem);
 
@@ -131,9 +148,20 @@ export async function catalogProblems(su: Client, options: CatalogOptions = {}):
      where ${USER_SCHEMA} and c.relkind in ('r', 'p', 'v', 'm', 'f', 'S') order by 1, 2, 4`,
     [LOGINS, RIGHTS],
   );
+  const listed = new Set<string>();
   for (const row of held.rows) {
-    const appTable = row.schema === "app" && (row.kind === "r" || row.kind === "p");
-    const want = appTable && row.role === "pgn_app" ? (rights[row.name] ?? []) : [];
+    const table = row.kind === "r" || row.kind === "p";
+    const zone =
+      table && row.schema === "app" && row.role === "pgn_app"
+        ? rights
+        : table && row.schema === "identity" && row.role === "pgn_auth"
+          ? identityRights
+          : undefined;
+    if (table && row.schema === "identity" && identityRights[row.name] === undefined && !listed.has(row.name)) {
+      listed.add(row.name);
+      add(`identity.${row.name}: pgn_auth's rights on it are not listed (test/tenancy/checks.ts)`);
+    }
+    const want = zone?.[row.name] ?? [];
     if (!same(row.rights, want)) {
       const has = row.rights.join(", ") || "no rights";
       add(`${row.schema}.${row.name}: ${row.role} has ${has}, not ${want.join(", ") || "none"}`);

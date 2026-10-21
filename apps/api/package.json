@@ -7,15 +7,18 @@
     "dev": "node --env-file=../../.env.dev --watch src/main.ts",
     "start": "node src/main.ts",
     "db:migrate": "node --env-file-if-exists=../../.env.dev scripts/db-migrate.ts",
-    "db:codegen": "node --env-file-if-exists=../../.env.dev scripts/db-codegen.ts"
+    "db:codegen": "node --env-file-if-exists=../../.env.dev scripts/db-codegen.ts",
+    "db:identity-schema": "node --env-file-if-exists=../../.env.dev scripts/identity-schema.ts"
   },
   "dependencies": {
     "@fastify/helmet": "catalog:",
     "@fastify/rate-limit": "catalog:",
     "@pageinator/contracts": "workspace:*",
+    "better-auth": "catalog:",
     "fastify": "catalog:",
     "fastify-type-provider-zod": "catalog:",
     "kysely": "catalog:",
+    "nodemailer": "catalog:",
     "pg": "catalog:",
     "zod": "catalog:"
   },

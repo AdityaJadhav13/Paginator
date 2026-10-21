@@ -1,0 +1,72 @@
+// An API app with sign-in on, on a migrated clone of its own: the emails it sends are caught, not sent. Also a Better
+// Auth instance on the same database for calls from the server itself (sign-up is closed over HTTP).
+import { inject } from "vitest";
+import { type App, buildApp } from "../../src/app.ts";
+import { type Config, loadConfig } from "../../src/config.ts";
+import { type Database, openDatabase } from "../../src/db/pools.ts";
+import { type Auth, createAuth } from "../../src/modules/identity/auth.ts";
+import { type Transport, openMailer } from "../../src/modules/notifications/mailer.ts";
+import type { TestDatabase } from "./helpers.ts";
+
+export const ORIGIN = "https://app.example.test";
+/** What the web app sends with every request that changes something. */
+export const FROM_APP = { origin: ORIGIN, "x-pageinator": "1", "content-type": "application/json" } as const;
+export const SECRET = "test-only-sign-in-secret-0123456789abcdef";
+
+export type Sent = Parameters<Transport["sendMail"]>[0];
+
+export type IdentityApp = {
+  app: App;
+  config: Config;
+  database: Database;
+  /** Better Auth for calls from the server itself (its emails are caught too) */
+  server: Auth;
+  sent: Sent[];
+  close(): Promise<void>;
+};
+
+export async function identityApp(db: TestDatabase, env: Record<string, string> = {}): Promise<IdentityApp> {
+  const run = inject("database");
+  const config = loadConfig({
+    PGN_LOG_LEVEL: "silent",
+    PGN_ALLOWED_ORIGINS: ORIGIN,
+    PGN_DB_HOST: run.host,
+    PGN_DB_PORT: String(run.port),
+    PGN_DB_NAME: db.name,
+    PGN_APP_PASSWORD: run.passwords.app,
+    PGN_AUTH_PASSWORD: run.passwords.auth,
+    PGN_LISTEN_PASSWORD: run.passwords.listen,
+    PGN_AUTH_SECRET: SECRET,
+    ...env,
+  });
+  const sent: Sent[] = [];
+  const transport: Transport = {
+    sendMail: async (message) => void sent.push(message),
+    close: () => undefined,
+  };
+  const database = openDatabase(config.database);
+  const app = await buildApp({ config, database, mailTransport: transport, checks: {} });
+  const quiet = { warn: () => undefined, error: () => undefined };
+  const mailer = openMailer(config.mail, transport, () => undefined);
+  const serverDatabase = openDatabase(config.database);
+  const server = createAuth({ config, database: serverDatabase, mailer, log: quiet });
+  return {
+    app,
+    config,
+    database,
+    server,
+    sent,
+    async close() {
+      await app.close();
+      await serverDatabase.close();
+    },
+  };
+}
+
+/** The link of the last email sent to this address, as a path on the app. */
+export function lastLink(sent: readonly Sent[], to: string): string {
+  const mail = sent.filter((m) => m.to === to).at(-1);
+  const link = mail?.text.match(new RegExp(`${ORIGIN.replace(/\./g, "\\.")}(/\\S+)`))?.[1];
+  if (!link) throw new Error(`no email with a link was sent to ${to}`);
+  return link;
+}

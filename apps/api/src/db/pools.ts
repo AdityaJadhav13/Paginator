@@ -4,8 +4,9 @@
 //   - listen (pgn_listen): one dedicated connection for LISTEN (PR 19), made by listener().
 // Nothing connects until it is used, so the API starts while the database is down, and /readyz reports it.
 // Not set here yet: TLS to the database (the pilot's deploy, PR 25).
-import { Client, Pool, type PoolConfig } from "pg";
+import { Client, Pool, type PoolConfig, types } from "pg";
 import { Kysely, PostgresDialect, sql } from "kysely";
+import { type IdentityStore, identityStore } from "./identity.ts";
 import type { DB } from "./schema.gen.ts";
 import { type Tenant, type Tx, withTenant } from "./tenant.ts";
 
@@ -20,8 +21,10 @@ export type Role = "app" | "auth" | "listen";
 export type Database = {
   /** Runs fn in one transaction as the tenant: the only way to reach app.* (src/db/tenant.ts). */
   withTenant<T>(tenant: Tenant, fn: (tx: Tx) => Promise<T>): Promise<T>;
-  /** Better Auth's pool (PR 7). */
+  /** Better Auth's pool (src/db/identity.ts makes its database settings from it). */
   readonly auth: Pool;
+  /** Our own identity tables (auth_event, sign_in_failure), on the auth pool. */
+  readonly identity: IdentityStore;
   /** A new connection for LISTEN, not yet connected (PR 19). Whoever makes it handles its errors and ends it. */
   listener(): Client;
   /** True when the app and auth roles can both sign in and run a query. */
@@ -34,8 +37,20 @@ export type Database = {
   onConnectionError(listener: (role: Role, error: Error) => void): void;
 };
 
+const INT8 = 20;
+/** For Better Auth's pool: int8 as a number, not node-postgres's string. Better Auth's database rate limiter wants a
+ * number for its int8 lastRequest (a millisecond time, far inside 2^53); before 1.7.11 a string made its X-Retry-After
+ * absurd (better-auth #11521). */
+const AUTH_TYPES = {
+  getTypeParser: ((id: number, format?: "text" | "binary") =>
+    id === INT8 && format !== "binary"
+      ? (value: string) => Number(value)
+      : types.getTypeParser(id, format)) as typeof types.getTypeParser,
+};
+
 function settingsFor(settings: DatabaseSettings, role: Role): PoolConfig {
   return {
+    ...(role === "auth" ? { types: AUTH_TYPES } : {}),
     host: settings.host,
     port: settings.port,
     database: settings.name,
@@ -85,6 +100,7 @@ export function openDatabase(settings: DatabaseSettings): Database {
   return {
     withTenant: (tenant, fn) => withTenant(app, tenant, fn),
     auth: authPool,
+    identity: identityStore(authPool),
     listener: () => new Client(settingsFor(settings, "listen")),
     async ping() {
       try {

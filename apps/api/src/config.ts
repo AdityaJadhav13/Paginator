@@ -1,6 +1,7 @@
 // The API's settings, read from the environment and checked with Zod, and those of the migration command. No secret
 // has a default: every password must come from the environment, and no message ever shows one.
 import { z } from "zod";
+import { PLAIN_ADDRESS } from "./modules/notifications/mailer.ts";
 
 const ADDRESS = z.union([z.ipv4(), z.ipv6(), z.cidrv4(), z.cidrv6()]);
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
@@ -84,6 +85,15 @@ function isOrigin(value: string): boolean {
   return (url.protocol === "https:" || url.protocol === "http:") && url.origin === value;
 }
 
+/** A sender: a plain address, or a short name and a plain address in angle brackets. */
+function isSender(value: string): boolean {
+  const named = /^([^<>"\r\n]{1,64}) <([^<>]+)>$/.exec(value);
+  return named ? PLAIN_ADDRESS.test(named[2] ?? "") : PLAIN_ADDRESS.test(value);
+}
+
+const LOOPBACK = new Set(["127.0.0.1", "::1", "localhost"]);
+const SMTP_TLS = ["starttls", "implicit", "none"] as const;
+
 const Env = z
   .object({
     PGN_API_HOST: z.string().min(1, { error: "must not be empty" }).default("127.0.0.1"),
@@ -112,6 +122,49 @@ const Env = z
     PGN_APP_PASSWORD: password(),
     PGN_AUTH_PASSWORD: password(),
     PGN_LISTEN_PASSWORD: password(),
+    // Sign-in (plan §4.1): the origin people use, which emailed links name (one of PGN_ALLOWED_ORIGINS; by default
+    // the first), and the secret that signs sessions and emailed tokens.
+    PGN_PUBLIC_ORIGIN: z
+      .string()
+      .refine(isOrigin, { error: "must be an origin such as https://app.example.test (no path)" })
+      .optional(),
+    PGN_AUTH_SECRET: z
+      .string({ error: "must be set: it is a secret, so it has no default" })
+      .refine((text) => text.length >= 32 && /\S/.test(text), { error: "must be at least 32 characters" }),
+    // Email: Mailpit in development (plan §7.1). TLS is STARTTLS unless the server is on this machine.
+    PGN_SMTP_HOST: z.string().min(1, { error: "must not be empty" }).default("127.0.0.1"),
+    PGN_SMTP_PORT: wholeNumber(1, 65535).default(51025),
+    PGN_SMTP_TLS: z.enum(SMTP_TLS, { error: `must be one of ${SMTP_TLS.join(", ")}` }).optional(),
+    PGN_SMTP_USER: z.string().min(1, { error: "must not be empty" }).optional(),
+    PGN_SMTP_PASSWORD: password().optional(),
+    PGN_MAIL_FROM: z
+      .string()
+      .refine(isSender, { error: "must be an address, or a name and <address>" })
+      .default("Pageinator <no-reply@example.test>"),
+    // Better Auth reads these from the environment itself, whatever our settings say: the first two can turn its
+    // telemetry on, BETTER_AUTH_SECRETS replaces PGN_AUTH_SECRET, and BETTER_AUTH_TRUSTED_ORIGINS widens the
+    // origins and redirect targets it accepts. The API refuses to start with any of them.
+    BETTER_AUTH_TELEMETRY: z.undefined({ error: "must not be set: the API sends no telemetry" }).optional(),
+    BETTER_AUTH_TELEMETRY_ENDPOINT: z.undefined({ error: "must not be set: the API sends no telemetry" }).optional(),
+    BETTER_AUTH_SECRETS: z.undefined({ error: "must not be set: the sign-in secret is PGN_AUTH_SECRET" }).optional(),
+    BETTER_AUTH_TRUSTED_ORIGINS: z
+      .undefined({ error: "must not be set: the allowed origins are PGN_ALLOWED_ORIGINS" })
+      .optional(),
+  })
+  .superRefine((env, context) => {
+    if (env.PGN_PUBLIC_ORIGIN !== undefined && !env.PGN_ALLOWED_ORIGINS.includes(env.PGN_PUBLIC_ORIGIN)) {
+      context.addIssue({ code: "custom", path: ["PGN_PUBLIC_ORIGIN"], message: "must be one of PGN_ALLOWED_ORIGINS" });
+    }
+    if (env.PGN_SMTP_TLS === "none" && !LOOPBACK.has(env.PGN_SMTP_HOST)) {
+      context.addIssue({
+        code: "custom",
+        path: ["PGN_SMTP_TLS"],
+        message: "may be none only for a server on this machine",
+      });
+    }
+    if ((env.PGN_SMTP_USER === undefined) !== (env.PGN_SMTP_PASSWORD === undefined)) {
+      context.addIssue({ code: "custom", path: ["PGN_SMTP_USER"], message: "and PGN_SMTP_PASSWORD go together" });
+    }
   })
   .transform((env) => ({
     host: env.PGN_API_HOST,
@@ -126,6 +179,17 @@ const Env = z
       port: env.PGN_DB_PORT,
       name: env.PGN_DB_NAME,
       passwords: { app: env.PGN_APP_PASSWORD, auth: env.PGN_AUTH_PASSWORD, listen: env.PGN_LISTEN_PASSWORD },
+    },
+    publicOrigin: env.PGN_PUBLIC_ORIGIN ?? env.PGN_ALLOWED_ORIGINS[0] ?? "",
+    authSecret: env.PGN_AUTH_SECRET,
+    mail: {
+      host: env.PGN_SMTP_HOST,
+      port: env.PGN_SMTP_PORT,
+      tls: env.PGN_SMTP_TLS ?? (LOOPBACK.has(env.PGN_SMTP_HOST) ? "none" : "starttls"),
+      from: env.PGN_MAIL_FROM,
+      ...(env.PGN_SMTP_USER !== undefined && env.PGN_SMTP_PASSWORD !== undefined
+        ? { auth: { user: env.PGN_SMTP_USER, pass: env.PGN_SMTP_PASSWORD } }
+        : {}),
     },
   }));
 

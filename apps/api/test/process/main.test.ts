@@ -34,8 +34,8 @@ type Exit = { code: number | null; signal: string | null; stdout: string; stderr
 
 function start(env: Record<string, string>, args: string[] = [MAIN]) {
   const child = spawn(process.execPath, args, {
-    // no database runs for these tests: the API connects only on first use, and none of them uses it
-    env: { PATH: process.env["PATH"] ?? "", PGN_LOG_LEVEL: "info", ...PASSWORDS, ...env },
+    // no database for these tests (port 1: nothing listens there); the API connects only on first use
+    env: { PATH: process.env["PATH"] ?? "", PGN_LOG_LEVEL: "info", PGN_DB_PORT: "1", ...PASSWORDS, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   children.push(child);
@@ -228,10 +228,40 @@ describe("a client that drops the connection mid-body", () => {
       expect(
         lines.filter((line) => line.msg === "the request body could not be read").map((line) => line.level),
       ).toEqual([30]);
-      expect(lines.filter((line) => line.level >= 50)).toEqual([]);
+      // Better Auth checks the identity schema at start-up and, with no database here, says it could not
+      const ours = lines.filter((line) => !line.msg.startsWith("Could not validate the database schema"));
+      expect(ours.filter((line) => line.level >= 50)).toEqual([]);
     },
     15_000,
   );
+});
+
+describe("the request log", () => {
+  it("never shows a token: no query string, and no secret path segment", async () => {
+    const port = await freePort();
+    const api = start({ PGN_API_PORT: String(port) });
+    await api.listening;
+    for (const path of [
+      "/api/auth/verify-email?token=SECRET-VERIFY-TOKEN&callbackURL=%2F",
+      "/api/auth/reset-password/SECRET-RESET-TOKEN?callbackURL=%2Freset",
+      "/api/v1/invitations/SECRET-INVITATION-ID/accept",
+    ]) {
+      await fetch(`http://127.0.0.1:${port}${path}`);
+    }
+    api.child.kill("SIGTERM");
+    const exit = await api.exited;
+    const urls = exit.stdout
+      .split("\n")
+      .filter((line) => line.startsWith("{"))
+      .map((line) => (JSON.parse(line) as { req?: { url: string } }).req?.url)
+      .filter((url) => url !== undefined);
+    expect(urls).toEqual([
+      "/api/auth/verify-email",
+      "/api/auth/reset-password/:secret",
+      "/api/v1/invitations/:secret/accept",
+    ]);
+    expect(exit.stdout + exit.stderr).not.toContain("SECRET");
+  });
 });
 
 describe("listen errors", () => {

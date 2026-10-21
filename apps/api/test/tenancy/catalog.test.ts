@@ -54,6 +54,10 @@ describe("(a) the catalog", () => {
       create sequence app.planted_seq;
       grant usage on sequence app.planted_seq to pgn_engine;
 
+      -- the identity zone: a table whose rights nobody listed, and a grant to a role that may not use the schema
+      create table identity.planted_unlisted (id integer);
+      grant select on identity.session to pgn_app;
+
       create function app.planted_definer() returns integer
         language sql security definer set search_path = pg_catalog return 1;
       create function app.planted_open() returns integer language sql return 1;
@@ -100,6 +104,8 @@ describe("(a) the catalog", () => {
       "app.planted_unforced: row-level security is not forced, so its owner would pass the walls",
       "app.person: pgn_engine has SELECT, not none",
       "app.planted_seq: pgn_engine has USAGE, not none",
+      "identity.planted_unlisted: pgn_auth's rights on it are not listed (test/tenancy/checks.ts)",
+      "identity.session: pgn_app has SELECT, not none",
       "reporting.people: pgn_app has SELECT, not none",
       "app.planted_unforced has column-level grants",
       mayCreate("pgn_migrator"),

@@ -10,14 +10,19 @@ import type { Database } from "./db/pools.ts";
 import { REQUEST_ID_HEADER, childLoggerFactory, requestId } from "./http/context.ts";
 import { ApiError, clientErrorHandler, errorHandler, frameworkErrorHandler } from "./http/errors.ts";
 import { health, type Checks } from "./http/health.ts";
+import { requestSerializer } from "./http/log.ts";
 import { registerSecurity } from "./http/security.ts";
+import { registerIdentity } from "./modules/identity/plugin.ts";
+import { type Transport, openMailer, smtpTransport } from "./modules/notifications/mailer.ts";
 import { closeWhenStopping } from "./shutdown.ts";
 
 export type AppDeps = {
   config: Config;
   /** The database, opened by main.ts (src/db/pools.ts): the app logs its connections' errors and closes it when the
-   * app closes. Tests that need no database leave it out. */
+   * app closes. With it, sign-in is on (/api/auth/*). Tests that need no database leave it out. */
   database?: Database;
+  /** Where email goes: by default the SMTP server of the settings (Mailpit in development); tests catch it. */
+  mailTransport?: Transport;
   /** Dependency checks for /readyz; a dependency without one is reported as not configured. */
   checks: Checks;
 };
@@ -25,7 +30,7 @@ export type AppDeps = {
 export async function buildApp(deps: AppDeps) {
   const { config } = deps;
   const fastify = Fastify({
-    logger: { level: config.logLevel },
+    logger: { level: config.logLevel, serializers: { req: requestSerializer } }, // no tokens in the logs
     genReqId: requestId,
     childLoggerFactory,
     frameworkErrors: frameworkErrorHandler,
@@ -58,6 +63,15 @@ export async function buildApp(deps: AppDeps) {
   fastify.setNotFoundHandler(async () => {
     throw new ApiError("not_found");
   });
+
+  if (database) {
+    // a mail server's message may name the recipient, so only its codes are logged
+    const mailer = openMailer(config.mail, deps.mailTransport ?? smtpTransport(config.mail), (kind, error) => {
+      const { code, responseCode } = error as { code?: string; responseCode?: number };
+      fastify.log.warn({ kind, code, responseCode }, "an email was not sent");
+    });
+    await registerIdentity(fastify, { config, database, mailer });
+  }
 
   const app = fastify.withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);

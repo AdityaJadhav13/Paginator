@@ -2,9 +2,10 @@
 // The web shows its own English or Marathi text for `code` and falls back to `message`.
 import { z } from "zod";
 
-/** The codes the API answers with today; later PRs add theirs from §5.1 (signed_out, not_allowed, …). */
+/** The codes the API answers with today; later PRs add theirs from §5.1 (not_allowed, two_step_required, …). */
 export const ERROR_CODES = [
   "invalid_request",
+  "signed_out",
   "bad_origin",
   "not_found",
   "request_too_large",

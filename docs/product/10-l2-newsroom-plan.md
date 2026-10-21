@@ -1,6 +1,6 @@
 # Pageinator L2, "the newsroom": implementation plan
 
-Status: a proposal for the owner to approve, dated 2026-10-20. It builds 09-launch-plan.md §4 L2 on the stack in §3.1. Nothing here is built yet. Every example name is fictional. Package versions and licences were checked on 2026-10-20 (Appendix A); anything not checked is marked "to verify".
+Status: a proposal for the owner to approve, dated 2026-10-20. It builds 09-launch-plan.md §4 L2 on the stack in §3.1. PRs 1–8 are now built on `feat/l2-foundation`; where the build differs from this plan, the section says so and why (§3.6, §4.1, §10, Appendix A). Every example name is fictional. Package versions and licences were checked on 2026-10-20 (Appendix A); anything not checked is marked "to verify".
 
 ## 0. Summary
 
@@ -28,7 +28,7 @@ Status: a proposal for the owner to approve, dated 2026-10-20. It builds 09-laun
    - foreign keys that include `org_id`;
    - Better Auth's tables in their own schema, reached through their own database role.
    The tenancy proof tests start in PR 6.
-6. **Better Auth 1.7.12, pinned, with only two plugins** (organization and twoFactor), and sign-up only by invitation.
+6. **Better Auth 1.7.8, pinned, with only two plugins** (organization and twoFactor), and sign-up only by invitation. (1.7.12 was the plan; §4.1 says why 1.7.8 is built.)
 7. **The Desk keeps working throughout.**
    - L2.1 sends it story bundles.
    - L2.3 imports its data into the hosted product once.
@@ -581,7 +581,7 @@ create policy pub_wall on app.story as restrictive                              
 - **Runner:** Kysely 0.29.7's built-in `Migrator` with `FileMigrationProvider`, run by `pnpm --filter @pageinator/api db:migrate` as `pgn_migrator`, as a step before each deploy.
 - **Files:** `apps/api/src/db/migrations/2026_11_01_0001_*.ts`. They use raw `sql` for DDL, RLS policies, grants and triggers.
 - **Forward only, expand/contract** (doc 04 §6). No `down` functions; disaster recovery is a restore.
-- **Better Auth's schema:** generated once with the pinned CLI `auth@1.7.12` (`auth generate`, with `schemaName: "identity"`), committed as a reviewed migration. Each Better Auth upgrade regenerates and diffs it.
+- **Better Auth's schema:** printed by `scripts/identity-schema.ts` (`pnpm --filter @pageinator/api db:identity-schema`), which calls the installed Better Auth's own `getMigrations` with our real `authOptions`, on a database whose `identity` schema is empty. The output is kept as printed in `src/db/identity/better-auth-1.7.8.sql`, never edited, and migration 0003 runs it. Each upgrade prints its change into a new file and a new migration; a database test fails while Better Auth expects a table or column no migration made. (The plan named the `auth` CLI; the script needs no extra package and reads the configuration the API really runs, so the two cannot drift.)
 - **Types:** a small generator (`src/db/codegen.ts`) writes `src/db/schema.gen.ts` from the migrated catalog. CI migrates a fresh database, runs the codegen, and fails on any diff. (kysely-codegen 0.20.0 was the plan; one of its dependencies, argparse 2.0.1, has the Python-2.0 licence, outside the licence check's allowlist. Switching to it needs that licence reviewed.)
 - **Large backfills** run as jobs, never inside migrations.
 
@@ -619,25 +619,37 @@ create policy pub_wall on app.story as restrictive                              
 
 ## 4. Auth and tenancy
 
-### 4.1 Better Auth configuration (version 1.7.12, pinned exactly; released 2026-10-20)
+### 4.1 Better Auth configuration (version 1.7.8, pinned exactly)
+
+**As built in PRs 7–8** (`apps/api/src/modules/identity/auth.ts`); the organization and twoFactor plugins arrive in PRs 9 and 11. **Why 1.7.8, not 1.7.12:** the workspace refuses any package younger than 7 days (`minimumReleaseAge`, docs/DEVELOPMENT.md "Supply chain"). 1.7.12 was released on 2026-10-20, so 1.7.8 was the newest release at least 7 days old when it was installed (2026-10-21). Two of its known issues are handled here: #11521 (int8 counts read as strings) by an int8 parser on the auth pool, and #11626 (a reset that half fails) by `transaction: true`. An upgrade is a new PR with the auth and invitation suites.
 
 ```ts
 betterAuth({
   appName: "Pageinator", baseURL: PUBLIC_ORIGIN, basePath: "/api/auth", secret: AUTH_SECRET,
-  database: { dialect: new PostgresDialect({ pool: authPool }), type: "postgres", schemaName: "identity" },
+  database: { dialect: new PostgresDialect({ pool: authPool }), type: "postgres", schemaName: "identity",
+              transaction: true },                     // a reset writes the password and ends sessions together
   advanced: { database: { generateId: "uuid" }, useSecureCookies: true, cookiePrefix: "pgn",
-              defaultCookieAttributes: { httpOnly: true, secure: true, sameSite: "lax" } },
-  trustedOrigins: [PUBLIC_ORIGIN],
-  telemetry: { enabled: false },                       // off by default; set anyway, plus BETTER_AUTH_TELEMETRY=0
+              defaultCookieAttributes: { httpOnly: true, secure: true, sameSite: "lax" },
+              ipAddress: { ipAddressHeaders: ["x-pgn-client-ip"] } },  // set from request.ip, never the client's
+  trustedOrigins: ALLOWED_ORIGINS,
+  telemetry: { enabled: false },                       // and the API refuses to start with BETTER_AUTH_TELEMETRY*,
+                                                       // BETTER_AUTH_SECRETS or BETTER_AUTH_TRUSTED_ORIGINS set
+  disabledPaths: [/* social, linked accounts, email change, deletion, update-user, verify-password, … */],
   emailAndPassword: { enabled: true, requireEmailVerification: true, minPasswordLength: 12,
                       maxPasswordLength: 128, revokeSessionsOnPasswordReset: true, autoSignIn: false,
-                      sendResetPassword, password: { hash: argon2idHash, verify: argon2idVerify } },
-  emailVerification: { sendVerificationEmail, sendOnSignUp: true, autoSignInAfterVerification: true },
-  session: { expiresIn: 12 * 3600, updateAge: 3600 },  // sliding 12 h idle; 30-day absolute cap in our middleware
-  rateLimit: { enabled: true, storage: "database", customRules: { /* §4.6 */ } },
-  hooks: { before: inviteOnlySignUp },                 // /sign-up/email needs a pending invitation for that email
-  databaseHooks: { session: { create: { after: auditSignInAndEmailNewDevice } } },
-  plugins: [
+                      sendResetPassword, onPasswordReset: recordReset,
+                      password: { hash: argon2idHash, verify: argon2idVerify } },
+  emailVerification: { sendVerificationEmail, sendOnSignUp: true, autoSignInAfterVerification: true,
+                       afterEmailVerification: recordVerified },
+  verification: { storeIdentifier: "hashed" },         // a database read reveals no usable reset token
+  user: { validateUserInfo: inviteOnlySignUp },        // every new account passes here, whatever the way in
+  session: { expiresIn: 12 * 3600, updateAge: 3600, cookieCache: { enabled: false } },
+                                                       // sliding 12 h idle; 30-day absolute cap in session.ts
+  rateLimit: { enabled: true, storage: "database", customStorage: tokenFreeStorage, customRules: { /* §4.6 */ } },
+  hooks: { before: reserveSignInAttempt, after: countWrongPasswordAndRecord },
+  databaseHooks: { session: { create: { before: capAt12Hours, after: recordSignInAndEmailNewDevice },
+                              delete: { after: recordSignOutOrRevocation } } },
+  plugins: [                                           // PRs 9 and 11
     organization({ allowUserToCreateOrganization: false, requireEmailVerificationOnInvitation: true,
                    invitationExpiresIn: 7 * 24 * 3600, sendInvitationEmail,
                    organizationHooks: { beforeCreateInvitation: inviterMayGrant,
@@ -649,18 +661,20 @@ betterAuth({
 ```
 
 **Choices behind it:**
-- **Passwords.** argon2id through @node-rs/argon2 2.2.2 (MIT), because doc 11 §1 asks for argon2id; Better Auth's default is scrypt. The parameters are at least OWASP's argon2id minimum (exact values to verify).
+- **Passwords.** argon2id, because doc 11 §1 asks for it; Better Auth's default is scrypt. It runs on Node's own `crypto.argon2` (Node 24, under the crypto module's "Stability: 2 - Stable"), not @node-rs/argon2: no native package to vet or licence-check. The parameters are OWASP's argon2id minimum, m = 19 MiB, t = 2, p = 1, stored as PHC strings; a test checks RFC 9106's vector and that no warning is printed.
+- **Invite-only sign-up is `user.validateUserInfo`,** not a `hooks.before` on `/sign-up/email`. Better Auth calls it for every account it creates, whatever the endpoint, and a refused sign-up gets the same answer as any other. Over HTTP it refuses every sign-up until PR 10 opens it to invitations; a call from the server (bootstrap, tests) may create an account.
+- **Email.** nodemailer 10.1.1 (MIT-0), the newest release at least 7 days old when installed; 10.1.4 fixes three advisories and is to be installed once it is 7 days old (11-fix-before-launch L2-22). A strict check refuses any recipient that is not one plain address.
 - **Invitation ids are random UUIDv4.** Better Auth's `generateId: "uuid"` makes them, and the id is the secret in the invitation link. Our own tables use UUIDv7.
 - **Not enabled:** magic link, email OTP, social sign-in, Generic OAuth, OAuth proxy, SSO, SCIM, admin, Stripe.
   - Most 2026 advisories need one of these. Examples: GHSA-965c-763c-88jm (critical; magic link plus OAuth, fixed in 1.7.7); GHSA-qq9h-g4jm-xgf3 (magic link or email OTP plus open sign-up).
   - The spec's "Continue with Google/Microsoft" buttons stay hidden.
 - **Advisory watch:** GitHub security advisories, plus `pnpm audit --prod` in CI. A high or critical advisory that touches an enabled feature is upgraded within 48 h, after running the auth and invitation suites.
 - **Fallback:** an `IdentityPort` (`getSession`, `membership`) isolates Better Auth, so Keycloak (Apache-2.0) can replace it if needed.
-- **To verify in PR 7–8:**
-  - the exact option names;
-  - that server-side `auth.api.*` calls honour the hooks;
-  - the cookie prefix (`__Secure-`);
-  - Better Auth's own Origin check on `/api/auth/*`.
+- **Checked in PRs 7–8:**
+  - the option names, against the installed 1.7.8 source and its types;
+  - server-side `auth.api.*` calls run the hooks, but not `disabledPaths` (that list is checked only by the HTTP router), and carry no request, so the hooks record events for HTTP calls only;
+  - the cookie is `__Secure-pgn.session_token` (HttpOnly, Secure, SameSite=Lax);
+  - Better Auth's own Origin check covers only requests with cookies; ours covers every change (ADR-025, 11-fix-before-launch).
 
 ### 4.2 Roles mapped to the product's roles (01 §2.3, 07 §12)
 
@@ -1119,10 +1133,10 @@ Rules for every PR:
 | 4 | api: skeleton | `apps/api` (fastify 5.12.7, zod 4.6.7, fastify-type-provider-zod 7.0.0, @fastify/helmet 13.2.0, @fastify/rate-limit 11.2.1) · Zod config · `buildApp` · error envelope · request id · `/healthz`, `/readyz` · Origin and header guard · `packages/contracts` seed (error codes) · Vitest project `api` · ESLint Node block | ~380 | 2 |
 | 5 | api: database plumbing | kysely 0.29.7, pg 8.23.1 · pools (app, auth, listen) · `withTenant` · migration runner · migrations for schemas, helper functions, grants, `publication`, `person`, `org_settings`, `audit_event` with RLS · our own type generator (`src/db/codegen.ts`) with CI diff, not kysely-codegen 0.20.0, whose dependency argparse 2.0.1 is under Python-2.0 · ESLint: no raw pool outside `src/db` | ~400 | 4 |
 | 6 | api: tenancy harness | Catalog meta-test (a) · cross-tenant generator (b) with two fictional organisations · planted-defect test · CI job `api` on compose | ~300 | 5 |
-| 7 | identity 1: Better Auth | a request-log serializer that drops the query string (Better Auth's emailed links carry tokens) · better-auth 1.7.12 · generated `identity` migration (`auth` 1.7.12 CLI; generated SQL listed separately) · mount `/api/auth/*` · argon2id (@node-rs/argon2 2.2.2) · nodemailer 10.1.7 with Mailpit · verification and reset emails (en/mr) · telemetry off | ~350 + generated | 6 |
+| 7 | identity 1: Better Auth | a request-log serializer that drops the query string (Better Auth's emailed links carry tokens) · better-auth 1.7.8 (§4.1: 1.7.12 was younger than the 7-day rule) · generated `identity` migration (printed by `scripts/identity-schema.ts` through Better Auth's `getMigrations`; generated SQL listed separately) · mount `/api/auth/*` · argon2id on Node's `crypto.argon2` · nodemailer 10.1.1 with Mailpit · verification and reset emails (en/mr) · telemetry off | ~350 + generated | 6 |
 | 8 | identity 2: sessions | `request.actor` resolution · 30-day absolute limit · rate-limit rules and the per-email failure counter · `identity.auth_event` · "new sign-in" email · tests: generic wrong-password answer, reset revokes sessions, lockout | ~350 | 7 |
 | 9 | orgs and permissions | Organization plugin · `publication_grant`, `invitation_grant` · permission map from §12 in contracts · `authorize()` and the route-declaration meta-test · `/me` · `bootstrap-org.ts` | ~400 | 8 |
-| 10 | invitations | Endpoints (§5.2) · invite-only sign-up hook · `afterAcceptInvitation` grants and reconciliation · invitation suite (CVE-2026-53514 regression, wrong email, expired, race, no injected grants) | ~400 | 9 |
+| 10 | invitations | Endpoints (§5.2) · invite-only sign-up (`validateUserInfo`, §4.1) · `afterAcceptInvitation` grants and reconciliation · invitation suite (CVE-2026-53514 regression, wrong email, expired, race, no injected grants) | ~400 | 9 |
 | 11 | two-step | twoFactor plugin · `mfa_required_roles` · `two_step_required` enforcement · tests | ~250 | 10 |
 | 12 | web 1: catalogue and client | English/Marathi catalogue with glossary seeds (02 §3.9) and a key-parity meta-test · API client (envelope, Idempotency-Key, `X-Pageinator`, 401) · real session service replacing `SimulatedSessionService`, with the simulated DTO tests rewritten (doc 15 §11) | ~400 | 11 |
 | 13 | web 2: sign-in screens | Sign in (with "Keep me signed in") · invitation and sign-up · verify · forgot and reset · two-step verify | ~380 | 12 |
@@ -1153,15 +1167,15 @@ Rules for every PR:
 | fastify | 5.12.7 | MIT | npm |
 | kysely | 0.29.7 (node ≥ 22) | MIT | npm |
 | pg | 8.23.1 | MIT | npm |
-| better-auth / `auth` (its CLI) | 1.7.12 / 1.7.12 | MIT | npm; GitHub releases (1.7.12 released 20 Oct; 1.7.7 fixed the critical magic-link advisory). `@better-auth/cli` is deprecated |
+| better-auth | 1.7.8 (built; 1.7.12 was planned) | MIT | npm; GitHub releases (1.7.12 released 20 Oct, younger than the 7-day rule, so 1.7.8 was installed on 21 Oct; 1.7.7 fixed the critical magic-link advisory). The `auth` CLI is not used: `scripts/identity-schema.ts` calls `getMigrations` (§3.6). `@better-auth/cli` is deprecated |
 | zod | 4.6.7 | MIT | npm |
 | fastify-type-provider-zod | 7.0.0 | MIT | npm (peers: zod ≥ 4.1.5, fastify ^5.5.0, @fastify/swagger ≥ 9.5.1, openapi-types ^12.1.3) |
 | @fastify/swagger · openapi-types | 9.9.2 · 12.1.3 | MIT · MIT | npm |
 | @fastify/rate-limit · helmet · cookie · cors · under-pressure | 11.2.1 · 13.2.0 · 11.1.3 · 11.3.1 · 9.2.1 | MIT | npm (cookie, cors and under-pressure probably not needed) |
 | @aws-sdk/client-s3 · s3-presigned-post · s3-request-presigner | 3.1153.0 | Apache-2.0 | npm |
 | pino | 10.4.0 | MIT | npm |
-| nodemailer | 10.1.7 | MIT-0 | npm (MIT-0 is on the allowlist) |
-| @node-rs/argon2 | 2.2.2 | MIT | npm (licences of its native binary packages: to verify by `check-licences`) |
+| nodemailer | 10.1.1 (built; 10.1.7 was planned) | MIT-0 | npm (MIT-0 is on the allowlist). The newest release at least 7 days old when installed; upgrade to ≥ 10.1.4 is 11-fix-before-launch L2-22 |
+| @node-rs/argon2 | not used | — | argon2id runs on Node's built-in `crypto.argon2` (§4.1), so no native package is needed |
 | kysely-codegen · kysely-ctl | 0.20.0 · 0.22.0 | MIT | npm. **Neither is used:** kysely-codegen pulls in argparse 2.0.1 (Python-2.0) through cosmiconfig and js-yaml, outside the licence allowlist, so `src/db/codegen.ts` generates the types (§3.6); kysely-ctl is not needed |
 | testcontainers · @testcontainers/postgresql | 12.2.1 | MIT | npm (optional; compose is the default) |
 | fflate · qrcode · @playwright/test | 0.8.3 · 1.5.4 · 1.64.1 | MIT · MIT · Apache-2.0 | npm |

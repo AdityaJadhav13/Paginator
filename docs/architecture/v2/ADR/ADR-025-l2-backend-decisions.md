@@ -67,15 +67,18 @@ L2 plan (`docs/product/10-l2-newsroom-plan.md` §0, §2, §3.1–3.2, §4.5), bu
 
    The check runs before the body is read, and bodies are JSON only on every route: any other body type answers 415
    (an unrouted path answers 404).
-   - **GET, HEAD and OPTIONS change nothing, with named exceptions only.** Today these are the token-bearing links in
-     emails: Better Auth's email verification and password-reset GETs (their exact routes are to verify in plan PRs
-     7–8). They act only with the token from the email, which a page on another site cannot know.
+   - **GET, HEAD and OPTIONS change nothing, with named exceptions only.** Today these are the two token-bearing links
+     in emails, both Better Auth's: `GET /api/auth/verify-email?token=…`, which marks the address verified and signs
+     its person in, and `GET /api/auth/reset-password/:token`, which only checks the token and sends the browser on to
+     the web app's reset page (the new password itself is a POST). They act only with the token from the email, which
+     a page on another site cannot know.
    - **Every exemption is listed and justified one by one** in this ADR or its successor. That covers both GETs that
      change something and routes the guard does not cover (Better Auth's `/api/auth/*`, later webhooks).
    - **What stays outside the API's own answers.** Three answers are written raw, without the envelope: Fastify's 503
      while the server is closing, and Node's own 400 for an HTTP/1.1 request without a Host header and 417 for an
      `Expect` other than 100-continue. Browsers never send either of the last two. They refuse a request; none
-     changes anything.
+     changes anything. And Better Auth's own answers under `/api/auth/*` are its JSON, which its client reads; the
+     guard's refusals there, and Fastify's, are envelopes as everywhere else.
    - **Where it comes from.** This is the Desk's `X-Desk` pattern; the API's security-baseline PR implements it in
      `apps/api/src/http/origin-guard.ts`. Two things differ:
      - the Desk (`tools/desk/deskserver/api.py`) also checks Host, against DNS rebinding of its 127.0.0.1 server, and
@@ -124,8 +127,9 @@ L2 plan (`docs/product/10-l2-newsroom-plan.md` §0, §2, §3.1–3.2, §4.5), bu
   - deferring the job inside the domain transaction meets the outbox's purpose;
   - publication-level access is enforced by RLS as well as in the service layer.
 - **The web client sends `X-Pageinator: 1` and JSON on every change** (plan §10, PR 12).
-- **Better Auth's `/api/auth/*` routes** need either the same header from its client, or a listed exemption once its own
-  Origin check is verified (plan PRs 7–8).
+- **Better Auth's `/api/auth/*` routes stay behind the same guard.** Its client sends `X-Pageinator: 1` with every
+  request, as the rest of the web client does (plan PR 12), so they need no exemption. Better Auth's own Origin and
+  Fetch Metadata checks stay on as a second layer.
 - **The tenancy proof tests (a)–(h) of plan §4.8** start in PR 6. A planted table without FORCE RLS must fail CI.
 - **Route hooks must never throw on an error answer.** If a route's preSerialization or onSend hook fails on the error
   envelope itself, Fastify's fallback handler answers instead: outside the envelope, with the hook's own message in the

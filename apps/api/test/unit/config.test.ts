@@ -148,6 +148,7 @@ describe("config: database settings", () => {
         "  - PGN_APP_PASSWORD must be set: it is a password, so it has no default",
         "  - PGN_AUTH_PASSWORD must be set: it is a password, so it has no default",
         "  - PGN_LISTEN_PASSWORD must be set: it is a password, so it has no default",
+        "  - PGN_AUTH_SECRET must be set: it is a secret, so it has no default",
       ].join("\n"),
     );
   });
@@ -190,5 +191,77 @@ describe("config: database settings", () => {
         "  - PGN_MIGRATOR_PASSWORD must be set: it is a password, so it has no default",
       ].join("\n"),
     );
+  });
+});
+
+describe("config: sign-in and email settings", () => {
+  it("defaults to the first allowed origin, Mailpit, and a sender at example.test", () => {
+    const config = load({ PGN_ALLOWED_ORIGINS: "https://app.example.test, http://127.0.0.1:5180" });
+    expect(config.publicOrigin).toBe("https://app.example.test");
+    expect(config.authSecret).toBe(PASSWORDS.PGN_AUTH_SECRET);
+    expect(config.mail).toEqual({
+      host: "127.0.0.1",
+      port: 51025,
+      tls: "none",
+      from: "Pageinator <no-reply@example.test>",
+    });
+  });
+
+  it("needs the public origin among the allowed origins, and a secret of at least 32 characters", () => {
+    const secret = "s3cret-too-short";
+    const message = problems({ PGN_PUBLIC_ORIGIN: "https://elsewhere.example.test", PGN_AUTH_SECRET: secret });
+    expect(message).toContain("  - PGN_AUTH_SECRET must be at least 32 characters");
+    expect(message).toContain("  - PGN_PUBLIC_ORIGIN must be one of PGN_ALLOWED_ORIGINS");
+    expect(message).not.toContain(secret);
+    expect(problems({ PGN_PUBLIC_ORIGIN: "https://app.example.test/path" })).toContain(
+      "PGN_PUBLIC_ORIGIN must be an origin",
+    );
+  });
+
+  it("uses STARTTLS for a mail server elsewhere, and refuses to send in the clear to it", () => {
+    expect(load({ PGN_SMTP_HOST: "smtp.example.test", PGN_SMTP_PORT: "587" }).mail).toMatchObject({ tls: "starttls" });
+    expect(load({ PGN_SMTP_HOST: "smtp.example.test", PGN_SMTP_TLS: "implicit" }).mail).toMatchObject({
+      tls: "implicit",
+    });
+    expect(problems({ PGN_SMTP_HOST: "smtp.example.test", PGN_SMTP_TLS: "none" })).toContain(
+      "  - PGN_SMTP_TLS may be none only for a server on this machine",
+    );
+  });
+
+  it("takes a mail server's user and password together, and never shows the password", () => {
+    const pass = "s3cret-smtp-pass";
+    expect(load({ PGN_SMTP_USER: "desk", PGN_SMTP_PASSWORD: pass }).mail).toMatchObject({
+      auth: { user: "desk", pass },
+    });
+    const message = problems({ PGN_SMTP_USER: "desk" });
+    expect(message).toContain("  - PGN_SMTP_USER and PGN_SMTP_PASSWORD go together");
+    expect(problems({ PGN_SMTP_PASSWORD: pass })).not.toContain(pass);
+  });
+
+  it.each(["Pageinator <no-reply@example.test>", "no-reply@example.test"])("accepts the sender %j", (from) => {
+    expect(load({ PGN_MAIL_FROM: from }).mail.from).toBe(from);
+  });
+
+  it.each(['"Pageinator" <no-reply@example.test>', "a@example.test, b@example.test", "Pageinator"])(
+    "refuses the sender %j",
+    (from) => {
+      expect(problems({ PGN_MAIL_FROM: from })).toContain("PGN_MAIL_FROM must be an address, or a name and <address>");
+    },
+  );
+});
+
+describe("config: Better Auth's own variables", () => {
+  it.each(["BETTER_AUTH_TELEMETRY", "BETTER_AUTH_TELEMETRY_ENDPOINT"])("refuses to start with %s set", (name) => {
+    expect(problems({ [name]: "1" })).toContain(`  - ${name} must not be set: the API sends no telemetry`);
+  });
+  it.each([
+    [
+      "BETTER_AUTH_SECRETS",
+      "1:a-rotated-secret-that-would-replace-ours-0123456789",
+      "the sign-in secret is PGN_AUTH_SECRET",
+    ],
+    ["BETTER_AUTH_TRUSTED_ORIGINS", "https://evil.example.test", "the allowed origins are PGN_ALLOWED_ORIGINS"],
+  ])("refuses to start with %s set", (name, value, why) => {
+    expect(problems({ [name]: value })).toContain(`  - ${name} must not be set: ${why}`);
   });
 });
