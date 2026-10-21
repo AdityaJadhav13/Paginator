@@ -5,10 +5,11 @@
 .vscode/
 .idea/
 
-# Environment / secrets
+# Environment / secrets (.env.dev holds the development passwords; only the placeholder example is committed)
 .env
 .env.*
 !.env.example
+!.env.dev.example
 
 # Logs
 *.log

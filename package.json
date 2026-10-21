@@ -19,6 +19,9 @@
     "test": "vitest run",
     "test:private": "PAGEINATOR_PRIVATE_RUN=1 vitest run --project private",
     "check:oracle": "node tools/ts/check-oracle-manifest.ts",
+    "dev:up": "docker compose -p pageinator --env-file .env.dev -f infra/docker/compose.dev.yml up -d --wait",
+    "dev:down": "docker compose -p pageinator --env-file .env.dev -f infra/docker/compose.dev.yml down",
+    "dev:reset": "docker compose -p pageinator --env-file .env.dev -f infra/docker/compose.dev.yml down --volumes && pnpm run dev:up",
     "prepare": "node tools/ts/install-hooks.ts"
   },
   "devDependencies": {
