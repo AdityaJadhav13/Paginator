@@ -70,6 +70,21 @@ never in this repository.
      The menu of the page's empty space has **Unlock all on page**. A lock lasts for this layout only (a new layout
      starts unlocked) and does not print. Locking or unlocking counts as a change of the page, so a saved page needs
      saving again (its new file prints the same).
+   - **Crop a photo:** A, **Crop photo** in the story panel, or the story's menu starts photo mode for the selected
+     story's photo; V or Esc ends it. The photo's frame stays where the layout put it; you choose which part of the
+     photo fills it:
+     - drag the photo in its frame, or move it with the arrow keys (2 % of the photo a step, 10 % with Shift);
+     - **Enlarge** enlarges it, never beyond 400 % and never below the resolution the layout allows that photo (150
+       ppi, or 142.5 ppi for an uploaded photo): the panel shows the resolution it prints at and warns below 150 ppi;
+     - double-click the photo in photo mode, or press **Set focal point**, and click its subject: the frame keeps that
+       point as near its centre as the photo's edges allow when the story is resized, swapped or laid out another way
+       (moving the photo moves the same point);
+     - **Reset crop** prints the photo as the layout crops it.
+
+     Each change is one undo step and a change of the page; the PDF prints exactly the part of the photo the editor
+     shows (the screen's picture is a lighter copy, so a strongly enlarged photo looks softer on screen than in print).
+     A crop lasts for this layout only, a locked story's crop can still change, and a replaced photo loses its crop
+     (Update text, and Save page, say so). A page without a crop prints exactly as before.
    - **Rulers and zoom:** rulers along the top and left give millimetres from the page's top-left corner, number the
      grid's columns and mark where the pointer is; Shift+R shows or hides them, and the browser remembers it. Shift+2
      zooms to the selected story, Shift+1 (or 0, or **Fit**) shows the whole page, Shift+3 its width, and − and + zoom

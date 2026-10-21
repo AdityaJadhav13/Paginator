@@ -154,25 +154,44 @@ pages open (the least recently used closes and opens again on its next request).
   Its text still changes, and a story whose articles are all deleted leaves its page even when locked: a deleted article
   never prints. A lock change is a change of the page (its revision moves), so a saved page is marked "changed, not
   saved"; a lock does not print, so it is in neither `printed.json` nor `status.json`.
+- **Photo crops.** A module's `crop` is null (the photo prints as the layout crops it: gen1's centre crop, the largest
+  window of the frame's shape) or `{"photo": "<photo id>", "focus": [x, y], "zoom": z}`. The frame stays gen1's (its
+  place and size in the story); the crop chooses which of the photo's pixels fill it. `zoom` (1 to 4) enlarges the photo
+  in its frame, never below the resolution gen1 allows that photo (150 ppi, or 0.95 × the resolution the paper printed
+  it at when lower: 142.5 ppi for an upload, which records none) and never beyond 400 %: the frame's size limits it, so
+  a photo already printed at that floor is never enlarged. `focus` (fractions of the photo's width and height) is the
+  point the frame keeps as near its centre as the photo's edges allow, at every size: one point is both the pan and
+  the focal point. Kept in `page-NN.edit.json`, for this layout only (a new layout starts with none), a crop is page
+  geometry: a change is a change of the page (its revision moves, the page is "changed, not saved" until it is saved),
+  the PDF prints exactly the crop's window of the run's own raster, and a page without a crop prints exactly as
+  before. A story's crop is the one its own module sends: it moves with its story (another layout, a swap) and never
+  applies to another picture. A crop that does not name the story's own photo is dropped (another story's photo; a
+  replaced photo, which has a new id; a removed one), and `crop: null` always means no crop. A crop whose photo changes
+  by new text is dropped too (`refresh`: `crops_reset`). A crop that is not one is refused (400 at the server). A locked story's crop can change (a lock freezes the place only).
 
 | `cmd` | Fields | Result |
 |---|---|---|
 | `open` | `edition`, `run`, `page`, `reload`? | `{"session": "<edition>/<run>/<page>", …page}` |
-| `set` | `session`, `modules`, `base_rev`? | page. Each module `{"story", "x", "y", "w", "h", "locked", "crop"}` (mm, `w` in columns; `locked` true or false, missing is false, anything else is refused; `crop` is always null for now, kept for the photo crop): one the editor left where it was keeps its exact position, whatever its lock; a moved one is snapped to the grid (whole columns; `y`, `h` in whole 0.5 mm steps from the news area's top, inside the news area). Unknown stories and repeats are dropped; written to `page-NN.edit.json`. Refused as the locks say (above). If the page cannot be set, it stays as it was |
+| `set` | `session`, `modules`, `base_rev`? | page. Each module `{"story", "x", "y", "w", "h", "locked", "crop"}` (mm, `w` in columns; `locked` true or false, missing is false, anything else is refused; `crop` null or missing, or a crop as above: its focus is clamped to the photo and its zoom to 1 … 4, both rounded, other keys dropped, anything else refused): one the editor left where it was keeps its exact position, whatever its lock or crop; a moved one is snapped to the grid (whole columns; `y`, `h` in whole 0.5 mm steps from the news area's top, inside the news area). Unknown stories and repeats are dropped; written to `page-NN.edit.json`. Refused as the locks say (above). If the page cannot be set, it stays as it was |
 | `alternative` | `session`, `variant` (1 lead on the other side, 2 lead at another width, 3 both), `base_rev`? | page (another complete layout of the same stories, set as an edit). Locked stories stay exactly where they are; the others are laid out in the space around them (the page's short height first, then the whole news area; columns first, then rows first), and the variant moves the lead only when it is not locked. Refused when every story is locked, or when nothing fills the space around them exactly; the page then stays as it was |
-| `refresh` | `session`, `base_rev`? | page + `"changed"` (stories set with new text), `"dropped"` (stories that left the page: all their articles deleted or emptied), `"removed"` (articles no longer printed on the page), `"kind_changes"` (`[{"article", "headline", "now": "story"\|"short item"}]`), `"folio_changed"`, `"ads_changed"` (slots). Text is kept in `edit-articles.json`; if the page cannot be set with it, nothing changes (the run's ads included). Refused on an older revision, as `set` is |
-| `export` | `session`, `base_rev`? | `{"pdf", "sha256", "rev", "problems", "articles", "printed", "pages_changed": {"<n>": [article ids the page keeps]}}` (`articles`: those of the stories that were set; `printed`: what the page now prints, as in `printed.json`): writes the edited page's PDF/X-1a file over `page-NN.pdf`; stories brought from other pages leave them now. `problems` also holds `touch` (two lines of a story touching in ink, the check the layout runs make). Refused before anything is set or written while a story of the page is also on another page and locked there |
+| `refresh` | `session`, `base_rev`? | page + `"changed"` (stories set with new text), `"dropped"` (stories that left the page: all their articles deleted or emptied), `"removed"` (articles no longer printed on the page), `"kind_changes"` (`[{"article", "headline", "now": "story"\|"short item"}]`), `"folio_changed"`, `"ads_changed"` (slots), `"crops_reset"` (stories whose crop was dropped: their photo was replaced or removed). Text is kept in `edit-articles.json`; if the page cannot be set with it, nothing changes (the run's ads included). Refused on an older revision, as `set` is |
+| `export` | `session`, `base_rev`? | `{"pdf", "sha256", "rev", "problems", "articles", "printed", "pages_changed": {"<n>": [article ids the page keeps]}}` (`articles`: those of the stories that were set; `printed`: what the page now prints, as in `printed.json`, plus `"crops": {"<article id>": sig}` when a photo prints cropped, recorded and never compared with the edition, which has no crops): writes the edited page's PDF/X-1a file over `page-NN.pdf`; stories brought from other pages leave them now. `problems` also holds `touch` (two lines of a story touching in ink, the check the layout runs make). Refused before anything is set or written while a story of the page is also on another page and locked there |
 | `state`, `draw`, `close`, `ping` | `session` (not for `ping`) | the page without, or with, its display list; closes the page |
 
 A page: `{"page", "role", "rev", "modules", "notes": [{"story", "fit": "fits"|"over"|"short"|"none", "by_mm",
-"articles", "headline"}], "problems", "pool": [{"story", "headline", "articles", "brief", "on_page", "locked"}], "grid":
+"articles", "headline", "photo"?}], "problems", "pool": [{"story", "headline", "articles", "brief", "on_page", "locked"}], "grid":
 {"page_w_mm", "page_h_mm", "origin_mm", "column_mm", "gutter_mm", "columns", "news_top_mm", "news_bottom_mm",
 "snap_mm"}, "also_on_pages": {"<story>": <page>}, "locked_on_pages": {"<story>": <page>}, "items", "fonts"}`.
 `also_on_pages`: this page's stories still on another page too (this page's save takes them off it); `locked_on_pages`:
 those of them locked there (this page cannot be saved meanwhile); `pool[].locked`: the story is locked on the page
 `on_page` (it cannot be brought here). A story on more than one other page counts as locked when it is locked on any of
 them. `items` is the display list in mm, y down: `text` (font key, size, horizontal scale, CMYK, glyphs `[gid, x, y]`),
-`rect`, `line`, `img` (raster key). `fonts` maps a font key to `{"face": "<24 hex>", "upem"}`. Problems: `overlap`,
+`rect`, `line`, `img` (`src`: raster key; a cropped photo is its whole raster with `sub`: `[x, y, w, h]`, the part that
+prints as fractions of the whole, so a pan adds no raster to the cache). `notes[].photo` (in the answers that draw the
+page, for a story with a photo): `{"id", "px": [width, height], "box_mm": [x0, y0, x1, y1]` (the frame), `"window":
+[x, y, w, h]` (the photo's pixels that print), `"ppi"` (their resolution), `"zoom"`, `"zoom_max"`, `"floor_ppi"`,
+`"focus"` (null: no crop), `"full"` (the whole raster's key, null when it cannot be read)}. `fonts` maps a font key to
+`{"face": "<24 hex>", "upem"}`. Problems: `overlap`,
 `outside` (outside the news area or over an ad or picture), `over`, `short` (more than 9 mm empty), `cannot_set`,
 `overset` (lines or subheading words that would not print), `unset` (paragraphs that could not be set), `empty` (more
 than 2% of the news area unused).
@@ -236,9 +255,9 @@ Medians measured on the paper's own printed pages (one front, `pages − 2` insi
 | GET | `/files/<id>/photos/<photo_id>.jpg` , `/files/<id>/ads/<slot>.jpg` | previews |
 | GET | `/files/<id>/runs/<rid>/<file>` | run outputs (`page-NN.pdf`, `page-NN.png`, `page-NN.thumb.png`, `edition.pdf`, `press-files.zip`) |
 | POST | `/api/editions/<id>/runs/<rid>/pages/<n>/edit` | `{"reload"?}` → the page (edit service `open`). 409 unless the run is done |
-| PUT | `/api/editions/<id>/runs/<rid>/pages/<n>/edit` | `{"modules": [...], "rev"?}` (at most 40) → the page; marks the page "changed, not saved" (a lock change too). 409 when `rev` is not the page's revision (changed in another window or tab); 400 when a lock refuses the change (§2.1: "“…” is locked: unlock it (Shift+L) to move it."), the page and the run's status staying as they were |
+| PUT | `/api/editions/<id>/runs/<rid>/pages/<n>/edit` | `{"modules": [...], "rev"?}` (at most 40) → the page; marks the page "changed, not saved" (a lock or crop change too). 409 when `rev` is not the page's revision (changed in another window or tab); 400 when a lock refuses the change (§2.1: "“…” is locked: unlock it (Shift+L) to move it.") or a crop is not one ("… a photo crop must give the photo's id, a focus point (two numbers) and a zoom (a number)."), the page and the run's status staying as they were |
 | POST | `/api/editions/<id>/runs/<rid>/pages/<n>/alternative` | `{"variant": 1|2|3, "rev"?}` → the page; marks it changed (409 as above) |
-| POST | `/api/editions/<id>/runs/<rid>/pages/<n>/refresh` | `{"rev"?}` → the page + `changed`, `dropped`, `removed`, `kind_changes`, `folio_changed`, `ads_changed` (as the edit service's `refresh`); marks it changed if anything changed. 409 as above |
+| POST | `/api/editions/<id>/runs/<rid>/pages/<n>/refresh` | `{"rev"?}` → the page + `changed`, `dropped`, `removed`, `kind_changes`, `folio_changed`, `ads_changed`, `crops_reset` (as the edit service's `refresh`); marks it changed if anything changed. 409 as above |
 | POST | `/api/editions/<id>/runs/<rid>/pages/<n>/save` | `{"rev"?}` → the export result + `{"page", "pdfx_check", "error", "stale", "press_ready", "pages_to_save", "pages_failing_check", "pages_with_repeats"}`. First marks the page, and every page it takes a story from, "needs saving" (so a save that stops part-way leaves them marked); then exports, makes the page's previews again, runs the independent PDF/X-1a check on it and merges `edition.pdf` and `press-files.zip` again. Pages a story left stay "needs saving". If a step fails, the page stays "needs saving" and `error` says why; `stale` lists what the new PDF still prints older than the edition (text corrected meanwhile). The edition's lock is held only while `status.json` is read and written, so article saves go on meanwhile; saves in one run go one at a time. 409 as above. 400, before any page is marked or any file written, while a story of the page is also on another page and locked there ("This page cannot be saved yet: “…” is also on page 5, locked there. Unlock it on page 5, or take it off this page, then save."); should the lock come between that check and the engine's export, the engine refuses too and the pages marked meanwhile stay "needs saving" |
 | GET | `/api/glyphs/<face>?ids=1,2,…` | `{"upem", "glyphs": {"<gid>": "<SVG path, font units, y up>"}}` (at most 4000 per request) |
 | GET | `/files/rasters/<key>.jpg` | a placed picture as the editor shows it (RGB JPEG, at most 1600 px) |
@@ -260,7 +279,7 @@ revision its PDF was made from), `"edited_unsaved"` (changed since its PDF was m
 `"needs_save_reason"` (a story moved from it to another page, or its last save could not finish), `"rev_seen"` (the
 newest revision the editor answered with: a save of an older one leaves the page "changed, not saved"), `"warnings"` (after
 a save: the save's checks in words, as a layout run words them, plus an issue number the page prints but the edition
-does not set), `"printed"` (what its PDF prints) and `"stale"` (reasons it no longer matches the edition: an article changed or deleted, the volume/issue/price,
+does not set), `"printed"` (what its PDF prints; its `crops`, when a photo prints cropped, are never compared) and `"stale"` (reasons it no longer matches the edition: an article changed or deleted, the volume/issue/price,
 an ad; also, fail closed, a page an older Desk made without a record of what it prints, a run laid out for another
 page count (every page) or back-page ads setting (its last page), and a page that cannot be checked because a file of
 the layout or the edition cannot be read (a missing `request.json` included, and an ads `index.json` that cannot be

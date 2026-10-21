@@ -157,6 +157,36 @@
             <span class="label">Column</span>
             <div class="seg" id="p-col" role="group" aria-label="First column"></div>
           </div>
+          <div class="field photo-tools" id="p-photo" role="group" aria-labelledby="p-photo-label" hidden>
+            <span class="label" id="p-photo-label">Photo</span>
+            <p id="p-ppi" class="ppi small"></p>
+            <label class="zoom-field"
+              >Enlarge
+              <input type="range" id="p-zoom" min="100" max="400" step="1" value="100" aria-describedby="p-ppi" />
+              <output id="p-zoom-out" for="p-zoom">100 %</output></label
+            >
+            <p id="p-zoom-note" class="small muted" hidden></p>
+            <div class="buttons">
+              <button
+                type="button"
+                id="p-crop"
+                aria-pressed="false"
+                aria-keyshortcuts="A"
+                title="Move the photo in its frame by dragging it, or with the arrow keys (A; V or Esc to stop)"
+              >
+                Crop photo
+              </button>
+              <button
+                type="button"
+                id="p-focal"
+                aria-pressed="false"
+                title="Click the photo's subject: the frame keeps it as near its centre as it can, at every size"
+              >
+                Set focal point
+              </button>
+              <button type="button" id="p-reset" title="Print the photo as the layout crops it">Reset crop</button>
+            </div>
+          </div>
           <div class="buttons">
             <button
               type="button"
@@ -188,6 +218,13 @@
           width and height and stays on the page, and <strong>Try another layout</strong> lays the other stories out
           around it. A right-click on a story, or Shift+F10, opens its menu; on the page's empty space it unlocks every
           story.
+        </p>
+        <p class="muted small help">
+          A (or <strong>Crop photo</strong>) moves the selected story's photo in its frame: drag it, or use the arrow
+          keys; <strong>Enlarge</strong> enlarges it as far as it still prints sharp. Double-click the photo, or press
+          <strong>Set focal point</strong>, and click its subject: the frame keeps it as near its centre as it can when
+          the story is resized or laid out again. V or Esc stops; <strong>Reset crop</strong> prints the photo as the
+          layout crops it.
         </p>
         <p class="muted small help">
           Shift+2 zooms to the selected story, Shift+1 shows the whole page and Shift+3 its width; Shift+R shows or

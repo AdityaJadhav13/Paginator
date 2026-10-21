@@ -97,3 +97,57 @@ export function gridColumns(grid) {
     return { n: i + 1, x0, x1: x0 + grid.column_mm, mid: x0 + grid.column_mm / 2 };
   });
 }
+
+/* Photo crops. The engine decides which pixels of a photo fill its frame (deskedit.crop_window) and sends them as the
+ * window [x, y, w, h] (pixels of the whole photo, px = [width, height]); a crop is the point of the photo the frame
+ * keeps as near its centre as the photo's edges allow (its focus, fractions of the photo) and a zoom. These are the
+ * screen's side of it: where the whole photo lies around its frame, and the focus a pan, a click or an arrow asks for.
+ * The engine's answer is what the page shows and prints. */
+
+/** Fractions kept to four places, as the engine keeps a crop. */
+const frac = (v) => Math.round(Math.min(1, Math.max(0, v)) * 1e4) / 1e4;
+
+/** The whole photo around its frame box [x0, y0, x1, y1] (mm) when its window fills the frame: {x0, y0, x1, y1} mm. */
+export function photoExtent(box, win, px) {
+  const sx = (box[2] - box[0]) / win[2];
+  const sy = (box[3] - box[1]) / win[3];
+  const x0 = box[0] - win[0] * sx;
+  const y0 = box[1] - win[1] * sy;
+  return { x0, y0, x1: x0 + px[0] * sx, y1: y0 + px[1] * sy };
+}
+
+/** The window after the photo is dragged by (dx, dy) mm in its frame: the photo follows the pointer, so the window
+ * goes the other way, and it never leaves the photo. Its size stays. */
+export function panWindow(win, px, box, dx, dy) {
+  const [x, y, w, h] = win;
+  const nx = Math.min(px[0] - w, Math.max(0, x - (dx * w) / (box[2] - box[0])));
+  const ny = Math.min(px[1] - h, Math.max(0, y - (dy * h) / (box[3] - box[1])));
+  return [nx, ny, w, h];
+}
+
+/** The focus that keeps a window where it is: its centre, as fractions of the photo (half a pixel more, so the
+ * engine, which rounds down, puts it back exactly where it was, whatever the four places of the fractions cut off). */
+export const focusOf = (win, px) => [
+  frac((Math.round(win[0]) + win[2] / 2 + 0.5) / px[0]),
+  frac((Math.round(win[1]) + win[3] / 2 + 0.5) / px[1]),
+];
+
+/** The focus at a point of the page (mm) over the whole photo (photoExtent), kept on the photo. */
+export const focusAt = (x, y, ext) => [frac((x - ext.x0) / (ext.x1 - ext.x0)), frac((y - ext.y0) / (ext.y1 - ext.y0))];
+
+/** The window of the same size that a focus gives, as the engine places it (centred, inside the photo; whole pixels). */
+export function windowAt(focus, win, px) {
+  const [, , w, h] = win;
+  const x = Math.max(0, Math.min(px[0] - w, Math.floor(focus[0] * px[0] - w / 2)));
+  const y = Math.max(0, Math.min(px[1] - h, Math.floor(focus[1] * px[1] - h / 2)));
+  return [x, y, w, h];
+}
+
+/** The focus an arrow key asks for: the window's centre moved by (fx, fy) of the photo (0.02 a step). */
+export const stepFocus = (win, px, fx, fy) => {
+  const [cx, cy] = focusOf(win, px);
+  return [frac(cx + fx), frac(cy + fy)];
+};
+
+/** The resolution a photo prints at with another zoom: the window shrinks as the zoom grows. */
+export const ppiAt = (ppi, zoom, next) => (ppi * zoom) / next;

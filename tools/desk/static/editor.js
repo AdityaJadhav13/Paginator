@@ -20,11 +20,18 @@ import {
   clampZoom,
   fitScale,
   fitWidthZoom,
+  focusAt,
+  focusOf,
   gridColumns,
+  panWindow,
+  photoExtent,
+  ppiAt,
   rulerLabel,
   rulerSteps,
   rulerTicks,
+  stepFocus,
   unionBox,
+  windowAt,
   zoomToRect,
 } from "./editor-view.js";
 
@@ -64,6 +71,8 @@ const S = {
   images: new Map(), // raster key -> HTMLImageElement
   drag: null,
   swapping: false,
+  mode: "select", // "select"; "photo": the selected story's photo is moved in its frame; "focal": its focal point is set
+  zooming: false, // the photo's zoom slider is being moved: the panel leaves it alone
   sending: false, // a change is on its way to the engine
   queued: null, // changes waiting for the one on its way, oldest first (null: none); sent one after the other
   inflight: null, // the change on its way (the state the first waiting change is set against)
@@ -301,7 +310,9 @@ async function send(modules) {
   if (S.sending) {
     // The engine sets each change against the one before it. A waiting change gives way to a newer one only when the
     // change before it, it and the newer one lock the same stories at the same places: a locked story unlocked and
-    // then moved (also by undo) must reach the engine as two changes, or the engine refuses the move.
+    // then moved (also by undo) must reach the engine as two changes, or the engine refuses the move. A crop change
+    // merges like a nudge: the engine never refuses a crop because of the change before it (a lock is checked against
+    // places only, a crop against its own values), so the newest page as the editor has it is what is set.
     const q = S.queued || [];
     const last = q[q.length - 1];
     const before = q.length > 1 ? q[q.length - 2] : S.inflight;
@@ -321,8 +332,11 @@ async function send(modules) {
     if (await accept(data, gen)) {
       S.dirty = true;
       setSaved("Changed · not saved");
+      // a crop sent for a photo the story no longer has comes back none (its photo was replaced or removed)
+      const lost = modules.filter((m) => m.crop && !(data.modules.find((x) => x.story === m.story) || {}).crop);
       const also = alsoText(data);
-      if (also) notice(also, "also");
+      if (lost.length) notice(lost.map((m) => `The photo of ${nameOf(m.story)} changed: its crop is reset.`).join(" "));
+      else if (also) notice(also, "also");
       else if (S.noticeKind === "also") notice("");
     }
   } catch (e) {
@@ -355,6 +369,7 @@ async function accept(data, gen) {
   S.data = data;
   S.modules = copy(S.queued ? S.queued[S.queued.length - 1] : data.modules); // the newest change shown
   if (S.selected && !S.modules.some((m) => m.story === S.selected)) S.selected = null;
+  if (S.mode !== "select" && !photoNote(S.selected)) setMode("select", true); // its photo or story is gone
   loadImages(data);
   invalidate();
   renderPanels();
@@ -392,15 +407,21 @@ async function loadGlyphs(data) {
   await Promise.all(jobs);
 }
 
-function loadImages(data) {
-  for (const it of data.items) {
-    if (it.t !== "img" || S.images.has(it.src)) continue;
-    const img = new Image();
+/** A picture of the cache as the screen shows it (asked for once, drawn when it has come). */
+function picture(key) {
+  let img = S.images.get(key);
+  if (!img) {
+    img = new Image();
     img.decoding = "async";
     img.onload = () => invalidate();
-    img.src = `/files/rasters/${it.src}.jpg`;
-    S.images.set(it.src, img);
+    img.src = `/files/rasters/${key}.jpg`;
+    S.images.set(key, img);
   }
+  return img;
+}
+
+function loadImages(data) {
+  for (const it of data.items) if (it.t === "img") picture(it.src);
 }
 
 /** Another layout, new text or a save: after the changes on their way, with no edits until it is answered. → whether
@@ -501,6 +522,8 @@ function refreshSaid(data, locked = new Map()) {
         `${gone.map((k) => locked.get(k)).join(", ")} left the page although ${gone.length === 1 ? "it was" : "they were"} locked.`,
       ),
     );
+  const reset = data.crops_reset || [];
+  for (const k of reset) said.push(`The photo of ${nameOf(k)} changed: its crop is reset.`);
   for (const k of data.kind_changes || []) {
     const head = (k.headline || articleHead(k.article)).slice(0, 60);
     said.push(
@@ -511,7 +534,7 @@ function refreshSaid(data, locked = new Map()) {
             "out again.",
     );
   }
-  return { said, changed: n + d + r > 0 || !!data.folio_changed || ads > 0 };
+  return { said, changed: n + d + r > 0 || !!data.folio_changed || ads > 0 || reset.length > 0 };
 }
 
 /** The save state after a save, from the check's verdict. */
@@ -658,15 +681,22 @@ function pressText(r) {
 
 // ------------------------------------------------------------------------------------------- edits
 
-// A module is its place (x, y, w, h) and its attributes (locked, and crop: the photo crop, not built yet, always null;
+// A module is its place (x, y, w, h) and its attributes (locked, and crop: null, or the photo crop {photo, focus, zoom};
 // never changed in place, so a shallow copy is enough). A locked story keeps its place, width and height for this
 // layout: every change that would move, resize or remove it is refused here, before anything is sent (the engine
-// refuses it too).
+// refuses it too). Its crop can still change: a lock freezes the place only.
 const copy = (mods) => mods.map((m) => ({ ...m }));
 const same = (a, b) =>
   a.w === b.w && Math.abs(a.x - b.x) < SAME_MM && Math.abs(a.y - b.y) < SAME_MM && Math.abs(a.h - b.h) < SAME_MM;
-const sameAttrs = (a, b) =>
-  !!a.locked === !!b.locked && JSON.stringify(a.crop ?? null) === JSON.stringify(b.crop ?? null);
+const sameCrop = (a, b) =>
+  a === b ||
+  (!!a &&
+    !!b &&
+    a.photo === b.photo &&
+    Math.abs(a.focus[0] - b.focus[0]) < 1e-4 &&
+    Math.abs(a.focus[1] - b.focus[1]) < 1e-4 &&
+    Math.abs(a.zoom - b.zoom) < 1e-3);
+const sameAttrs = (a, b) => !!a.locked === !!b.locked && sameCrop(a.crop ?? null, b.crop ?? null);
 const lockedHere = (story) => S.modules.some((m) => m.story === story && m.locked);
 
 /** A change a lock refuses, said on the page (nothing is sent). what: what unlocking would allow ("move it", …). */
@@ -749,6 +779,108 @@ function unlockAll() {
   say("Every story on this page is unlocked.");
 }
 
+// ------------------------------------------------------------------------------------------- photo crops
+
+/* A story's photo fills the frame the layout gave it (its place and size in the story). In photo mode (A, "Crop photo")
+ * the photo is dragged in its frame, or moved with the arrow keys; the zoom slider enlarges it, as far as it still prints
+ * sharp; in focal mode (a double-click on the photo in photo mode, "Set focal point") a click on its subject sets the
+ * point the frame keeps as near its centre as it can, at every size. A pan and a focal point are one stored point. Each
+ * is one change and one undo step, and the engine sets it: what its answer shows is what prints. */
+const CANVAS_LABELS = {
+  photo:
+    "The page, photo mode: drag the selected story's photo to move it in its frame, or move it with the arrow keys " +
+    "(with Shift, further); double-click it to set its focal point. V or Esc returns to selecting stories.",
+  focal:
+    "The page, focal point: click the subject of the photo; the frame keeps it as near its centre as it can. Enter or " +
+    "Esc finishes.",
+};
+
+/** A story's photo as the engine last drew it (notes[].photo), or null. */
+const photoNote = (story) => (story && S.data ? (noteOf(story) || {}).photo || null : null);
+
+/** The window of the photo the frame shows for this story now: the one its crop asks for (it may be on its way to the
+ * engine), else the engine's. */
+function shownWindow(m, p) {
+  return m && m.crop && m.crop.photo === p.id ? windowAt(m.crop.focus, p.window, p.px) : p.window;
+}
+
+function setMode(mode, quiet = false) {
+  if (S.mode === mode) return;
+  S.mode = mode;
+  if (S.drag && S.drag.part === "photo") S.drag = null;
+  canvas.setAttribute("aria-label", CANVAS_LABELS[mode] || canvasLabel);
+  const p = photoNote(S.selected);
+  if (mode !== "select" && p && p.full) picture(p.full); // the whole photo, once photo mode needs it
+  if (!quiet)
+    say(
+      mode === "photo"
+        ? `Photo mode: drag the photo of ${nameOf(S.selected)} to move it in its frame. V or Esc to stop.`
+        : mode === "focal"
+          ? "Click the subject of the photo: the frame keeps it as near its centre as it can. Enter or Esc to finish."
+          : "Selecting stories.",
+    );
+  renderPanels();
+  invalidate();
+}
+
+/** Photo mode for a story (A, "Crop photo", the menu); toggle: the panel's button leaves it again. */
+function cropPhoto(story, toggle = false) {
+  if (!S.data || !story) return;
+  if (!photoNote(story)) return notice(`${cap(nameOf(story))} has no photo.`, "photo");
+  if (S.swapping) stopSwapping();
+  if (S.selected !== story) select(story);
+  setMode(toggle && S.mode === "photo" ? "select" : "photo");
+}
+
+/** Focal mode for a story's photo ("Set focal point", a double-click on the photo in photo mode). */
+function focalPoint(story) {
+  if (!S.data || !story) return;
+  if (!photoNote(story)) return notice(`${cap(nameOf(story))} has no photo.`, "photo");
+  if (S.selected !== story) select(story);
+  setMode("focal");
+}
+
+/** A story's crop changed (its focus, its zoom, or both), its place kept: one change and one undo step. */
+function setCrop(story, change) {
+  const m = S.modules.find((x) => x.story === story);
+  const p = photoNote(story);
+  if (!m || !p) return;
+  const own = m.crop && m.crop.photo === p.id ? m.crop : null;
+  setAttrs(story, {
+    crop: {
+      photo: p.id,
+      focus: change.focus || (own ? own.focus : focusOf(p.window, p.px)),
+      zoom: change.zoom ?? (own ? own.zoom : 1),
+    },
+  });
+}
+
+/** The photo printed as the layout crops it again (gen1's centre crop). */
+function resetCrop(story) {
+  const m = S.modules.find((x) => x.story === story);
+  if (!m || !m.crop) return;
+  setAttrs(story, { crop: null });
+  say(`The photo of ${nameOf(story)} prints as laid out again.`);
+}
+
+/** The arrow keys in photo mode: the photo moved in its frame by a step (2 % of the photo; with Shift, 10 %). */
+function panByKey(story, fx, fy) {
+  const m = S.modules.find((x) => x.story === story);
+  const p = photoNote(story);
+  if (!m || !p) return;
+  const win = shownWindow(m, p);
+  const focus = stepFocus(win, p.px, fx, fy);
+  const next = windowAt(focus, win, p.px);
+  if (next[0] === win[0] && next[1] === win[1]) return say("The photo is at its edge in that direction.");
+  setCrop(story, { focus });
+}
+
+/** The resolution as a badge: a warning below 150 ppi (§8.11). → [class, text]. */
+const ppiBadge = (ppi) =>
+  ppi < 150
+    ? ["warn", `${Math.round(ppi)} ppi: below 150 ppi, it may print soft`]
+    : ["ok", `${Math.round(ppi)} ppi: prints sharp`];
+
 function removeStory(story) {
   if (!canEdit()) return;
   if (lockedHere(story)) return refuseLocked(story, "take it off the page");
@@ -774,7 +906,11 @@ function swap(a, b) {
   if (!ma || !mb) return;
   const held = [ma, mb].find((m) => m.locked);
   if (held) return refuseLocked(held.story, "move it");
-  commit(S.modules.map((m) => (m.story === a ? { ...m, story: b } : m.story === b ? { ...m, story: a } : { ...m })));
+  // the places change hands; each story keeps its own attributes (its crop belongs to its photo)
+  const place = (m) => ({ x: m.x, y: m.y, w: m.w, h: m.h });
+  commit(
+    S.modules.map((m) => (m.story === a ? { ...m, ...place(mb) } : m.story === b ? { ...m, ...place(ma) } : { ...m })),
+  );
   S.selected = b;
   renderPanels();
 }
@@ -790,6 +926,7 @@ function fitHeight(story) {
 
 function startSwapping() {
   if (!S.selected || !canEdit()) return;
+  setMode("select", true);
   if (lockedHere(S.selected)) return refuseLocked(S.selected, "move it");
   S.swapping = true;
   canvas.style.cursor = "crosshair";
@@ -858,6 +995,7 @@ function hit(px, py) {
 // ------------------------------------------------------------------------------------------- drawing
 
 const canvas = $("#canvas");
+const canvasLabel = canvas.getAttribute("aria-label"); // selecting stories; photo and focal mode say their own
 const ctx = canvas.getContext("2d");
 let content = null; // offscreen drawing of the page at the current view
 let contentKey = "";
@@ -946,7 +1084,22 @@ function drawContent(w, h, dpr) {
     } else if (it.t === "img") {
       const img = S.images.get(it.src);
       c.setTransform(1, 0, 0, 1, 0, 0);
-      if (img && img.complete && img.naturalWidth) {
+      if (img && img.complete && img.naturalWidth && it.sub) {
+        // a cropped photo: the part of the whole photo that prints
+        const [sx, sy, sw, sh] = it.sub;
+        const [nw, nh] = [img.naturalWidth, img.naturalHeight];
+        c.drawImage(
+          img,
+          sx * nw,
+          sy * nh,
+          sw * nw,
+          sh * nh,
+          (ox + it.x * s) * k,
+          (oy + it.y * s) * k,
+          it.w * s * k,
+          it.h * s * k,
+        );
+      } else if (img && img.complete && img.naturalWidth) {
         c.drawImage(img, (ox + it.x * s) * k, (oy + it.y * s) * k, it.w * s * k, it.h * s * k);
       } else {
         c.fillStyle = "#e5e7eb";
@@ -1030,7 +1183,64 @@ function draw() {
     ctx.font = "12px system-ui, sans-serif";
     ctx.fillText(`${S.drag.ghost.w} col × ${Math.round(S.drag.ghost.h)} mm`, x0 + 6, y0 - 6);
   }
+  if (S.mode !== "select") drawPhoto();
   drawRulers(w, h);
+}
+
+/** Photo and focal mode: the frame, where the whole photo lies around it (faded while it is dragged and while its focal
+ * point is set), what the frame will show, and the focal point. */
+function drawPhoto() {
+  const m = S.modules.find((x) => x.story === S.selected);
+  const p = photoNote(S.selected);
+  if (!m || !p) return;
+  const dragging = S.drag && S.drag.part === "photo";
+  const win = dragging ? S.drag.win : shownWindow(m, p);
+  const ext = photoExtent(p.box_mm, win, p.px);
+  const [ex0, ey0] = toPx(ext.x0, ext.y0);
+  const [ex1, ey1] = toPx(ext.x1, ext.y1);
+  const [bx0, by0] = toPx(p.box_mm[0], p.box_mm[1]);
+  const [bx1, by1] = toPx(p.box_mm[2], p.box_mm[3]);
+  const img = p.full ? picture(p.full) : null;
+  ctx.save();
+  if (img && img.complete && img.naturalWidth && (dragging || S.mode === "focal")) {
+    ctx.globalAlpha = 0.35;
+    ctx.drawImage(img, ex0, ey0, ex1 - ex0, ey1 - ey0);
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.rect(bx0, by0, bx1 - bx0, by1 - by0);
+    ctx.clip();
+    ctx.drawImage(img, ex0, ey0, ex1 - ex0, ey1 - ey0);
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeStyle = "rgba(30, 41, 59, 0.7)";
+  ctx.strokeRect(ex0 + 0.5, ey0 + 0.5, ex1 - ex0 - 1, ey1 - ey0 - 1); // the whole photo
+  ctx.setLineDash([]);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#d97706";
+  ctx.strokeRect(bx0, by0, bx1 - bx0, by1 - by0); // its frame
+  const own = m.crop && m.crop.photo === p.id ? m.crop.focus : null;
+  const f = dragging ? focusOf(win, p.px) : own || focusOf(win, p.px);
+  const fx = ex0 + f[0] * (ex1 - ex0);
+  const fy = ey0 + f[1] * (ey1 - ey0);
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 3;
+  for (const pass of [0, 1]) {
+    if (pass) {
+      ctx.strokeStyle = "#d97706";
+      ctx.lineWidth = 1.5;
+    }
+    ctx.beginPath();
+    ctx.arc(fx, fy, 7, 0, 2 * Math.PI);
+    ctx.moveTo(fx - 12, fy);
+    ctx.lineTo(fx + 12, fy);
+    ctx.moveTo(fx, fy - 12);
+    ctx.lineTo(fx, fy + 12);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /** A locked story's mark: a padlock on a white tile, 18 px square, at (x, y) in the view (px). */
@@ -1201,6 +1411,27 @@ canvas.addEventListener("pointerdown", (e) => {
   const px = e.clientX - r.left;
   const py = e.clientY - r.top;
   if (onRuler(px, py)) return;
+  if (S.mode !== "select") {
+    const p = photoNote(S.selected);
+    const [x, y] = toMm(px, py);
+    const inBox = (b) => p && x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
+    if (p && S.mode === "focal") {
+      const m = S.modules.find((q) => q.story === S.selected);
+      const ext = photoExtent(p.box_mm, shownWindow(m, p), p.px);
+      if (inBox([ext.x0, ext.y0, ext.x1, ext.y1])) setCrop(S.selected, { focus: focusAt(x, y, ext) });
+      return; // a click outside the photo does nothing: Enter or Esc finishes
+    }
+    if (inBox(p ? p.box_mm : null)) {
+      if (canEdit()) {
+        const m = S.modules.find((q) => q.story === S.selected);
+        S.drag = { part: "photo", story: S.selected, start: [px, py], base: shownWindow(m, p), pointer: e.pointerId };
+        S.drag.win = S.drag.base;
+        canvas.setPointerCapture(e.pointerId);
+      }
+      return;
+    }
+    setMode("select", true); // a click elsewhere: back to selecting stories
+  }
   const h = hit(px, py);
   if (S.swapping) {
     const from = S.selected;
@@ -1231,6 +1462,14 @@ canvas.addEventListener("pointermove", (e) => {
   const py = e.clientY - r.top;
   if (!S.drag) {
     pointAt([px, py]); // a drag draws the view itself, at every move
+    const p = S.mode !== "select" ? photoNote(S.selected) : null;
+    if (p) {
+      const [x, y] = toMm(px, py);
+      const b = p.box_mm;
+      canvas.style.cursor =
+        S.mode === "focal" ? "crosshair" : x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3] ? "grab" : "default";
+      return;
+    }
     const h = S.data && !onRuler(px, py) ? hit(px, py) : null;
     canvas.style.cursor = S.swapping
       ? "crosshair"
@@ -1251,6 +1490,15 @@ canvas.addEventListener("pointermove", (e) => {
   S.pointer = [px, py];
   const dx = (px - S.drag.start[0]) / S.view.s;
   const dy = (py - S.drag.start[1]) / S.view.s;
+  if (S.drag.part === "photo") {
+    const p = photoNote(S.drag.story);
+    if (!p) return;
+    S.drag.moved = S.drag.moved || Math.abs(dx) + Math.abs(dy) >= DRAG_MIN_MM;
+    S.drag.win = panWindow(S.drag.base, p.px, p.box_mm, dx, dy);
+    canvas.style.cursor = "grabbing";
+    requestAnimationFrame(draw);
+    return;
+  }
   if (S.drag.locked) {
     if (!S.drag.told && Math.abs(dx) + Math.abs(dy) >= DRAG_MIN_MM) {
       S.drag.told = true; // said once per drag
@@ -1283,6 +1531,13 @@ canvas.addEventListener("pointerup", (e) => {
   const d = S.drag;
   if (!d || e.pointerId !== d.pointer) return;
   S.drag = null;
+  if (d.part === "photo") {
+    const p = photoNote(d.story);
+    canvas.style.cursor = "grab";
+    if (d.moved && p) setCrop(d.story, { focus: focusOf(d.win, p.px) });
+    else invalidate();
+    return;
+  }
   if (d.ghost && !same(d.ghost, d.from)) {
     const g = d.ghost;
     update(d.from.story, { x: g.x, y: g.y, w: g.w, h: g.h });
@@ -1297,6 +1552,13 @@ canvas.addEventListener("pointerleave", () => pointAt(null));
 canvas.addEventListener("dblclick", (e) => {
   const r = canvas.getBoundingClientRect();
   const [px, py] = [e.clientX - r.left, e.clientY - r.top];
+  if (S.mode === "focal") return; // its clicks set the focal point
+  if (S.mode === "photo") {
+    const p = photoNote(S.selected);
+    const [x, y] = toMm(px, py);
+    if (p && x >= p.box_mm[0] && x <= p.box_mm[2] && y >= p.box_mm[1] && y <= p.box_mm[3])
+      return focalPoint(S.selected);
+  }
   const h = S.data && !onRuler(px, py) && hit(px, py);
   if (h) openText(h.story);
 });
@@ -1331,6 +1593,8 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (S.drag) return cancelDrag();
     if (S.swapping) return stopSwapping();
+    if (S.mode === "focal") return setMode("photo");
+    if (S.mode === "photo") return setMode("select");
     S.selected = null;
     renderPanels();
     return invalidate();
@@ -1367,6 +1631,28 @@ window.addEventListener("keydown", (e) => {
   const m = S.modules.find((x) => x.story === S.selected);
   // story keys act only while the page has the focus: not on a button or a list, nor when the focus fell to the body
   if (!m || t !== canvas) return;
+  if (e.code === "KeyV" && !e.shiftKey) {
+    e.preventDefault();
+    return setMode("select");
+  }
+  if (e.code === "KeyA" && !e.shiftKey) {
+    e.preventDefault();
+    return e.repeat ? undefined : cropPhoto(m.story);
+  }
+  if (S.mode !== "select") {
+    // photo and focal mode: the arrows move the photo in its frame; Enter finishes the focal point
+    const steps = e.shiftKey ? 0.1 : 0.02;
+    const pans = { ArrowUp: [0, -steps], ArrowDown: [0, steps], ArrowLeft: [-steps, 0], ArrowRight: [steps, 0] };
+    if (pans[e.key]) {
+      e.preventDefault();
+      return panByKey(m.story, ...pans[e.key]);
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      return setMode(S.mode === "focal" ? "photo" : "select");
+    }
+    return; // the story's other keys (Delete …) wait until stories are selected again
+  }
   if (e.key === "Enter") {
     e.preventDefault();
     return openText(m.story);
@@ -1407,11 +1693,17 @@ function menuItems(story) {
   const held = (what) => (locked ? `${cap(nameOf(story))} is locked: unlock it (${SHIFT}L) to ${what}.` : "");
   const fits =
     !n || n.fit === "fits" ? "It already fits its box." : n.fit === "none" ? "It cannot be set at this width." : "";
+  const noPhoto = photoNote(story) ? "" : `${cap(nameOf(story))} has no photo.`;
+  const mod = S.modules.find((x) => x.story === story);
+  const uncropped = mod && mod.crop ? "" : "The photo is not cropped: it prints as the layout crops it.";
   return [
     { label: "Edit text", key: "Enter", act: () => openText(story) },
     { label: "Fit height to text", act: () => fitHeight(story), off: held("change its size") || fits },
     { label: "Swap with…", act: startSwapping, off: held("move it") },
     { label: locked ? "Unlock" : "Lock in place", key: `${SHIFT}L`, act: () => toggleLock(story) },
+    { label: "Crop photo", key: "A", act: () => cropPhoto(story), off: noPhoto },
+    { label: "Set focal point", act: () => focalPoint(story), off: noPhoto },
+    { label: "Reset crop", act: () => resetCrop(story), off: noPhoto || uncropped },
     {
       label: "Remove from page",
       key: MAC ? "⌫" : "Del",
@@ -1864,6 +2156,7 @@ function renderPanels() {
       ),
     );
     for (const id of ["#p-height", "#p-y", "#p-fit-height", "#p-swap", "#p-remove"]) $(id).disabled = locked;
+    photoPanel(m);
     if (!typing.has("#p-height")) $("#p-height").value = Math.round(m.h * 2) / 2;
     if (!typing.has("#p-y")) $("#p-y").value = Math.round(m.y * 2) / 2;
   }
@@ -1871,6 +2164,43 @@ function renderPanels() {
   storyFit();
   refreshMenu();
   if (focused) refocus(focused);
+}
+
+/** The selected story's photo in the panel: its resolution, the zoom (as far as it prints sharp), crop and focal point. */
+function photoPanel(m) {
+  const p = photoNote(m.story);
+  $("#p-photo").hidden = !p;
+  if (!p) return;
+  const mine = S.selected === m.story;
+  $("#p-crop").setAttribute("aria-pressed", mine && S.mode === "photo" ? "true" : "false");
+  $("#p-focal").setAttribute("aria-pressed", mine && S.mode === "focal" ? "true" : "false");
+  $("#p-reset").disabled = !m.crop;
+  const most = Math.floor(p.zoom_max * 100 + 1e-6);
+  const zoom = m.crop && m.crop.photo === p.id ? Math.min(m.crop.zoom, p.zoom_max) : 1;
+  const slider = $("#p-zoom");
+  slider.max = String(most);
+  slider.disabled = most <= 100;
+  if (!S.zooming) slider.value = String(Math.round(zoom * 100));
+  zoomShown(p, Number(slider.value) / 100);
+}
+
+/** The zoom as the slider has it: its percentage, the resolution the photo would print at, and the limit. */
+function zoomShown(p, zoom) {
+  const [cls, text] = ppiBadge(ppiAt(p.ppi, p.zoom, zoom));
+  $("#p-zoom-out").textContent = `${Math.round(zoom * 100)} %`;
+  $("#p-ppi").className = `ppi small ${cls}`;
+  $("#p-ppi").textContent = text;
+  const note = $("#p-zoom-note");
+  const most = Math.floor(p.zoom_max * 100 + 1e-6) / 100;
+  const floor = Math.round(p.floor_ppi * 10) / 10;
+  note.hidden = !(most <= 1 || zoom >= most - 1e-6);
+  note.textContent =
+    most <= 1
+      ? `It prints at the lowest resolution allowed for it already (${floor} ppi): it can be moved in its frame, not ` +
+        "enlarged."
+      : most < 4
+        ? `Enlarged as far as it prints sharp (${floor} ppi).`
+        : "Enlarged 400 %, the most a photo is enlarged.";
 }
 
 /** Focus back on the row or button with this key (it was drawn again), or on the story's row elsewhere. */
@@ -1954,6 +2284,7 @@ function problemItems() {
 }
 
 function select(story) {
+  if (story !== S.selected && S.mode !== "select") setMode("select", true);
   S.selected = story;
   renderPanels();
   invalidate();
@@ -2042,6 +2373,7 @@ async function goPage(n) {
   S.undo = [];
   S.redo = [];
   S.selected = null;
+  setMode("select", true);
   S.dirty = false;
   notice("");
   title();
@@ -2375,6 +2707,24 @@ $("#story").addEventListener("keydown", (e) => {
 });
 $("#p-fit-height").addEventListener("click", () => S.selected && fitHeight(S.selected));
 $("#p-lock").addEventListener("click", () => S.selected && toggleLock(S.selected));
+$("#p-crop").addEventListener("click", () => S.selected && cropPhoto(S.selected, true));
+$("#p-focal").addEventListener("click", () =>
+  S.mode === "focal" ? setMode("photo") : S.selected && focalPoint(S.selected),
+);
+$("#p-reset").addEventListener("click", () => S.selected && resetCrop(S.selected));
+$("#p-zoom").addEventListener("input", (e) => {
+  const p = photoNote(S.selected);
+  S.zooming = true;
+  if (p) zoomShown(p, Number(e.target.value) / 100);
+});
+$("#p-zoom").addEventListener("change", (e) => {
+  S.zooming = false;
+  if (S.selected && photoNote(S.selected)) setCrop(S.selected, { zoom: Number(e.target.value) / 100 });
+});
+$("#p-zoom").addEventListener("blur", () => {
+  S.zooming = false;
+  renderPanels();
+});
 $("#p-lock-note").textContent =
   `Locked in place for this layout: its place, width and height stay as they are, and it stays on this page. Unlock ` +
   `it (${SHIFT}L) to change them. Its text can still change.`;

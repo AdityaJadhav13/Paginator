@@ -56,7 +56,7 @@ def fake_rgb_to_cmyk(img: Image.Image) -> Image.Image:
 # does), "half" makes page 1 and fails page 2. Its "issue" picks how `measure` behaves: "" works, "slowmeasure" takes
 # 1.5 s, "failmeasure" exits 1 with {"error"}.
 FAKE_ENGINE = r'''
-import json, os, signal, sys, time
+import json, os, re, signal, sys, time
 from pathlib import Path
 sys.path.insert(0, ENGINE_DIR)                                   # set by the test: the Desk's engine folder
 import deskprinted                                               # what a page prints, as the real engine records it
@@ -194,7 +194,8 @@ if cmd == "edit-service":
     # its open page, else of its edit file, else its articles in status.json (as the real engine reads them). Every
     # change moves the revision on, and a change made on an older revision is refused, as the real engine does. So are
     # the changes its locks refuse: moving, resizing or removing a locked story, bringing in one locked on another page
-    # and saving a page while one of its stories is locked on another page.
+    # and saving a page while one of its stories is locked on another page. A photo crop that is not one is refused,
+    # and a saved page records the crops it prints, as the real engine records them.
     STALE = "this page was changed in another window or tab; it is shown again as it is now"
     def answer(obj):
         sys.stdout.write(json.dumps(obj) + "\n")
@@ -265,6 +266,14 @@ if cmd == "edit-service":
         for k in first:
             if k not in mine and k in w and w[k]["locked"]:
                 raise ValueError("%s is locked on page %d: unlock it there to bring it here" % (story_name(s, k), w[k]["page"]))
+    def check_crops(modules):                      # as deskedit.crop_value: none, or a photo, a focus and a zoom
+        num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+        for m in modules:
+            c = m.get("crop")
+            if c is not None and not (isinstance(c, dict) and re.fullmatch(r"p-[0-9a-f]{10}", str(c.get("photo")))
+                                      and isinstance(c.get("focus"), list) and len(c["focus"]) == 2
+                                      and all(num(v) for v in c["focus"]) and num(c.get("zoom"))):
+                raise ValueError("a photo crop must give the photo's id, a focus point (two numbers) and a zoom (a number)")
     answer({"id": 0, "ok": True, "result": {"ready": True}})
     sessions = {}
     for line in sys.stdin:
@@ -283,7 +292,7 @@ if cmd == "edit-service":
                     s["text"] = {a["id"]: a for a in rq["articles"]}           # the run's text until Update text
                     s["folio"] = {k: rq["edition"].get(k, "") for k in ("volume", "issue", "price")}
                     s["modules"] = [{"story": "d" + a[2:], "x": 12.82 + 40.69 * (2 * k % 8), "y": 30.0, "w": 2, "h": 100.0,
-                                     "locked": False} for k, a in enumerate(on_pages(s).get(req["page"], []))]
+                                     "locked": False, "crop": None} for k, a in enumerate(on_pages(s).get(req["page"], []))]
                     sessions[key] = s
                 res = dict(draw(sessions[key]), session=key)
             elif c == "set":
@@ -292,6 +301,7 @@ if cmd == "edit-service":
                 if (run_dir(s) / "fake-set-slow").exists():
                     time.sleep(1.0)
                 check_locks(s, req["modules"])
+                check_crops(req["modules"])
                 s["modules"] = req["modules"]
                 s["rev"] += 1
                 res = draw(s)
@@ -351,6 +361,10 @@ if cmd == "edit-service":
                 printed = {"v": deskprinted.VERSION,
                            "articles": {a: deskprinted.article_sig(s["text"][a], False) for a in mine if s["text"].get(a)},
                            "folio": deskprinted.folio_sig(s["folio"]) if s["page"] == 1 else None, "ads": {}}
+                crops = {"a-" + m["story"][1:]: deskprinted.crop_sig(m["crop"]["photo"], 2000, 1500, [0, 0, 1000, 750])
+                         for m in s["modules"] if m.get("crop")}            # the crops it prints (a fictional window)
+                if crops:
+                    printed["crops"] = crops
                 res = {"pdf": name, "sha256": "0" * 64, "rev": s["rev"], "problems": [], "articles": mine, "pages_changed": changed,
                        "printed": printed}
                 if (run_dir(s) / "fake-export-no-printed").exists():    # an engine that records nothing
@@ -2054,6 +2068,31 @@ class EditTests(DeskCase):
         self.assertEqual(moved["rev"], unlocked["rev"] + 1)
         saved = self.call("POST", f"{url}/save", {"rev": moved["rev"]}).json()
         self.assertEqual((saved["error"], saved["press_ready"]), (None, True))
+
+    def test_a_crop_goes_through_to_the_engine_and_marks_the_page_until_saved(self):
+        eid, rid = self.finished_run("2026-07-24")
+        url = f"/api/editions/{eid}/runs/{rid}/pages/1"
+        opened = self.call("POST", f"{url}/edit", {}).json()
+        m = opened["modules"][0]
+        self.assertIsNone(m["crop"])
+        crop = {"photo": "p-0000000001", "focus": [0.25, 0.75], "zoom": 2.0}
+        cropped = self.call("PUT", f"{url}/edit", {"modules": [{**m, "crop": crop}], "rev": opened["rev"]}).json()
+        self.assertEqual((cropped["modules"][0]["crop"], cropped["rev"]), (crop, opened["rev"] + 1))
+        st = self.status(eid, rid)
+        self.assertTrue(self.page_of(st, 1)["edited_unsaved"])                    # a crop is a change of the page
+        self.assertEqual((st["press_ready"], st["pages_to_save"]), (False, [1]))
+        before = self.run_files(eid, rid)
+        for bad in ("centre", {"photo": "p-0000000001"}, {**crop, "zoom": "2"}, {**crop, "photo": "../p-0000000001"}):
+            with self.subTest(bad=bad):
+                said = self.call("PUT", f"{url}/edit", {"modules": [{**m, "crop": bad}], "rev": cropped["rev"]},
+                                 expect=400).json()
+                self.assertEqual(said["error"], "The page could not be changed: a photo crop must give the photo's id, "
+                                                "a focus point (two numbers) and a zoom (a number).")
+                self.assertEqual(self.run_files(eid, rid), before)               # nothing marked or written
+        saved = self.call("POST", f"{url}/save", {"rev": cropped["rev"]}).json()
+        self.assertEqual((saved["error"], saved["stale"], saved["press_ready"]), (None, [], True))   # never compared
+        page = self.page_of(self.status(eid, rid), 1)
+        self.assertEqual((list(page["printed"]["crops"]), page["edited_unsaved"]), (["a-" + m["story"][1:]], False))
 
     def test_a_page_cannot_be_saved_while_a_story_on_it_is_locked_on_another_page(self):
         eid, rid, first, second = self.two_page_run("2026-07-21")

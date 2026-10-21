@@ -8,7 +8,11 @@ Desk's server both use this module, so they always agree on what "changed" means
 
 What counts is what prints: an article's text line by line as the engine reads it (spacing inside a line and extra
 empty lines print the same, so they are no change), and for a short item only its headline and text (the rest never
-prints)."""
+prints).
+
+A page saved from the editor with a photo cropped also records the crop ("crops": {article id: crop_sig}). That entry
+is never compared with the edition: the edition has no crops (a crop is one of the page's own edits, which its revision
+covers), so a crop never makes a page "need saving", and a page laid out automatically records none."""
 from __future__ import annotations
 
 import hashlib
@@ -66,6 +70,12 @@ def folio_sig(edition: dict) -> str:
     return _sig([unicodedata.normalize("NFC", str(edition.get(k) or "")) for k in EDITION_FIELDS])
 
 
+def crop_sig(photo: str, width_px: int, height_px: int, window) -> str:
+    """A photo as an edited page prints it cropped: the photo, its size and the window of its pixels (x, y, w, h) that
+    fills its frame. Recorded, never compared (module docstring)."""
+    return _sig(["crop", str(photo), int(width_px), int(height_px), [int(v) for v in window]])
+
+
 def file_sig(path: Path) -> str | None:
     """A raster file's signature (None: no such file)."""
     try:
@@ -121,8 +131,9 @@ def briefs_of(plan: dict) -> set[str]:
 
 def stale(printed: dict, articles: dict, briefs: set[str], edition: dict, ads: dict) -> list[str]:
     """Why a page's PDF no longer prints what the edition holds now ([] when it does). printed: the page's record
-    ({"v": VERSION, "articles": {id: sig}, "folio": sig or None, "ads": {slot: sig or None}}); articles: the edition's articles by
-    id; briefs: the run's short items; ads: the edition's ads now (ad_sigs)."""
+    ({"v": VERSION, "articles": {id: sig}, "folio": sig or None, "ads": {slot: sig or None}}, and "crops", which is never
+    compared); articles: the edition's articles by id; briefs: the run's short items; ads: the edition's ads now
+    (ad_sigs)."""
     if printed.get("v") != VERSION:
         return [OLDER]
     out = []

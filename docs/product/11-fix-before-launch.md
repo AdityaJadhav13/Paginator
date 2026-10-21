@@ -67,6 +67,25 @@ refuses every change to a locked story before anything is written.
 | LOCK-13 | `static/editor.js` "Other stories" list | If another tab locks a story after this page loaded, the list still shows it unlocked; a bring-in is then refused by the engine (400) and the page is shown again, leaving an undo entry for the refused change | The engine refuses; nothing is written |
 | LOCK-14 | `engine/deskedit.py` `is_locked` | Its docstring says anything but false counts as locked, but 0, "" and null count as unlocked | Nit |
 
+## Page editor: photo crop and focal point (L1-3)
+
+From the feature's code review and its independent verification, 2026-10-22. Print safety held in both: a page without
+a crop prints byte for byte as before, and a crop prints exactly the window the editor shows.
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| CROP-1 | `engine/deskedit.py` `_full_raster` | Every photo drawn puts its whole raster in `cache/rasters` at once, uncompressed (up to 16 MB for an upload), and nothing ever cleans the cache | Disk only; the cache already keeps each gen1 crop the same way |
+| CROP-2 | `engine/deskedit.py` `__init__` | A stored crop that cannot print is dropped when a page opens, but neither written to its edit file nor counted as a new revision | The dropped crop never printed anyway (render applies a crop only to its own photo); the next change writes the file |
+| CROP-3 | `static/editor.js` photo mode | After **Crop photo** in the panel the focus stays on that button, so the arrows do not move the photo until the page is clicked; Esc and V do nothing while the zoom slider has the focus | Dragging and the canvas keys work; accessibility polish |
+| CROP-4 | `README.md` | The floor values named there (150 ppi, 142.5 for uploads) leave out photos imported from a printed page, whose floor is 0.95 × the resolution they were printed at when lower | Wording; the engine uses gen1's own floor |
+| CROP-5 | `engine/deskedit.py` | A crop is matched to its photo by id only: two stories sharing one photo id would each pass the other's crop test | The Desk gives every upload its own id; no two articles share one |
+| CROP-6 | `static/editor.js` `send` | The "its crop is reset" notice also shows when the engine dropped a crop for another reason (the story's set option has no photo) | The page shown is the engine's; only the words |
+| CROP-7 | `engine/deskedit.py` `crop_window` | A zoom stored above what the frame allows stays stored (the frame prints at the largest allowed); a later larger frame enlarges it again | Intended (the focal point keeps its zoom at every size); the panel shows the zoom that prints |
+| CROP-8 | `static/editor.js` `ppiBadge` | The badge warns "below 150 ppi" at the largest zoom an upload allows (142.5 ppi), which the slider offers | Honest (spec §8.11: below 150 warns); a softer word could follow |
+| CROP-9 | `engine/deskedit.py` `_apply_crops` | A cropped photo's raster is decompressed twice per render (gen1 and the crop) | Performance only (a few tens of ms) |
+| CROP-10 | the server's save API | A save made through the API (not the editor) after a photo is replaced, without Update text, prints the old photo with its crop | The page stays stale, so not "press ready"; `refresh` drops the crop; the editor always runs Update text before a save |
+| CROP-11 | `test/test_engine.py` | No unit test runs gen1's real render end to end with a crop (the tests run gen1's own crop lines and a gen1-shaped page) | Checked on the real engine: byte-identical PDFs without a crop, the exact window with one |
+
 ## Desk: noticed while checking L1-2 (not caused by it)
 
 | # | Where | What | Why it can wait |

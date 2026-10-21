@@ -4,6 +4,10 @@
 """
 from __future__ import annotations
 
+import dataclasses
+import gzip
+import hashlib
+import inspect
 import itertools
 import json
 import math
@@ -11,6 +15,7 @@ import os
 import stat
 import sys
 import tempfile
+import textwrap
 import types
 import unittest
 from datetime import date
@@ -408,6 +413,7 @@ class LockCase(unittest.TestCase):
     edition's stories dA … dD and a column of short items; other pages' stories are their edit files."""
 
     KEYS = ("dA", "dB", "dC", "dD", "dbriefs1")
+    PHOTOS: dict = {}                              # story → its photo's id (none by default)
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -417,15 +423,18 @@ class LockCase(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def built(self, keys=None):
+    def built(self, keys=None, photos=None):
         keys = self.KEYS if keys is None else keys
+        photos = self.PHOTOS if photos is None else photos
         brief = {k: k.startswith("dbriefs") for k in keys}
         return types.SimpleNamespace(
-            story_of={k: {"id": k, "headline": None if brief[k] else f"h-{k}"} for k in keys},
+            story_of={k: {"id": k, "headline": None if brief[k] else f"h-{k}", "images": [photos[k]] if k in photos else []}
+                      for k in keys},
             els_of={k: [] if brief[k] else [{"id": f"h-{k}", "kind": "headline", "text": f"Fictional headline {k[1:]}"}]
                     for k in keys},
             article_of={k: [f"a-{i + 1:010x}"] for i, k in enumerate(keys)},
-            items=[{"key": k, "brief": brief[k], "order": i} for i, k in enumerate(keys)])
+            items=[{"key": k, "brief": brief[k], "order": i} for i, k in enumerate(keys)],
+            photos_idx={p: {"width_px": 2000, "height_px": 1500, "ppi": None} for p in photos.values()})
 
     def session(self, modules, keys=None):
         s = DEd.PageSession.__new__(DEd.PageSession)
@@ -469,8 +478,18 @@ class ModuleAttrsTest(LockCase):
         self.assertEqual((s.modules, s.rev), ([self.A], 5))
         self.assertEqual(DE.read_json(s.edit_path)["modules"], [self.A])
 
-    def test_a_crop_never_moves_a_story_and_is_none_for_now(self):
+    def test_a_crop_never_moves_a_story(self):
+        self.PHOTOS = {"dA": "p-0000000001"}
         s = self.session([self.A])
+        crop = {"photo": "p-0000000001", "focus": [0.2, 0.8], "zoom": 2.0}
+        s.apply([{**self.A, "crop": crop}])
+        self.assertEqual(s.modules, [{**self.A, "crop": crop}])                 # still at 137.23
+        self.assertEqual(DE.read_json(s.edit_path)["modules"], [{**self.A, "crop": crop}])
+        s.apply([{**self.A, "crop": None}])
+        self.assertEqual((s.modules, s.rev), ([self.A], 5))
+
+    def test_a_crop_of_a_photo_the_story_does_not_have_is_dropped(self):
+        s = self.session([self.A])                                            # dA has no photo here
         s.apply([{**self.A, "crop": {"photo": "p-0000000001", "focus": [0.2, 0.8], "zoom": 2.0}}])
         self.assertEqual(s.modules, [self.A])
 
@@ -760,6 +779,20 @@ class LockedAlternativeTest(LockCase):
             s.alternative(1)
         self.assertEqual(str(e.exception), DEd.NO_FILL_AROUND)                   # searched: 11 not locked
 
+    def test_crops_go_with_their_stories(self):
+        self.PHOTOS = {"dA": "p-000000000a", "dB": "p-000000000b"}
+        ca = {"photo": "p-000000000a", "focus": [0.2, 0.3], "zoom": 2.0}
+        cb = {"photo": "p-000000000b", "focus": [0.9, 0.1], "zoom": 1.5}
+        a = {**mod("dA", 0, TOP, 3, 100.0, locked=True), "crop": ca}
+        s = self.page([a, {**mod("dB", 5, TOP, 3, 470.0), "crop": cb}, mod("dC", 3, 230.0, 2, 100.0)], ["dA", "dB", "dC"])
+        s.alternative(3)
+        self.assertEqual(s.modules, [a, {**mod("dB", 3, TOP, 5, 470.0), "crop": cb}, mod("dC", 0, 130.0, 3, 370.0)])
+        s = self.page([{**mod("dB", 5, TOP, 3, 470.0), "crop": cb}], ["dB"])          # no locks: the whole page
+        g = self.Search(None, {"stories": [{"id": "dB"}]}, None, None, {"dB"}, None)
+        s.generator = lambda: g
+        s.alternative(1)
+        self.assertEqual(s.modules, [{**mod("dB", 0, TOP, 8, 470.0), "crop": cb}])
+
     def test_without_locks_the_whole_page_is_searched_as_before(self):
         s = self.page([mod("dA", 0, TOP, 3, 100.0), mod("dB", 3, TOP, 5, 470.0)], ["dA", "dB"])
         s.tpl.regions = [(0, G.NCOL, TOP, 499.8)]                  # the template's own edges, off the grid or not
@@ -770,6 +803,402 @@ class LockedAlternativeTest(LockCase):
             s.alternative(2)
         self.assertEqual(str(e.exception), "no other layout fills this page exactly with these stories")
         self.assertEqual(g.runs, [([(0, G.NCOL, TOP, 499.8)], "right", {3})])     # the lead's width banned
+
+
+# ------------------------------------------------------------------------------------------- photo crops
+def gen1_lines(first: str, last: str) -> str:
+    """Lines of gen1's own render (generate.render; gen1 is frozen), from the one that starts with first to the one that
+    starts with last, ready to run: the crop is checked against gen1's own code, never a copy of it."""
+    lines = inspect.getsource(G.render).splitlines()
+    a = next(i for i, ln in enumerate(lines) if ln.strip().startswith(first))
+    b = next(i for i, ln in enumerate(lines) if i >= a and ln.strip().startswith(last))
+    return textwrap.dedent("\n".join(lines[a:b + 1]))
+
+
+GEN1_WINDOW = gen1_lines("want = ph_w / ph_h", "chp = min(H0, max(1, round(W0 / want)))")   # its window of a photo
+GEN1_PHOTO = gen1_lines('ph_top, ph_h, ph_w = y + ph["ph_top"]', "B.items.append(X.Image(x * MM")  # … and its picture
+
+
+def gen1_window(W0: int, H0: int, fw: float, fh: float) -> tuple:
+    """gen1's window of a W0 × H0 photo for a frame fw × fh mm, by gen1's own lines. → (x, y, w, h)."""
+    ns = {"W0": W0, "H0": H0, "ph_w": fw, "ph_h": fh}
+    exec(GEN1_WINDOW, ns)  # noqa: S102 — gen1's own frozen source, from the repository
+    return ns["x_off"], ns["y_off"], ns["cpx"], ns["chp"]
+
+
+def crop(photo: str, fx: float = 0.25, fy: float = 0.75, zoom: float = 2.0) -> dict:
+    return {"photo": photo, "focus": [fx, fy], "zoom": zoom}
+
+
+class CropValueTest(unittest.TestCase):
+    """A photo crop as the editor sends it: checked, clamped and rounded, or refused."""
+
+    def test_a_crop_is_clamped_and_rounded_and_keeps_only_its_own_keys(self):
+        self.assertIsNone(DEd.crop_value(None))
+        self.assertEqual(DEd.crop_value({"photo": "p-00000000ab", "focus": [0.123456, 1.7], "zoom": 9, "more": 1}),
+                         {"photo": "p-00000000ab", "focus": [0.1235, 1.0], "zoom": 4.0})
+        self.assertEqual(DEd.crop_value({"photo": "p-00000000ab", "focus": (-3, 0), "zoom": 0.2}),
+                         {"photo": "p-00000000ab", "focus": [0.0, 0.0], "zoom": 1.0})
+        c = DEd.crop_value({"photo": "p-00000000ab", "focus": [0.31, 0.7], "zoom": 2.5})
+        self.assertEqual(DEd.crop_value(c), c)                                       # as stored: kept as it is
+
+    def test_anything_else_is_refused(self):
+        ok = crop("p-00000000ab", 0.5, 0.5, 2)
+        for bad in ("crop", 1, [], True, {}, {**ok, "photo": "p-00000000AB"}, {**ok, "photo": "p-00000000ab\n"},
+                    {**ok, "photo": None}, {**ok, "focus": [0.5]}, {**ok, "focus": [0.5, 0.5, 0.5]},
+                    {**ok, "focus": "0.5,0.5"}, {**ok, "focus": [0.5, None]}, {**ok, "focus": [True, 0.5]},
+                    {**ok, "focus": [float("nan"), 0.5]}, {**ok, "zoom": None}, {**ok, "zoom": "2"}, {**ok, "zoom": False},
+                    {**ok, "zoom": float("inf")}, {**ok, "zoom": 10 ** 400}, {k: v for k, v in ok.items() if k != "zoom"}):
+            with self.subTest(bad=repr(bad)[:60]):
+                with self.assertRaises(ValueError) as e:
+                    DEd.crop_value(bad)
+                self.assertEqual(str(e.exception), DEd.CROP_BAD)
+
+
+class CropWindowTest(unittest.TestCase):
+    """Which pixels of a photo fill its frame: without a crop exactly gen1's (by gen1's own lines); with one, the window
+    enlarged and centred on the focus within the photo's edges, never below the photo's resolution floor."""
+
+    SIZES = [(1, 1), (2, 3), (59, 40), (60, 41), (640, 480), (1999, 1333), (2000, 1500), (1500, 2000), (1201, 1200),
+             (37, 1000)]
+    FRAMES = [(36.5, 24.0), (36.5, 36.5), (77.19, 51.4), (77.19, 103.3), (159.07, 99.5), (240.95, 120.0), (118.88, 160.2)]
+
+    def test_without_a_crop_it_is_gen1s_own_window(self):
+        for (W0, H0), (fw, fh) in itertools.product(self.SIZES, self.FRAMES):
+            with self.subTest(px=(W0, H0), frame=(fw, fh)):
+                win, zoom, _ = DEd.crop_window(W0, H0, fw, fh)
+                self.assertEqual((win, zoom), (gen1_window(W0, H0, fw, fh), 1.0))
+
+    def test_centred_at_zoom_1_it_is_gen1s_window_too(self):
+        for (W0, H0), (fw, fh) in itertools.product(self.SIZES, self.FRAMES):
+            with self.subTest(px=(W0, H0), frame=(fw, fh)):
+                self.assertEqual(DEd.crop_window(W0, H0, fw, fh, crop("p-0000000001", 0.5, 0.5, 1.0))[0],
+                                 gen1_window(W0, H0, fw, fh))
+
+    def test_the_window_keeps_its_focus_as_near_its_centre_as_the_edges_allow(self):
+        # 2000 × 1500 in a 100 × 75 mm frame: gen1 prints all of it (508 ppi); at zoom 2 a window of 1000 × 750
+        win = lambda fx, fy, z=2.0: DEd.crop_window(2000, 1500, 100.0, 75.0, crop("p-0000000001", fx, fy, z))[0]
+        self.assertEqual(win(0.5, 0.5), (500, 375, 1000, 750))
+        self.assertEqual(win(0.3, 0.6), (100, 525, 1000, 750))
+        self.assertEqual(win(0.0, 0.0), (0, 0, 1000, 750))                        # at the photo's edges
+        self.assertEqual(win(1.0, 0.95), (1000, 750, 1000, 750))
+        self.assertEqual(win(0.1, 0.5, 1.0), (0, 0, 2000, 1500))                  # all of it: nowhere to go
+
+    def test_the_zoom_stops_at_the_photos_resolution_floor_and_at_400_percent(self):
+        c = crop("p-0000000001", 0.5, 0.5, 4.0)
+        win, z, most = DEd.crop_window(2000, 1500, 100.0, 75.0, c, 150.0)          # 508 ppi at zoom 1
+        self.assertAlmostEqual(most, 508.0 / 150.0)
+        self.assertEqual(z, most)
+        self.assertGreaterEqual(min(win[2] / (100.0 / 25.4), win[3] / (75.0 / 25.4)), 150.0)
+        self.assertLess(min((win[2] - 1) / (100.0 / 25.4), (win[3] - 1) / (75.0 / 25.4)), 150.0)   # as small as allowed
+        # gen1's floor for a photo uploaded without its print resolution: 0.95 × 150 = 142.5 ppi
+        self.assertAlmostEqual(DEd.crop_window(2000, 1500, 100.0, 75.0, c, 142.5)[2], 508.0 / 142.5)
+        self.assertEqual(DEd.crop_window(2000, 1500, 40.0, 30.0, c, 150.0)[1:], (4.0, 4.0))    # 1270 ppi: 400 % at most
+        self.assertEqual(DEd.crop_window(2000, 1500, 40.0, 30.0, c, 150.0)[0][2:], (500, 375))
+        # a photo that already prints at its floor or below is never enlarged; it can still be moved in its frame
+        self.assertEqual(DEd.crop_window(580, 435, 100.0, 75.0, c, 150.0), ((0, 0, 580, 435), 1.0, 1.0))
+        self.assertEqual(DEd.crop_window(580, 300, 50.0, 75.0, crop("p-0000000001", 0.0, 0.5, 4.0), 150.0)[0],
+                         (0, 0, 200, 300))
+
+    def test_every_window_is_whole_pixels_inside_the_photo_of_the_frames_shape_and_sharp_enough(self):
+        for (W0, H0), (fw, fh), z, fx, fy in itertools.product(self.SIZES, self.FRAMES, (1.0, 1.37, 2.0, 4.0),
+                                                               (0.0, 0.31, 1.0), (0.0, 0.77, 1.0)):
+            (x, y, w, h), used, most = DEd.crop_window(W0, H0, fw, fh, crop("p-0000000001", fx, fy, z), 142.5)
+            g = gen1_window(W0, H0, fw, fh)
+            with self.subTest(px=(W0, H0), frame=(fw, fh), zoom=z, focus=(fx, fy)):
+                self.assertTrue(all(isinstance(v, int) for v in (x, y, w, h)))
+                self.assertTrue(0 <= x <= x + w <= W0 and 0 <= y <= y + h <= H0 and w >= 1 and h >= 1)
+                self.assertTrue(1.0 <= most <= DEd.ZOOM_MAX and used == max(1.0, min(z, most)))
+                self.assertTrue(w <= g[2] and h <= g[3])
+                self.assertLess(abs(w - g[2] / used), 1.0)                          # the frame's shape, to a pixel
+                self.assertLess(abs(h - g[3] / used), 1.0)
+                if used > 1.0:
+                    self.assertGreaterEqual(min(w / (fw / 25.4), h / (fh / 25.4)), 142.5 * (1 - 1e-9))
+
+    def test_deskedit_finds_gen1s_picture_by_gen1s_own_expressions(self):
+        """_apply_crops rebuilds gen1's rectangle and pixels with these expressions; gen1 is frozen, and these are its
+        lines (the window itself runs gen1's lines in the tests above)."""
+        src = {" ".join(ln.split()) for ln in inspect.getsource(G.render).splitlines()}
+        for line in ('ph_top, ph_h, ph_w = y + ph["ph_top"], ph["ph_h"], ph["ph_w"]',
+                     'raw = gzip.decompress(s.photo["path"].read_bytes())',
+                     'W0, H0 = s.photo["w"], s.photo["h"]',
+                     'rows_px = [raw[((y_off + r_) * W0 + x_off) * 4:((y_off + r_) * W0 + x_off + cpx) * 4] for r_ in range(chp)]',
+                     'B.items.append(X.Image(x * MM, (B.page_h - ph_top - ph_h) * MM, ph_w * MM, ph_h * MM, cpx, chp, '
+                     'b"".join(rows_px)))'):
+            with self.subTest(line=line):
+                self.assertIn(line, src)
+
+
+class CropAttrsTest(LockCase):
+    """A crop is a module's attribute: it never moves its story, it belongs to its photo (so it moves with its story and
+    never applies to another picture), and a photo replaced or removed loses it."""
+
+    PHOTOS = {"dA": "p-000000000a", "dB": "p-000000000b"}
+    A, B = mod("dA", 0, TOP, 3, 120.5), mod("dB", 3, TOP, 5, 120.5)
+
+    def test_a_crop_is_kept_as_the_engine_checks_it(self):
+        s = self.session([self.A, self.B])
+        s.apply([{**self.A, "crop": {"photo": "p-000000000a", "focus": [0.123456, -1], "zoom": 7, "note": "x"}}, self.B])
+        self.assertEqual(s.modules, [{**self.A, "crop": {"photo": "p-000000000a", "focus": [0.1235, 0.0], "zoom": 4.0}},
+                                     self.B])
+        self.assertEqual(DE.read_json(s.edit_path)["modules"], s.modules)
+
+    def test_a_crop_that_is_not_valid_is_refused_and_nothing_is_written(self):
+        s = self.session([self.A, self.B])
+        for bad in ("yes", {"photo": "p-000000000a"}, crop("p-000000000a", zoom="2"), crop("not-a-photo")):
+            with self.subTest(bad=bad):
+                self.refused(s, [{**self.A, "crop": bad}, self.B], DEd.CROP_BAD)
+
+    def test_a_crop_for_a_photo_no_story_here_has_is_dropped(self):
+        c = mod("dC", 0, 200.0, 3, 100.0)                                        # dC has no photo
+        s = self.session([self.A, self.B, c])
+        s.apply([{**self.A, "crop": crop("p-00000000ff")}, self.B, {**c, "crop": crop("p-00000000fe")}])
+        self.assertEqual(s.modules, [self.A, self.B, c])
+
+    def test_a_crop_moves_with_its_story_in_a_swap(self):
+        ca, cb = crop("p-000000000a"), crop("p-000000000b", 0.6, 0.4, 1.5)
+        place = lambda m: {k: m[k] for k in ("x", "y", "w", "h")}
+        for b_crop in (cb, None):
+            with self.subTest(b_cropped=b_crop is not None):
+                a, b = {**self.A, "crop": ca}, {**self.B, "crop": b_crop}
+                s = self.session([a, b])
+                s.apply([{**b, **place(a)}, {**a, **place(b)}])          # the places swapped, each story with its own
+                self.assertEqual(s.modules, [{**mod("dB", 0, TOP, 3, 120.5), "crop": b_crop},
+                                             {**mod("dA", 3, TOP, 5, 120.5), "crop": ca}])
+
+    def test_a_storys_crop_comes_from_its_own_module_only(self):
+        ca, cb = crop("p-000000000a"), crop("p-000000000b", 0.6, 0.4, 1.5)
+        s = self.session([{**self.A, "crop": ca}, {**self.B, "crop": cb}])
+        # A sends B's crop and B sends none: A's crop (another story's photo) is dropped, B's null wins
+        s.apply([{**self.A, "crop": cb}, {**self.B, "crop": None}])
+        self.assertEqual(s.modules, [self.A, self.B])
+        # attributes left with the places (an older editor's swap): neither crop reaches another picture
+        s = self.session([{**self.A, "crop": ca}, {**self.B, "crop": cb}])
+        s.apply([{**self.A, "crop": ca, "story": "dB"}, {**self.B, "crop": cb, "story": "dA"}])
+        self.assertEqual(s.modules, [mod("dB", 0, TOP, 3, 120.5), mod("dA", 3, TOP, 5, 120.5)])
+
+    def test_a_locked_storys_crop_can_change(self):
+        a = {**self.A, "locked": True}                                          # a lock freezes the place only
+        s = self.session([a, self.B])
+        s.apply([{**a, "crop": crop("p-000000000a")}, self.B])
+        self.assertEqual(s.modules[0], {**a, "crop": crop("p-000000000a")})
+
+    def test_undo_and_redo_go_through_crops(self):
+        steps = [crop("p-000000000a"), crop("p-000000000a", 0.9, 0.1, 3.0), None]
+        s = self.session([self.A])
+        for c in steps + steps[-2::-1] + [None]:
+            s.apply([{**self.A, "crop": c}])
+            self.assertEqual(s.modules, [{**self.A, "crop": c}])
+        self.assertEqual(s.rev, 3 + 6)
+
+    def test_a_stored_crop_that_cannot_print_is_dropped_when_the_page_opens(self):
+        stored = [{**self.A, "crop": crop("p-000000000a")}, {**self.B, "crop": crop("p-00000000ff")},   # another photo
+                  {**mod("dC", 0, 200.0, 3, 100.0), "crop": "damaged"}]
+        s = self.session(stored)
+        self.assertEqual(s._reset_crops(), ["dB", "dC"])
+        self.assertEqual([m["crop"] for m in s.modules], [crop("p-000000000a"), None, None])
+        self.assertEqual(stored[1]["crop"], crop("p-00000000ff"))                  # new dicts: what was kept is intact
+
+    def new_text(self, s, photo_a: str | None) -> dict:
+        """The session set up for new text: article 1 (story dA) now with photo_a (None: no photo). → that article."""
+        arts = [{"id": "a-0000000001", "photo": {"id": "p-000000000a"}}, {"id": "a-0000000002"}]
+        s.req_articles, s.articles, s._text_sig, s.text_path = arts, arts, "", self.run / "edit-articles.json"
+        s.edition, s.assets, s.frozen, s._measurers, s._g, s._g_keys = {}, self.run.parent.parent, {}, {}, None, None
+        s._link_photos = lambda: None
+
+        def built(edition, articles, ed_dir, frozen=None):
+            a1 = next(a for a in articles if a["id"] == "a-0000000001")
+            b = self.built(["dA", "dB"], {**({"dA": a1["photo"]["id"]} if a1.get("photo") else {}), "dB": "p-000000000b"})
+            b.kind_changes = lambda other, ids: []
+            return b
+        s.engine.built = built
+        return {"id": "a-0000000001", "photo": {"id": photo_a} if photo_a else None}
+
+    def test_new_text_that_replaces_a_photo_drops_its_crop(self):
+        for photo_a in ("p-00000000aa", None):
+            with self.subTest(photo_a=photo_a):
+                s = self.session([{**self.A, "crop": crop("p-000000000a")}, {**self.B, "crop": crop("p-000000000b")}])
+                a1 = self.new_text(s, photo_a)
+                DE.write_json(s.text_path, {"articles": {"a-0000000001": a1}})     # another page set it (Update text)
+                s.sync()
+                self.assertEqual([m["crop"] for m in s.modules], [None, crop("p-000000000b")])
+                self.assertEqual(s.rev, 4)
+                self.assertEqual(DE.read_json(s.edit_path)["modules"], s.modules)
+
+    def test_update_text_drops_the_crop_of_a_replaced_photo_unless_the_page_cannot_be_set(self):
+        ed = self.run.parent.parent
+        DE.write_json(ed / "edition.json", {})
+        for fails in (False, True):
+            with self.subTest(fails=fails):
+                s = self.session([{**self.A, "crop": crop("p-000000000a")}, {**self.B, "crop": crop("p-000000000b")}])
+                a1 = self.new_text(s, "p-00000000aa")
+                DE.write_json(ed / "articles.json", {"articles": [a1, {"id": "a-0000000002"}]})
+                s.edition_dir, s.prints_folio, s.keep, s.redo, s.fixed_boxes = ed, False, [], [], []
+                s.folio_fields = s._live_fields()
+                if fails:
+                    def cannot():
+                        raise RuntimeError("a fictional failure while setting the page")
+                    s.draw = cannot
+                    before = ([dict(m) for m in s.modules], s.rev, self.files())
+                    with self.assertRaises(RuntimeError):
+                        s.refresh_text()
+                    self.assertEqual((s.modules, s.rev, self.files()), before)        # the crop kept, nothing written
+                    continue
+                said = s.refresh_text()
+                self.assertEqual((said["changed"], said["crops_reset"]), (["dA"], ["dA"]))
+                self.assertEqual(([m["crop"] for m in s.modules], s.rev), ([None, crop("p-000000000b")], 4))
+
+
+class CropRenderTest(unittest.TestCase):
+    """A crop in the page that prints: gen1's own picture of the photo (made here by gen1's own lines) is found and
+    replaced by the crop's window, pixel for pixel; nothing else changes (fictional rasters)."""
+
+    W0, H0 = 60, 40
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.raw = {p: bytes((x * 7 + y * 13 + c * 61 + seed) % 256 for y in range(self.H0) for x in range(self.W0)
+                             for c in range(4)) for p, seed in (("p-000000000a", 0), ("p-000000000b", 101))}
+        for p, raw in self.raw.items():
+            (self.dir / f"{p}.cmyk.gz").write_bytes(gzip.compress(raw, mtime=0))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def story(self, key: str, photo: str):
+        return types.SimpleNamespace(id=key, photos_extra=[], photo={
+            "id": photo, "w": self.W0, "h": self.H0, "aspect": self.W0 / self.H0, "path": self.dir / f"{photo}.cmyk.gz",
+            "min_ppi": 10.0})                                                     # a fictional floor: these are small
+
+    def page(self, crops: dict):
+        """A page as gen1 renders it (an ad, a rule, story dA's photo, a rule, story dB's photo; the photos by gen1's
+        own lines) and a session whose stories have these crops. → (session, B, number of fixed items, g, placed)."""
+        B = types.SimpleNamespace(items=[DEd.X.Image(10.0, 20.0, 30.0, 40.0, 2, 1, bytes(8))], page_h=540.0, fonts={})
+        g = types.SimpleNamespace(stories=[self.story("dA", "p-000000000a"), self.story("dB", "p-000000000b")])
+        placed = [(0, 12.82, 93.8, 2, 120.0, {"photo": {"ph_top": 14.2, "ph_h": 25.3, "ph_w": 36.5}}),
+                  (1, 53.51, 93.8, 3, 120.0, {"photo": {"ph_top": 14.2, "ph_h": 30.7, "ph_w": 77.19}})]
+        for i, x, y, w, h, o in placed:
+            B.items.append(DEd.X.Line(x, 1.0, x + 20.0, 1.0, 0.5, (0, 0, 0, 1)))
+            exec(GEN1_PHOTO, {"x": x, "y": y, "ph": o["photo"], "s": g.stories[i], "B": B, "gzip": gzip,  # noqa: S102
+                              "X": DEd.X, "MM": DEd.MM})
+        s = DEd.PageSession.__new__(DEd.PageSession)
+        s.modules = [{"story": k, "crop": c} for k, c in crops.items()]
+        s.built = types.SimpleNamespace(story_of={k: {"headline": f"h-{k}"} for k in ("dA", "dB")}, article_of={
+            "dA": ["a-0000000001"], "dB": ["a-0000000002"]}, els_of={k: [{"id": f"h-{k}", "kind": "headline",
+                                                                          "text": f"Fictional {k}"}] for k in ("dA", "dB")})
+        return s, B, 1, g, placed
+
+    def cut(self, photo: str, x: int, y: int, w: int, h: int) -> bytes:
+        raw = self.raw[photo]
+        return b"".join(raw[((y + r) * self.W0 + x) * 4:((y + r) * self.W0 + x + w) * 4] for r in range(h))
+
+    def test_without_a_crop_gen1s_pictures_stay_as_they_are(self):
+        s, B, n_fixed, g, placed = self.page({"dA": None, "dB": None})
+        before = list(B.items)
+        photos = s._apply_crops(B, n_fixed, g, placed)
+        self.assertTrue(all(a is b for a, b in zip(B.items, before, strict=True)))
+        self.assertFalse(any("item" in p for p in photos.values()))
+        self.assertEqual(photos["dA"]["window"], list(gen1_window(self.W0, self.H0, 36.5, 25.3)))
+        self.assertEqual((photos["dA"]["id"], photos["dA"]["px"], photos["dA"]["focus"], photos["dA"]["zoom"]),
+                         ("p-000000000a", [60, 40], None, 1.0))
+        self.assertEqual(photos["dB"]["box_mm"], [53.51, 108.0, 130.7, 138.7])
+
+    def test_a_crop_replaces_its_photo_with_its_window_pixel_for_pixel(self):
+        c = crop("p-000000000a", 0.3, 0.7, 2.0)
+        s, B, n_fixed, g, placed = self.page({"dA": c, "dB": None})
+        before = list(B.items)
+        photos = s._apply_crops(B, n_fixed, g, placed)
+        k, (x, y, w, h) = photos["dA"]["item"], photos["dA"]["window"]
+        self.assertEqual((x, y, w, h), DEd.crop_window(self.W0, self.H0, 36.5, 25.3, c, 10.0)[0])
+        self.assertEqual((k, w, h), (2, 29, 20))
+        img = B.items[k]
+        self.assertEqual((img.width_px, img.height_px, img.cmyk_bytes), (w, h, self.cut("p-000000000a", x, y, w, h)))
+        self.assertEqual((img.x_pt, img.y_pt, img.w_pt, img.h_pt), (before[k].x_pt, before[k].y_pt, before[k].w_pt,
+                                                                    before[k].h_pt))           # the same frame
+        self.assertTrue(all(a is b for j, (a, b) in enumerate(zip(B.items, before, strict=True)) if j != k))
+        self.assertEqual((photos["dA"]["focus"], photos["dA"]["zoom"]), ([0.3, 0.7], 2.0))
+        self.assertNotIn("item", photos["dB"])
+
+    def test_each_crop_finds_its_own_photo_in_order(self):
+        ca, cb = crop("p-000000000a", 0.0, 0.0, 3.0), crop("p-000000000b", 1.0, 1.0, 1.5)
+        s, B, n_fixed, g, placed = self.page({"dA": ca, "dB": cb})
+        photos = s._apply_crops(B, n_fixed, g, placed)
+        self.assertEqual((photos["dA"]["item"], photos["dB"]["item"]), (2, 4))
+        for k, p in (("dA", "p-000000000a"), ("dB", "p-000000000b")):
+            self.assertEqual(B.items[photos[k]["item"]].cmyk_bytes, self.cut(p, *photos[k]["window"]))
+
+    def test_a_crop_never_applies_to_another_picture(self):
+        s, B, n_fixed, g, placed = self.page({"dA": crop("p-000000000b"), "dB": None})
+        before = list(B.items)
+        photos = s._apply_crops(B, n_fixed, g, placed)
+        self.assertTrue(all(a is b for a, b in zip(B.items, before, strict=True)))
+        self.assertIsNone(photos["dA"]["focus"])
+
+    def test_a_photo_that_is_not_where_gen1_put_it_refuses_the_page(self):
+        changes = {"its place": {"x_pt": None}, "its size in pixels": {"width_px": None}, "its pixels": {"cmyk_bytes": None}}
+        for what, change in changes.items():
+            with self.subTest(what):
+                s, B, n_fixed, g, placed = self.page({"dA": crop("p-000000000a"), "dB": None})
+                img = B.items[2]
+                moved = {"x_pt": img.x_pt + 1e-9, "width_px": img.width_px - 1,
+                         "cmyk_bytes": img.cmyk_bytes[:-1] + bytes([img.cmyk_bytes[-1] ^ 0xFF])}
+                B.items[2] = dataclasses.replace(img, **{k: moved[k] for k in change})
+                before = list(B.items)
+                with self.assertRaises(ValueError) as e:
+                    s._apply_crops(B, n_fixed, g, placed)
+                self.assertEqual(str(e.exception), DEd.CROP_LOST.format(name="“Fictional dA”"))
+                self.assertTrue(all(a is b for a, b in zip(B.items, before, strict=True)))
+
+    def test_a_damaged_photo_is_never_cropped(self):
+        s, B, n_fixed, g, placed = self.page({"dA": crop("p-000000000a"), "dB": None})
+        (self.dir / "p-000000000a.cmyk.gz").write_bytes(gzip.compress(self.raw["p-000000000a"][:-4], mtime=0))
+        with self.assertRaises(ValueError) as e:
+            s._apply_crops(B, n_fixed, g, placed)
+        self.assertIn("damaged", str(e.exception))
+
+    def test_the_screen_draws_a_cropped_photo_from_its_whole_raster(self):
+        c = crop("p-000000000a", 0.3, 0.7, 2.0)
+        s, B, n_fixed, g, placed = self.page({"dA": c, "dB": None})
+        photos = s._apply_crops(B, n_fixed, g, placed)
+        s.render = lambda: (B, {}, n_fixed, placed, [], [], photos)
+        s.tpl = types.SimpleNamespace(page_h=540.0)
+        s.state = lambda text=(): {"notes": [{"story": "dA"}, {"story": "dB"}, {"story": "dC"}]}
+        cache = self.dir / "cache"
+        s.engine = types.SimpleNamespace(cache_dir=lambda name: (cache / name).mkdir(parents=True, exist_ok=True) or cache / name)
+        s._fulls, s.photo_dir = {}, self.dir
+        out = s.draw()
+        imgs = [it for it in out["items"] if it["t"] == "img"]
+        sha = lambda data: hashlib.sha1(data).hexdigest()[:24]
+        full = sha(self.raw["p-000000000a"])
+        x, y, w, h = photos["dA"]["window"]
+        self.assertEqual((imgs[1]["src"], imgs[1]["sub"]), (full, [x / 60, y / 40, w / 60, h / 40]))
+        self.assertEqual((imgs[2]["src"], "sub" in imgs[2]), (sha(B.items[4].cmyk_bytes), False))     # as before
+        self.assertEqual((imgs[1]["x"], imgs[1]["w"]), (12.82, 36.5))                                  # the frame
+        cached = {p.stem for p in (cache / "rasters").glob("*.cmyk")}
+        self.assertEqual(cached, {full, sha(self.raw["p-000000000b"]), sha(B.items[0].cmyk_bytes), sha(B.items[4].cmyk_bytes)})
+        notes = {n["story"]: n for n in out["notes"]}
+        self.assertEqual({k: notes["dA"]["photo"][k] for k in ("id", "full", "window", "focus", "zoom")},
+                         {"id": "p-000000000a", "full": full, "window": [x, y, w, h], "focus": [0.3, 0.7], "zoom": 2.0})
+        self.assertNotIn("item", notes["dA"]["photo"])
+        self.assertIsNone(notes["dB"]["photo"]["focus"])
+        self.assertNotIn("photo", notes["dC"])
+
+    def test_the_page_records_the_crops_it_prints_and_only_those(self):
+        c = crop("p-000000000a", 0.3, 0.7, 2.0)
+        s, B, n_fixed, g, placed = self.page({"dA": c, "dB": None})
+        photos = s._apply_crops(B, n_fixed, g, placed)
+        s.articles = [{"id": "a-0000000001", "headline": "क"}, {"id": "a-0000000002", "headline": "ख"}]
+        s.frozen, s.run_dir, s.prints_folio, s.tpl = {}, self.dir, False, types.SimpleNamespace(ad_slots=[])
+        both = ["a-0000000001", "a-0000000002"]
+        rec = s.printed(both, photos)
+        self.assertEqual(rec["crops"], {"a-0000000001": DP_.crop_sig("p-000000000a", 60, 40, photos["dA"]["window"])})
+        self.assertEqual(rec["v"], 3)
+        self.assertNotIn("crops", s.printed(["a-0000000002"], photos))       # dA's article does not print here
+        s2, B2, *_ = self.page({"dA": None, "dB": None})
+        self.assertNotIn("crops", s.printed(both, s2._apply_crops(B2, n_fixed, g, placed)))
+        self.assertEqual(DP_.stale({**rec, "crops": {"a-0000000001": "anything"}}, {a["id"]: a for a in s.articles},
+                                   set(), {}, {}), [])                           # recorded, never compared
 
 
 # ------------------------------------------------------------------------------------------- a run's own pictures

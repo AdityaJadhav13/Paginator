@@ -9,7 +9,14 @@ import {
   clampZoom,
   fitScale,
   fitWidthZoom,
+  focusAt,
+  focusOf,
   gridColumns,
+  panWindow,
+  photoExtent,
+  ppiAt,
+  stepFocus,
+  windowAt,
   rulerLabel,
   rulerSteps,
   rulerTicks,
@@ -201,4 +208,51 @@ test("union box: around every box, or none", () => {
     ]),
     { x0: 5, y0: 20, x1: 30, y1: 90 },
   );
+});
+
+// ---- photo crops: a fictional 2000 × 1500 photo whose window [500, 375, 1000, 750] fills a frame 100 × 75 mm at (50, 200)
+const PX = [2000, 1500];
+const WIN = [500, 375, 1000, 750];
+const BOX = [50, 200, 150, 275];
+
+test("the whole photo lies around its frame at the window's scale", () => {
+  const ext = photoExtent(BOX, WIN, PX);
+  near(ext.x0, 0); // 500 px at 0.1 mm a pixel left of the frame
+  near(ext.y0, 162.5);
+  near(ext.x1, 200);
+  near(ext.y1, 312.5);
+});
+
+test("a pan moves the window against the pointer and never out of the photo", () => {
+  assert.deepEqual(panWindow(WIN, PX, BOX, 10, -5), [400, 425, 1000, 750]); // 10 mm right: 100 px to the left
+  assert.deepEqual(panWindow(WIN, PX, BOX, 1000, 1000), [0, 0, 1000, 750]);
+  assert.deepEqual(panWindow(WIN, PX, BOX, -1000, -1000), [1000, 750, 1000, 750]);
+  assert.deepEqual(panWindow([0, 0, 2000, 1500], PX, BOX, 30, 30), [0, 0, 2000, 1500]); // all of it: nowhere to go
+});
+
+test("a window's focus brings the engine back to the same window, pixel for pixel", () => {
+  for (const px of [PX, [1999, 1333], [37, 1000], [640, 480]])
+    for (const w of [1, 7, 333, Math.min(px[0], 1000)].filter((v) => v <= px[0]))
+      for (const x of [0, 1, Math.floor((px[0] - w) / 3), px[0] - w].filter((v) => v <= px[0] - w)) {
+        const win = [x, 0, w, Math.min(px[1], 5)];
+        assert.deepEqual(windowAt(focusOf(win, px), win, px), win, `${px} ${win}`);
+      }
+});
+
+test("a click sets the focus under it, kept on the photo", () => {
+  const ext = photoExtent(BOX, WIN, PX);
+  assert.deepEqual(focusAt(50, 200, ext), [0.25, 0.25]); // the frame's top left corner
+  assert.deepEqual(focusAt(-20, 400, ext), [0, 1]);
+});
+
+test("an arrow moves the focus a step from the window's centre", () => {
+  const [fx, fy] = stepFocus(WIN, PX, 0.02, -0.1);
+  near(fx, 0.5203, 1e-9); // the centre (half a pixel on) and 2 %
+  near(fy, 0.4003, 1e-9);
+  assert.deepEqual(stepFocus([1000, 750, 1000, 750], PX, 0.5, 0.5), [1, 1]); // kept on the photo
+});
+
+test("a photo prints sharper as its zoom falls", () => {
+  near(ppiAt(200, 2, 1), 400);
+  near(ppiAt(200, 1, 1.25), 160);
 });

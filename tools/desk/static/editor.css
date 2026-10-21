@@ -598,3 +598,32 @@ button.lock[aria-pressed="true"] {
     transition: none !important;
   }
 }
+
+/* the selected story's photo: its resolution, the zoom, crop and focal point */
+.photo-tools .ppi {
+  margin: 0.25rem 0;
+}
+.photo-tools .ppi.ok {
+  color: #166534;
+}
+.photo-tools .ppi.warn {
+  color: #b45309;
+}
+.photo-tools .zoom-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.photo-tools .zoom-field input {
+  flex: 1;
+  min-width: 0;
+}
+.photo-tools output {
+  min-width: 3.5em;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.photo-tools button[aria-pressed="true"] {
+  background: #fef3c7;
+  border-color: #d97706;
+}

@@ -2,7 +2,7 @@
 
 A page is its template (the fixed parts) and its modules: [{story, x, y, w, h, locked, crop}], with x and y the module's
 top-left corner in mm, w its width in grid columns and h its height in mm. locked and crop are the module's attributes,
-kept apart from its place (crop is always None for now: the photo crop is not built yet).
+kept apart from its place.
 - **Options.** Each module is set by gen1's typesetter with the module option that fills its box best, by gen1's own
   leaf cost (span preference + option cost + white space), at the story's rank on the page (the planner's order, the
   same lead promotion included).
@@ -24,6 +24,12 @@ kept apart from its place (crop is always None for now: the photo crop is not bu
   is locked on another page (the save would take it off that page). Another layout keeps the locked stories where they
   are and lays the others out around them. Its text can still change, and a story whose articles are all deleted still
   leaves the page: a deleted article must never print. A lock does not print, so it is not in what a page prints.
+- **Photo crops.** gen1 frames a story's photo and fills the frame with its centre (the largest window of the frame's
+  shape). A crop chooses other pixels for the same frame: it enlarges that window (never beyond ZOOM_MAX, nor below the
+  resolution gen1 allows the photo) and centres it on a point of the photo, its focus, as far as the photo's edges
+  allow, so the point stays in the frame at every size. A crop belongs to its story's photo: it moves with its story
+  (another layout, a swap) and never applies to another picture (a replaced photo has another id; its crop is dropped). It is
+  page geometry, kept for this layout only and covered by the page's revision; what prints is recorded ("crops").
 
 Drawing returns a display list: text as glyph ids at positions in mm, with y down from the page's top-left corner, plus
 rectangles, rules and pictures. The browser draws it with the same glyph outlines the PDF embeds, so screen and print
@@ -31,17 +37,19 @@ agree. Fonts and pictures go to a content-addressed cache in the desk home, whic
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import math
 import os
 import traceback
+import zlib
 from datetime import date
 from pathlib import Path
 
 import deskgen as DG
 import deskprinted
-from deskcommon import log, read_json, write_json
+from deskcommon import PHOTO_ID, log, read_json, write_json
 
 G, CP, X, MM = DG.G, DG.CP, DG.X, DG.MM
 SNAP_MM = G.UNIT                                         # positions and heights snap to the search's unit …
@@ -57,6 +65,9 @@ SAVE_HELD = ("this page cannot be saved yet: {name} is also on page {page}, lock
              "take it off this page, then save")
 ALL_LOCKED = "every story on this page is locked: unlock one to try another layout"
 NO_FILL_AROUND = "no other layout fills the space around the locked stories exactly: unlock one, or move it"
+ZOOM_MAX = 4.0                                           # a crop enlarges its photo in the frame at most this much
+CROP_BAD = "a photo crop must give the photo's id, a focus point (two numbers) and a zoom (a number)"
+CROP_LOST = "the photo of {name} could not be found on the page to crop it: nothing was changed"
 
 
 def _r(v: float) -> float:
@@ -78,6 +89,67 @@ def _round(v: float) -> int:
 def is_locked(m: dict) -> bool:
     """A stored module's lock. Anything but false or missing counts as locked: a lock only ever refuses a change."""
     return bool(m.get("locked"))
+
+
+def _number(v) -> float | None:
+    """A finite number as JSON gives it (never true or false), else None."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    try:
+        f = float(v)
+    except OverflowError:                                # an integer too large for a float
+        return None
+    return f if math.isfinite(f) else None
+
+
+def crop_value(c) -> dict | None:
+    """A photo crop as the editor sends it, checked: None (no crop: the photo prints as gen1 crops it), or {"photo": the
+    photo's id, "focus": [x, y], the point of the photo (fractions of its width and height) the frame keeps as near its
+    centre as the photo's edges allow, "zoom": how much the photo is enlarged in its frame (1: as large as gen1 sets
+    it)}. The focus is clamped to the photo, the zoom to 1 … ZOOM_MAX (the frame's resolution may limit it further:
+    crop_window), both rounded; other keys are dropped. Anything else is refused."""
+    if c is None:
+        return None
+    if not isinstance(c, dict):
+        raise ValueError(CROP_BAD)
+    photo, focus, zoom = c.get("photo"), c.get("focus"), _number(c.get("zoom"))
+    xy = [_number(v) for v in focus] if isinstance(focus, (list, tuple)) and len(focus) == 2 else [None]
+    if not (isinstance(photo, str) and PHOTO_ID.fullmatch(photo)) or None in xy or zoom is None:
+        raise ValueError(CROP_BAD)
+    return {"photo": photo, "focus": [round(min(1.0, max(0.0, v)), 4) for v in xy],
+            "zoom": round(min(ZOOM_MAX, max(1.0, zoom)), 3)}
+
+
+def crop_window(W0: int, H0: int, fw: float, fh: float, crop: dict | None = None, floor: float = G.MIN_PPI):
+    """The pixels of a W0 × H0 photo that fill a frame of fw × fh mm. → ((x, y, w, h) in the photo's pixels, the zoom
+    used, the largest zoom allowed). Without a crop: exactly gen1's window (generate.render: the largest window of the
+    frame's shape, centred), with gen1's own expressions. A crop's zoom makes that window smaller, never below floor
+    (the photo's resolution floor, ppi, gen1's own: Story.photo["min_ppi"]) and never beyond ZOOM_MAX; the window is
+    centred on the crop's focus as far as the photo's edges allow. The window is rounded up to whole pixels, so its
+    resolution is never below the floor; at zoom 1 it is gen1's window, and at focus (½, ½) also in gen1's place."""
+    want = fw / fh
+    if W0 / H0 > want:                                   # too wide: gen1 crops the sides
+        cw0, ch0 = min(W0, max(1, round(H0 * want))), H0
+    else:                                                # too tall: top and bottom
+        cw0, ch0 = W0, min(H0, max(1, round(W0 / want)))
+    ppi = min(cw0 / (fw / 25.4), ch0 / (fh / 25.4))
+    zoom_max = max(1.0, min(ZOOM_MAX, ppi / floor))
+    if crop is None:
+        return ((W0 - cw0) // 2, (H0 - ch0) // 2, cw0, ch0), 1.0, zoom_max
+    z = max(1.0, min(float(crop["zoom"]), zoom_max))
+    w, h = min(cw0, max(1, math.ceil(cw0 / z))), min(ch0, max(1, math.ceil(ch0 / z)))
+    if z > 1.0 and min(w / (fw / 25.4), h / (fh / 25.4)) < floor * (1 - 1e-9):   # never: ceil keeps it (fail closed)
+        raise ValueError("a photo crop would print below the photo's resolution floor")
+    fx, fy = crop["focus"]
+    x = max(0, min(W0 - w, math.floor(fx * W0 - w / 2)))
+    y = max(0, min(H0 - h, math.floor(fy * H0 - h / 2)))
+    return (x, y, w, h), z, zoom_max
+
+
+def _rows(raw, W0: int, x: int, y: int, w: int, h: int) -> bytes:
+    """A window of a raw CMYK raster W0 pixels wide, row by row (as gen1 cuts its window)."""
+    mv = memoryview(raw)
+    return b"".join(mv[((y + r) * W0 + x) * 4:((y + r) * W0 + x + w) * 4] for r in range(h))
 
 
 def free_regions(regions: list, boxes: list, news_top: float, rows_first: bool = False) -> list[tuple]:
@@ -170,6 +242,8 @@ class PageSession:
             self.rev += 1
             self._write_edit()
         self.modules = kept
+        self._reset_crops()                              # a crop of a photo its story no longer has never prints
+        self._fulls: dict = {}                           # photo id → the cache key of its whole raster (photo mode)
         self.options: dict = {}
         self.partial: set[str] = set()                   # stories measured only where the page has needed them so far
         self._measurers: dict = {}                       # (story, rank class) → a generator measuring it width by width
@@ -273,7 +347,8 @@ class PageSession:
             return
         changed = self._set_articles(articles)
         mine = {m["story"] for m in self.modules}
-        if mine & set(changed) or any(k not in self.built.story_of for k in mine):   # this page changed: a new revision
+        reset = self._reset_crops()                      # a photo replaced or removed: its crop goes
+        if reset or mine & set(changed) or any(k not in self.built.story_of for k in mine):   # this page changed
             self.modules = [m for m in self.modules if m["story"] in self.built.story_of]
             self.rev += 1
             self._write_edit()
@@ -454,28 +529,62 @@ class PageSession:
     @staticmethod
     def _attrs(m: dict) -> dict:
         """A module's attributes, as the editor sends them: locked (true or false; missing is false) and the photo crop
-        (always None for now)."""
+        (crop_value: missing or null is none). Anything else is refused."""
         locked = m.get("locked")
         if locked is not None and not isinstance(locked, bool):
             raise ValueError("a story's lock must be true or false")
-        return {"locked": bool(locked), "crop": None}
+        return {"locked": bool(locked), "crop": crop_value(m.get("crop"))}
 
     def set_modules(self, modules: list[dict]) -> None:
         """The page's new modules, as the editor sends them (each story at most once; only stories of the edition). A
         module the editor left where it was, or brought back to the layout's place (undo), keeps that exact position
         (the layout's own may be off the editor's grid, as below an advertisement); a moved one is snapped. Its
-        attributes (the lock) never move it: only its place is compared. A story that is on another page stays there
-        too until this page is saved (see export)."""
+        attributes (the lock, the crop) never move it: only its place is compared. A story that is on another page
+        stays there too until this page is saved (see export). A story's crop is the one its own module sends, kept only
+        when it names the story's own photo: a crop naming another photo (another story's, a replaced or removed one)
+        is dropped, so a crop never applies to another picture, and null (no crop) always wins."""
         before = {m["story"]: m for m in self.modules}
+        first = self._first(modules)
+        sent = {k: self._attrs(m) for k, m in first.items()}
         out = []
-        for k, m in self._first(modules).items():
+        for k, m in first.items():
             self._ensure_options(k)
             p, o = before.get(k), self.origin.get(k)
             place = (dict(p) if p is not None and self._same_place(p, m) else
                      dict(o) if o is not None and self._same_place(o, m) else self.snap(m))
-            place.update(self._attrs(m))
+            crop = sent[k]["crop"]
+            place.update(locked=sent[k]["locked"], crop=crop if crop is not None and crop["photo"] == self._photo_of(k) else None)
             out.append(place)
         self.modules = out
+
+    def _photo_of(self, key: str) -> str | None:
+        """The story's photo as gen1 sets it (generate.Story: the largest of its pictures in the photo index), or None
+        (no photo, or not a story of the edition now)."""
+        st = self.built.story_of.get(key)
+        ids = (st or {}).get("images") or []
+        if not ids:
+            return None
+        idx = self.built.photos_idx
+        ids = [i for i in ids if i in idx]
+        return min(ids, key=lambda i: (-idx[i]["width_px"] * idx[i]["height_px"], i)) if ids else None
+
+    def _reset_crops(self) -> list[str]:
+        """Crops that cannot print as stored are dropped: their story's photo was replaced or removed (a crop never
+        applies to another picture), or the stored crop is not one the engine writes. New module dicts, so a change
+        undone afterwards (Update text that cannot set the page) gets the old ones back. → the stories."""
+        gone = []
+        for m in self.modules:
+            c = m.get("crop")
+            if c is not None:
+                try:
+                    ok = crop_value(c) == c and c["photo"] == self._photo_of(m["story"])
+                except ValueError:
+                    ok = False
+                if not ok:
+                    gone.append(m["story"])
+        if gone:
+            self.modules = [{**m, "crop": None} if m["story"] in gone else m for m in self.modules]
+        return gone
 
     def _first(self, modules: list[dict]) -> dict:
         """story → its module, for each story of the edition at its first occurrence (as set_modules takes them)."""
@@ -543,7 +652,8 @@ class PageSession:
 
     def render(self):
         """gen1's render of the page; a module whose text does not fit gets one more row and the page is set again (as
-        gen1.main does), at most OVERSET_TRIES times. → (Builder, report, fixed items, placed, notes, text problems)."""
+        gen1.main does), at most OVERSET_TRIES times; then the photo crops (_apply_crops). → (Builder, report, fixed
+        items, placed, notes, text problems, photos)."""
         for attempt in range(OVERSET_TRIES + 1):
             placed, notes = self.placed()
             g = self.generator()
@@ -561,6 +671,7 @@ class PageSession:
                     grew = True
             if not grew:
                 break
+        photos = self._apply_crops(B, n_fixed, g, placed)
         DG.draw_folios(B, self.tpl, self.engine.cx, self.redo, rep)
         text = []
         for st_ in rep["stories"]:
@@ -570,7 +681,50 @@ class PageSession:
                 text.append({"kind": "overset", "stories": [st_["story"]], "lines": lines, "words": words})
             if st_.get("unset_paragraphs"):
                 text.append({"kind": "unset", "stories": [st_["story"]], "paragraphs": st_["unset_paragraphs"]})
-        return B, rep, n_fixed, placed, notes, text
+        return B, rep, n_fixed, placed, notes, text, photos
+
+    def _apply_crops(self, B, n_fixed: int, g, placed: list) -> dict:
+        """The page's photos as they print, after gen1's render. → {story: {"id", "px": [W0, H0], "box_mm" (the frame),
+        "window": [x, y, w, h] (the photo's pixels in the frame), "ppi", "zoom", "zoom_max", "floor_ppi", "focus" (None:
+        no crop), "item" (only when cropped: the picture's place in B.items)}}. A story whose module has a crop for its
+        photo gets the crop's window instead of gen1's: gen1's picture of that photo is found by gen1's own rectangle,
+        size and pixels (generate.render, its own expressions), each after the one found before, and replaced; if it
+        is not there, the page is refused (nothing is set or written). Without a crop, gen1's pictures stay as they are."""
+        crops = {m["story"]: m.get("crop") for m in self.modules}
+        out, at = {}, n_fixed
+        for i, x, y, w, h, o in placed:
+            s, ph = g.stories[i], o["photo"]
+            if not ph or not s.photo:
+                continue
+            W0, H0, floor = s.photo["w"], s.photo["h"], s.photo["min_ppi"]
+            ph_top, ph_h, ph_w = y + ph["ph_top"], ph["ph_h"], ph["ph_w"]
+            crop = crops.get(s.id)
+            if crop is not None and crop.get("photo") != s.photo["id"]:
+                crop = None                              # never another picture's crop
+            win, zoom, zoom_max = crop_window(W0, H0, ph_w, ph_h, crop, floor)
+            most = math.floor(zoom_max * 1000 + 1e-6) / 1000                # as shown: never more than allowed
+            info = {"id": s.photo["id"], "px": [W0, H0], "box_mm": [_r(x), _r(ph_top), _r(x + ph_w), _r(ph_top + ph_h)],
+                    "window": list(win), "ppi": round(min(win[2] / (ph_w / 25.4), win[3] / (ph_h / 25.4)), 1),
+                    "zoom": min(round(zoom, 3), most), "zoom_max": most, "floor_ppi": round(floor, 1),
+                    "focus": list(crop["focus"]) if crop else None}
+            if crop is not None:
+                raw = DG.gz_raw(s.photo["path"])
+                if len(raw) != W0 * H0 * 4:
+                    raise ValueError(f"the photo of {self._name(s.id)} is damaged (its raster has the wrong size)")
+                gw = crop_window(W0, H0, ph_w, ph_h)[0]                     # gen1's own window, rectangle and pixels
+                rect = (x * MM, (B.page_h - ph_top - ph_h) * MM, ph_w * MM, ph_h * MM)
+                pixels = _rows(raw, W0, *gw)
+                k = next((j for j in range(at, len(B.items)) if isinstance(B.items[j], X.Image)
+                          and (B.items[j].x_pt, B.items[j].y_pt, B.items[j].w_pt, B.items[j].h_pt) == rect
+                          and (B.items[j].width_px, B.items[j].height_px) == gw[2:] and B.items[j].cmyk_bytes == pixels),
+                         None)
+                if k is None:
+                    raise ValueError(CROP_LOST.format(name=self._name(s.id)))
+                B.items[k] = dataclasses.replace(B.items[k], width_px=win[2], height_px=win[3],
+                                                 cmyk_bytes=_rows(raw, W0, *win))
+                info["item"], at = k, k + 1
+            out[s.id] = info
+        return out
 
     def problems(self, notes, text=()) -> list[dict]:
         out = list(text)
@@ -750,8 +904,10 @@ class PageSession:
         placed = [pl for k, tree in res[1] for pl in g.place(tree, G.ORIGIN + regions[k][0] * G.PITCH, regions[k][2])]
         if sorted(g.stories[i].id for i, *_ in placed) != sorted(free):      # never a story lost on the way
             raise ValueError("another layout did not place every story of this page; the page is kept as it was")
+        crop = {m["story"]: m.get("crop") for m in self.modules}             # a crop goes with its story
         return self.apply([dict(m) for m in held] + [{"story": g.stories[i].id, "x": x, "y": y, "w": w, "h": h,
-                                                      "locked": False} for i, x, y, w, h, o in placed])
+                                                      "locked": False, "crop": crop.get(g.stories[i].id)}
+                                                     for i, x, y, w, h, o in placed])
 
     def _around(self, areas: list, held: list[dict]) -> list:
         """Where the stories that are not locked may go: each area with the locked stories (held) cut out, columns
@@ -790,7 +946,8 @@ class PageSession:
         story rather than a short item, or the other way round, is reported and changes at the next layout. If the page
         cannot be set with the new text, nothing changes (the run's ads included). Refused on an older revision, as a
         change is. → the page, plus "changed" (stories set with new text), "dropped" (stories that left the page),
-        "removed" (articles no longer printed on it), "kind_changes", "folio_changed", "ads_changed"."""
+        "removed" (articles no longer printed on it), "kind_changes", "folio_changed", "ads_changed", "crops_reset"
+        (stories whose photo crop was dropped: their photo was replaced or removed)."""
         self.check_rev(base_rev)
         live = {a.get("id"): a for a in read_json(self.edition_dir / "articles.json", {"articles": []}).get("articles", [])}
         mine = [a for m in self.modules for a in self.built.article_of.get(m["story"], [])]
@@ -811,7 +968,7 @@ class PageSession:
             ads_changed = self._refresh_ads(undo) if self.assets == self.run_dir else []
             if articles == self.articles and not folio_changed and not ads_changed:
                 return {**self.draw(), "changed": [], "dropped": [], "removed": [], "kind_changes": [],
-                        "folio_changed": False, "ads_changed": []}
+                        "folio_changed": False, "ads_changed": [], "crops_reset": []}
             if fields != self.folio_fields:
                 self.folio_fields = fields
                 self.keep, self.redo = DG.folio_plan(self.tpl, self.page, self.pages, self.day, fields)
@@ -823,7 +980,8 @@ class PageSession:
             kept = [a for m in self.modules for a in self.built.article_of.get(m["story"], [])]
             removed = [a for a in mine if a not in kept]
             changed = [k for k in changed if any(m["story"] == k for m in self.modules)]
-            if changed or dropped or removed or folio_changed or ads_changed:
+            crops_reset = self._reset_crops()            # a photo replaced or removed: its crop never prints on another
+            if changed or dropped or removed or folio_changed or ads_changed or crops_reset:
                 self.rev += 1
             drawn = self.draw()
         except Exception:
@@ -843,11 +1001,14 @@ class PageSession:
         self._write_edit()
         kinds = self.built.kind_changes(self.engine.built(self.edition, articles, self.edition_dir), kept)
         return {**drawn, "changed": changed, "dropped": dropped, "removed": removed, "kind_changes": kinds,
-                "folio_changed": folio_changed, "ads_changed": ads_changed}
+                "folio_changed": folio_changed, "ads_changed": ads_changed, "crops_reset": crops_reset}
 
     def draw(self) -> dict:
-        """The page as a display list (mm, y down), with the fonts and pictures it needs from the cache."""
-        B, rep, n_fixed, placed, notes, text = self.render()
+        """The page as a display list (mm, y down), with the fonts and pictures it needs from the cache. A cropped photo
+        is drawn from its whole raster ("src") and the part of it that prints ("sub": x, y, w, h as fractions of the
+        whole), so a pan never adds a raster to the cache; the note of each story with a photo has "photo" (as
+        _apply_crops gives it, with "full": the key of the whole raster, None when it cannot be read)."""
+        B, rep, n_fixed, placed, notes, text, photos = self.render()
         H = self.tpl.page_h
         fonts = {}
         for fk, ef in B.fonts.items():
@@ -856,8 +1017,11 @@ class PageSession:
             if not f.exists():
                 _atomic(f, ef.face_bytes)
             fonts[fk] = {"face": h, "upem": ef.upem}
+        for p in photos.values():
+            p["full"] = self._full_raster(p["id"], *p["px"])
+        cut = {p["item"]: p for p in photos.values() if "item" in p}
         items = []
-        for it in B.items:
+        for k, it in enumerate(B.items):
             if isinstance(it, X.TextRun):
                 gl = [[g.gid, _r(g.x_pt / MM), _r(H - g.y_pt / MM)] for _, gs in it.clusters for g in gs]
                 items.append({"t": "text", "f": it.font, "s": it.size_pt, "hs": it.hscale, "c": list(it.cmyk), "g": gl})
@@ -868,14 +1032,42 @@ class PageSession:
                 items.append({"t": "line", "x1": _r(it.x1 / MM), "y1": _r(H - it.y1 / MM), "x2": _r(it.x2 / MM), "y2": _r(H - it.y2 / MM),
                               "lw": it.width_pt, "c": list(it.cmyk)})
             elif isinstance(it, X.Image):
-                h = hashlib.sha1(it.cmyk_bytes).hexdigest()[:24]
-                meta = self.engine.cache_dir("rasters") / f"{h}.json"
-                if not meta.exists():
-                    _atomic(self.engine.cache_dir("rasters") / f"{h}.cmyk", it.cmyk_bytes)
-                    write_json(meta, {"width_px": it.width_px, "height_px": it.height_px})
-                items.append({"t": "img", "x": _r(it.x_pt / MM), "y": _r(H - (it.y_pt + it.h_pt) / MM), "w": _r(it.w_pt / MM),
-                              "h": _r(it.h_pt / MM), "src": h})
-        return {**self.state(text), "items": items, "fonts": fonts, "fixed_items": n_fixed}
+                box = {"t": "img", "x": _r(it.x_pt / MM), "y": _r(H - (it.y_pt + it.h_pt) / MM), "w": _r(it.w_pt / MM),
+                       "h": _r(it.h_pt / MM)}
+                p = cut.get(k)
+                if p is not None and p["full"]:
+                    (W0, H0), (wx, wy, ww, wh) = p["px"], p["window"]
+                    items.append({**box, "src": p["full"], "sub": [wx / W0, wy / H0, ww / W0, wh / H0]})
+                else:
+                    items.append({**box, "src": self._raster_key(it.cmyk_bytes, it.width_px, it.height_px)})
+        state = self.state(text)
+        for n in state["notes"]:
+            p = photos.get(n["story"])
+            if p is not None:
+                n["photo"] = {k: v for k, v in p.items() if k != "item"}
+        return {**state, "items": items, "fonts": fonts, "fixed_items": n_fixed}
+
+    def _raster_key(self, data: bytes, width_px: int, height_px: int) -> str:
+        """A raster in the cache the server makes the screen's pictures from (rasters/<key>.cmyk and its size), keyed by
+        its content."""
+        h = hashlib.sha1(data).hexdigest()[:24]
+        meta = self.engine.cache_dir("rasters") / f"{h}.json"
+        if not meta.exists():
+            _atomic(self.engine.cache_dir("rasters") / f"{h}.cmyk", data)
+            write_json(meta, {"width_px": width_px, "height_px": height_px})
+        return h
+
+    def _full_raster(self, pid: str, W0: int, H0: int) -> str | None:
+        """The cache key of a photo's whole raster, the run's own as it prints (the page's photo folder), for the
+        editor's photo mode and cropped photos; kept for the session (a photo id's pixels never change). None when it
+        cannot be read: the page is drawn without it."""
+        if pid not in self._fulls:
+            try:
+                raw = DG.gz_raw(self.photo_dir / f"{pid}.cmyk.gz")
+            except (OSError, EOFError, zlib.error):      # missing, cut short or damaged
+                raw = None
+            self._fulls[pid] = self._raster_key(raw, W0, H0) if raw is not None and len(raw) == W0 * H0 * 4 else None
+        return self._fulls[pid]
 
     def export(self, base_rev=None) -> dict:
         """The edited page as its PDF/X-1a page file (the run's page-NN.pdf; the auto layout kept as page-NN.auto.pdf).
@@ -886,7 +1078,7 @@ class PageSession:
         held = self._held(self._takes())
         if held:
             raise ValueError(SAVE_HELD.format(name=self._name(held[0]), page=held[1]))
-        B, rep, n_fixed, placed, notes, text = self.render()
+        B, rep, n_fixed, placed, notes, text, photos = self.render()
         work = self.run_dir / "work" / f"page-{self.page:02d}"
         work.mkdir(parents=True, exist_ok=True, mode=0o700)
         touch = sorted(G.body_touches(self.model, B, work))     # two lines of a story touching in ink (as the runs check)
@@ -904,16 +1096,23 @@ class PageSession:
         problems = self.problems(notes, text) + [{"kind": "touch", "stories": touch}] if touch else self.problems(notes, text)
         return {"pdf": pdf.name, "sha256": hashlib.sha256(data).hexdigest(), "rev": self.rev, "problems": problems,
                 "articles": articles, "pages_changed": {str(k): v for k, v in changed.items()},
-                "printed": self.printed(articles)}
+                "printed": self.printed(articles, photos)}
 
-    def printed(self, articles: list) -> dict:
-        """What the page prints (deskprinted): its articles' text and photos, its folio fields, its ads."""
+    def printed(self, articles: list, photos: dict | None = None) -> dict:
+        """What the page prints (deskprinted): its articles' text and photos, its folio fields, its ads, and, when a
+        photo prints cropped, "crops": {article id: deskprinted.crop_sig} (photos: render's). The crops are recorded,
+        never compared with the edition (it has none): they are the page's own edits, covered by its revision."""
         by_id, briefs = {a.get("id"): a for a in self.articles}, deskprinted.briefs_of(self.frozen)
         ads = deskprinted.ad_sigs(self.run_dir / "ads")
-        return {"v": deskprinted.VERSION,
-                "articles": {a: deskprinted.article_sig(by_id[a], a in briefs) for a in articles if a in by_id},
-                "folio": deskprinted.folio_sig(self.folio_fields) if self.prints_folio else None,
-                "ads": {s["slot"]: ads.get(s["slot"]) for s in self.tpl.ad_slots}}
+        out = {"v": deskprinted.VERSION,
+               "articles": {a: deskprinted.article_sig(by_id[a], a in briefs) for a in articles if a in by_id},
+               "folio": deskprinted.folio_sig(self.folio_fields) if self.prints_folio else None,
+               "ads": {s["slot"]: ads.get(s["slot"]) for s in self.tpl.ad_slots}}
+        crops = {a: deskprinted.crop_sig(p["id"], *p["px"], p["window"]) for k, p in (photos or {}).items() if "item" in p
+                 for a in self.built.article_of.get(k, []) if a in articles}
+        if crops:
+            out["crops"] = crops
+        return out
 
 
 def _atomic(path: Path, data: bytes) -> None:
