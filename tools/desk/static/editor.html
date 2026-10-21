@@ -110,9 +110,10 @@
           <canvas
             id="canvas"
             tabindex="0"
-            aria-label="The page. Select a story with a click, move it by dragging, resize it with its handles; double-click it or press Enter to change its text."
+            aria-label="The page. Select a story with a click, move it by dragging, resize it with its handles; double-click it or press Enter to change its text. Shift+L locks it in place or unlocks it; a right-click or Shift+F10 opens its menu."
           ></canvas>
           <div class="ed-busy" id="busy" hidden>Setting the page…</div>
+          <div class="ed-menu" id="menu" role="menu" aria-label="Story" hidden></div>
         </section>
         <section class="ed-story" id="story" aria-labelledby="story-head" hidden>
           <div class="ed-story-head">
@@ -129,6 +130,21 @@
         <div id="props" hidden>
           <h2 id="p-headline"></h2>
           <p id="p-fit" class="fit"></p>
+          <button
+            type="button"
+            id="p-lock"
+            class="lock"
+            aria-pressed="false"
+            aria-keyshortcuts="Shift+L"
+            title="Keep this story's place, width and height for this layout (Shift+L)"
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+              <path d="M5 7.5V5.5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.6" />
+              <rect x="3.5" y="7.5" width="9" height="6.5" rx="1.2" fill="currentColor" />
+            </svg>
+            Lock in place
+          </button>
+          <p id="p-lock-note" class="lock-note small" hidden></p>
           <div class="field">
             <span class="label">Width</span>
             <div class="seg" id="p-width" role="group" aria-label="Width in columns"></div>
@@ -166,6 +182,12 @@
           the page. Double-click a story, or press Enter, to type its text: the page is set again when you pause. Every
           change is set by the same engine that makes the print file, and kept as you go; <strong>Save page</strong>
           makes the page's PDF and checks it.
+        </p>
+        <p class="muted small help">
+          Shift+L locks the selected story in place for this layout, or unlocks it: a locked story keeps its place,
+          width and height and stays on the page, and <strong>Try another layout</strong> lays the other stories out
+          around it. A right-click on a story, or Shift+F10, opens its menu; on the page's empty space it unlocks every
+          story.
         </p>
         <p class="muted small help">
           Shift+2 zooms to the selected story, Shift+1 shows the whole page and Shift+3 its width; Shift+R shows or

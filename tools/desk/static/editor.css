@@ -467,6 +467,100 @@ button.row {
 .buttons button {
   text-align: left;
 }
+.buttons button:disabled,
+.seg button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.field.two input:disabled {
+  background: #f3f4f6;
+  color: var(--muted);
+}
+button.lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+button.lock[aria-pressed="true"] {
+  background: #eef2ff;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.lock-note {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #eef2ff;
+  color: #1e3a8a;
+  line-height: 1.45;
+}
+.lock-note[hidden] {
+  display: none;
+}
+.story-list li.locked button.row {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.story-list li.locked button.row:hover {
+  background: none;
+}
+
+.ed-menu {
+  position: absolute;
+  z-index: 3;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.22);
+}
+.ed-menu[hidden] {
+  display: none;
+}
+.ed-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.ed-menu button:hover,
+.ed-menu button:focus {
+  background: #eef2ff;
+}
+.ed-menu button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ed-menu button.danger {
+  color: var(--error);
+}
+.ed-menu button[aria-disabled="true"] {
+  color: #9aa3ae;
+  cursor: default;
+}
+.ed-menu .key {
+  color: var(--muted);
+  font-size: 12px;
+}
 .problems {
   list-style: none;
   margin: 0;

@@ -7,7 +7,8 @@
  * Marathi input method works); the engine sets the page again with it when you pause. "Save page" writes the print
  * file and checks it. Plain JavaScript, no libraries; all text goes into the page as text nodes (never as HTML).
  *
- * Requests: one change at a time goes to the engine (newer changes wait, and only the newest is sent). Another layout,
+ * Requests: one change at a time goes to the engine; newer changes wait, and a waiting change gives way to a newer one
+ * unless a lock changes between them (the engine checks each change against the one before). Another layout,
  * new text and saving wait for the changes on their way and allow no edits until they are answered. Every request is
  * made for the page shown when it started; an answer for a page the editor has left is dropped. Every change carries
  * the page's revision: a change made on an older view of the page (another window or tab changed it) is refused,
@@ -38,6 +39,7 @@ const ZOOM_MARGIN_PX = 32; // room around a story zoomed to
 const PREFS_KEY = "pageinator-desk.editor.v1"; // the editor's choices kept in this browser (the rulers)
 const BAD = new Set(["overlap", "outside", "over", "cannot_set", "overset", "unset"]); // the print file would show these
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+const SHIFT = MAC ? "⇧" : "Shift+"; // in messages that name a key
 const params = new URLSearchParams(location.search);
 const ID = {
   edition: params.get("edition") || "",
@@ -63,7 +65,8 @@ const S = {
   drag: null,
   swapping: false,
   sending: false, // a change is on its way to the engine
-  queued: null, // the newest change, sent when the one on its way is answered
+  queued: null, // changes waiting for the one on its way, oldest first (null: none); sent one after the other
+  inflight: null, // the change on its way (the state the first waiting change is set against)
   working: false, // another layout, new text or a save is being made: no edits meanwhile
   workText: "",
   textInline: false, // a save is setting the typed text itself
@@ -246,26 +249,71 @@ function sayOpened(entry, data, later) {
   notice(said.join(" "), also && !later ? "also" : "");
 }
 
-/** Stories on this page that are still on another page too (they leave it when this page is saved). */
+/** Stories on this page that are still on another page too (they leave it when this page is saved), and those of them
+ * locked there (this page cannot be saved until they are unlocked there or taken off here). */
 function alsoText(data) {
-  const also = Object.values(data.also_on_pages || {});
-  if (!also.length) return "";
-  const pages = [...new Set(also)].sort((a, b) => a - b);
-  const n = also.length;
+  const also = data.also_on_pages || {};
+  const held = data.locked_on_pages || {};
+  const pagesOf = (keys, at) => [...new Set(keys.map((k) => at[k]))].sort((a, b) => a - b);
+  const free = Object.keys(also).filter((k) => !(k in held));
+  const locked = Object.keys(held);
+  const said = [];
+  if (free.length) {
+    const pages = pagesOf(free, also);
+    const n = free.length;
+    said.push(
+      `${n === 1 ? "A story here is" : `${n} stories here are`} still on page ${pages.join(", ")} too: saving this ` +
+        `page takes ${n === 1 ? "it" : "them"} off ${pages.length === 1 ? "that page" : "those pages"}.`,
+    );
+  }
+  if (locked.length) {
+    const n = locked.length;
+    said.push(
+      `${n === 1 ? `${cap(nameOf(locked[0]))} is` : `${n} stories here are`} also on page ` +
+        `${pagesOf(locked, held).join(", ")}, locked there: this page cannot be saved until ${n === 1 ? "it is" : "they are"} ` +
+        "unlocked there or taken off this page.",
+    );
+  }
+  return said.join(" ");
+}
+
+/** Why this page cannot be saved now, in the server's words ("" when it can): a story on it is also on another page,
+ * locked there (its save would take it off that page). The server checks it again at the save. */
+function heldText(data) {
+  const held = Object.entries(data.locked_on_pages || {}).sort((a, b) => a[1] - b[1]);
+  if (!held.length) return "";
+  const [story, n] = held[0];
   return (
-    `${n === 1 ? "A story here is" : `${n} stories here are`} still on page ${pages.join(", ")} too: saving this ` +
-    `page takes ${n === 1 ? "it" : "them"} off ${pages.length === 1 ? "that page" : "those pages"}.`
+    `This page cannot be saved yet: ${nameOf(story)} is also on page ${n}, locked there. Unlock it on page ${n}, or ` +
+    "take it off this page, then save."
   );
 }
 
+/** Which stories are locked, and where. */
+const lockKey = (mods) =>
+  mods
+    .filter((m) => m.locked)
+    .map((m) => `${m.story}@${m.x},${m.y},${m.w},${m.h}`)
+    .sort()
+    .join("|");
+
 async function send(modules) {
   if (S.sending) {
-    S.queued = modules;
+    // The engine sets each change against the one before it. A waiting change gives way to a newer one only when the
+    // change before it, it and the newer one lock the same stories at the same places: a locked story unlocked and
+    // then moved (also by undo) must reach the engine as two changes, or the engine refuses the move.
+    const q = S.queued || [];
+    const last = q[q.length - 1];
+    const before = q.length > 1 ? q[q.length - 2] : S.inflight;
+    if (last && lockKey(before) === lockKey(last) && lockKey(last) === lockKey(modules)) q[q.length - 1] = modules;
+    else q.push(modules);
+    S.queued = q;
     return;
   }
   const gen = S.gen;
   const url = base();
   S.sending = true;
+  S.inflight = modules;
   showBusy();
   setSaved("Setting the page…");
   try {
@@ -279,7 +327,7 @@ async function send(modules) {
     }
   } catch (e) {
     if (gen === S.gen) {
-      S.queued = null; // a change made on what failed is not sent
+      S.queued = null; // the changes made on what failed are not sent
       S.refusals += 1; // nor a save or another layout asked meanwhile
       S.saveAfter = false;
       if (e.status === 409) await resync(gen, e.message);
@@ -290,9 +338,10 @@ async function send(modules) {
     }
   } finally {
     S.sending = false;
-    const next = S.queued;
-    S.queued = null;
-    if (next && gen === S.gen) send(next);
+    S.inflight = null;
+    const next = gen === S.gen && S.queued ? S.queued.shift() : null; // the oldest waiting change goes next
+    if (!next || !S.queued.length) S.queued = null;
+    if (next) send(next);
     else settled();
   }
 }
@@ -304,7 +353,7 @@ async function accept(data, gen) {
   if (gen !== S.gen) return false;
   if (S.data && data.rev !== S.data.rev) tellDesk(); // the page changed (by this window or the engine)
   S.data = data;
-  S.modules = copy(S.queued || data.modules);
+  S.modules = copy(S.queued ? S.queued[S.queued.length - 1] : data.modules); // the newest change shown
   if (S.selected && !S.modules.some((m) => m.story === S.selected)) S.selected = null;
   loadImages(data);
   invalidate();
@@ -406,15 +455,27 @@ function another() {
     S.edits += 1;
     S.dirty = true;
     setSaved("Changed · not saved");
+    const moved =
+      before.length !== S.modules.length ||
+      before.some((b) => !S.modules.some((m) => m.story === b.story && same(m, b)));
     notice(
-      ["", "Lead on the other side.", "Lead at another width.", "Lead on the other side, at another width."][variant] +
+      (!S.modules.some((m) => m.locked)
+        ? ["", "Lead on the other side.", "Lead at another width.", "Lead on the other side, at another width."][
+            variant
+          ]
+        : moved
+          ? "The stories that are not locked are laid out another way around the locked ones, which stay where they are."
+          : "Laid out around the locked stories, the page came out as it was: unlock a story to try other layouts.") +
         " Undo brings back the last one.",
     );
   });
 }
 
-/** What Update text (or the story panel) did to the page, in words. */
-function refreshSaid(data) {
+/** The page's locked stories by name, before a request that may take stories off it (Update text). */
+const lockedNames = () => new Map(S.modules.filter((m) => m.locked).map((m) => [m.story, nameOf(m.story)]));
+
+/** What Update text (or the story panel) did to the page, in words. locked: lockedNames() from before it. */
+function refreshSaid(data, locked = new Map()) {
   const n = (data.changed || []).length;
   const d = (data.dropped || []).length;
   const r = (data.removed || []).length;
@@ -433,6 +494,13 @@ function refreshSaid(data) {
     );
   else if (r)
     said.push(`${r === 1 ? "1 article" : `${r} articles`} left the page: deleted from the edition, or emptied.`);
+  const gone = (data.dropped || []).filter((k) => locked.has(k)); // a deleted article never prints, locked or not
+  if (gone.length)
+    said.push(
+      cap(
+        `${gone.map((k) => locked.get(k)).join(", ")} left the page although ${gone.length === 1 ? "it was" : "they were"} locked.`,
+      ),
+    );
   for (const k of data.kind_changes || []) {
     const head = (k.headline || articleHead(k.article)).slice(0, 60);
     said.push(
@@ -456,9 +524,10 @@ function savedLabel(c) {
 
 function refreshText() {
   return exclusive("Setting the articles' current text…", async (gen, url) => {
+    const locked = lockedNames();
     const data = await api("POST", `${url}/refresh`, { rev: rev() });
     if (!(await accept(data, gen))) return;
-    const { said, changed } = refreshSaid(data);
+    const { said, changed } = refreshSaid(data, locked);
     if (changed) {
       S.edits += 1;
       S.dirty = true;
@@ -502,9 +571,10 @@ function savePage() {
     // on the page as this window shows it (a change made in another window is refused here, and shown)
     S.workText = "Setting the edition's current text first…";
     showBusy();
+    const locked = lockedNames();
     const current = await api("POST", `${url}/refresh`, { rev: rev() });
     if (!(await accept(current, gen))) return;
-    const now = refreshSaid(current);
+    const now = refreshSaid(current, locked);
     if (now.changed) {
       S.edits += 1;
       S.dirty = true;
@@ -512,6 +582,8 @@ function savePage() {
       notice([...now.said, "Check the page, then press Save page again."].join(" "));
       return;
     }
+    const held = heldText(S.data); // the page as the engine has it this moment (the server checks it again)
+    if (held) return notice(held, "error");
     const bad = (S.data.problems || []).filter((p) => BAD.has(p.kind));
     if (bad.length) {
       const list = bad
@@ -586,9 +658,21 @@ function pressText(r) {
 
 // ------------------------------------------------------------------------------------------- edits
 
+// A module is its place (x, y, w, h) and its attributes (locked, and crop: the photo crop, not built yet, always null;
+// never changed in place, so a shallow copy is enough). A locked story keeps its place, width and height for this
+// layout: every change that would move, resize or remove it is refused here, before anything is sent (the engine
+// refuses it too).
 const copy = (mods) => mods.map((m) => ({ ...m }));
 const same = (a, b) =>
   a.w === b.w && Math.abs(a.x - b.x) < SAME_MM && Math.abs(a.y - b.y) < SAME_MM && Math.abs(a.h - b.h) < SAME_MM;
+const sameAttrs = (a, b) =>
+  !!a.locked === !!b.locked && JSON.stringify(a.crop ?? null) === JSON.stringify(b.crop ?? null);
+const lockedHere = (story) => S.modules.some((m) => m.story === story && m.locked);
+
+/** A change a lock refuses, said on the page (nothing is sent). what: what unlocking would allow ("move it", …). */
+function refuseLocked(story, what) {
+  notice(`${cap(nameOf(story))} is locked: unlock it (${SHIFT}L) to ${what}.`, "lock");
+}
 
 function pushUndo(modules) {
   S.undo.push(modules);
@@ -622,20 +706,61 @@ function redo() {
   apply(S.redo.pop());
 }
 
+/** A story's place, width or height changed (a locked story's never is). */
 function update(story, change) {
   const m = S.modules.find((x) => x.story === story);
   if (!m || same({ ...m, ...change }, m)) return renderPanels();
+  if (m.locked) {
+    renderPanels(); // the fields show its place again
+    return refuseLocked(story, "move it or change its size");
+  }
   commit(S.modules.map((x) => (x.story === story ? { ...x, ...change } : { ...x })));
+}
+
+/** A story's attributes changed (the lock), its place kept: one change and one undo step. */
+function setAttrs(story, change) {
+  const m = S.modules.find((x) => x.story === story);
+  if (!m) return renderPanels();
+  const next = { ...m, ...change };
+  if (same(next, m) && sameAttrs(next, m)) return renderPanels();
+  commit(S.modules.map((x) => (x.story === story ? next : { ...x })));
+}
+
+/** Lock a story in place for this layout, or unlock it (Shift+L, the story panel, the menu). */
+function toggleLock(story) {
+  if (!canEdit()) return;
+  const m = S.modules.find((x) => x.story === story);
+  if (!m) return;
+  setAttrs(story, { locked: !m.locked });
+  if (S.noticeKind === "lock") notice("");
+  say(
+    m.locked
+      ? `${cap(nameOf(story))} is unlocked.`
+      : `${cap(nameOf(story))} is locked in place: its place, width and height stay as they are.`,
+  );
+}
+
+/** Every story of the page unlocked (the menu on the page's empty space): one change and one undo step. */
+function unlockAll() {
+  if (!canEdit()) return;
+  if (!S.modules.some((m) => m.locked)) return notice("No story on this page is locked.", "lock");
+  commit(S.modules.map((m) => ({ ...m, locked: false })));
+  if (S.noticeKind === "lock") notice("");
+  say("Every story on this page is unlocked.");
 }
 
 function removeStory(story) {
   if (!canEdit()) return;
+  if (lockedHere(story)) return refuseLocked(story, "take it off the page");
   if (S.selected === story) S.selected = null;
   commit(S.modules.filter((m) => m.story !== story).map((m) => ({ ...m })));
 }
 
 function bringIn(story) {
   if (!canEdit()) return;
+  const p = S.data.pool.find((x) => x.story === story);
+  if (p && p.locked)
+    return notice(`${cap(nameOf(story))} is locked on page ${p.on_page}: unlock it there to bring it here.`, "lock");
   const g = S.data.grid;
   const h = Math.min(90, g.news_bottom_mm - g.news_top_mm);
   S.selected = story;
@@ -647,13 +772,25 @@ function swap(a, b) {
   const ma = S.modules.find((m) => m.story === a);
   const mb = S.modules.find((m) => m.story === b);
   if (!ma || !mb) return;
+  const held = [ma, mb].find((m) => m.locked);
+  if (held) return refuseLocked(held.story, "move it");
   commit(S.modules.map((m) => (m.story === a ? { ...m, story: b } : m.story === b ? { ...m, story: a } : { ...m })));
   S.selected = b;
   renderPanels();
 }
 
+/** The story's height set to what its text needs at its width (the story panel, the menu). */
+function fitHeight(story) {
+  const m = S.modules.find((x) => x.story === story);
+  const n = m && noteOf(m.story);
+  if (!m || !n || n.fit === "fits" || n.fit === "none") return;
+  const h = n.fit === "over" ? m.h + n.by_mm : m.h - n.by_mm;
+  update(m.story, snapModule({ ...m, h }, "y"));
+}
+
 function startSwapping() {
   if (!S.selected || !canEdit()) return;
+  if (lockedHere(S.selected)) return refuseLocked(S.selected, "move it");
   S.swapping = true;
   canvas.style.cursor = "crosshair";
   notice("Click the story to swap with, on the page or in the list “On this page” (Esc to stop).", "swap");
@@ -698,9 +835,9 @@ function snapModule(m, keep = "h") {
 }
 
 function hit(px, py) {
-  // handles of the selected module first, then the topmost module under the pointer
+  // handles of the selected module first (a locked one has none), then the topmost module under the pointer
   const sel = S.modules.find((m) => m.story === S.selected);
-  if (sel) {
+  if (sel && !sel.locked) {
     const b = boxOf(sel);
     const [x1, y1] = toPx(b.x1, b.y1);
     const [x0, y0] = toPx(b.x0, b.y0);
@@ -861,8 +998,14 @@ function draw() {
       ctx.fillStyle = "rgba(220, 38, 38, 0.06)";
       ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     }
+    if (m.locked) {
+      ctx.setLineDash([6, 4]); // locked: a dashed outline, a padlock, and no handles
+      if (!sel && !typed && !bad.has(m.story)) ctx.strokeStyle = "rgba(30, 41, 59, 0.6)";
+    }
     ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
-    if (sel) {
+    ctx.setLineDash([]);
+    if (m.locked) drawPadlock(Math.max(x0 + 4, x1 - 22), y0 + 5);
+    else if (sel) {
       ctx.fillStyle = "#2563eb";
       for (const [hx, hy] of [
         [x1, (y0 + y1) / 2],
@@ -888,6 +1031,30 @@ function draw() {
     ctx.fillText(`${S.drag.ghost.w} col × ${Math.round(S.drag.ghost.h)} mm`, x0 + 6, y0 - 6);
   }
   drawRulers(w, h);
+}
+
+/** A locked story's mark: a padlock on a white tile, 18 px square, at (x, y) in the view (px). */
+function drawPadlock(x, y) {
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+  ctx.strokeStyle = "rgba(30, 41, 59, 0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(x + 0.5, y + 0.5, 17, 17, 4);
+  else ctx.rect(x + 0.5, y + 0.5, 17, 17);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = "#1e293b"; // the shackle
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y + 9);
+  ctx.lineTo(x + 6, y + 6.5);
+  ctx.arc(x + 9, y + 6.5, 3, Math.PI, 0);
+  ctx.lineTo(x + 12, y + 9);
+  ctx.stroke();
+  ctx.fillStyle = "#1e293b"; // the body
+  ctx.fillRect(x + 4, y + 8.5, 10, 6.5);
+  ctx.restore();
 }
 
 let frame = 0;
@@ -1024,6 +1191,10 @@ function pointAt(p) {
 }
 
 canvas.addEventListener("pointerdown", (e) => {
+  if (e.button === 2 || (MAC && e.ctrlKey && e.button === 0)) {
+    M.pointerAt = performance.now(); // a right-click (a Ctrl+click on a Mac): the menu event follows
+    return;
+  }
   if (!S.data || e.button !== 0 || S.drag) return; // one pointer at a time
   canvas.focus();
   const r = canvas.getBoundingClientRect();
@@ -1046,7 +1217,8 @@ canvas.addEventListener("pointerdown", (e) => {
   S.selected = h.story;
   if (canEdit()) {
     const m = S.modules.find((x) => x.story === h.story);
-    S.drag = { part: h.part, start: [px, py], from: { ...m }, ghost: null, pointer: e.pointerId };
+    // a locked story is selected, never dragged: a drag on it only says why it does not move
+    S.drag = { part: h.part, start: [px, py], from: { ...m }, ghost: null, pointer: e.pointerId, locked: !!m.locked };
     canvas.setPointerCapture(e.pointerId);
   }
   renderPanels();
@@ -1064,19 +1236,28 @@ canvas.addEventListener("pointermove", (e) => {
       ? "crosshair"
       : !h
         ? "default"
-        : h.part === "right"
-          ? "ew-resize"
-          : h.part === "bottom"
-            ? "ns-resize"
-            : h.part === "corner"
-              ? "nwse-resize"
-              : "move";
+        : lockedHere(h.story)
+          ? "not-allowed"
+          : h.part === "right"
+            ? "ew-resize"
+            : h.part === "bottom"
+              ? "ns-resize"
+              : h.part === "corner"
+                ? "nwse-resize"
+                : "move";
     return;
   }
   if (e.pointerId !== S.drag.pointer) return;
   S.pointer = [px, py];
   const dx = (px - S.drag.start[0]) / S.view.s;
   const dy = (py - S.drag.start[1]) / S.view.s;
+  if (S.drag.locked) {
+    if (!S.drag.told && Math.abs(dx) + Math.abs(dy) >= DRAG_MIN_MM) {
+      S.drag.told = true; // said once per drag
+      refuseLocked(S.drag.from.story, "move it");
+    }
+    return;
+  }
   if (Math.abs(dx) + Math.abs(dy) < DRAG_MIN_MM) {
     // back where it started: no change
     if (S.drag.ghost) {
@@ -1166,11 +1347,26 @@ window.addEventListener("keydown", (e) => {
     if (!e.repeat) view();
     return;
   }
+  // Shift+L locks the selected story in place, or unlocks it (by the key's position, as the keys above)
+  if (e.shiftKey && e.code === "KeyL" && !S.drag) {
+    e.preventDefault();
+    if (e.repeat || !S.data) return;
+    if (!S.modules.some((x) => x.story === S.selected))
+      return notice(`Select a story on the page first: ${SHIFT}L locks it in place.`, "lock");
+    return toggleLock(S.selected);
+  }
+  // the canvas's menu from the keyboard: Shift+F10, or the menu key (a button or a list keeps its own)
+  if ((e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) && (t === canvas || t === document.body)) {
+    e.preventDefault();
+    if (!e.repeat && S.data && !S.drag) openMenuFromKeys();
+    return;
+  }
   if (e.key === "PageDown") return goPage(ID.page + 1);
   if (e.key === "PageUp") return goPage(ID.page - 1);
   if (!S.data || S.drag) return;
   const m = S.modules.find((x) => x.story === S.selected);
-  if (!m || (t !== canvas && t !== document.body)) return; // story keys act on the page, not on a button or list
+  // story keys act only while the page has the focus: not on a button or a list, nor when the focus fell to the body
+  if (!m || t !== canvas) return;
   if (e.key === "Enter") {
     e.preventDefault();
     return openText(m.story);
@@ -1183,11 +1379,202 @@ window.addEventListener("keydown", (e) => {
   const moves = { ArrowUp: [0, -step], ArrowDown: [0, step], ArrowLeft: [-pitch(), 0], ArrowRight: [pitch(), 0] };
   if (moves[e.key]) {
     e.preventDefault();
+    if (m.locked) return refuseLocked(m.story, "move it");
     const [dx, dy] = moves[e.key];
     const g = snapModule({ ...m, x: m.x + dx, y: m.y + dy });
     update(m.story, { x: g.x, y: g.y });
   }
 });
+
+// ------------------------------------------------------------------------------------------- the canvas's menu
+
+/* The menu of a story (a right-click on it, or Shift+F10 or the menu key while it is selected) or of the page's empty
+ * space: a role="menu" list of buttons. The arrow keys, Home and End move in it, Enter or Space acts, Esc or Tab
+ * closes it and the focus goes back to the page. An item a lock refuses stays in the menu, marked off, and says why. */
+const M = { open: false, story: null, items: [], at: [0, 0], keyAt: -1e9, pointerAt: -1e9 }; // at: where it opened (px)
+
+function menuItems(story) {
+  if (!story)
+    return [
+      {
+        label: "Unlock all on page",
+        act: unlockAll,
+        off: S.modules.some((m) => m.locked) ? "" : "No story on this page is locked.",
+      },
+    ];
+  const locked = lockedHere(story);
+  const n = noteOf(story);
+  const held = (what) => (locked ? `${cap(nameOf(story))} is locked: unlock it (${SHIFT}L) to ${what}.` : "");
+  const fits =
+    !n || n.fit === "fits" ? "It already fits its box." : n.fit === "none" ? "It cannot be set at this width." : "";
+  return [
+    { label: "Edit text", key: "Enter", act: () => openText(story) },
+    { label: "Fit height to text", act: () => fitHeight(story), off: held("change its size") || fits },
+    { label: "Swap with…", act: startSwapping, off: held("move it") },
+    { label: locked ? "Unlock" : "Lock in place", key: `${SHIFT}L`, act: () => toggleLock(story) },
+    {
+      label: "Remove from page",
+      key: MAC ? "⌫" : "Del",
+      act: () => removeStory(story),
+      off: held("take it off the page"),
+      danger: true,
+    },
+  ];
+}
+
+/** The menu of a story (or of the page: story null) at a point of the view (px), kept inside the view. */
+function openMenu(story, at) {
+  closeMenu();
+  if (!S.data) return;
+  if (S.swapping) stopSwapping();
+  M.story = story;
+  M.items = menuItems(story);
+  M.at = at;
+  M.open = true;
+  const menu = $("#menu");
+  menu.setAttribute("aria-label", story ? `Story ${headOf(story)}` : "The page");
+  renderMenu();
+  menu.hidden = false;
+  placeMenu();
+  menuFocus(0);
+}
+
+/** The menu's items as buttons; the one that had the focus keeps it. */
+function renderMenu() {
+  const menu = $("#menu");
+  const focused = [...menu.children].indexOf(document.activeElement);
+  menu.replaceChildren(
+    ...M.items.map((it, i) =>
+      el(
+        "button",
+        {
+          type: "button",
+          role: "menuitem",
+          tabindex: "-1",
+          class: it.danger ? "danger" : null,
+          "aria-disabled": it.off ? "true" : null,
+          title: it.off || null,
+          "data-i": i,
+        },
+        el("span", {}, it.label),
+        it.key ? el("span", { class: "key", "aria-hidden": "true" }, it.key) : null,
+      ),
+    ),
+  );
+  if (focused >= 0) menuFocus(focused);
+}
+
+/** The open menu at the point it was opened at, kept inside the view: when it opens, and when the view changes size
+ * (a notice, the story panel), so it stays open with the focus in it. */
+function placeMenu() {
+  if (!M.open) return;
+  const menu = $("#menu");
+  const area = $("#wrap").getBoundingClientRect();
+  const r = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(4, Math.min(M.at[0], area.width - r.width - 4))}px`;
+  menu.style.top = `${Math.max(4, Math.min(M.at[1], area.height - r.height - 4))}px`;
+}
+
+/** The open menu after the page changed (an answer came, a lock was set or lifted): its items as the page is now; it
+ * closes when its story has left the page. */
+function refreshMenu() {
+  if (!M.open) return;
+  if (M.story && !S.modules.some((m) => m.story === M.story)) return closeMenu();
+  const items = menuItems(M.story);
+  const shown = (list) => list.map((it) => `${it.label}\t${it.off || ""}`).join("\n");
+  const changed = shown(items) !== shown(M.items);
+  M.items = items;
+  if (changed) renderMenu();
+}
+
+/** The menu from the keyboard: the selected story's, beside it; else the page's, at the view's top left. */
+function openMenuFromKeys() {
+  M.keyAt = performance.now(); // the browser may send its own menu event for the same key: not a second menu
+  const m = S.modules.find((x) => x.story === S.selected);
+  const edge = (S.rulers ? RULER_PX : 0) + 12;
+  if (!m) return openMenu(null, [edge, edge]);
+  const [x0, y0] = toPx(m.x, m.y);
+  openMenu(m.story, [Math.max(edge, x0 + 12), Math.max(edge, y0 + 12)]);
+}
+
+/** The menu closed. The focus never falls to the page's body: from the menu it goes back to the page (a click that
+ * closed it then moves it on, as clicks do). */
+function closeMenu() {
+  if (!M.open) return;
+  const inside = $("#menu").contains(document.activeElement);
+  M.open = false;
+  M.story = null;
+  M.items = [];
+  $("#menu").hidden = true;
+  $("#menu").replaceChildren();
+  if (inside || document.activeElement === document.body) canvas.focus();
+}
+
+function menuFocus(i) {
+  const items = [...$("#menu").children];
+  if (items.length) items[(i + items.length) % items.length].focus();
+}
+
+/** An item chosen: done after the menu closes; one a lock refuses says why instead. */
+function menuAct(i) {
+  const it = M.items[i];
+  if (!it) return;
+  closeMenu();
+  if (it.off) return notice(it.off, "lock");
+  it.act();
+}
+
+$("#menu").addEventListener("click", (e) => {
+  const b = e.target instanceof Element ? e.target.closest("[role='menuitem']") : null;
+  if (b) menuAct(Number(b.dataset.i));
+});
+$("#menu").addEventListener("keydown", (e) => {
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.ctrlKey || e.metaKey) return closeMenu(); // undo, save …: the page's own keys, with the menu closed
+  e.stopPropagation(); // the page's other keys do not act while the menu is open
+  const items = [...$("#menu").children];
+  const i = items.indexOf(document.activeElement);
+  const to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
+  if (to !== undefined) {
+    e.preventDefault();
+    return menuFocus(to);
+  }
+  if (e.key === "Escape" || e.key === "Tab" || e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+    e.preventDefault();
+    if (e.key !== "Escape" && e.key !== "Tab") M.keyAt = performance.now(); // its own menu event: not a new menu
+    return closeMenu();
+  }
+  if (e.shiftKey && e.code === "KeyL" && M.story) {
+    e.preventDefault();
+    const story = M.story;
+    closeMenu();
+    return toggleLock(story);
+  }
+  // Enter and Space press the item that has the focus (the browser makes them a click)
+});
+canvas.addEventListener("contextmenu", (e) => {
+  e.preventDefault(); // the page has its own menu
+  const now = performance.now();
+  const byPointer = now - M.pointerAt < 10000; // a right-click: the menu at the pointer
+  M.pointerAt = -1e9;
+  if (!S.data || S.drag) return;
+  if (!byPointer) {
+    // the menu key or Shift+F10: opened already by the key itself, else the selected story's (or the page's)
+    if (now - M.keyAt >= 1000) openMenuFromKeys();
+    M.keyAt = -1e9;
+    return;
+  }
+  const r = canvas.getBoundingClientRect();
+  const [px, py] = [e.clientX - r.left, e.clientY - r.top];
+  if (onRuler(px, py)) return;
+  canvas.focus();
+  const h = hit(px, py);
+  if (h && h.story !== S.selected) select(h.story);
+  openMenu(h ? h.story : null, [px, py]);
+});
+$("#menu").addEventListener("contextmenu", (e) => e.preventDefault());
+document.addEventListener("pointerdown", (e) => M.open && !$("#menu").contains(e.target) && closeMenu(), true);
+window.addEventListener("blur", () => closeMenu());
 
 // ------------------------------------------------------------------------------------------- view (zoom and rulers)
 
@@ -1286,6 +1673,7 @@ canvas.addEventListener(
   (e) => {
     if (!S.data) return;
     e.preventDefault();
+    closeMenu(); // it stood where the page was
     if (e.ctrlKey || e.metaKey) {
       const r = canvas.getBoundingClientRect();
       const [mx, my] = toMm(e.clientX - r.left, e.clientY - r.top);
@@ -1305,8 +1693,11 @@ canvas.addEventListener(
   { passive: false },
 );
 
-// the page fills the space left to it (the window, or the story panel opening or resized)
-new ResizeObserver(refit).observe($("#wrap"));
+// the page fills the space left to it (the window, or the story panel opening or resized); a menu open on it stays
+new ResizeObserver(() => {
+  refit();
+  placeMenu(); // a menu open on the page stays open, inside the view
+}).observe($("#wrap"));
 
 // ------------------------------------------------------------------------------------------- panels
 
@@ -1342,6 +1733,12 @@ const articleHead = (aid) => {
   const n = S.data ? S.data.notes.find((x) => (x.articles || []).includes(aid)) : null;
   return n ? (n.headline || "a short item").slice(0, 60) : "an article";
 };
+/** A story in a message: its headline in quotes, or the column of short items. */
+const nameOf = (story) => {
+  const head = headOf(story);
+  return head === SHORT_ITEMS ? "the column of short items" : `“${head.slice(0, 60)}”`;
+};
+const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1); // a message that starts with a name
 
 function fitText(n) {
   if (!n) return ["", ""];
@@ -1370,12 +1767,17 @@ function renderPanels() {
   if (!S.data) return;
   const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.key : "";
   const also = S.data.also_on_pages || {};
+  const held = S.data.locked_on_pages || {};
   const on = $("#on-page");
   on.replaceChildren(
     ...S.modules.map((m) => {
       const n = noteOf(m.story);
       const [cls, text] = fitText(n);
-      const elsewhere = also[m.story] ? ` · still on page ${also[m.story]} until you save` : "";
+      const elsewhere = held[m.story]
+        ? ` · locked on page ${held[m.story]} too: unlock it there, or take it off here, to save this page`
+        : also[m.story]
+          ? ` · still on page ${also[m.story]} until you save`
+          : "";
       return row(
         `${m.story === S.selected ? "selected" : ""} ${cls === "ok" && !elsewhere ? "" : "warn"}`,
         {
@@ -1384,7 +1786,11 @@ function renderPanels() {
           onclick: () => (S.swapping ? swapWith(m.story) : select(m.story)),
         },
         mr(headOf(m.story)),
-        el("span", { class: "meta" }, `${m.w} col × ${Math.round(m.h)} mm · ${text}${elsewhere}`),
+        el(
+          "span",
+          { class: "meta" },
+          `${m.w} col × ${Math.round(m.h)} mm${m.locked ? " · locked" : ""} · ${text}${elsewhere}`,
+        ),
       );
     }),
   );
@@ -1393,19 +1799,22 @@ function renderPanels() {
   $("#pool").replaceChildren(
     ...pool.slice(0, 200).map((p) =>
       row(
-        "",
+        p.locked ? "locked" : "",
         {
-          title: p.on_page
-            ? `Move this story here from page ${p.on_page} (it leaves that page when you save this one)`
-            : "Bring this story onto the page",
+          title: p.locked
+            ? `Locked on page ${p.on_page}: unlock it there to bring it here`
+            : p.on_page
+              ? `Move this story here from page ${p.on_page} (it leaves that page when you save this one)`
+              : "Bring this story onto the page",
           "data-key": `pool:${p.story}`,
+          "aria-disabled": p.locked ? "true" : null, // still says why when pressed
           onclick: () => bringIn(p.story),
         },
         mr(p.headline),
         el(
           "span",
           { class: "meta" },
-          `${p.brief ? "short items" : "story"}${p.on_page ? ` · now on page ${p.on_page}` : " · not on any page"}`,
+          `${p.brief ? "short items" : "story"}${p.locked ? ` · locked on page ${p.on_page}` : p.on_page ? ` · now on page ${p.on_page}` : " · not on any page"}`,
         ),
       ),
     ),
@@ -1414,12 +1823,15 @@ function renderPanels() {
   $("#props-empty").hidden = !!m;
   $("#props").hidden = !m;
   if (m) {
+    const locked = !!m.locked; // its place, width and height cannot change: those controls are off
     $("#p-headline").textContent = headOf(m.story);
     $("#p-headline").lang = langOf(headOf(m.story));
     const [cls, text] = fitText(noteOf(m.story));
     const fitEl = $("#p-fit");
     fitEl.className = `fit ${cls}`;
     fitEl.textContent = text;
+    $("#p-lock").setAttribute("aria-pressed", locked ? "true" : "false");
+    $("#p-lock-note").hidden = !locked;
     $("#p-width").replaceChildren(
       ...Array.from({ length: S.data.grid.columns }, (_, i) =>
         el(
@@ -1428,6 +1840,7 @@ function renderPanels() {
             type: "button",
             "aria-pressed": m.w === i + 1 ? "true" : "false",
             "data-key": `w:${i + 1}`,
+            disabled: locked,
             onclick: () => update(m.story, snapModule({ ...m, w: i + 1 })),
           },
           i + 1,
@@ -1443,17 +1856,20 @@ function renderPanels() {
             type: "button",
             "aria-pressed": col === i ? "true" : "false",
             "data-key": `c:${i + 1}`,
+            disabled: locked,
             onclick: () => update(m.story, { x: S.data.grid.origin_mm + i * pitch() }),
           },
           i + 1,
         ),
       ),
     );
+    for (const id of ["#p-height", "#p-y", "#p-fit-height", "#p-swap", "#p-remove"]) $(id).disabled = locked;
     if (!typing.has("#p-height")) $("#p-height").value = Math.round(m.h * 2) / 2;
     if (!typing.has("#p-y")) $("#p-y").value = Math.round(m.y * 2) / 2;
   }
   $("#problems").replaceChildren(...problemItems());
   storyFit();
+  refreshMenu();
   if (focused) refocus(focused);
 }
 
@@ -1607,6 +2023,7 @@ function showProblem(msg) {
 
 async function goPage(n) {
   if (n < 1 || (S.pages && n > S.pages) || n === ID.page || S.switching || S.working) return;
+  closeMenu();
   cancelDrag();
   stopSwapping();
   if (!(await closeText(false))) return notice("Your typed text could not be saved: see the story panel.", "error");
@@ -1885,9 +2302,10 @@ const hasParagraph = (body) =>
 
 /** The page set again with the articles' new text (Update text for this page). */
 async function setText(gen, url) {
+  const locked = lockedNames();
   const data = await api("POST", `${url}/refresh`, { rev: rev() });
   if (!(await accept(data, gen))) return;
-  const { said, changed } = refreshSaid(data);
+  const { said, changed } = refreshSaid(data, locked);
   if (changed) {
     S.edits += 1;
     S.dirty = true;
@@ -1955,13 +2373,11 @@ $("#story").addEventListener("keydown", (e) => {
     closeText();
   }
 });
-$("#p-fit-height").addEventListener("click", () => {
-  const m = S.modules.find((x) => x.story === S.selected);
-  const n = m && noteOf(m.story);
-  if (!m || !n || n.fit === "fits" || n.fit === "none") return;
-  const h = n.fit === "over" ? m.h + n.by_mm : m.h - n.by_mm;
-  update(m.story, snapModule({ ...m, h }, "y"));
-});
+$("#p-fit-height").addEventListener("click", () => S.selected && fitHeight(S.selected));
+$("#p-lock").addEventListener("click", () => S.selected && toggleLock(S.selected));
+$("#p-lock-note").textContent =
+  `Locked in place for this layout: its place, width and height stay as they are, and it stays on this page. Unlock ` +
+  `it (${SHIFT}L) to change them. Its text can still change.`;
 const typing = new Set(); // number fields being typed in (the panel does not overwrite them meanwhile)
 for (const [id, keyName] of [
   ["#p-height", "h"],
@@ -2003,7 +2419,7 @@ window.addEventListener("beforeunload", (e) => {
   }
 });
 
-if (params.get("debug") === "1") window.__editor = { S, T, toPx, boxOf, leaveText }; // the Desk's browser checks
+if (params.get("debug") === "1") window.__editor = { S, T, M, toPx, boxOf, leaveText }; // the Desk's browser checks
 
 (async () => {
   title();

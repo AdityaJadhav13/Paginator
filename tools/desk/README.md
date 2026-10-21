@@ -57,6 +57,19 @@ never in this repository.
      text still fits its box. The page itself is never set with browser text.
    - **Checks** list overlaps, text that does not fit, stories outside the news area or over an ad, and empty space.
    - **Try another layout** lays out the same stories another way; **Update text** sets the articles' current text.
+   - **Lock a story in place:** Shift+L, the **Lock in place** button in the story panel, or the story's menu (a
+     right-click on it, Ctrl+click on a Mac, or Shift+F10) locks the selected story for this layout, or unlocks it. A locked story keeps its
+     place, width and height and stays on the page; it shows a padlock and a dashed outline:
+     - moving, resizing, swapping or removing it is refused with a message that says to unlock it first;
+     - **Try another layout** lays the other stories out around it, or says that nothing fills that space exactly;
+     - its text can still change, and a story whose articles are deleted still leaves the page (a deleted article never
+       prints);
+     - a story locked on another page cannot be brought onto this page, and this page cannot be saved while it holds a
+       story that is locked on another page (unlock it there, or take it off this page).
+
+     The menu of the page's empty space has **Unlock all on page**. A lock lasts for this layout only (a new layout
+     starts unlocked) and does not print. Locking or unlocking counts as a change of the page, so a saved page needs
+     saving again (its new file prints the same).
    - **Rulers and zoom:** rulers along the top and left give millimetres from the page's top-left corner, number the
      grid's columns and mark where the pointer is; Shift+R shows or hides them, and the browser remembers it. Shift+2
      zooms to the selected story, Shift+1 (or 0, or **Fit**) shows the whole page, Shift+3 its width, and − and + zoom
@@ -92,8 +105,9 @@ never in this repository.
 - **Articles that do not fit.** If an article fits nowhere, it is listed with the reason.
 - **Text is typed in the story panel, not on the page itself.** Within a layout, an article stays in the story it
   was laid out in: a short item that grows stays with the short items until the edition is laid out again (the
-  editor says so). Another layout needs 11 stories or fewer on the page. Moves keep the house grid: whole columns,
-  half-millimetre heights.
+  editor says so). Another layout needs 11 stories or fewer on the page, not counting locked ones. With locked stories
+  it often finds no exact fill of the space left around them (narrow strips), and says so. Moves keep the house grid:
+  whole columns, half-millimetre heights.
 - **One page in two windows.** A change made in a window that shows an older version of the page is refused, and
   that window shows the page as it is now.
 
