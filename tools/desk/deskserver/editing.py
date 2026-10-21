@@ -11,6 +11,8 @@ Pages and the press files:
   automatic layout is kept as page-NN.auto.pdf), takes the stories brought from other pages off those pages, makes the
   page's previews again, merges edition.pdf and press-files.zip again, runs the independent PDF/X-1a check on the
   page and records all of it in the run's status.json. If any step fails, the page stays marked "needs saving";
+- a page is not saved while one of its stories is also on another page and locked there (the save would take it off
+  that page): the save is refused before any page is marked, and the engine refuses it too, before it writes anything;
 - the press files count as current only when no article is printed on two pages and every page prints what the
   edition holds now (press.py);
 - every change carries the page's revision: a change made on an older view of the page (another window or tab
@@ -298,6 +300,26 @@ def _warnings(problems: list) -> list[str]:
         if p.get("kind") == "empty":
             out.append(f"About {round((p.get('mm2') or 0) / 100)} cm² of the news area is left empty: add a short item or a photo")
     return out
+
+
+def locked_elsewhere(state: dict) -> str | None:
+    """Why the page cannot be saved now, or None: a story on it is also on another page and locked there, and the save
+    would take it off that page (the engine refuses that save too, before it writes anything). A list that is there but
+    cannot be read refuses (fail closed)."""
+    held = state.get("locked_on_pages")
+    if held is None:
+        return None
+    if not isinstance(held, dict) or not all(isinstance(n, int) and not isinstance(n, bool) for n in held.values()):
+        return "This page cannot be saved yet: the engine's list of its stories locked on other pages cannot be read."
+    if not held:
+        return None
+    story, n = min(held.items(), key=lambda kv: (kv[1], str(kv[0])))
+    head = next((x.get("headline") for x in state.get("notes") or [] if isinstance(x, dict) and x.get("story") == story), "")
+    name = f"“{head}”" if isinstance(head, str) and head else "the column of short items"
+    more = len(held) - 1
+    return (f"This page cannot be saved yet: {name} is also on page {n}, locked there. Unlock it on page {n}, or take it "
+            "off this page, then save." + (f" {more} more {'story' if more == 1 else 'stories'} on this page "
+                                           f"{'is' if more == 1 else 'are'} locked on another page too." if more else ""))
 
 
 def before_save(run_dir: Path, page: int, others: list[int]) -> None:

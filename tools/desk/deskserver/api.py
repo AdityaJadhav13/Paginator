@@ -412,6 +412,9 @@ class Api:
             if base_rev is not None and state.get("rev") != base_rev:
                 raise DeskError(409, "The page could not be saved: it was changed in another window or tab; it is "
                                      "shown again as it is now.")
+            held = editing.locked_elsewhere(state)               # before any page is marked: a refusal marks none
+            if held:
+                raise DeskError(400, held)
             others = sorted({n for n in (state.get("also_on_pages") or {}).values() if isinstance(n, int)})
             with self.store.lock(eid):
                 editing.before_save(run_dir, page, others)

@@ -4,10 +4,14 @@
 """
 from __future__ import annotations
 
+import itertools
+import json
+import math
 import os
 import stat
 import sys
 import tempfile
+import types
 import unittest
 from datetime import date
 from pathlib import Path
@@ -384,6 +388,388 @@ class AdRefreshTest(unittest.TestCase):
             s.refresh_text()
         self.assertEqual((self.run_ads(s), self.page_ad(s), s.rev), (*before, 7))
         self.assertFalse(s.text_path.exists())
+
+
+# ------------------------------------------------------------------------------------------- locks (white box)
+G = DEd.G
+TOP, FOOT = 30.0, 500.0                    # a fictional news area: 8 columns, 30 to 500 mm from the page's top
+
+
+def col_x(col: int) -> float:
+    return round(G.ORIGIN + col * G.PITCH, 3)
+
+
+def mod(story: str, col: int, y: float, w: int, h: float, locked: bool = False) -> dict:
+    return {"story": story, "x": col_x(col), "y": y, "w": w, "h": h, "locked": locked, "crop": None}
+
+
+class LockCase(unittest.TestCase):
+    """Page 1 of a fictional four-page run, as a page session without the engine (white box, as AdRefreshTest): the
+    edition's stories dA … dD and a column of short items; other pages' stories are their edit files."""
+
+    KEYS = ("dA", "dB", "dC", "dD", "dbriefs1")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.run = Path(self.tmp.name) / "ed" / "runs" / "r-20261021-120000"
+        self.run.mkdir(parents=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def built(self, keys=None):
+        keys = self.KEYS if keys is None else keys
+        brief = {k: k.startswith("dbriefs") for k in keys}
+        return types.SimpleNamespace(
+            story_of={k: {"id": k, "headline": None if brief[k] else f"h-{k}"} for k in keys},
+            els_of={k: [] if brief[k] else [{"id": f"h-{k}", "kind": "headline", "text": f"Fictional headline {k[1:]}"}]
+                    for k in keys},
+            article_of={k: [f"a-{i + 1:010x}"] for i, k in enumerate(keys)},
+            items=[{"key": k, "brief": brief[k], "order": i} for i, k in enumerate(keys)])
+
+    def session(self, modules, keys=None):
+        s = DEd.PageSession.__new__(DEd.PageSession)
+        s.page, s.pages, s.run_dir, s.rev = 1, 4, self.run, 3
+        s.edit_path = self.run / "page-01.edit.json"
+        s.modules, s.origin, s.built = [dict(m) for m in modules], {}, self.built(keys)
+        s.tpl = types.SimpleNamespace(news_top=TOP, news_bottom=FOOT, regions=[(0, G.NCOL, TOP, FOOT)], model={})
+        s.engine = types.SimpleNamespace(sessions={}, cached_options=lambda b, k: {})
+        s.options, s.partial, s.extra_rows, s.keep = {}, set(), {}, []
+        s.draw = lambda: {"rev": s.rev, "modules": s.modules}     # setting the page itself is not under test here
+        s._write_edit()
+        return s
+
+    def other_page(self, n: int, modules: list) -> None:
+        DE.write_json(self.run / f"page-{n:02d}.edit.json",
+                      {"schema": "pageinator.desk.page-edit/1", "page": n, "modules": modules, "rev": 1})
+
+    def files(self) -> dict:
+        """Every file of the run, with its bytes and modification time."""
+        return {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in sorted(self.run.iterdir()) if p.is_file()}
+
+    def refused(self, s, modules, says: str) -> None:
+        """The change is refused with these words, and nothing is set or written."""
+        before = ([dict(m) for m in s.modules], s.rev, self.files())
+        with self.assertRaises(ValueError) as e:
+            s.apply(modules)
+        self.assertEqual(str(e.exception), says)
+        self.assertEqual((s.modules, s.rev, self.files()), before)
+
+
+class ModuleAttrsTest(LockCase):
+    """A module's attributes (the lock, the crop) are kept apart from its place: changing one never moves it."""
+
+    A = mod("dA", 2, 137.23, 3, 100.0)                           # off the editor's grid, as below an advertisement
+
+    def test_a_lock_change_keeps_an_off_grid_place(self):
+        s = self.session([self.A])
+        s.apply([{**self.A, "locked": True}])
+        self.assertEqual(s.modules, [{**self.A, "locked": True}])     # not snapped to 137.0 or 137.5
+        s.apply([{**self.A, "locked": False}])
+        self.assertEqual((s.modules, s.rev), ([self.A], 5))
+        self.assertEqual(DE.read_json(s.edit_path)["modules"], [self.A])
+
+    def test_a_crop_never_moves_a_story_and_is_none_for_now(self):
+        s = self.session([self.A])
+        s.apply([{**self.A, "crop": {"photo": "p-0000000001", "focus": [0.2, 0.8], "zoom": 2.0}}])
+        self.assertEqual(s.modules, [self.A])
+
+    def test_a_moved_story_is_snapped_and_keeps_its_attributes(self):
+        s = self.session([self.A])
+        s.apply([{**self.A, "y": 150.2, "locked": True}])          # moved and locked at once (it was not locked)
+        self.assertEqual(s.modules, [{**self.A, "y": 150.0, "locked": True}])
+        self.assertEqual(s.snap({**self.A, "y": 150.2, "locked": True}),
+                         {"story": "dA", "x": col_x(2), "y": 150.0, "w": 3, "h": 100.0})   # snap is the place only
+
+    def test_a_lock_that_is_not_true_or_false_is_refused(self):
+        s = self.session([self.A])
+        for bad in ("yes", "false", 1, [], {}):
+            with self.subTest(bad=bad):
+                self.refused(s, [{**self.A, "locked": bad}], "a story's lock must be true or false")
+        s.apply([{k: v for k, v in self.A.items() if k != "locked"}])   # missing: not locked
+        self.assertFalse(s.modules[0]["locked"])
+
+
+class LockTest(LockCase):
+    """A locked story keeps its place, width and height and stays on the page; a story locked on another page is not
+    brought here, and a page is not saved while one of its stories is locked on another page."""
+
+    P = mod("dA", 0, TOP, 3, 120.5, locked=True)
+    B = mod("dB", 3, TOP, 5, 120.5)
+    MOVE = "“Fictional headline A” is locked: unlock it (Shift+L) to move it"
+
+    def test_a_locked_story_cannot_be_moved_resized_or_taken_off(self):
+        s = self.session([self.P, self.B])
+        for change in ({"x": col_x(1)}, {"y": 40.0}, {"w": 2}, {"h": 100.0}, {"x": col_x(1), "locked": False}):
+            with self.subTest(change=change):
+                self.refused(s, [{**self.P, **change}, self.B], self.MOVE)
+        off = "“Fictional headline A” is locked: unlock it (Shift+L) to take it off the page"
+        self.refused(s, [self.B], off)
+        self.refused(s, [{**self.P, "story": "d-not-in-the-edition"}, self.B], off)
+        self.refused(s, [{**self.P, "x": col_x(4)}, {**self.P, "story": "dA"}, self.B], self.MOVE)   # first one counts
+        s.apply([self.P, {**self.B, "x": col_x(4), "w": 4}])            # the others still move
+        self.assertEqual((s.modules[0], s.modules[1]["x"]), (self.P, col_x(4)))
+
+    def test_unlocking_in_place_and_undo_and_redo_pass(self):
+        s = self.session([self.P])
+        p, q = dict(self.P), {**self.P, "x": col_x(4), "y": 60.0}
+        steps = [{**p, "locked": False}, {**q, "locked": False}, q]          # unlock, move, lock
+        undone = [{**q, "locked": False}, {**p, "locked": False}, p]         # each step undone, last first
+        for m in steps + undone + steps:                                     # … and redone
+            s.apply([m])
+            self.assertEqual(s.modules, [m])
+        self.assertEqual(s.rev, 3 + 9)
+
+    def test_a_swap_with_a_locked_story_is_refused(self):
+        for a, b, who in ((self.P, self.B, "A"), ({**self.P, "locked": False}, {**self.B, "locked": True}, "B")):
+            with self.subTest(locked=who):
+                s = self.session([a, b])
+                swapped = [{**a, "story": b["story"]}, {**b, "story": a["story"]}]     # as the editor swaps two
+                self.refused(s, swapped, f"“Fictional headline {who}” is locked: unlock it (Shift+L) to move it")
+
+    def test_a_story_locked_on_another_page_cannot_be_brought_here(self):
+        self.other_page(2, [mod("dB", 0, TOP, 4, 200.0, locked=True)])
+        s = self.session([self.P])
+        self.refused(s, [self.P, self.B], "“Fictional headline B” is locked on page 2: unlock it there to bring it here")
+        self.assertEqual(s.where()["dB"], {"page": 2, "locked": True})
+        self.assertEqual([(p["on_page"], p["locked"]) for p in s.pool() if p["story"] == "dB"], [(2, True)])
+        self.other_page(2, [mod("dB", 0, TOP, 4, 200.0)])                   # unlocked there: it may come here
+        s.apply([self.P, self.B])
+        self.assertEqual([m["story"] for m in s.modules], ["dA", "dB"])
+        self.assertEqual([(p["on_page"], p["locked"]) for p in s.pool() if p["story"] == "dC"], [(None, False)])
+
+    def test_a_story_on_two_other_pages_counts_as_locked_when_either_has_it_locked(self):
+        for locked_on in (2, 3):
+            with self.subTest(locked_on=locked_on):
+                for n in (2, 3):
+                    self.other_page(n, [mod("dB", 0, TOP, 4, 200.0, locked=n == locked_on)])
+                self.assertEqual(self.session([self.P]).where()["dB"], {"page": locked_on, "locked": True})
+
+    def test_a_page_holding_a_story_locked_on_another_page_is_not_saved(self):
+        self.other_page(2, [mod("dB", 0, TOP, 4, 200.0, locked=True), mod("dC", 4, TOP, 4, 200.0)])
+        s = self.session([self.P, self.B])
+        (self.run / "page-01.pdf").write_bytes(b"the page as it was last saved (fictional)")
+        s.render = lambda: self.fail("the page was set before the locks were checked")
+        before = self.files()
+        says = ("this page cannot be saved yet: “Fictional headline B” is also on page 2, locked there. Unlock it on "
+                "page 2, or take it off this page, then save")
+        for call in (s.export, s.take_from_other_pages):
+            with self.subTest(call=call.__name__):
+                with self.assertRaises(ValueError) as e:
+                    call()
+                self.assertEqual(str(e.exception), says)
+                self.assertEqual(self.files(), before)            # the PDF and both pages' edits: untouched
+
+    def test_a_save_takes_a_story_off_the_page_it_is_unlocked_on(self):
+        c = mod("dC", 4, TOP, 4, 200.0, locked=True)
+        self.other_page(2, [mod("dB", 0, TOP, 4, 200.0), c])
+        s = self.session([self.P, self.B])
+        self.assertEqual(s.take_from_other_pages(), {2: ["a-0000000003"]})
+        saved = DE.read_json(self.run / "page-02.edit.json")
+        self.assertEqual((saved["modules"], saved["rev"], saved["changed_by_page"]), ([c], 2, 1))
+
+    def test_a_story_whose_articles_are_deleted_leaves_even_when_locked(self):
+        s = self.session([self.P, {**self.B, "locked": True}])
+        arts = [{"id": "a-0000000001"}, {"id": "a-0000000002"}]
+        s.req_articles, s.articles, s._text_sig, s.text_path = arts, arts, "", self.run / "edit-articles.json"
+        s.edition, s.assets, s.frozen, s._measurers, s._g = {}, self.run, {}, {}, None
+        s._link_photos = lambda: None
+        story = {"a-0000000001": "dA", "a-0000000002": "dB"}
+        s.engine.built = lambda edition, articles, ed_dir, frozen=None: self.built([story[a["id"]] for a in articles])
+        DE.write_json(s.text_path, {"articles": {"a-0000000001": None}})          # deleted from the edition
+        s.sync()                                                                  # a deleted article never prints
+        self.assertEqual(([m["story"] for m in s.modules], s.rev), (["dB"], 4))
+        self.assertEqual([m["story"] for m in DE.read_json(s.edit_path)["modules"]], ["dB"])
+
+
+class FreeRegionsTest(unittest.TestCase):
+    """The space around locked stories, as whole-column rectangles for gen1's search."""
+
+    AREA = [(0, G.NCOL, TOP, FOOT)]
+
+    @staticmethod
+    def box(col: int, w: int, y0: float, y1: float) -> tuple:
+        return (G.ORIGIN + col * G.PITCH, y0, G.ORIGIN + col * G.PITCH + G.span_mm(w), y1)
+
+    def test_a_box_in_the_middle_leaves_four_rectangles(self):
+        b = [self.box(3, 2, 100.0, 200.0)]
+        self.assertEqual(DEd.free_regions(self.AREA, b, TOP),
+                         [(0, 3, 30.0, 500.0), (5, 3, 30.0, 500.0), (3, 2, 30.0, 100.0), (3, 2, 200.0, 500.0)])
+        self.assertEqual(DEd.free_regions(self.AREA, b, TOP, rows_first=True),
+                         [(0, 8, 30.0, 100.0), (0, 8, 200.0, 500.0), (0, 3, 100.0, 200.0), (5, 3, 100.0, 200.0)])
+
+    def test_a_box_at_the_top_left(self):
+        b = [self.box(0, 3, TOP, 130.0)]
+        self.assertEqual(DEd.free_regions(self.AREA, b, TOP), [(3, 5, 30.0, 500.0), (0, 3, 130.0, 500.0)])
+        self.assertEqual(DEd.free_regions(self.AREA, b, TOP, True), [(0, 8, 130.0, 500.0), (3, 5, 30.0, 130.0)])
+
+    def test_strips_lower_than_a_module_are_dropped(self):
+        self.assertEqual(DEd.free_regions(self.AREA, [self.box(0, 8, 39.5, 490.5)], TOP), [])
+        self.assertEqual(DEd.free_regions(self.AREA, [self.box(0, 8, 40.0, 490.0)], TOP),
+                         [(0, 8, 30.0, 40.0), (0, 8, 490.0, 500.0)])               # 10 mm is a module's least height
+
+    def test_edges_off_the_grid_are_rounded_inwards(self):
+        b = [self.box(3, 2, 100.2, 200.3)]
+        self.assertEqual(DEd.free_regions(self.AREA, b, TOP),
+                         [(0, 3, 30.0, 500.0), (5, 3, 30.0, 500.0), (3, 2, 30.0, 100.0), (3, 2, 200.5, 500.0)])
+        self.assertEqual(DEd.free_regions(self.AREA, b, TOP, True),
+                         [(0, 8, 30.0, 100.0), (0, 8, 200.5, 500.0), (0, 3, 100.0, 200.5), (5, 3, 100.0, 200.5)])
+        self.assertEqual(DEd.free_regions([(2, 4, 260.3, 499.8)], [], TOP), [(2, 4, 260.5, 499.5)])   # below an ad
+
+    def test_two_boxes(self):
+        b = [self.box(4, 4, TOP, 230.0), self.box(0, 4, TOP, 130.0)]
+        self.assertEqual(DEd.free_regions(self.AREA, b, TOP), [(4, 4, 230.0, 500.0), (0, 4, 130.0, 500.0)])
+        self.assertEqual(DEd.free_regions(self.AREA, b, TOP, True), [(0, 8, 230.0, 500.0), (0, 4, 130.0, 230.0)])
+
+    def test_a_box_across_two_regions_and_one_outside_them(self):
+        area = [(0, 4, TOP, FOOT), (4, 4, TOP, FOOT)]                              # as beside an ad block
+        self.assertEqual(DEd.free_regions(area, [self.box(3, 2, 100.0, 200.0)], TOP),
+                         [(0, 3, 30.0, 500.0), (3, 1, 30.0, 100.0), (3, 1, 200.0, 500.0),
+                          (5, 3, 30.0, 500.0), (4, 1, 30.0, 100.0), (4, 1, 200.0, 500.0)])
+        self.assertEqual(DEd.free_regions(self.AREA, [self.box(0, 8, 505.0, 530.0)], TOP), [(0, 8, 30.0, 500.0)])
+
+    def test_what_is_left_is_on_the_grid_inside_the_area_and_clear_of_every_box(self):
+        def over(a, b):
+            return min(a[2], b[2]) - max(a[0], b[0]) > 1e-6 and min(a[3], b[3]) - max(a[1], b[1]) > 1e-6
+
+        for rows_first, col, w, y0, h in itertools.product((False, True), (0, 2, 5), (1, 3), (30.0, 77.3, 211.75), (40.0, 133.3)):
+            boxes = [self.box(col, w, y0, y0 + h), self.box((col + 4) % 8, 2, y0 + 60.2, y0 + 140.0)]
+            free = DEd.free_regions(self.AREA, boxes, TOP, rows_first)
+            with self.subTest(rows_first=rows_first, col=col, w=w, y0=y0, h=h):
+                self.assertTrue(free)
+                for r in free:
+                    c0, cols, t, b = r
+                    self.assertTrue(0 <= c0 and c0 + cols <= G.NCOL and TOP <= t and b <= FOOT and b - t >= DEd.MIN_H_MM)
+                    for edge in (t, b):
+                        self.assertAlmostEqual((edge - TOP) / DEd.SNAP_MM, round((edge - TOP) / DEd.SNAP_MM), places=6)
+                    self.assertFalse(any(over(G.region_box(r), bx) for bx in boxes))
+                for a, b in itertools.combinations(free, 2):
+                    self.assertFalse(over(G.region_box(a), G.region_box(b)))
+
+
+class LockedAlternativeTest(LockCase):
+    """Another layout with locked stories, with a stub search: the locked stories stay exactly as they are, the search
+    gets the stories that are not locked at their ranks on the page and the free space around the locked ones."""
+
+    class Search:
+        """Stands in for gen1's generator (DG.DeskGenerator): records what it is given; fills each region it is asked
+        for with one story (fictional), or nothing."""
+        made: list = []
+        fill = True
+
+        def __init__(self, cx, model, photo_dir, styles, ids, space_em, pre=None):
+            self.ids, self.ban_lead, self.extra_rows, self.runs = set(ids), set(), {}, []
+            self.stories = [types.SimpleNamespace(id=st["id"], rank=r) for r, st in enumerate(model["stories"])]
+            type(self).made.append(self)
+
+        def run(self, regions, span_prior, side):
+            self.runs.append((list(regions), side, set(self.ban_lead)))
+            if not type(self).fill:
+                return None, {}
+            trees = [(k, (i, regions[k])) for k, i in zip(range(len(regions)), range(len(self.stories)), strict=False)]
+            return (0.0, trees), {}
+
+        def place(self, tree, x, y):
+            i, (c0, w, t, b) = tree
+            return [(i, x, y, w, math.floor((b - t) / G.UNIT) * G.UNIT, None)]
+
+    def setUp(self):
+        super().setUp()
+        self.real = DEd.DG.DeskGenerator
+        DEd.DG.DeskGenerator = self.Search
+        self.Search.made, self.Search.fill = [], True
+
+    def tearDown(self):
+        DEd.DG.DeskGenerator = self.real
+        super().tearDown()
+
+    def page(self, modules, keys):
+        s = self.session(modules, keys)
+        s.order = lambda: list(keys)
+        s.generator = lambda: self.fail("the whole page was searched although stories are locked")
+        s.engine.cal = types.SimpleNamespace(lead_side="right", span_prior=lambda r, w: 0.0, styles={}, space_em=0.25)
+        s.engine.cx, s.tpl.model, s.photo_dir = None, {"unassigned": []}, self.run
+        s.options = {k: {} for k in keys}
+        return s
+
+    def test_the_locked_stories_stay_and_the_others_fill_the_space_around_them(self):
+        a = mod("dA", 0, TOP, 3, 100.0, locked=True)              # the page's lead, locked at the top left
+        s = self.page([a, mod("dB", 5, TOP, 3, 470.0), mod("dC", 3, 230.0, 2, 100.0)], ["dA", "dB", "dC"])
+        stored = json.dumps(a, sort_keys=True)
+        s.alternative(3)
+        g = self.Search.made[0]
+        self.assertEqual([(st.id, st.rank) for st in g.stories], [("dB", 1), ("dC", 2)])   # their ranks on the page
+        self.assertIs(g.extra_rows, s.extra_rows)
+        self.assertEqual(g.runs, [([(3, 5, 30.0, 500.01), (0, 3, 130.0, 500.01)], "right", set())])  # lead locked
+        self.assertEqual(json.dumps(s.modules[0], sort_keys=True), stored)                # exactly as it was
+        self.assertEqual(s.modules[1:], [mod("dB", 3, TOP, 5, 470.0), mod("dC", 0, 130.0, 3, 370.0)])
+        self.assertEqual(s.rev, 4)
+
+    def test_no_fill_changes_nothing_after_every_try_in_order(self):
+        a = mod("dA", 0, TOP, 3, 100.0, locked=True)
+        s = self.page([a, mod("dB", 3, TOP, 5, 270.0), mod("dC", 0, 130.0, 3, 170.0)], ["dA", "dB", "dC"])
+        self.Search.fill = False
+        before = ([dict(m) for m in s.modules], s.rev, self.files())
+        with self.assertRaises(ValueError) as e:
+            s.alternative(1)
+        self.assertEqual(str(e.exception), DEd.NO_FILL_AROUND)
+        self.assertEqual((s.modules, s.rev, self.files()), before)
+        self.assertEqual([r for r, _, _ in self.Search.made[0].runs], [
+            [(3, 5, 30.0, 300.01), (0, 3, 130.0, 300.01)],          # the page's own (short) height, columns first
+            [(0, 8, 130.0, 300.01), (3, 5, 30.0, 130.01)],          # … rows first
+            [(3, 5, 30.0, 500.01), (0, 3, 130.0, 500.01)],          # the whole news area
+            [(0, 8, 130.0, 500.01), (3, 5, 30.0, 130.01)]])
+
+    def test_a_search_that_leaves_a_story_out_changes_nothing(self):
+        a = mod("dA", 0, TOP, 3, 100.0, locked=True)                # two free regions, three stories to place
+        s = self.page([a, mod("dB", 3, TOP, 5, 470.0), mod("dC", 0, 130.0, 3, 370.0), mod("dD", 3, 300.0, 2, 100.0)],
+                      ["dA", "dB", "dC", "dD"])
+        before = ([dict(m) for m in s.modules], s.rev, self.files())
+        with self.assertRaises(ValueError) as e:
+            s.alternative(1)
+        self.assertIn("did not place every story", str(e.exception))
+        self.assertEqual((s.modules, s.rev, self.files()), before)
+
+    def test_a_lead_that_is_not_locked_changes_side_and_width(self):
+        b = mod("dB", 0, TOP, 3, 100.0, locked=True)
+        s = self.page([mod("dA", 3, TOP, 5, 470.0), b, mod("dC", 0, 130.0, 3, 370.0)], ["dA", "dB", "dC"])
+        s.alternative(3)                                            # the lead was on the right: now left, not 5 wide
+        g = self.Search.made[0]
+        self.assertEqual((g.runs[0][1], g.runs[0][2]), ("left", {5}))
+        self.assertEqual([(st.id, st.rank) for st in g.stories], [("dA", 0), ("dC", 2)])
+
+    def test_a_page_with_every_story_locked_is_refused(self):
+        s = self.page([mod("dA", 0, TOP, 3, 100.0, locked=True), mod("dB", 3, TOP, 5, 470.0, locked=True)], ["dA", "dB"])
+        before = ([dict(m) for m in s.modules], s.rev, self.files())
+        with self.assertRaises(ValueError) as e:
+            s.alternative(1)
+        self.assertEqual(str(e.exception), DEd.ALL_LOCKED)
+        self.assertEqual((s.modules, s.rev, self.files(), self.Search.made), (*before, []))
+
+    def test_only_the_stories_not_locked_count_towards_the_search_limit(self):
+        keys = [f"d{i:010x}" for i in range(G.MAX_STORIES + 1)]
+        mods = [mod(k, i % 8, TOP + 40.0 * (i // 8), 1, 40.0) for i, k in enumerate(keys)]
+        s = self.page(mods, keys)
+        with self.assertRaises(ValueError) as e:
+            s.alternative(1)
+        self.assertEqual(str(e.exception), f"this page has {G.MAX_STORIES + 1} stories; another layout needs "
+                                           f"{G.MAX_STORIES} or fewer")
+        s = self.page([{**mods[0], "locked": True}] + mods[1:], keys)
+        self.Search.fill = False
+        with self.assertRaises(ValueError) as e:
+            s.alternative(1)
+        self.assertEqual(str(e.exception), DEd.NO_FILL_AROUND)                   # searched: 11 not locked
+
+    def test_without_locks_the_whole_page_is_searched_as_before(self):
+        s = self.page([mod("dA", 0, TOP, 3, 100.0), mod("dB", 3, TOP, 5, 470.0)], ["dA", "dB"])
+        s.tpl.regions = [(0, G.NCOL, TOP, 499.8)]                  # the template's own edges, off the grid or not
+        g = self.Search(None, {"stories": [{"id": "dA"}, {"id": "dB"}]}, None, None, {"dA", "dB"}, None)
+        s.generator = lambda: g
+        self.Search.fill = False
+        with self.assertRaises(ValueError) as e:
+            s.alternative(2)
+        self.assertEqual(str(e.exception), "no other layout fills this page exactly with these stories")
+        self.assertEqual(g.runs, [([(0, G.NCOL, TOP, 499.8)], "right", {3})])     # the lead's width banned
 
 
 # ------------------------------------------------------------------------------------------- a run's own pictures

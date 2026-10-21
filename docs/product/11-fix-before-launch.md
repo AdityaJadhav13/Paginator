@@ -45,6 +45,35 @@ These come from the feature's code review and its independent verification, 2026
 | VIEW-11 | Small items:<br>• the comment at `fit()` describes the top placement wrongly;<br>• `aria-keyshortcuts` is missing on Fit, Width, Story and Rulers | Cosmetic |
 | VIEW-12 | Spec items not built yet (05 §8.5, §8.12):<br>• moving or resetting the ruler origin;<br>• guides pulled from the rulers;<br>• a units menu;<br>• the absolute 10–800 % zoom range;<br>• Shift+0 = actual size (today "100 %" and Shift+0 mean the whole page) | Not claimed by the Desk; needed for the product's editor |
 
+## Page editor: lock a story in place (L1-2)
+
+From the feature's code review and its independent verification, 2026-10-21. Print safety held in both: the engine
+refuses every change to a locked story before anything is written.
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| LOCK-1 | `deskserver/api.py` `_save`, `editing.py` | The race case: when a story is locked on the other page between the save's check and the engine's export, both pages stay "needs saving" with reasons that are not true ("Page 1 is taking a story…", "did not finish"), and the page's last check result is cleared. A refused save should restore what `before_save` changed | Fails closed (nothing prints wrongly); rare |
+| LOCK-2 | `static/editor.js` undo/redo | After an undo or redo unlocks a story, the "is locked" notice stays on screen | Cosmetic |
+| LOCK-3 | `static/editor.js` `another()` | With every story locked, "Try another layout" sends a request and shows a red error, instead of saying so at once like the other refusals | The answer is right; only the presentation differs |
+| LOCK-4 | `static/editor.html` help text | "on the page's empty space it unlocks every story" reads as if a right-click unlocks everything; it opens a menu with **Unlock all on page** | Wording |
+| LOCK-5 | `CONTRACT.md` §2.1, `engine/deskedit.py` `_attrs` | The contract says a `locked` value that is not true, false or missing is refused, but `null` is taken as false (unlock in place). Make the code or the contract match | The behaviour is safe (unlocking in place is allowed) |
+| LOCK-6 | `engine/deskedit.py` `free_regions` | Strips between 10 mm and the shortest free story's height are kept as regions; gen1 must fill every region, so one such strip makes every try fail with "no fill". Drop strips shorter than the free stories' smallest option | The refusal is honest and changes nothing |
+| LOCK-7 | `engine/deskedit.py` `alternative()` | With the lead locked, variants 1–3 run the same search, so further presses give nothing new; and a layout that comes out unchanged still makes a revision and an undo step, and marks a saved page "Changed · not saved" | The notice says the page came out as it was |
+| LOCK-8 | `engine/deskedit.py` `alternative()` | Up to 4 searches instead of 2, each rebuilding gen1's tables and re-measuring widths it measured on the last press; not measured against the 180 s limit on a full 11-story page (the verifier's searches took 0–9 s) | Performance only |
+| LOCK-9 | `test/test_server.py`, `test/test_engine.py` | Test gaps: the fake engine does not check the type of `locked` or snap places, and its alternative never answers "no fill"; "a deleted article leaves even when locked" is tested through `sync()` only, not `refresh_text()`; no test runs the lock-aware alternative through gen1's real search (a probe did: correct, no overlaps) | Checked by hand and by both checks |
+| LOCK-10 | `engine/deskedit.py` and `static/editor.js` messages | The engine says "Shift+L" while the editor's own notices say "⇧L" on a Mac; with several stories held on one page the server and the editor may name different ones | Wording |
+| LOCK-11 | `static/editor.js` menu | Reasons for disabled items are only in their `title`; the canvas has no `aria-haspopup`; during a save or another layout, menu items and Shift+L silently do nothing; after a right-click that produced no menu event, a keyboard-opened menu may jump to the pointer for 10 s | Accessibility and polish |
+| LOCK-12 | `static/editor.js` drawing | The padlock mark covers the end of the headline at the story's top-right corner (screen only) | Does not print |
+| LOCK-13 | `static/editor.js` "Other stories" list | If another tab locks a story after this page loaded, the list still shows it unlocked; a bring-in is then refused by the engine (400) and the page is shown again, leaving an undo entry for the refused change | The engine refuses; nothing is written |
+| LOCK-14 | `engine/deskedit.py` `is_locked` | Its docstring says anything but false counts as locked, but 0, "" and null count as unlocked | Nit |
+
+## Desk: noticed while checking L1-2 (not caused by it)
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| DESK-7 | `engine/deskedit.py` Update text | The first Update text in a layout writes `edit-articles.json` even when nothing changed (the edition's articles have `is_brief`/`words` keys the run lacks), so a save refused for a lock is not entirely write-free | PDFs, page edit files and status stay unchanged |
+| DESK-8 | `edit-service.log` in the Desk home | Every engine refusal writes a traceback that includes the headline | The log is in the private Desk home, never in the repository; trim it before the hosted engine (L2.3) |
+
 ## Licence check (`tools/ts/check-licences.ts`)
 
 | # | What | Why it can wait |
