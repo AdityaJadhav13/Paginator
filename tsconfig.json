@@ -17,6 +17,12 @@
       "path": "packages/contracts/test"
     },
     {
+      "path": "apps/api"
+    },
+    {
+      "path": "apps/api/test"
+    },
+    {
       "path": "tools/ts"
     }
   ]

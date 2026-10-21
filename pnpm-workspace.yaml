@@ -20,6 +20,12 @@ catalog:
   prettier: "3.9.10"
   # Zod 4: the shared schemas (packages/contracts) and the API; MIT.
   zod: "4.6.7"
+  # The API (apps/api); MIT.
+  fastify: "5.12.7"
+  fastify-type-provider-zod: "7.0.0"
+  # Required peers of fastify-type-provider-zod; its types import them (nothing loads them at run time yet).
+  "@fastify/swagger": "9.9.2"
+  openapi-types: "12.1.3"
 
 overrides:
   typescript: "npm:@typescript/typescript6@6.0.2"

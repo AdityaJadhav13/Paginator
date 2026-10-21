@@ -4,6 +4,7 @@
 | Path | What |
 |---|---|
 | `apps/web` | The React application (`@pageinator/web`) |
+| `apps/api` | The API (`@pageinator/api`, Fastify; its layout: docs/product/10-l2-newsroom-plan.md §2.1) |
 | `packages/*` | Engine packages (`@pageinator/pyshim`, and from M1 `harfbuzz`, `fonts`, `shape`, `hyphenate`, `compose`, `headline`, `document`, `pdf`, `kernel`) |
 | `packages/contracts` | Zod schemas shared by the API and the web app (not a kernel package): the error envelope and its codes |
 | `tools/testkit` | Test-only helpers: repository paths, Python-flavoured JSONL |
@@ -40,6 +41,7 @@
 | `pnpm run typecheck` | `tsc -b` (TypeScript 7) for packages, plus the web app's own typecheck |
 | `pnpm run lint` / `pnpm run format` | ESLint (with the kernel determinism rules) and Prettier |
 | `pnpm --filter @pageinator/web dev` | Run the web app |
+| `pnpm --filter @pageinator/api dev` | Run the API on `http://127.0.0.1:8780` (`/healthz`, `/readyz`), restarting on changes. Its settings (`PGN_*`) are read and checked by `apps/api/src/config.ts`; behind any proxy, `PGN_TRUST_PROXY` must name it |
 | `pnpm run guard` | Privacy guard, frozen-evidence guard and oracle check. Locally, on a branch stacked on another, set `GUARD_BASE=origin/<base>` |
 | `pnpm run check:oracle` | The frozen oracle: its manifest's SHA-256s, and every tracked file against `tools/ts/oracle-files.json` |
 | `pnpm run test:private` | Private parity tests against pilot goldens (needs `PAGEINATOR_PRIVATE_GOLDENS`; fails, never skips, when missing) |
