@@ -63,6 +63,13 @@ function tooWide(entry: string): boolean {
   return value >> 32n === MAPPED >> 32n && bits < 96 + 8; // inside it: an IPv4 range wider than /8
 }
 
+/** An origin as browsers send it in the Origin header: scheme, host and port, nothing more. */
+function isOrigin(value: string): boolean {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return (url.protocol === "https:" || url.protocol === "http:") && url.origin === value;
+}
+
 const Env = z
   .object({
     PGN_API_HOST: z.string().min(1, { error: "must not be empty" }).default("127.0.0.1"),
@@ -79,6 +86,12 @@ const Env = z
     // seconds a stop (SIGTERM, SIGINT) waits for requests in flight before closing their connections
     PGN_SHUTDOWN_GRACE_S: wholeNumber(0, 600).default(10),
     PGN_LOG_LEVEL: z.enum(LOG_LEVELS, { error: `must be one of ${LOG_LEVELS.join(", ")}` }).default("info"),
+    // The security baseline (§4.5–4.6). The web app's origins: in production exactly the app's own origin; in
+    // development Vite on 127.0.0.1:5180 (§7.1).
+    PGN_ALLOWED_ORIGINS: list(isOrigin, "must be origins such as https://app.example.test (no path)")
+      .refine((origins) => origins.length > 0, { error: "must name at least one origin" })
+      .default(["http://127.0.0.1:5180"]),
+    PGN_RATE_LIMIT_PER_MINUTE: wholeNumber(1, 100_000).default(60),
   })
   .transform((env) => ({
     host: env.PGN_API_HOST,
@@ -86,6 +99,8 @@ const Env = z
     trustProxy: env.PGN_TRUST_PROXY,
     shutdownGraceSeconds: env.PGN_SHUTDOWN_GRACE_S,
     logLevel: env.PGN_LOG_LEVEL,
+    allowedOrigins: env.PGN_ALLOWED_ORIGINS,
+    rateLimitPerMinute: env.PGN_RATE_LIMIT_PER_MINUTE,
   }));
 
 export type Config = z.output<typeof Env>;

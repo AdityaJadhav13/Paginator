@@ -93,3 +93,37 @@ describe("config", () => {
     expect(problems({ PGN_API_PORT: port })).toContain("PGN_API_PORT must be a whole number from 1 to 65535");
   });
 });
+
+describe("config: security settings", () => {
+  it("defaults to the development web app's origin and 60 requests a minute", () => {
+    expect(loadConfig({})).toMatchObject({ allowedOrigins: ["http://127.0.0.1:5180"], rateLimitPerMinute: 60 });
+  });
+
+  it("reads a list of origins and the limit", () => {
+    const env = {
+      PGN_ALLOWED_ORIGINS: "https://app.example.test, http://127.0.0.1:5180",
+      PGN_RATE_LIMIT_PER_MINUTE: "300",
+    };
+    expect(loadConfig(env)).toMatchObject({
+      allowedOrigins: ["https://app.example.test", "http://127.0.0.1:5180"],
+      rateLimitPerMinute: 300,
+    });
+  });
+
+  it.each(["https://app.example.test/", "app.example.test", "ftp://files.example.test", "null"])(
+    "refuses the origin %j",
+    (origin) => {
+      expect(problems({ PGN_ALLOWED_ORIGINS: origin })).toContain("PGN_ALLOWED_ORIGINS must be origins");
+    },
+  );
+
+  it("names the entries that are not origins, and needs at least one", () => {
+    expect(problems({ PGN_ALLOWED_ORIGINS: "https://app.example.test/desk,http://127.0.0.1:5180" })).toContain(
+      "  - PGN_ALLOWED_ORIGINS must be origins such as https://app.example.test (no path); not https://app.example.test/desk",
+    );
+    expect(problems({ PGN_ALLOWED_ORIGINS: " , " })).toContain("PGN_ALLOWED_ORIGINS must name at least one origin");
+    expect(problems({ PGN_RATE_LIMIT_PER_MINUTE: "0" })).toContain(
+      "PGN_RATE_LIMIT_PER_MINUTE must be a whole number from 1 to 100000",
+    );
+  });
+});

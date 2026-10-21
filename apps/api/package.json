@@ -8,6 +8,8 @@
     "start": "node src/main.ts"
   },
   "dependencies": {
+    "@fastify/helmet": "catalog:",
+    "@fastify/rate-limit": "catalog:",
     "@pageinator/contracts": "workspace:*",
     "fastify": "catalog:",
     "fastify-type-provider-zod": "catalog:",

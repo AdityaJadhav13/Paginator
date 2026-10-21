@@ -9,6 +9,7 @@ import type { Config } from "./config.ts";
 import { REQUEST_ID_HEADER, childLoggerFactory, requestId } from "./http/context.ts";
 import { ApiError, clientErrorHandler, errorHandler, frameworkErrorHandler } from "./http/errors.ts";
 import { health, type Checks } from "./http/health.ts";
+import { registerSecurity } from "./http/security.ts";
 import { closeWhenStopping } from "./shutdown.ts";
 
 export type AppDeps = {
@@ -39,6 +40,7 @@ export async function buildApp(deps: AppDeps) {
     reply.header(REQUEST_ID_HEADER, request.id);
   });
   fastify.addHook("onSend", closeWhenStopping);
+  await registerSecurity(fastify, config);
   fastify.setNotFoundHandler(async () => {
     throw new ApiError("not_found");
   });
