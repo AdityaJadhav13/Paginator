@@ -1,6 +1,6 @@
 // /healthz answers while the process is up. /readyz reports each dependency as "ok", "failing" or "not_configured",
-// and answers 503 when one is failing. Nothing uses a database yet, so it is "not_configured" until the pools arrive
-// (PR 5) with its check.
+// and answers 503 when one is failing. main.ts gives the database's check (src/db/pools.ts: both pools answer a
+// query); a test app without it reports "not_configured".
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 

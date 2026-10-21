@@ -4,6 +4,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { type AddressInfo, type Server, type Socket, connect, createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { PASSWORDS } from "../unit/helpers.ts";
 
 const MAIN = fileURLToPath(new URL("../../src/main.ts", import.meta.url));
 const HARNESS = fileURLToPath(new URL("./stop-harness.ts", import.meta.url));
@@ -33,7 +34,8 @@ type Exit = { code: number | null; signal: string | null; stdout: string; stderr
 
 function start(env: Record<string, string>, args: string[] = [MAIN]) {
   const child = spawn(process.execPath, args, {
-    env: { PATH: process.env["PATH"] ?? "", PGN_LOG_LEVEL: "info", ...env },
+    // no database runs for these tests: the API connects only on first use, and none of them uses it
+    env: { PATH: process.env["PATH"] ?? "", PGN_LOG_LEVEL: "info", ...PASSWORDS, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   children.push(child);

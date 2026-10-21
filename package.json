@@ -18,6 +18,7 @@
     "typecheck": "tsc -b && pnpm --filter @pageinator/web typecheck",
     "test": "vitest run",
     "test:private": "PAGEINATOR_PRIVATE_RUN=1 vitest run --project private",
+    "test:db": "PAGEINATOR_DB_RUN=1 vitest run --project api-db --project tenancy",
     "check:oracle": "node tools/ts/check-oracle-manifest.ts",
     "dev:up": "docker compose -p pageinator --env-file .env.dev -f infra/docker/compose.dev.yml up -d --wait",
     "dev:down": "docker compose -p pageinator --env-file .env.dev -f infra/docker/compose.dev.yml down",

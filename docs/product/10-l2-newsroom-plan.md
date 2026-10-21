@@ -473,8 +473,8 @@ alter table app.story force row level security;
 create policy org_wall on app.story
   using (org_id = (select app.current_org())) with check (org_id = (select app.current_org()));
 create policy pub_wall on app.story as restrictive                                 -- content tables only
-  using (publication_id = any ((select app.current_pubs())))
-  with check (publication_id = any ((select app.current_pubs())));
+  using (publication_id = any ((select app.current_pubs())::uuid[]))                -- the cast makes it an array:
+  with check (publication_id = any ((select app.current_pubs())::uuid[]));          -- without it, a subquery fails
 ```
 
 **`withTenant({orgId, userId, pubIds, requestId}, fn)`:**
@@ -582,7 +582,7 @@ create policy pub_wall on app.story as restrictive                              
 - **Files:** `apps/api/src/db/migrations/2026_11_01_0001_*.ts`. They use raw `sql` for DDL, RLS policies, grants and triggers.
 - **Forward only, expand/contract** (doc 04 §6). No `down` functions; disaster recovery is a restore.
 - **Better Auth's schema:** generated once with the pinned CLI `auth@1.7.12` (`auth generate`, with `schemaName: "identity"`), committed as a reviewed migration. Each Better Auth upgrade regenerates and diffs it.
-- **Types:** kysely-codegen 0.20.0 writes `src/db/schema.gen.ts`. CI migrates a fresh database, runs the codegen, and fails on any diff.
+- **Types:** a small generator (`src/db/codegen.ts`) writes `src/db/schema.gen.ts` from the migrated catalog. CI migrates a fresh database, runs the codegen, and fails on any diff. (kysely-codegen 0.20.0 was the plan; one of its dependencies, argparse 2.0.1, has the Python-2.0 licence, outside the licence check's allowlist. Switching to it needs that licence reviewed.)
 - **Large backfills** run as jobs, never inside migrations.
 
 ### 3.7 How the Desk's files map to Postgres and S3 (CONTRACT §1)
@@ -1117,7 +1117,7 @@ Rules for every PR:
 | 2 | infra: development compose | `infra/docker/compose.dev.yml` (Postgres 18.6, SeaweedFS 4.48, Mailpit 1.31.6; ports in §7.1) · role init SQL (database rights only; schemas from PR 5) · `.env.dev.example` · `pnpm dev:*` scripts with `-p pageinator` | ~180 | 1 |
 | 3 | ci: the Desk's tests | `tools/desk/requirements.lock` (hashed, from the pdfx1 pins) · CI job `desk` (both venvs, fictional tests) · fake engine moved to a shared fixture | ~150 | 1 |
 | 4 | api: skeleton | `apps/api` (fastify 5.12.7, zod 4.6.7, fastify-type-provider-zod 7.0.0, @fastify/helmet 13.2.0, @fastify/rate-limit 11.2.1) · Zod config · `buildApp` · error envelope · request id · `/healthz`, `/readyz` · Origin and header guard · `packages/contracts` seed (error codes) · Vitest project `api` · ESLint Node block | ~380 | 2 |
-| 5 | api: database plumbing | kysely 0.29.7, pg 8.23.1 · pools (app, auth, listen) · `withTenant` · migration runner · migrations for schemas, helper functions, grants, `publication`, `person`, `org_settings`, `audit_event` with RLS · kysely-codegen 0.20.0 with CI diff · ESLint: no raw pool outside `src/db` | ~400 | 4 |
+| 5 | api: database plumbing | kysely 0.29.7, pg 8.23.1 · pools (app, auth, listen) · `withTenant` · migration runner · migrations for schemas, helper functions, grants, `publication`, `person`, `org_settings`, `audit_event` with RLS · our own type generator (`src/db/codegen.ts`) with CI diff, not kysely-codegen 0.20.0, whose dependency argparse 2.0.1 is under Python-2.0 · ESLint: no raw pool outside `src/db` | ~400 | 4 |
 | 6 | api: tenancy harness | Catalog meta-test (a) · cross-tenant generator (b) with two fictional organisations · planted-defect test · CI job `api` on compose | ~300 | 5 |
 | 7 | identity 1: Better Auth | a request-log serializer that drops the query string (Better Auth's emailed links carry tokens) · better-auth 1.7.12 · generated `identity` migration (`auth` 1.7.12 CLI; generated SQL listed separately) · mount `/api/auth/*` · argon2id (@node-rs/argon2 2.2.2) · nodemailer 10.1.7 with Mailpit · verification and reset emails (en/mr) · telemetry off | ~350 + generated | 6 |
 | 8 | identity 2: sessions | `request.actor` resolution · 30-day absolute limit · rate-limit rules and the per-email failure counter · `identity.auth_event` · "new sign-in" email · tests: generic wrong-password answer, reset revokes sessions, lockout | ~350 | 7 |
@@ -1162,7 +1162,7 @@ Rules for every PR:
 | pino | 10.4.0 | MIT | npm |
 | nodemailer | 10.1.7 | MIT-0 | npm (MIT-0 is on the allowlist) |
 | @node-rs/argon2 | 2.2.2 | MIT | npm (licences of its native binary packages: to verify by `check-licences`) |
-| kysely-codegen · kysely-ctl | 0.20.0 · 0.22.0 | MIT | npm (kysely-ctl not needed) |
+| kysely-codegen · kysely-ctl | 0.20.0 · 0.22.0 | MIT | npm. **Neither is used:** kysely-codegen pulls in argparse 2.0.1 (Python-2.0) through cosmiconfig and js-yaml, outside the licence allowlist, so `src/db/codegen.ts` generates the types (§3.6); kysely-ctl is not needed |
 | testcontainers · @testcontainers/postgresql | 12.2.1 | MIT | npm (optional; compose is the default) |
 | fflate · qrcode · @playwright/test | 0.8.3 · 1.5.4 · 1.64.1 | MIT · MIT · Apache-2.0 | npm |
 | sharp · @img/sharp-libvips-linux-x64 | 0.35.5 · 1.3.4 | Apache-2.0 · **LGPL-3.0-or-later** | npm (not used in L2) |

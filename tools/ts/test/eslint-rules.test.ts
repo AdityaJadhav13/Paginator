@@ -87,3 +87,22 @@ describe("kernel determinism rules", () => {
     }
   });
 });
+
+describe("the API's database boundary", () => {
+  it.each([
+    ['import { Pool } from "pg";\nvoid Pool;', "apps/api/src/http/x.ts"],
+    ['import { sql } from "kysely";\nvoid sql;', "apps/api/src/modules/orgs/service.ts"],
+    ['import type { Kysely } from "kysely";\nexport type K = Kysely<unknown>;', "apps/api/src/app.ts"],
+    ['import { Migrator } from "kysely/migration";\nvoid Migrator;', "apps/api/scripts/x.ts"],
+    ['import Cursor from "pg-cursor";\nvoid Cursor;', "apps/api/src/x.ts"],
+  ])("refuses %j outside src/db (%s)", async (code, file) => {
+    expect(await restricted(code, file)).toEqual(["no-restricted-imports"]);
+  });
+
+  it("lets src/db and the tests use pg and kysely", async () => {
+    const code = 'import { Pool } from "pg";\nimport { sql } from "kysely";\nvoid Pool;\nvoid sql;';
+    for (const file of ["apps/api/src/db/x.ts", "apps/api/src/db/migrations/x.ts", "apps/api/test/db/x.test.ts"]) {
+      expect(await restricted(code, file), file).toEqual([]);
+    }
+  });
+});

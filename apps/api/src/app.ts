@@ -6,6 +6,7 @@
 import Fastify from "fastify";
 import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from "fastify-type-provider-zod";
 import type { Config } from "./config.ts";
+import type { Database } from "./db/pools.ts";
 import { REQUEST_ID_HEADER, childLoggerFactory, requestId } from "./http/context.ts";
 import { ApiError, clientErrorHandler, errorHandler, frameworkErrorHandler } from "./http/errors.ts";
 import { health, type Checks } from "./http/health.ts";
@@ -14,6 +15,9 @@ import { closeWhenStopping } from "./shutdown.ts";
 
 export type AppDeps = {
   config: Config;
+  /** The database, opened by main.ts (src/db/pools.ts): the app logs its connections' errors and closes it when the
+   * app closes. Tests that need no database leave it out. */
+  database?: Database;
   /** Dependency checks for /readyz; a dependency without one is reported as not configured. */
   checks: Checks;
 };
@@ -34,6 +38,16 @@ export async function buildApp(deps: AppDeps) {
   });
   fastify.setErrorHandler(errorHandler);
   fastify.removeContentTypeParser("text/plain"); // bodies are JSON only
+  const { database } = deps;
+  if (database) {
+    database.onConnectionError((role, error) => {
+      fastify.log.warn(
+        { role, code: (error as NodeJS.ErrnoException).code },
+        `a database connection failed: ${error.message}`,
+      );
+    });
+    fastify.addHook("onClose", () => database.close());
+  }
 
   // first, so that every answer carries the request id, including a refusal by a later hook
   fastify.addHook("onRequest", async (request, reply) => {

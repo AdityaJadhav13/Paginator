@@ -1,5 +1,5 @@
-// The API's settings, read from the environment and checked with Zod. No secret has a default here: the settings
-// that will hold one (database passwords, PR 5) must come from the environment.
+// The API's settings, read from the environment and checked with Zod, and those of the migration command. No secret
+// has a default: every password must come from the environment, and no message ever shows one.
 import { z } from "zod";
 
 const ADDRESS = z.union([z.ipv4(), z.ipv6(), z.cidrv4(), z.cidrv6()]);
@@ -63,6 +63,20 @@ function tooWide(entry: string): boolean {
   return value >> 32n === MAPPED >> 32n && bits < 96 + 8; // inside it: an IPv4 range wider than /8
 }
 
+/** A password: it must be set, and be more than white space (Postgres would store an empty one as no password). */
+function password() {
+  return z
+    .string({ error: "must be set: it is a password, so it has no default" })
+    .refine((text) => /\S/.test(text), { error: "must not be empty or only white space" });
+}
+
+/** Where the database is (plan §7.1: the development compose's port by default). */
+const DATABASE = {
+  PGN_DB_HOST: z.string().min(1, { error: "must not be empty" }).default("127.0.0.1"),
+  PGN_DB_PORT: wholeNumber(1, 65535).default(55432),
+  PGN_DB_NAME: z.string().min(1, { error: "must not be empty" }).default("pageinator"),
+};
+
 /** An origin as browsers send it in the Origin header: scheme, host and port, nothing more. */
 function isOrigin(value: string): boolean {
   if (!URL.canParse(value)) return false;
@@ -92,6 +106,12 @@ const Env = z
       .refine((origins) => origins.length > 0, { error: "must name at least one origin" })
       .default(["http://127.0.0.1:5180"]),
     PGN_RATE_LIMIT_PER_MINUTE: wholeNumber(1, 100_000).default(60),
+    // The database (plan §3.1): one login role per connection pool, each with its own password (.env.dev in
+    // development).
+    ...DATABASE,
+    PGN_APP_PASSWORD: password(),
+    PGN_AUTH_PASSWORD: password(),
+    PGN_LISTEN_PASSWORD: password(),
   })
   .transform((env) => ({
     host: env.PGN_API_HOST,
@@ -101,16 +121,40 @@ const Env = z
     logLevel: env.PGN_LOG_LEVEL,
     allowedOrigins: env.PGN_ALLOWED_ORIGINS,
     rateLimitPerMinute: env.PGN_RATE_LIMIT_PER_MINUTE,
+    database: {
+      host: env.PGN_DB_HOST,
+      port: env.PGN_DB_PORT,
+      name: env.PGN_DB_NAME,
+      passwords: { app: env.PGN_APP_PASSWORD, auth: env.PGN_AUTH_PASSWORD, listen: env.PGN_LISTEN_PASSWORD },
+    },
   }));
 
+/** The migration command's settings (pnpm --filter @pageinator/api db:migrate, and db:codegen): it signs in as
+ * pgn_migrator. */
+const MigratorEnv = z.object({ ...DATABASE, PGN_MIGRATOR_PASSWORD: password() }).transform((env) => ({
+  host: env.PGN_DB_HOST,
+  port: env.PGN_DB_PORT,
+  name: env.PGN_DB_NAME,
+  password: env.PGN_MIGRATOR_PASSWORD,
+}));
+
 export type Config = z.output<typeof Env>;
+export type MigratorConfig = z.output<typeof MigratorEnv>;
 
 /** The settings are not right; the message lists every problem, one per line. */
 export class ConfigError extends Error {}
 
-export function loadConfig(env: Readonly<Record<string, string | undefined>>): Config {
-  const result = Env.safeParse(env);
+function parse<T>(schema: z.ZodType<T>, env: Readonly<Record<string, string | undefined>>, whose: string): T {
+  const result = schema.safeParse(env);
   if (result.success) return result.data;
   const problems = result.error.issues.map((issue) => `  - ${String(issue.path[0])} ${issue.message}`);
-  throw new ConfigError(["The API's settings are not right:", ...problems].join("\n"));
+  throw new ConfigError([`${whose} settings are not right:`, ...problems].join("\n"));
+}
+
+export function loadConfig(env: Readonly<Record<string, string | undefined>>): Config {
+  return parse(Env, env, "The API's");
+}
+
+export function loadMigratorConfig(env: Readonly<Record<string, string | undefined>>): MigratorConfig {
+  return parse(MigratorEnv, env, "The migration command's");
 }

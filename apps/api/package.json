@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/main.ts",
-    "start": "node src/main.ts"
+    "dev": "node --env-file=../../.env.dev --watch src/main.ts",
+    "start": "node src/main.ts",
+    "db:migrate": "node --env-file-if-exists=../../.env.dev scripts/db-migrate.ts",
+    "db:codegen": "node --env-file-if-exists=../../.env.dev scripts/db-codegen.ts"
   },
   "dependencies": {
     "@fastify/helmet": "catalog:",
@@ -13,11 +15,14 @@
     "@pageinator/contracts": "workspace:*",
     "fastify": "catalog:",
     "fastify-type-provider-zod": "catalog:",
+    "kysely": "catalog:",
+    "pg": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@fastify/swagger": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "openapi-types": "catalog:",
     "vitest": "catalog:"
   }

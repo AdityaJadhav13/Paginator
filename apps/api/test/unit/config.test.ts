@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, loadConfig } from "../../src/config.ts";
+import { ConfigError, loadConfig, loadMigratorConfig } from "../../src/config.ts";
+import { PASSWORDS } from "./helpers.ts";
 
-function problems(env: Record<string, string>): string {
+/** The settings from env, with the database passwords that every test but theirs leaves aside. */
+function load(env: Record<string, string>) {
+  return loadConfig({ ...PASSWORDS, ...env });
+}
+
+function problems(env: Record<string, string>, read: (env: Record<string, string>) => unknown = load): string {
   try {
-    loadConfig(env);
+    read(env);
   } catch (error) {
     if (error instanceof ConfigError) return error.message;
     throw error;
@@ -13,7 +19,7 @@ function problems(env: Record<string, string>): string {
 
 describe("config", () => {
   it("uses the development defaults when nothing is set", () => {
-    expect(loadConfig({})).toMatchObject({
+    expect(load({})).toMatchObject({
       host: "127.0.0.1",
       port: 8780,
       trustProxy: [],
@@ -31,14 +37,14 @@ describe("config", () => {
       PGN_LOG_LEVEL: "warn",
       HOME: "/home/someone",
     };
-    expect(loadConfig(env)).toMatchObject({
+    expect(load(env)).toMatchObject({
       host: "0.0.0.0",
       port: 9000,
       trustProxy: ["10.0.0.5", "fd00:1234::/32"],
       shutdownGraceSeconds: 0,
       logLevel: "warn",
     });
-    expect(loadConfig(env)).not.toHaveProperty("HOME");
+    expect(load(env)).not.toHaveProperty("HOME");
   });
 
   it("lists every problem at once, in plain words", () => {
@@ -86,7 +92,7 @@ describe("config", () => {
       "::ffff:10.0.0.1",
       "127.0.0.1",
     ];
-    expect(loadConfig({ PGN_TRUST_PROXY: proxies.join(",") }).trustProxy).toEqual(proxies);
+    expect(load({ PGN_TRUST_PROXY: proxies.join(",") }).trustProxy).toEqual(proxies);
   });
 
   it.each(["0", "65536", "-1", "8780.5", "", " 8780"])("refuses the port %j", (port) => {
@@ -96,7 +102,7 @@ describe("config", () => {
 
 describe("config: security settings", () => {
   it("defaults to the development web app's origin and 60 requests a minute", () => {
-    expect(loadConfig({})).toMatchObject({ allowedOrigins: ["http://127.0.0.1:5180"], rateLimitPerMinute: 60 });
+    expect(load({})).toMatchObject({ allowedOrigins: ["http://127.0.0.1:5180"], rateLimitPerMinute: 60 });
   });
 
   it("reads a list of origins and the limit", () => {
@@ -104,7 +110,7 @@ describe("config: security settings", () => {
       PGN_ALLOWED_ORIGINS: "https://app.example.test, http://127.0.0.1:5180",
       PGN_RATE_LIMIT_PER_MINUTE: "300",
     };
-    expect(loadConfig(env)).toMatchObject({
+    expect(load(env)).toMatchObject({
       allowedOrigins: ["https://app.example.test", "http://127.0.0.1:5180"],
       rateLimitPerMinute: 300,
     });
@@ -124,6 +130,65 @@ describe("config: security settings", () => {
     expect(problems({ PGN_ALLOWED_ORIGINS: " , " })).toContain("PGN_ALLOWED_ORIGINS must name at least one origin");
     expect(problems({ PGN_RATE_LIMIT_PER_MINUTE: "0" })).toContain(
       "PGN_RATE_LIMIT_PER_MINUTE must be a whole number from 1 to 100000",
+    );
+  });
+});
+
+describe("config: database settings", () => {
+  it("defaults to the development compose's database, and needs every password", () => {
+    expect(load({}).database).toEqual({
+      host: "127.0.0.1",
+      port: 55432,
+      name: "pageinator",
+      passwords: { app: "test-app", auth: "test-auth", listen: "test-listen" },
+    });
+    expect(problems({}, loadConfig)).toBe(
+      [
+        "The API's settings are not right:",
+        "  - PGN_APP_PASSWORD must be set: it is a password, so it has no default",
+        "  - PGN_AUTH_PASSWORD must be set: it is a password, so it has no default",
+        "  - PGN_LISTEN_PASSWORD must be set: it is a password, so it has no default",
+      ].join("\n"),
+    );
+  });
+
+  it("reads where the database is", () => {
+    const env = { PGN_DB_HOST: "db.example.test", PGN_DB_PORT: "5432", PGN_DB_NAME: "kalpaniknagar" };
+    expect(load(env).database).toMatchObject({ host: "db.example.test", port: 5432, name: "kalpaniknagar" });
+    expect(problems({ PGN_DB_PORT: "0", PGN_DB_HOST: "", PGN_DB_NAME: "" })).toBe(
+      [
+        "The API's settings are not right:",
+        "  - PGN_DB_HOST must not be empty",
+        "  - PGN_DB_PORT must be a whole number from 1 to 65535",
+        "  - PGN_DB_NAME must not be empty",
+      ].join("\n"),
+    );
+  });
+
+  it("refuses an empty or blank password, and never shows a password's value", () => {
+    const message = problems({ PGN_APP_PASSWORD: "", PGN_AUTH_PASSWORD: " \t ", PGN_LISTEN_PASSWORD: "s3cret-listen" });
+    expect(message).toBe(
+      [
+        "The API's settings are not right:",
+        "  - PGN_APP_PASSWORD must not be empty or only white space",
+        "  - PGN_AUTH_PASSWORD must not be empty or only white space",
+      ].join("\n"),
+    );
+    expect(problems({ PGN_API_PORT: "x", PGN_APP_PASSWORD: "s3cret-app" })).not.toContain("s3cret");
+  });
+
+  it("the migration command needs only where the database is and the migrator's password", () => {
+    expect(loadMigratorConfig({ PGN_MIGRATOR_PASSWORD: "test-migrator", PGN_APP_PASSWORD: "" })).toEqual({
+      host: "127.0.0.1",
+      port: 55432,
+      name: "pageinator",
+      password: "test-migrator",
+    });
+    expect(problems({}, loadMigratorConfig)).toBe(
+      [
+        "The migration command's settings are not right:",
+        "  - PGN_MIGRATOR_PASSWORD must be set: it is a password, so it has no default",
+      ].join("\n"),
     );
   });
 });

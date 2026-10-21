@@ -108,6 +108,25 @@ export default defineConfig(
     languageOptions: { globals: globals.node },
   },
   {
+    // Only apps/api/src/db reaches the database, so every query on app.* goes through withTenant (plan §2.1, §3.2).
+    // Tests may connect directly, to seed rows and to check what the roles can do.
+    files: ["apps/api/**/*.ts"],
+    ignores: ["apps/api/src/db/**", "apps/api/test/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["pg", "pg/*", "pg-*", "kysely", "kysely/*"],
+              message: "Only apps/api/src/db reaches the database (withTenant); use what it exports.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: KERNEL_SRC,
     ignores: NOT_KERNEL,
     rules: {

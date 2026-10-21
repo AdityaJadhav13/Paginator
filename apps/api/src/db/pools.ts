@@ -1,0 +1,108 @@
+// The API's connections to Postgres (docs/product/10-l2-newsroom-plan.md §2, §3.1), one login role each:
+//   - app (pgn_app): every query on app.*, and only through withTenant (src/db/tenant.ts);
+//   - auth (pgn_auth): Better Auth's tables in identity.* (PR 7);
+//   - listen (pgn_listen): one dedicated connection for LISTEN (PR 19), made by listener().
+// Nothing connects until it is used, so the API starts while the database is down, and /readyz reports it.
+// Not set here yet: TLS to the database (the pilot's deploy, PR 25).
+import { Client, Pool, type PoolConfig } from "pg";
+import { Kysely, PostgresDialect, sql } from "kysely";
+import type { DB } from "./schema.gen.ts";
+import { type Tenant, type Tx, withTenant } from "./tenant.ts";
+
+export type DatabaseSettings = {
+  host: string;
+  port: number;
+  name: string;
+  passwords: { app: string; auth: string; listen: string };
+};
+export type Role = "app" | "auth" | "listen";
+
+export type Database = {
+  /** Runs fn in one transaction as the tenant: the only way to reach app.* (src/db/tenant.ts). */
+  withTenant<T>(tenant: Tenant, fn: (tx: Tx) => Promise<T>): Promise<T>;
+  /** Better Auth's pool (PR 7). */
+  readonly auth: Pool;
+  /** A new connection for LISTEN, not yet connected (PR 19). Whoever makes it handles its errors and ends it. */
+  listener(): Client;
+  /** True when the app and auth roles can both sign in and run a query. */
+  ping(): Promise<boolean>;
+  /** Closes every pooled connection once the queries in flight are done; a second call waits for the first. */
+  close(): Promise<void>;
+  /** Where the errors of pooled connections go, idle or in use: a database restart, or a server process ended between
+   * two statements (by idle_in_transaction_session_timeout, say). Until it is called, they are written to stderr. The
+   * query or transaction on that connection fails, the connection is dropped, and the next one gets a new connection. */
+  onConnectionError(listener: (role: Role, error: Error) => void): void;
+};
+
+function settingsFor(settings: DatabaseSettings, role: Role): PoolConfig {
+  return {
+    host: settings.host,
+    port: settings.port,
+    database: settings.name,
+    user: `pgn_${role}`,
+    password: settings.passwords[role],
+    application_name: `pageinator-api ${role}`,
+    connectionTimeoutMillis: 5_000, // also how long a request waits for a free connection
+    statement_timeout: 30_000,
+    idle_in_transaction_session_timeout: 60_000, // a transaction left open cannot hold its locks for ever
+  };
+}
+
+/**
+ * Gives every connection of the pool an error listener for its whole life. pg-pool listens only while a connection is
+ * idle, and Kysely not at all, so an error on a connection in use (its server process ended between two statements)
+ * would be an error event with no listener, which stops the process. Only a connection's first error is reported (the
+ * lost connection that follows a server's goodbye is the same failure), and pg-pool, which passes an idle connection's
+ * error on to the pool, does not make it twice.
+ */
+function watch(pool: Pool, role: Role, report: (role: Role, error: Error) => void): void {
+  const reported = new WeakSet<Error>();
+  pool.on("connect", (client) => {
+    let failed = false;
+    client.on("error", (error) => {
+      reported.add(error);
+      if (failed) return;
+      failed = true;
+      report(role, error);
+    });
+  });
+  pool.on("error", (error) => {
+    if (!reported.has(error)) report(role, error);
+  });
+}
+
+export function openDatabase(settings: DatabaseSettings): Database {
+  let listener = (role: Role, error: Error) => {
+    console.error(`A database connection (${role}) failed: ${error.message}`);
+  };
+  const report = (role: Role, error: Error) => listener(role, error);
+  const appPool = new Pool({ ...settingsFor(settings, "app"), max: 10 });
+  const authPool = new Pool({ ...settingsFor(settings, "auth"), max: 5 });
+  watch(appPool, "app", report);
+  watch(authPool, "auth", report);
+  const app = new Kysely<DB>({ dialect: new PostgresDialect({ pool: appPool }) });
+  let closing: Promise<void> | undefined;
+  return {
+    withTenant: (tenant, fn) => withTenant(app, tenant, fn),
+    auth: authPool,
+    listener: () => new Client(settingsFor(settings, "listen")),
+    async ping() {
+      try {
+        await Promise.all([sql`select 1`.execute(app), authPool.query("select 1")]);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    close() {
+      // Kysely ends the app pool only if it ever used it; ending an unused pool is harmless, but twice is an error.
+      closing ??= Promise.all([app.destroy(), authPool.end()]).then(() => {
+        if (!appPool.ending) return appPool.end();
+      });
+      return closing;
+    },
+    onConnectionError(next) {
+      listener = next;
+    },
+  };
+}

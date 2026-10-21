@@ -10,6 +10,7 @@
 | `tools/testkit` | Test-only helpers: repository paths, Python-flavoured JSONL |
 | `tools/ts` | Repository guards: privacy, frozen evidence, dependency graph, oracle manifest |
 | `infra/docker` | Local development services (`compose.dev.yml`) and the database's first-start SQL (roles only) |
+| `apps/api/src/db` | The API's database: pools, `withTenant`, the migration runner, the migrations, and `schema.gen.ts` (generated) |
 | `tools/oracle/v0` | **Frozen** Python reference oracle (never edited) |
 | `tools/desk` | **Pageinator Desk**: the owner's internal, local layout desk on the Phase-0 engines (not the product; see its README) |
 | `experiments/phase0`, `fixtures/typeset/v1` | **Frozen** Phase-0 evidence and golden vectors (changes need the `evidence-change` approval) |
@@ -37,11 +38,14 @@
 | Command | Does |
 |---|---|
 | `pnpm run ci` | Everything CI runs: guards, dependency graph, lint, format check, typecheck, tests, web build |
-| `pnpm test` | All tests: web (jsdom), kernel (node), api with the shared contracts (node) |
+| `pnpm test` | All tests but the database's: web (jsdom), kernel (node), api with the shared contracts (node) |
+| `pnpm run test:db` | The API's database and tenancy tests (`apps/api/test/db`, `apps/api/test/tenancy`) on the local Postgres (`pnpm dev:up` first). Each file works in a clone of a freshly migrated template database; the run drops them all. It reads `.env.dev`, and fails, never skips, without the database |
 | `pnpm run typecheck` | `tsc -b` (TypeScript 7) for packages, plus the web app's own typecheck |
 | `pnpm run lint` / `pnpm run format` | ESLint (with the kernel determinism rules) and Prettier |
 | `pnpm --filter @pageinator/web dev` | Run the web app |
-| `pnpm --filter @pageinator/api dev` | Run the API on `http://127.0.0.1:8780` (`/healthz`, `/readyz`), restarting on changes. Its settings (`PGN_*`) are read and checked by `apps/api/src/config.ts`; behind any proxy, `PGN_TRUST_PROXY` must name it |
+| `pnpm --filter @pageinator/api dev` | Run the API on `http://127.0.0.1:8780` (`/healthz`, `/readyz`), restarting on changes, with the settings of `.env.dev`. Its settings (`PGN_*`) are read and checked by `apps/api/src/config.ts`: the database's place (`PGN_DB_HOST`, `PGN_DB_PORT`, `PGN_DB_NAME`, by default the local Postgres) and the passwords of `pgn_app`, `pgn_auth` and `pgn_listen`, which have no default. Behind any proxy, `PGN_TRUST_PROXY` must name it |
+| `pnpm --filter @pageinator/api db:migrate` | Applies the pending migrations (`apps/api/src/db/migrations`, forward only) as `pgn_migrator` acting as `pgn_owner`; needs `PGN_MIGRATOR_PASSWORD` (from `.env.dev` when it exists; the environment wins) |
+| `pnpm --filter @pageinator/api db:codegen` | Rewrites `apps/api/src/db/schema.gen.ts` from the migrated database; with `--check` it only fails when the file differs. `pnpm run test:db` makes the same comparison |
 | `pnpm run guard` | Privacy guard, frozen-evidence guard and oracle check. Locally, on a branch stacked on another, set `GUARD_BASE=origin/<base>` |
 | `pnpm run check:oracle` | The frozen oracle: its manifest's SHA-256s, and every tracked file against `tools/ts/oracle-files.json` |
 | `pnpm run test:private` | Private parity tests against pilot goldens (needs `PAGEINATOR_PRIVATE_GOLDENS`; fails, never skips, when missing) |
@@ -64,7 +68,7 @@ ports listen on 127.0.0.1 only:
 
 | Service | Address | Notes |
 |---|---|---|
-| Postgres 18.6 (`db`) | `127.0.0.1:55432`, database `pageinator` | On the first start, `infra/docker/postgres-init.sql` makes the roles: `pgn_owner` and the logins `pgn_migrator`, `pgn_app`, `pgn_auth` and `pgn_engine` (docs/product/10-l2-newsroom-plan.md §3.1), and `pgn_listen` (ADR-025, plan §10 row 5). The schemas come with the migrations. It reports healthy only once that SQL has finished |
+| Postgres 18.6 (`db`) | `127.0.0.1:55432`, database `pageinator` | On the first start, `infra/docker/postgres-init.sql` makes the roles: `pgn_owner` and the logins `pgn_migrator`, `pgn_app`, `pgn_auth` and `pgn_engine` (docs/product/10-l2-newsroom-plan.md §3.1), and `pgn_listen` (ADR-025, plan §10 row 5). The schemas come with the migrations (`pnpm --filter @pageinator/api db:migrate`). It reports healthy only once that SQL has finished |
 | SeaweedFS 4.48 S3 (`s3`) | `http://127.0.0.1:58333` | Accepts only the key pair in `.env.dev`; it reports unhealthy if it would let an unsigned request in |
 | Mailpit 1.31.6 (`mail`) | web `http://127.0.0.1:58025`, SMTP `127.0.0.1:51025` | Catches every email |
 

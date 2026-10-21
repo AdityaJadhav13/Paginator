@@ -2,9 +2,12 @@ import { readFileSync } from "node:fs";
 import { configDefaults, defineConfig } from "vitest/config";
 
 // Projects: the web app (its own config: jsdom), the kernel packages, test kit and repository tools (node), the API
-// with the shared packages it uses (node), and a private project that runs only via `pnpm test:private` because it
-// needs the private pilot goldens on this machine.
+// with the shared packages it uses (node), and three that run only when asked: the API's database tests and its
+// tenancy tests (`pnpm test:db`: they need the development database, and fail without it), and a private project
+// (`pnpm test:private`: it needs the private pilot goldens on this machine).
 const privateRun = process.env["PAGEINATOR_PRIVATE_RUN"] === "1";
+const dbRun = process.env["PAGEINATOR_DB_RUN"] === "1";
+const DB_TESTS = ["apps/api/test/db/**/*.test.ts", "apps/api/test/tenancy/**/*.test.ts"];
 // shared packages (tools/ts/workspace.json, as eslint.config.js and tools/ts/check-graph.ts read it) are not kernel code
 const workspace = JSON.parse(readFileSync(new URL("./tools/ts/workspace.json", import.meta.url), "utf8")) as {
   sharedPackages: string[];
@@ -28,8 +31,29 @@ export default defineConfig({
           name: "api",
           environment: "node",
           include: ["apps/api/test/**/*.test.ts", ...SHARED.map((dir) => `${dir}/test/**/*.test.ts`)],
+          exclude: [...configDefaults.exclude, ...DB_TESTS],
         },
       },
+      ...(dbRun
+        ? [
+            {
+              test: {
+                name: "api-db",
+                environment: "node",
+                include: ["apps/api/test/db/**/*.test.ts"],
+                globalSetup: ["apps/api/test/db/global-setup.ts"],
+              },
+            },
+            {
+              test: {
+                name: "tenancy",
+                environment: "node",
+                include: ["apps/api/test/tenancy/**/*.test.ts"],
+                globalSetup: ["apps/api/test/db/global-setup.ts"],
+              },
+            },
+          ]
+        : []),
       ...(privateRun
         ? [
             {

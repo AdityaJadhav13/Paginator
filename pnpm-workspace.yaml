@@ -29,6 +29,10 @@ catalog:
   # The API's security baseline (Helmet, the request limit); MIT.
   "@fastify/helmet": "13.2.0"
   "@fastify/rate-limit": "11.2.1"
+  # The API's database: Kysely over node-postgres; MIT.
+  kysely: "0.29.7"
+  pg: "8.23.1"
+  "@types/pg": "8.23.1"
 
 overrides:
   typescript: "npm:@typescript/typescript6@6.0.2"

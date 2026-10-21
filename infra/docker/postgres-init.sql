@@ -2,8 +2,9 @@
 -- pgn_listen (ADR-025, plan §10 row 5). The Postgres image runs this file once, when the db volume is new;
 -- `pnpm dev:reset` starts over. The passwords come from .env.dev.
 -- The schemas (app, identity, queue), their USAGE grants, and every table, grant and RLS policy come from the
--- migrations (PR 5), which act as pgn_owner. Note for PR 5: nobody may use the public schema, so Kysely's migration
--- tables need their own schema (Migrator's migrationTableSchema must not be public).
+-- migrations (apps/api/src/db/migrations), which act as pgn_owner. Nobody may use the public schema, so the migration
+-- runner records the migrations in a schema of its own ("migrations"). The database tests give the databases they
+-- make the same rights as this file (apps/api/test/db/settings.ts), and compare them with this database's.
 \getenv database POSTGRES_DB
 \getenv migrator_password PGN_MIGRATOR_PASSWORD
 \getenv app_password PGN_APP_PASSWORD

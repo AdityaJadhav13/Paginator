@@ -6,9 +6,11 @@
 import { buildApp } from "../../src/app.ts";
 import { loadConfig } from "../../src/config.ts";
 import { stop, stopOnSignals } from "../../src/shutdown.ts";
+import { PASSWORDS } from "../unit/helpers.ts";
 
 const mode = process.argv[2];
-const app = await buildApp({ config: loadConfig({ PGN_LOG_LEVEL: mode === "big" ? "info" : "silent" }), checks: {} });
+const config = loadConfig({ PGN_LOG_LEVEL: mode === "big" ? "info" : "silent", ...PASSWORDS });
+const app = await buildApp({ config, checks: {} });
 if (mode === "big") {
   app.get("/test/big", async (_request, reply) => {
     await new Promise((resolve) => setTimeout(resolve, 300)); // still in flight when the stop begins

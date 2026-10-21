@@ -1,4 +1,5 @@
-// Starts the API: settings from the environment, then buildApp, then listen (127.0.0.1:8780 unless set otherwise).
+// Starts the API: settings from the environment, then the database's pools, then buildApp, then listen (127.0.0.1:8780
+// unless set otherwise).
 // SIGTERM or SIGINT stops it (src/shutdown.ts): answers begun after the stop close their connections once sent; an
 // answer already sent in full when the stop began is cut at once (Node's own close). One already streaming, or one sent
 // before its request's body was read, keeps its connection until the grace period (PGN_SHUTDOWN_GRACE_S, 10 s by
@@ -6,6 +7,7 @@
 // the process at once, with no line; SIGTERM then SIGINT runs the stop twice.
 import { buildApp } from "./app.ts";
 import { ConfigError, loadConfig } from "./config.ts";
+import { openDatabase } from "./db/pools.ts";
 import { stopOnSignals } from "./shutdown.ts";
 
 function settings() {
@@ -29,7 +31,8 @@ function listenProblem(error: unknown): string {
 }
 
 const config = settings();
-const app = await buildApp({ config, checks: {} }); // the database check arrives with the pools (PR 5)
+const database = openDatabase(config.database); // connects on first use
+const app = await buildApp({ config, database, checks: { database: () => database.ping() } });
 stopOnSignals(app, config.shutdownGraceSeconds);
 
 try {
