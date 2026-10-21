@@ -8,7 +8,9 @@ whole edition.
 built. The Desk exists for that.
 - **It is not the Pageinator product** (`apps/`), and it does not change the product plan or its gates
   (`docs/architecture/v2/13_ROADMAP_AND_RISKS.md`).
-- **It runs only on the owner's Mac** and binds to `127.0.0.1`. It is never deployed and makes no public claims.
+- **It runs only on the owner's Mac** and binds to `127.0.0.1`. The Desk itself is never deployed and makes no public
+  claims. Its engine and helpers (`tools/desk/engine`, `tools/desk/deskserver`) are also the hosted engine service of
+  the L2 newsroom, run unchanged by the engine worker from L2.2 (`docs/product/10-l2-newsroom-plan.md` §2.2).
 - **It uses the Phase-0 engines, imported read-only** and never changed:
   - `experiments/phase0/gen1`: the layout search;
   - `experiments/phase0/page1`: rebuilding the fixed parts of the page;

@@ -1,7 +1,9 @@
 # Pageinator Desk — internal contract (server ⇄ engine ⇄ UI)
 
 Pageinator Desk is an **internal tool for the owner's own newspaper**, run on one Mac. It is not the
-Pageinator product (`apps/`), it is never deployed, and it makes no public claims. It lays out pages with
+Pageinator product (`apps/`), the Desk itself is never deployed, and it makes no public claims; its engine and
+helpers (`tools/desk/engine`, `tools/desk/deskserver`) are also the hosted engine service of the L2 newsroom (run
+unchanged by the engine worker, `docs/product/10-l2-newsroom-plan.md` §2.2). It lays out pages with
 the Phase-0 engines (`experiments/phase0/gen1`, `page1`, `head1`, `compose3`, `pdfx1`), which it imports
 read-only and never changes.
 
