@@ -570,6 +570,15 @@ fieldset.preview-zoom {
 }
 
 .alert-ok,
+/* the last import's summary (Word files, Pageinator stories): a long unbroken file name or headline wraps */
+.import-note {
+  overflow-wrap: anywhere;
+}
+
+.import-note .notice-body {
+  min-width: 0;
+}
+
 .notice-ok {
   border-color: #b9dcc5;
   background: var(--pg-ok-soft);

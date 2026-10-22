@@ -97,8 +97,15 @@ Every id from a request is checked against its pattern before it touches the fil
 - `priority`: 1 Lead · 2 Top · 3 Normal (default) · 4 Minor. A **short item** (brief) is any article with at most
   60 words of body text and no photo; short items are set together in a "news in brief" column.
 - `page`: `null` (the Desk chooses) or a page number to pin the article to.
-- `photo`: `null` or the photo record. `source`: `"typed"`, `"pasted"`, `"word"` (from a .docx file) or
-  `"sample:<name>"`.
+- `photo`: `null` or the photo record. `source`: `"typed"`, `"pasted"`, `"word"` (from a .docx file), `"bundle"`
+  (from a Pageinator stories file, §6) or `"sample:<name>"`.
+- `bundle` (only on an article imported from a Pageinator stories file, §6): `{"organisation_id", "publication_id",
+  "story", "revision", "bundle_id", "imported", "section", "language", "photo_sha256", "photo_id", "photo_filename",
+  "sig"}`: where the story came from, the revision imported, and `sig`, the SHA-256 of what the Desk may change (its
+  headline, kicker, deck, byline, body, priority, page, and its photo's id, caption and credit) as imported. The
+  engine never reads it (`section` and `language` are kept for the hosted product; the Desk does not use them yet).
+- `bundle_deleted` (top level, beside `articles`; only once an imported article was deleted): the tombstones of §6,
+  so a story deleted in the Desk is never imported again.
 
 ## 2. Engine commands
 
@@ -249,6 +256,7 @@ Medians measured on the paper's own printed pages (one front, `pages − 2` insi
 | DELETE | `/api/editions/<id>/articles/<aid>` | → `{"ok": true}` |
 | POST | `/api/editions/<id>/articles/bulk` | `{"text": "…"}` (articles separated by a line `---`; first line headline; an optional line `Byline: …`; the rest body) → `{"created": n, "articles": [...], "skipped": [{"headline", "reason"}]}` |
 | POST | `/api/editions/<id>/articles/import-docx` | the raw `.docx` file (at most 20 MB, at most 200 stories) → `{"created", "articles", "skipped", "notes"}`: a Title or Heading 1 paragraph starts a story (else the first paragraph is the headline); a short first line under it can be the byline (`Byline: …` / `वार्ताहर: …` with a colon, `By A. Writer`, `प्रतिनिधी, काल्पनिकनगर`, `वार्ताहर, काल्पनिकनगर`); Heading 2–4 become subheadings. Only the body's own paragraphs are read: tables, text boxes, pictures, deleted (tracked) text and formatting are not taken, and `notes` say what was left out. A damaged file is refused with a plain message (400) |
+| POST | `/api/editions/<id>/articles/import-bundle` | the raw Pageinator stories file (`pageinator.story-bundle/1`, §6; at most 200 MB) → `{"bundle": {"id", "edition", "stories"}, "added", "replaced", "unchanged", "kept", "deleted", "refused", "notes", "articles"}`. Each list holds `{"story", "headline", "article"?}` (`kept`, `deleted` and `refused` also `"reason"`); `articles` are those added or replaced. A bundle that is not sound is refused whole (400/413, nothing written) |
 | PUT | `/api/editions/<id>/articles/<aid>/photo` | raw image bytes (`Content-Type: image/jpeg|image/png|image/webp`), query `caption`, `credit` → photo record |
 | PUT | `/api/editions/<id>/articles/<aid>/photo-text` | `{"caption", "credit"}` → photo record |
 | DELETE | `/api/editions/<id>/articles/<aid>/photo` | → `{"ok": true}` |
@@ -314,3 +322,98 @@ false, the UI tells the user not to send the press files. Articles on no page af
 The UI never says "press-ready". It says: the page PDFs are PDF/X-1a files made by the same writer whose
 text-only test page the press accepted; **pages with photos or ads have not yet been press-tested — print one
 test page before a real edition.**
+
+## 6. Pageinator story bundles (`pageinator.story-bundle/1`)
+
+The hosted newsroom's "Send to the Desk" makes a **Pageinator stories file**: one edition's stories and their photo
+originals in a ZIP the owner downloads and imports with **Pageinator stories…** on the articles step
+(`POST /api/editions/<id>/articles/import-bundle`, `deskserver/bundle.py`). The Desk never calls the hosted product: the
+file is the bridge. The hosted side writes exactly this format; the Desk refuses anything else.
+
+### The ZIP
+- Its files: `bundle.json`, and one `photos/<sha256>.<ext>` per distinct photo original (`<sha256>`: the file's SHA-256,
+  64 lowercase hex; `<ext>`: `jpg`, `jpeg`, `png` or `webp`). A `photos/` folder entry may be there. Nothing else: any
+  other name (a path with `..`, an absolute path, a backslash, another folder), a repeated name, a symbolic link, an
+  encrypted file, or a photo no story names refuses the file.
+- Stored or deflated only. At most 200 MB packed, 300 MB unpacked, 202 files, 200 stories; `bundle.json` at most 32 MB
+  unpacked, a photo at most 40 MB (as an upload); a file over 1 MB unpacked may unpack to at most 100 times its packed
+  size. Every file is read no further than the size the ZIP lists, and a file that is not that size, or fails its
+  checksum, is damaged.
+- **No ZIP64.** A bundle never needs it (at most 202 files and 200 MB), so a ZIP with the ZIP64 end records is refused
+  (`m.bundle.zip64`). Before the ZIP is opened, its end-of-central-directory record must list at most 202 entries and a
+  central directory of at most 1 MB (`deskserver/ziplimits.py`; a Word file is checked the same way, at 5,000 entries
+  and 4 MB, ZIP64 allowed there).
+
+### bundle.json (UTF-8 JSON)
+```json
+{"format": "pageinator.story-bundle/1",
+ "bundle": {"id": "b-0001", "created": "2026-08-01T06:00:00+05:30"},
+ "source": {"organisation_id": "org-…", "publication_id": "pub-…"},
+ "edition": {"date": "2026-08-01", "pages": 8},
+ "stories": [{
+   "id": "st-0001", "revision": 3,
+   "headline": "…", "kicker": "", "deck": "", "byline": "…",
+   "body": "First paragraph.\n\n## A subheading\n\nSecond paragraph.", "body_format": "desk-text/1",
+   "section": "शहर", "priority": 3, "page": null, "language": "mr",
+   "photo": {"file": "photos/<sha256>.jpg", "sha256": "<sha256>", "filename": "IMG_0001.jpg",
+             "caption": "…", "credit": "…"}}]}
+```
+- **Every key is required** (`null` where allowed); an unknown key anywhere refuses the file, naming it. `format` is
+  checked first: another version is refused as one ("update the Desk, or make the file again"). Every text, keys
+  included, is Unicode characters: a lone surrogate (`"\ud800"`) refuses the file, naming its field.
+- `bundle.id`, `source.organisation_id`, `source.publication_id`, `stories[].id`: 1–64 characters, a letter or digit,
+  then letters, digits, `.`, `_`, `:` or `-`. `bundle.created`: text (ISO 8601). Story ids are unique in a file.
+- `edition.date`: `YYYY-MM-DD`, a real date, and **the importing edition's date** (else refused). `edition.pages`: 4, 8
+  or 16; when it is not the edition's, the answer notes it and a story pinned beyond the edition's pages is refused.
+- `revision`: a whole number ≥ 1. It **must increase on any change to any field of the story**, `photo` and its fields
+  (`file`, `sha256`, `filename`, `caption`, `credit`) included: the Desk replaces an article only for a higher
+  revision, and treats the same revision as the same story, whatever its fields.
+- `headline`, `kicker`, `deck`, `byline`, `body`: text (`""` allowed by the format; the Desk's rules apply below).
+  `body_format`: `"desk-text/1"` only (below); a body that is not desk-text/1 refuses the file, naming the field.
+- `section`: text (at most 200 characters) or `null`. `language`: a BCP 47 tag (`mr`, `en`, `mr-IN`).
+- `priority`: 1–4 (§1). `page`: `null` or a page number (1–16) to pin the story to.
+- `photo`: `null`, or one photo: `file` (its file in the ZIP), `sha256` (the same as the name's), `filename` (the
+  original's name as uploaded, at most 255 characters), `caption`, `credit` (text). Two stories may name one file.
+
+### desk-text/1 (the body)
+Exactly what the engine prints, one block for one printed paragraph or subheading (`deskarticles.blocks`):
+- The body is **blocks separated by exactly `\n\n`** (one empty line). No block is empty or only spaces, and **no
+  block contains `\n`**: a paragraph is one line however long (the engine fills the column). No `\r` anywhere. So no
+  body starts or ends with `\n`, and never has three `\n` in a row.
+- A block that starts with `##` (after any spaces) is a **subheading**, and must be exactly `## ` followed by its text,
+  which does not start with a space or `#`. Every other block is a **paragraph**, which therefore never starts with
+  `##`: there is no escape, so a paragraph that must begin with `##` cannot be sent.
+- Spaces inside a block print as single spaces; spaces at the ends of a block are dropped, as for typed text.
+- `""` is allowed by the format: the Desk refuses that story (it needs body text).
+
+### Import
+- **Checks before anything is written** (the whole file is refused, with the reason's code, and nothing is written):
+  the ZIP and its limits, `bundle.json` against the format, the edition's date, every photo's SHA-256, and the colour
+  profile (a photo conversion that fails for want of it).
+- **Each story then** is matched to an article by (`organisation_id`, `publication_id`, story `id`) through the
+  article's `bundle` record:
+  - no such article, but one imported from it was **deleted in the Desk**: **deleted**, never added again
+    (`m.bundle.deletedInDesk`; a story killed at the desk, for a legal reason for example, cannot come back by an
+    import). Deleting an imported article keeps a tombstone in `articles.json`, `"bundle_deleted": [{"organisation_id",
+    "publication_id", "story", "article", "deleted"}]`, for the life of the edition; such a story can only be typed
+    or pasted again;
+  - no such article: **added** (a new article, `source: "bundle"`);
+  - the article was changed in the Desk since its last import (its `sig` differs): **kept**, as the Desk has it;
+  - else, by `revision`: lower than the article's: **kept** (the Desk has a newer one); the same: **unchanged**;
+    higher: **replaced** (the same article id, so a laid-out page that prints it becomes "needs saving" as for a typed
+    change, §3 `status.json`). A replaced article keeps its photo when the original is the same (`photo_sha256`), with
+    the new caption and credit; a new original becomes a new photo id.
+  - A story the Desk would refuse as a typed article is **refused**, with that reason, and the others go on: texts are
+    cleaned as typed ones (NFC, line ends, control characters, trailing spaces; the same length limits), a headline
+    and body text are needed, the priority and page as §1 says; a photo goes through the upload pipeline (§4: not a
+    picture, damaged, too many pixels are refused).
+- **One write**: the articles, the photos (linked from a staging folder in the edition beside `photos/`) and the
+  photos' index, under the edition's lock; if it fails part-way, the photos it added are removed and `articles.json`
+  (written atomically) is as it was. Then every finished layout is checked against the edition again, and the edition
+  is measured again.
+- A story left out of a later file stays as it is.
+- The answer's `headline` is the one the Desk has (a story kept or unchanged) or sets (cleaned, as typed text is), at
+  most 200 characters; names from the file echoed in a refusal (a member, a field) are cut to 200 characters.
+- When the server starts, a staging folder (`.bundle-*`) left by an import that stopped part-way is removed (it holds
+  photo originals), and then every edition's photos that no article names.
+

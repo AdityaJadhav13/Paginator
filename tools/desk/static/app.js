@@ -104,7 +104,7 @@ const state = {
   adLocal: {}, // slot -> what the server said about an upload or removal in this session
   adBust: {}, // slot -> cache-busting token for the preview image
   loadedAt: Date.now(),
-  wordNote: null, // what the last Word import did: {edition, kind, text, lines}
+  wordNote: null, // what the last Word or Pageinator stories import did: {edition, kind, text, lines}
 };
 
 let runUI = null; // the mounted progress panel of state.run (patched in place while polling)
@@ -1847,6 +1847,17 @@ function viewArticles() {
     ),
     h(
       "button",
+      {
+        type: "button",
+        class: "btn",
+        dataset: { focusKey: "articles:bundle" },
+        title: t("arts.bundleTitle"),
+        onclick: chooseBundle,
+      },
+      t("arts.bundle"),
+    ),
+    h(
+      "button",
       { type: "button", class: "btn", dataset: { focusKey: "articles:import" }, onclick: openImportDialog },
       t("arts.import"),
     ),
@@ -1922,6 +1933,7 @@ function wordNote() {
     close,
   );
   box.setAttribute("role", "status");
+  box.classList.add("import-note"); // file names and headlines with no space in them wrap inside it
   return box;
 }
 
@@ -2666,6 +2678,77 @@ async function importWordFiles(files) {
   if (added) toast(t("count.added", { n: added }));
   if (state.editionId === eid) await refreshDetail();
   if (state.editionId === eid && state.step === "articles") renderMain();
+}
+
+// ===================================================================== Pageinator stories (a story bundle)
+
+let bundleBusy = false;
+
+/** Opens the file chooser for one Pageinator stories file (pageinator.story-bundle/1: a .zip made by Pageinator). */
+function chooseBundle() {
+  if (!state.detail || bundleBusy) return;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".zip,application/zip";
+  input.addEventListener("change", () => importBundle((input.files || [])[0]));
+  input.click();
+}
+
+async function importBundle(file) {
+  if (!file || bundleBusy) return;
+  bundleBusy = true;
+  const eid = state.editionId;
+  let note;
+  toast(t("bundle.reading"), "info");
+  try {
+    if (!/\.zip$/i.test(file.name)) {
+      note = { kind: "warn", text: () => t("bundle.notZip", { file: file.name }), lines: [] };
+    } else {
+      const res = await api("POST", apiPath(eid, "articles", "import-bundle"), {
+        raw: file,
+        contentType: "application/zip",
+      });
+      note = bundleNote(file.name, res);
+    }
+  } catch (err) {
+    const why = errMsg(err); // the server's refusal, by its code: said again in the language shown
+    note = { kind: "warn", text: () => t("bundle.refused", { file: file.name, reason: msg(why) }), lines: [] };
+  } finally {
+    bundleBusy = false;
+  }
+  state.wordNote = { edition: eid, ...note };
+  if (state.editionId === eid) await refreshDetail();
+  if (state.editionId === eid && state.step === "articles") renderMain();
+}
+
+/** What an import did, in the language shown when it is drawn: the counts, then each story kept or not added, and
+ * why, then the server's notes. */
+function bundleNote(file, res) {
+  const count = (k) => arr(res[k]).filter(isObj).length;
+  const counts = [
+    ["added", "bundle.added"],
+    ["replaced", "bundle.replaced"],
+    ["unchanged", "bundle.unchanged"],
+    ["kept", "bundle.kept"],
+    ["deleted", "bundle.deleted"],
+    ["refused", "bundle.refusedN"],
+  ];
+  const line = (s) => () =>
+    t("bundle.line", {
+      headline: clip(str(s.headline).trim() || str(s.story), 60), // no headline: the story's id in the newsroom
+      reason: said(s.reason, res.msgs) || t("common.notAccepted"),
+    });
+  return {
+    kind: count("kept") || count("deleted") || count("refused") ? "warn" : "ok",
+    text: () => {
+      const list = counts.filter(([k]) => count(k)).map(([k, key]) => t(key, { n: count(k) }));
+      return list.length ? t("bundle.summary", { file, list: list.join("; ") }) : t("bundle.nothing", { file });
+    },
+    lines: [
+      ...[...arr(res.kept), ...arr(res.deleted), ...arr(res.refused)].filter(isObj).map(line),
+      ...arr(res.notes).map((n) => () => said(n, res.msgs)),
+    ],
+  };
 }
 
 // ===================================================================== import a past edition (testing)

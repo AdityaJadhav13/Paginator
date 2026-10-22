@@ -37,6 +37,7 @@ class Desk:
         self.engine = EngineClient.from_env(self.repo_root, self.home)
         self.jobs = JobManager(self.store, self.engine, poll_interval=poll_interval, kill_after=kill_after)
         self.store.is_active = self.jobs.is_active
+        self.store.clean_staging()                    # what an import that stopped part-way left (bundle.py)
         self.measurer = Measurer(self.engine, busy=self.jobs.generating, delay=measure_delay,
                                  poll=min(0.5, poll_interval), kill_after=kill_after)
         self.store.articles_changed = self.measurer.touch

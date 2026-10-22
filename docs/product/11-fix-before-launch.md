@@ -207,6 +207,24 @@ code (fixed after the verification's MINOR-1). These are still English on the Ma
 | MSG-22 | `static/strings.js` `tm()` | A wire with `"params": null` leaves its placeholder in the Marathi text (the server always sends an object) | The server never sends `null` |
 | MSG-23 | `static/app.js` (run screen) | The run's end message ("4 pages made." with failures and check problems) is in `status.message` with its code, but the run screen shows the server's message only while the run is going (`patchRun`: none once it has ended) | The page cards and the check results say the same, in Marathi |
 
+## Desk: Pageinator story bundles (PR 24, the Desk side; `deskserver/bundle.py`, CONTRACT.md §6)
+
+The review's minor findings, left for later. Each says where, and why it can wait.
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| BUNDLE-1 | `bundle.py` `open_bundle` | JSON amplification: a 32 MB `bundle.json` of `{},` parses to about 926 MB of Python objects | The file comes from the paper's own hosted product, downloaded by the owner; lower `MAX_JSON` or count values while parsing when the API side's real sizes are known |
+| BUNDLE-2 | CONTRACT.md §6 | Spec details to state: the exact language-tag pattern; the 64-character `created` limit; a UTF-8 BOM (refused today as unreadable JSON); duplicate JSON keys (the last wins today); "characters" meaning code points after NFC; the per-field length limits (§1's) and the photo rules (§4's) written out in §6 | The API side is built to §6 next: settle these with it |
+| BUNDLE-3 | `bundle.py` `_commit` | `section` and `photo_filename` are stored as sent, not cleaned (`clean_text`) | Never printed or shown yet |
+| BUNDLE-4 | `bundle.py` `_commit` (failure path) | The rollback writes `photos/index.json` (empty) when there was none before | Harmless: an empty index reads as no photos |
+| BUNDLE-5 | `bundle.py` `_is_date` | Uses `\d`, which also matches non-ASCII digits (then `date.fromisoformat` refuses them) | Refused either way |
+| BUNDLE-6 | `bundle.py` `parse` | `revision` has no upper bound (a JSON number beyond 2^53 − 1 loses precision in JavaScript) | The hosted product counts from 1 |
+| BUNDLE-7 | `test/test_bundle.py` | Paths not tested: a page-pin edit, a photo removed or replaced in the Desk leading to "kept"; two stories naming one photo; the 409 "import again" retry; a failure part-way through linking photos; a replaced photo on a laid-out page; the real engine laying out articles that carry the `bundle` key | The rules are shared with tested paths; add as the API side's fixtures arrive |
+| BUNDLE-8 | `store.py` `update_article` | An article PUT carries no revision check, so two windows can overwrite each other's edit (an existing pattern, not the bundle's) | As today for typed articles |
+| BUNDLE-9 | `bundle.py` `parse` | The same SHA-256 named as both `.jpg` and `.jpeg` is two files in the ZIP for one photo | Both are checked and refer to the same bytes |
+| BUNDLE-10 | `bundle.py` `parse` | Story ids that differ only in case (`St-1`, `st-1`) are two stories | The hosted product's ids are UUIDs |
+| BUNDLE-11 | `package.json` `test:desk` | Needs the two Python environments set up first (environment only) | CI sets them up; `docs/DEVELOPMENT.md` says how |
+
 ## Licence check (`tools/ts/check-licences.ts`)
 
 | # | What | Why it can wait |

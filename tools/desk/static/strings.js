@@ -279,6 +279,11 @@ const TABLE = {
     "एक किंवा अधिक Word (.docx) फायलींतील बातम्या जोडा",
   ],
   "arts.word": ["Word files…", "Word फायली…"],
+  "arts.bundleTitle": [
+    "Add the stories sent from Pageinator (a .zip file)",
+    "Pageinator मधून पाठवलेल्या बातम्या जोडा (.zip फाइल)",
+  ],
+  "arts.bundle": ["Pageinator stories…", "Pageinator बातम्या…"],
   "arts.import": ["Import a past edition (for testing)", "जुना अंक आयात करा (चाचणीसाठी)"],
   "arts.searchLabel": ["Search articles", "बातम्यांमध्ये शोधा"],
   "arts.searchPlaceholder": ["Search headlines and text", "मथळे आणि मजकुरात शोधा"],
@@ -535,6 +540,43 @@ const TABLE = {
       other: "{n} Word फायलींमधून एकही बातमी जोडली गेली नाही.",
     },
   ],
+
+  // ---- Pageinator stories: a story bundle from the hosted newsroom (CONTRACT.md §6)
+  "bundle.reading": ["Reading the Pageinator stories file…", "Pageinator बातम्यांची फाइल वाचत आहे…"],
+  "bundle.notZip": [
+    "{file}: not a .zip file (download the stories from Pageinator again)",
+    "{file}: ही .zip फाइल नाही (Pageinator मधून बातम्या पुन्हा डाउनलोड करा)",
+  ],
+  "bundle.refused": ["{file} was not imported: {reason}", "{file} आयात केली नाही: {reason}"],
+  // {list} is the counts below that are not zero, joined with "; "
+  "bundle.summary": ["From {file}: {list}.", "{file} मधून: {list}."],
+  "bundle.nothing": ["{file} holds no stories.", "{file} मध्ये एकही बातमी नाही."],
+  "bundle.added": [
+    { one: "{n} story added", other: "{n} stories added" },
+    { one: "{n} बातमी जोडली", other: "{n} बातम्या जोडल्या" },
+  ],
+  "bundle.replaced": [
+    { one: "{n} replaced by its newer revision", other: "{n} replaced by their newer revisions" },
+    { one: "{n} बातमी नव्या आवृत्तीने बदलली", other: "{n} बातम्या नव्या आवृत्तीने बदलल्या" },
+  ],
+  "bundle.unchanged": [
+    { one: "{n} already up to date", other: "{n} already up to date" },
+    { one: "{n} आधीच अद्ययावत", other: "{n} आधीच अद्ययावत" },
+  ],
+  "bundle.kept": [
+    { one: "{n} kept as the Desk has it", other: "{n} kept as the Desk has them" },
+    { one: "{n} Desk मध्ये आहे तशी ठेवली", other: "{n} Desk मध्ये आहेत तशा ठेवल्या" },
+  ],
+  "bundle.deleted": [
+    { one: "{n} deleted in the Desk, not added again", other: "{n} deleted in the Desk, not added again" },
+    { one: "{n} Desk मधून हटवलेली, पुन्हा जोडली नाही", other: "{n} Desk मधून हटवलेल्या, पुन्हा जोडल्या नाहीत" },
+  ],
+  "bundle.refusedN": [
+    { one: "{n} not added", other: "{n} not added" },
+    { one: "{n} जोडली नाही", other: "{n} जोडल्या नाहीत" },
+  ],
+  // a story kept or not added, and why (the reason is the server's, by its code)
+  "bundle.line": ["“{headline}”: {reason}", "“{headline}”: {reason}", SAME],
 
   // ---- import a past edition (testing)
   "imp.lede": [
@@ -1976,6 +2018,99 @@ const TABLE = {
   "m.img.badProfile": [
     "The newsprint colour profile could not be used: it must be a CMYK printer profile ({error}).",
     "वृत्तपत्र कागदाचे रंग-प्रोफाइल वापरता आले नाही: ते CMYK प्रिंटरचे प्रोफाइल असावे ({error}).",
+  ],
+  "m.bundle.notZip": [
+    "This is not a Pageinator stories file (a .zip made by Pageinator). Download it again from Pageinator and try again.",
+    "ही Pageinator बातम्यांची फाइल नाही (Pageinator ने बनवलेली .zip फाइल). ती Pageinator मधून पुन्हा डाउनलोड करून पुन्हा प्रयत्न करा.",
+  ],
+  "m.bundle.damaged": [
+    "This Pageinator stories file is damaged. Download it again and try again.",
+    "ही Pageinator बातम्यांची फाइल खराब झाली आहे. ती पुन्हा डाउनलोड करून पुन्हा प्रयत्न करा.",
+  ],
+  "m.bundle.tooLarge": [
+    "This Pageinator stories file is larger than 200 MB.",
+    "ही Pageinator बातम्यांची फाइल 200 MB पेक्षा मोठी आहे.",
+  ],
+  "m.bundle.unpacksTooLarge": [
+    "This Pageinator stories file unpacks to more than 300 MB.",
+    "ही Pageinator बातम्यांची फाइल उघडल्यावर 300 MB पेक्षा मोठी होते.",
+  ],
+  "m.bundle.tooManyFiles": [
+    "This Pageinator stories file holds more than {max} files.",
+    "या Pageinator बातम्यांच्या फाइलमध्ये {max} पेक्षा जास्त फायली आहेत.",
+  ],
+  "m.bundle.memberTooLarge": [
+    "{name} in this Pageinator stories file is larger than the Desk takes.",
+    "या Pageinator बातम्यांच्या फाइलमधील {name} Desk घेऊ शकतो त्यापेक्षा मोठी आहे.",
+  ],
+  "m.bundle.packed": [
+    "{name} in this Pageinator stories file unpacks to far more than its packed size: the file was refused.",
+    "या Pageinator बातम्यांच्या फाइलमधील {name} उघडल्यावर तिच्या आकाराच्या कितीतरी पट मोठी होते: फाइल नाकारली.",
+  ],
+  "m.bundle.badMember": [
+    "This Pageinator stories file holds {name}, which such a file never holds: the file was refused.",
+    "या Pageinator बातम्यांच्या फाइलमध्ये {name} आहे, जे अशा फाइलमध्ये कधीच नसते: फाइल नाकारली.",
+  ],
+  "m.bundle.noJson": [
+    "This file has no bundle.json: it is not a Pageinator stories file.",
+    "या फाइलमध्ये bundle.json नाही: ही Pageinator बातम्यांची फाइल नाही.",
+  ],
+  "m.bundle.badJson": ["The bundle.json in this file cannot be read.", "या फाइलमधील bundle.json वाचता येत नाही."],
+  "m.bundle.version": [
+    "This Pageinator stories file is in a format this Desk does not read ({format}): update the Desk, or make the file again.",
+    "ही Pageinator बातम्यांची फाइल या Desk ला वाचता न येणाऱ्या स्वरूपात आहे ({format}): Desk अद्ययावत करा, किंवा फाइल पुन्हा बनवा.",
+  ],
+  "m.bundle.unknownField": [
+    "This Pageinator stories file has a field this Desk does not know ({field}): update the Desk, or make the file again.",
+    "या Pageinator बातम्यांच्या फाइलमध्ये या Desk ला माहीत नसलेले क्षेत्र आहे ({field}): Desk अद्ययावत करा, किंवा फाइल पुन्हा बनवा.",
+  ],
+  "m.bundle.badField": [
+    "This Pageinator stories file has a field that is missing or not valid ({field}).",
+    "या Pageinator बातम्यांच्या फाइलमधील एक क्षेत्र नाही किंवा वैध नाही ({field}).",
+  ],
+  "m.bundle.tooManyStories": [
+    "This Pageinator stories file holds more than {max} stories.",
+    "या Pageinator बातम्यांच्या फाइलमध्ये {max} पेक्षा जास्त बातम्या आहेत.",
+  ],
+  "m.bundle.storyTwice": [
+    "This Pageinator stories file lists the story {story} twice.",
+    "या Pageinator बातम्यांच्या फाइलमध्ये {story} ही बातमी दोनदा आहे.",
+  ],
+  "m.bundle.photoMissing": [
+    "A photo the stories name is not in this Pageinator stories file ({name}).",
+    "बातम्यांमध्ये नाव असलेले एक छायाचित्र या Pageinator बातम्यांच्या फाइलमध्ये नाही ({name}).",
+  ],
+  "m.bundle.badSha": [
+    "A photo in this Pageinator stories file does not match its SHA-256 checksum ({name}): the file was changed or damaged. Download it again.",
+    "या Pageinator बातम्यांच्या फाइलमधील एक छायाचित्र त्याच्या SHA-256 तपासणी-बेरजेशी जुळत नाही ({name}): फाइल बदलली गेली किंवा खराब झाली. ती पुन्हा डाउनलोड करा.",
+  ],
+  "m.bundle.otherDate": [
+    "These stories are for the edition of {date}; this edition is of {edition}. Open that edition, or make the file again.",
+    "या बातम्या {date} च्या अंकासाठी आहेत; हा अंक {edition} चा आहे. तो अंक उघडा, किंवा फाइल पुन्हा बनवा.",
+  ],
+  "m.bundle.otherPages": [
+    "The stories were sent for an edition of {sent} pages; this one has {pages}: a story pinned to a page it does not have was refused.",
+    "बातम्या {sent} पानांच्या अंकासाठी पाठवल्या होत्या; या अंकात {pages} पाने आहेत: नसलेल्या पानावर पिन केलेली बातमी नाकारली.",
+  ],
+  "m.bundle.keptEdited": [
+    "Changed in the Desk since it was imported: kept as it is.",
+    "आयात केल्यानंतर Desk मध्ये बदलली: आहे तशी ठेवली.",
+  ],
+  "m.bundle.keptNewer": [
+    "The Desk has a newer revision of it (revision {revision}): kept as it is.",
+    "Desk कडे हिची नवी आवृत्ती आहे (आवृत्ती {revision}): आहे तशी ठेवली.",
+  ],
+  "m.bundle.retry": [
+    "It changed in the Desk while the file was being read: import the file again.",
+    "फाइल वाचत असताना ती Desk मध्ये बदलली: फाइल पुन्हा आयात करा.",
+  ],
+  "m.bundle.zip64": [
+    "This Pageinator stories file is in the ZIP64 form, which the Desk does not take: make the file again.",
+    "ही Pageinator बातम्यांची फाइल ZIP64 स्वरूपात आहे, जे Desk घेत नाही: फाइल पुन्हा बनवा.",
+  ],
+  "m.bundle.deletedInDesk": [
+    "Deleted in the Desk after it was imported: not added again.",
+    "आयात केल्यानंतर Desk मधून हटवली: पुन्हा जोडली नाही.",
   ],
 
   // ---- shared words

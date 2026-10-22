@@ -189,6 +189,43 @@ OLD = {
     "m.plan.pinnedFull": ({"max": 10, "page": 2}, "More than 10 stories are pinned to page 2 — pin it to another page"),
     "m.plan.pageFailed": ({"n": 3, "message": "the layout search ran out of time"},
                           "Page 3 could not be laid out: the layout search ran out of time"),
+    # Pageinator story bundles (PR 24): new messages, the English as first written (there was no older text)
+    "m.bundle.notZip": ({}, "This is not a Pageinator stories file (a .zip made by Pageinator). Download it again from "
+                            "Pageinator and try again."),
+    "m.bundle.damaged": ({}, "This Pageinator stories file is damaged. Download it again and try again."),
+    "m.bundle.tooLarge": ({}, "This Pageinator stories file is larger than 200 MB."),
+    "m.bundle.unpacksTooLarge": ({}, "This Pageinator stories file unpacks to more than 300 MB."),
+    "m.bundle.tooManyFiles": ({"max": 202}, "This Pageinator stories file holds more than 202 files."),
+    "m.bundle.memberTooLarge": ({"name": "photos/x.png"},
+                                "photos/x.png in this Pageinator stories file is larger than the Desk takes."),
+    "m.bundle.packed": ({"name": "bundle.json"}, "bundle.json in this Pageinator stories file unpacks to far more than "
+                                                 "its packed size: the file was refused."),
+    "m.bundle.badMember": ({"name": "../x"}, "This Pageinator stories file holds ../x, which such a file never holds: "
+                                             "the file was refused."),
+    "m.bundle.noJson": ({}, "This file has no bundle.json: it is not a Pageinator stories file."),
+    "m.bundle.badJson": ({}, "The bundle.json in this file cannot be read."),
+    "m.bundle.version": ({"format": "pageinator.story-bundle/2"}, "This Pageinator stories file is in a format this "
+                         "Desk does not read (pageinator.story-bundle/2): update the Desk, or make the file again."),
+    "m.bundle.unknownField": ({"field": "stories[0].colour"}, "This Pageinator stories file has a field this Desk does "
+                              "not know (stories[0].colour): update the Desk, or make the file again."),
+    "m.bundle.badField": ({"field": "stories[2].priority"},
+                          "This Pageinator stories file has a field that is missing or not valid (stories[2].priority)."),
+    "m.bundle.tooManyStories": ({"max": 200}, "This Pageinator stories file holds more than 200 stories."),
+    "m.bundle.storyTwice": ({"story": "st-1"}, "This Pageinator stories file lists the story st-1 twice."),
+    "m.bundle.photoMissing": ({"name": "photos/x.png"},
+                              "A photo the stories name is not in this Pageinator stories file (photos/x.png)."),
+    "m.bundle.badSha": ({"name": "photos/x.png"}, "A photo in this Pageinator stories file does not match its SHA-256 "
+                        "checksum (photos/x.png): the file was changed or damaged. Download it again."),
+    "m.bundle.otherDate": ({"date": "2026-08-01", "edition": "2026-08-02"}, "These stories are for the edition of "
+                           "2026-08-01; this edition is of 2026-08-02. Open that edition, or make the file again."),
+    "m.bundle.otherPages": ({"sent": 8, "pages": 4}, "The stories were sent for an edition of 8 pages; this one has 4: "
+                            "a story pinned to a page it does not have was refused."),
+    "m.bundle.keptEdited": ({}, "Changed in the Desk since it was imported: kept as it is."),
+    "m.bundle.keptNewer": ({"revision": 3}, "The Desk has a newer revision of it (revision 3): kept as it is."),
+    "m.bundle.retry": ({}, "It changed in the Desk while the file was being read: import the file again."),
+    "m.bundle.zip64": ({}, "This Pageinator stories file is in the ZIP64 form, which the Desk does not take: make the "
+                           "file again."),
+    "m.bundle.deletedInDesk": ({}, "Deleted in the Desk after it was imported: not added again."),
 }
 
 

@@ -20,7 +20,7 @@ from socketserver import TCPServer
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import __version__, docx, editing, images
+from . import __version__, bundle, docx, editing, images
 from . import messages as M
 from .messages import annotate
 from .store import AD_BUSY, decorate, parse_pages
@@ -72,6 +72,7 @@ ROUTES = [(method, re.compile(pattern), name, body) for method, pattern, name, b
     ("POST", r"/api/editions/([^/]+)/articles", "create_article", "json"),
     ("POST", r"/api/editions/([^/]+)/articles/bulk", "bulk_articles", "json"),
     ("POST", r"/api/editions/([^/]+)/articles/import-docx", "import_docx", "docx"),
+    ("POST", r"/api/editions/([^/]+)/articles/import-bundle", "import_bundle", "bundle"),
     ("PUT", r"/api/editions/([^/]+)/articles/([^/]+)", "update_article", "json"),
     ("DELETE", r"/api/editions/([^/]+)/articles/([^/]+)", "delete_article", None),
     ("PUT", r"/api/editions/([^/]+)/articles/([^/]+)/photo", "put_photo", "image"),
@@ -249,6 +250,10 @@ class Api:
         except docx.DocxError as e:
             raise DeskError(400, str(e)) from None
         return {**self.store.create_many(req.args[0], got["articles"], "word"), "notes": got["notes"]}
+
+    def import_bundle(self, req: Request) -> dict:
+        """A Pageinator stories file (pageinator.story-bundle/1, the raw .zip is the request body): CONTRACT.md §6."""
+        return bundle.import_bundle(self.store, req.args[0], req.body)
 
     def update_article(self, req: Request) -> dict:
         return self.store.update_article(req.args[0], path_id(ARTICLE_ID, req.args[1], "article"), req.json())
@@ -629,6 +634,8 @@ class Handler(BaseHTTPRequestHandler):
             raise DeskError(413, "This picture file is larger than 40 MB. Save it smaller and try again.")
         if kind == "docx" and n > docx.MAX_BYTES:
             raise DeskError(413, "This Word file is larger than 20 MB.")
+        if kind == "bundle" and n > bundle.MAX_BYTES:
+            raise DeskError(413, M.msg("m.bundle.tooLarge"))
         if kind == "json" and n > JSON_LIMIT:
             raise DeskError(413, "The request is too large (the most is 2 MB of text).")
         data = self.rfile.read(n) if n else b""

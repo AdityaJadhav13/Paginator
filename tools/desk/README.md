@@ -45,6 +45,12 @@ never in this repository.
      the press files.
 6. **Word files:** "Word files…" adds the stories of one or more `.docx` files. A file can hold one story or several
    (each starting with a Title or Heading 1 paragraph). Only the text is taken, not its formatting.
+   **Pageinator stories:** "Pageinator stories…" imports the `.zip` the hosted newsroom's "Send to the Desk" makes
+   (`pageinator.story-bundle/1`, CONTRACT.md §6): the edition's stories, with their photos. The file must be for this
+   edition's date, and a file that is damaged or not in that format is refused whole, with nothing added. Importing a
+   newer file again replaces only the stories nobody changed in the Desk since their last import; the others are
+   kept as they are, and the summary says which, and why a story was not added. A story deleted in the Desk is never
+   added again by a later file.
 7. **Edit a page** (the page editor, "Edit page" under each page once the layout is done):
    - The page is drawn with the same glyph outlines the print file embeds, so the screen shows the same letters at
      the same places as the print file (its colours on screen are approximate).
@@ -157,7 +163,7 @@ The contract between them is in [`CONTRACT.md`](CONTRACT.md).
 
 `pnpm run test:desk` runs the three suites from the repository root, and CI's `desk` job runs the same three commands.
 The tests use fictional data only and need nothing from `~/PageinatorPrivate`.
-- `experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py tools/desk/test/test_messages.py`
+- `experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py tools/desk/test/test_messages.py tools/desk/test/test_bundle.py`
 - `tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py`
 - `node --test tools/desk/test/*.mjs`: the page editor's ruler and zoom arithmetic (`test_editor_view.mjs`), the main
   screen's words in English and Marathi (`test_strings.mjs`), and the paste preview read as the server reads it

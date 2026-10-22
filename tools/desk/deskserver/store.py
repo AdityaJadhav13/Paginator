@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import sys
 import threading
 import traceback
@@ -16,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 import deskarticles  # noqa: E402  (the engine's own text parser: the Desk counts words the way it lays them out)
 
 from . import images  # noqa: E402
+from .bundle import tombstone  # noqa: E402
 from . import messages as M  # noqa: E402
 from .press import edition_now, mark_damaged, recheck_status
 from .util import (EDITION_ID, PHOTO_ID, RUN_ID, SLOT_ID, ARTICLE_ID, DeskError, clean_text, ensure_dir, new_id,
@@ -361,6 +363,8 @@ class Store:
             doc = self._doc(d)
             article = _find(doc["articles"], aid)
             doc["articles"].remove(article)
+            if (gone := tombstone(article)) is not None:      # an imported story is never imported again (§6)
+                doc.setdefault("bundle_deleted", []).append(gone)
             self._save(d, doc)
             self._recheck_runs(d)
             self.articles_changed(eid)
@@ -540,6 +544,18 @@ class Store:
         finally:
             lock.release()
         return True
+
+    def clean_staging(self) -> None:
+        """At start: the staging folders (`.bundle-*`, photo originals) an import stopped part-way left are removed,
+        then every edition's photos that no article names (an import's photos linked before its articles were
+        written)."""
+        for d in sorted(self.editions_dir.iterdir()):
+            if not (EDITION_ID.fullmatch(d.name) and (d / "edition.json").is_file()):
+                continue
+            for left in d.glob(".bundle-*"):
+                if left.is_dir() and not left.is_symlink():
+                    shutil.rmtree(left, ignore_errors=True)
+            self.gc_photos(d.name)
 
     def ads_summary(self, eid: str) -> dict:
         d = self.require(eid)
