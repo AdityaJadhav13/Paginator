@@ -1,0 +1,97 @@
+/* The Stories list and the story editor (plan §10 PRs 21–22): tokens only, logical properties only. */
+
+.pg-chip {
+  display: inline-block;
+  padding-inline: var(--pg-space-2);
+  border: var(--pg-border-width) solid var(--pg-color-border);
+  border-radius: var(--pg-radius-pill);
+  font-size: var(--pg-font-size-200);
+  line-height: var(--pg-line-height-200);
+  white-space: nowrap;
+}
+
+.pg-chip--ready {
+  border-color: var(--pg-color-success);
+  color: var(--pg-color-success);
+}
+
+.pg-chip--held,
+.pg-chip--spiked {
+  border-color: var(--pg-color-warning);
+  color: var(--pg-color-warning);
+}
+
+.pg-stories__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pg-space-3) var(--pg-space-4);
+  align-items: end;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.pg-stories__table-wrap {
+  overflow-x: auto;
+}
+
+.pg-stories__table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.pg-stories__table th,
+.pg-stories__table td {
+  padding-block: var(--pg-space-2);
+  padding-inline: var(--pg-space-2);
+  border-block-end: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  text-align: start;
+  vertical-align: top;
+}
+
+.pg-stories__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-stories__card {
+  border-block-end: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  padding-block-end: var(--pg-space-3);
+}
+
+.pg-stories__card > * + * {
+  margin-block-start: var(--pg-space-1);
+}
+
+.pg-stories__meta {
+  color: var(--pg-color-text-muted);
+}
+
+.pg-editor {
+  max-inline-size: var(--pg-account-measure);
+  overflow-wrap: anywhere;
+}
+
+.pg-editor .pg-textarea {
+  inline-size: 100%;
+  min-block-size: var(--pg-editor-body-min);
+}
+
+.pg-editor__versions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pg-space-4);
+}
+
+.pg-editor__version {
+  flex: 1 1 var(--pg-editor-version-min);
+  min-inline-size: 0;
+  padding: var(--pg-space-3);
+  border: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  border-radius: var(--pg-radius-md);
+  white-space: pre-wrap;
+}

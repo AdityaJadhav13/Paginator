@@ -48,7 +48,10 @@ describe("Navigation from permissions", () => {
     expect(reporter).toContain("glossary.stories /org/o/pub/p/stories");
     expect(reporter).not.toContain("nav.brand /org/o/pub/p/brand");
     expect(reporter).not.toContain("glossary.team /org/o/team");
-    expect(labels(navigation(org("member", ["reporter"]), "p", false))).toEqual([]);
+    // in the deployed app a Reporter has their stories, and nothing else of the publication yet
+    expect(labels(navigation(org("member", ["reporter"]), "p", false))).toEqual(["glossary.stories /org/o/pub/p/stories"]);
+    expect(labels(navigation(org("member", ["advertising"]), "p", false))).toEqual([]); // the ads desk is L2.6
+    expect(labels(navigation(org("member", ["photo_editor"]), "p", false))).toEqual(["glossary.stories /org/o/pub/p/stories"]);
   });
 
   it("offers only Home while the organisation's two-step rule is unmet", () => {
@@ -65,7 +68,11 @@ describe("The organisation's home", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Sahyadri Media Cooperative" })).toBeInTheDocument();
     expect(screen.getByText("Your role here: Admin.")).toBeInTheDocument();
     expect(screen.getByText("Pune Daily Ledger: Editor and Can approve pages")).toBeInTheDocument();
-    expect(screen.getByText("The newsroom screens are still being built.")).toBeInTheDocument();
+    expect(screen.getByText("The stories desk is open. The other newsroom screens are still being built.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Stories of Pune Daily Ledger" })).toHaveAttribute(
+      "href",
+      "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/stories",
+    );
     const nav = screen.getByRole("navigation", { name: "Organization" });
     expect(nav).toHaveTextContent("Team");
     expect(screen.getAllByRole("link", { name: "Team" })[0]).toHaveAttribute("href", "/org/org-demo-sahyadri/team");

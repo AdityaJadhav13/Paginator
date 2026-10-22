@@ -28,6 +28,7 @@ import type {
   WorkspaceAccessError,
   WorkspaceAccessService,
 } from "../../services/index.ts";
+import { forgetDrafts, keepDrafts, signedOut, signedOutElsewhere } from "../stories/drafts.ts";
 
 /** Why the session could not be read: the API's problem, or the placeholder workspace's error. */
 export type SessionProblem =
@@ -168,6 +169,26 @@ export function SessionProvider({
 
   useEffect(() => onSignedOut?.(expire), [onSignedOut, expire]);
 
+  // a signed-in person keeps drafts in this tab
+  const readyUser = state.status === "ready" ? state.session.user.id : undefined;
+  useEffect(() => {
+    if (readyUser) keepDrafts(readyUser);
+  }, [readyUser]);
+
+  // signed out in another tab: this tab stops keeping drafts for that person, drops any it wrote since, and reads the
+  // session again (it has ended)
+  useEffect(() => {
+    const heard = (event: StorageEvent) => {
+      const userId = signedOutElsewhere(event);
+      const current = stateRef.current;
+      if (!userId || current.status !== "ready" || current.session.user.id !== userId) return;
+      forgetDrafts(userId);
+      void load({ assertive: true, invalidate: true, showLoading: false });
+    };
+    window.addEventListener("storage", heard);
+    return () => window.removeEventListener("storage", heard);
+  }, [load]);
+
   const signIn = useCallback(
     async (input: SignInInput) => {
       setIntentionalSignOut(false);
@@ -192,8 +213,12 @@ export function SessionProvider({
 
   const signOut = useCallback(async () => {
     setIntentionalSignOut(true);
+    const leaving = stateRef.current;
     const request = ++requestRef.current;
     const result = await session.signOut();
+    // signed out: the person's unsaved story text on this device goes with them (a shared device), here and in every
+    // other tab, but only now that the sign-out succeeded, and whatever happened on this screen meanwhile
+    if (result.ok && leaving.status === "ready") signedOut(leaving.session.user.id);
     if (!isCurrent(request)) return result;
     if (!result.ok) {
       // still signed in: the control that asked shows why

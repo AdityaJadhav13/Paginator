@@ -393,3 +393,17 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | L2-155 | LISTEN hints | Anyone who can send NOTIFY on app_events (pgn_app, any connection to the database) can send well-formed hints: they carry only ids, and each is checked against the reader's access, but they can ping or flood streams | Only the API's roles reach the database |
 | L2-156 | `routes.ts` backpressure | A burst of more than 256 KiB of events in one tick (a huge forged flood) ends even streams that read, because they cannot drain within the tick | The browser reconnects and gets `resync` |
 | L2-157 | `events.ts` confirm | For a Reporter, a story given away from them is no longer confirmed as theirs, so they hear nothing of it leaving; their list catches up on its next fetch | Ids only; the list is refetched on resync and navigation |
+| L2-158 | `apps/web` story editor | Clearing an existing headline shows "Save failed" (the API refuses an empty headline) rather than saying a headline is needed | Found in the L2-H review |
+| L2-159 | `apps/web` story editor drafts | Drafts kept from an expired session never expire: they need an age limit | Found in the L2-H review |
+| L2-160 | `apps/web` story editor | Assigning a story while an autosave is in flight can conflict with the person's own save (409 story_changed) | Found in the L2-H review |
+| L2-161 | `apps/web` story editor | `lang` is missing on a new story's text boxes and on the desk note | Found in the L2-H review |
+| L2-162 | `apps/web` story editor | The save status is announced to screen readers every 1.5 s | Found in the L2-H review |
+| L2-163 | `apps/web` send-back dialog | The send-back textarea's CSS | Found in the L2-H review |
+| L2-164 | `apps/web` Stories list | The chips for Held and Spiked lack contrast | Found in the L2-H review |
+| L2-165 | `apps/web` breadcrumbs | The breadcrumb for an Advertising member | Found in the L2-H review |
+| L2-166 | `apps/web` story editor drafts | `readDraft` does not validate what it reads back from storage | Found in the L2-H review |
+| L2-167 | `apps/web` word counts | The web's word count and the API's differ | The API's count (the Desk's own, @pageinator/desk-text) is the one stored |
+| L2-168 | `apps/web` story editor drafts | Killing the whole browser within about 8 s of typing loses the latest draft | Found in the L2-H review |
+| L2-169 | `apps/web` Stories list | An edited story can disappear between "Show more" clicks (the cursor moves with updated_at) | Found in the L2-H review |
+| L2-170 | `apps/web` paste dialog | The paste dialog scrolls sideways at 320 px | Found in the L2-H review |
+| L2-171 | `apps/web` story editor | The page pin offers 1–16 whatever pages the edition has | The API refuses a pin past the edition's last page |

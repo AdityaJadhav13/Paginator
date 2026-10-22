@@ -1,5 +1,5 @@
 /**
- * The test double for the real session, account, security and team services, and for the person's workspace (/me),
+ * The test double for the real session, account, security, team and story services, and for the person's workspace (/me),
  * used by component tests (the app itself runs on src/api).
  *
  * It answers like the API: Better Auth's codes for sign-in, two-step, reset and confirmation (INVALID_EMAIL_OR_PASSWORD,
@@ -20,6 +20,7 @@ import type {
   ServiceResult,
   SessionService,
   SessionSnapshot,
+  StoryService,
   TeamService,
   WorkspaceAccessDto,
   WorkspaceAccessService,
@@ -27,6 +28,7 @@ import type {
 import { grantsOf } from "../services/index.ts";
 import type { MockOperation } from "./scenarios.ts";
 import { createCanonicalSeed } from "./seed.ts";
+import { createMockStories, type MockStoryOperation } from "./create-mock-stories.ts";
 import {
   createAccounts,
   createInvitations,
@@ -41,7 +43,14 @@ import {
   type MockOrgRole,
 } from "./session-seed.ts";
 
-export type MockSessionPreset = "sahyadri-editor" | "konkan-reviewer" | "sahyadri-owner" | "signed-out";
+export type MockSessionPreset =
+  | "sahyadri-editor"
+  | "konkan-reviewer"
+  | "sahyadri-owner"
+  | "sahyadri-subeditor"
+  | "sahyadri-reporter"
+  | "sahyadri-photo-editor"
+  | "signed-out";
 
 export type MockAuthOperation =
   | "session.get"
@@ -66,7 +75,8 @@ export type MockAuthOperation =
   | "team.listInvitations"
   | "team.invite"
   | "team.resendInvitation"
-  | "team.cancelInvitation";
+  | "team.cancelInvitation"
+  | MockStoryOperation;
 
 /** An email the double "sent". */
 export interface MockMail {
@@ -128,6 +138,7 @@ export interface MockSessionEnvironment {
   readonly account: AccountService;
   readonly security: SecurityService;
   readonly team: TeamService;
+  readonly stories: StoryService;
   readonly access: WorkspaceAccessService;
   readonly sessionController: MockSessionController;
   readonly invalidatePendingSessionMutations: () => void;
@@ -140,7 +151,15 @@ export interface CreateMockSessionEnvironmentOptions {
   readonly intercept?: (operation: MockOperation) => Promise<"failure" | "denial" | undefined>;
 }
 
-const PRESETS: readonly MockSessionPreset[] = ["sahyadri-editor", "konkan-reviewer", "sahyadri-owner", "signed-out"];
+const PRESETS: readonly MockSessionPreset[] = [
+  "sahyadri-editor",
+  "konkan-reviewer",
+  "sahyadri-owner",
+  "sahyadri-subeditor",
+  "sahyadri-reporter",
+  "sahyadri-photo-editor",
+  "signed-out",
+];
 const MIN_PASSWORD = 12;
 const MAX_PASSWORD = 128;
 const TEAM_INVITATION_ID = "a1b2c3d4-0000-4000-8000-000000000001";
@@ -839,6 +858,32 @@ export function createMockSessionEnvironment(
     return { email: found.email, password: found.password, name: found.name };
   };
 
+  const storyDouble = createMockStories({
+    person: () => {
+      const account = current();
+      return account ? { userId: account.userId, name: account.name } : undefined;
+    },
+    standing(userId, orgId, pubId) {
+      const mine = orgRoles.get(userId)?.find((org) => org.organizationId === orgId);
+      const exists = names.publications.some((pub) => pub.id === pubId && pub.orgId === orgId);
+      if (!mine || !exists) return undefined;
+      const here = mine.publications.find((publication) => publication.publicationId === pubId);
+      // Owner and Admin reach every publication; a member only those they hold roles on
+      if (mine.orgRole === "member" && !here) return undefined;
+      return {
+        orgRole: mine.orgRole,
+        access: {
+          roles: (here?.roles ?? []) as MemberDto["publications"][number]["roles"],
+          grants: (here?.grants ?? []) as MemberDto["publications"][number]["grants"],
+        },
+        twoStepBlocked: twoStepRolesOf(orgId).includes(mine.orgRole) && !(userId === signedInUserId && sessionTwoStep),
+      };
+    },
+    gate: (operation) => gate(operation),
+    signedOut: () => signedOutAnswer(),
+    nameOf: (userId) => accounts.find((account) => account.userId === userId)?.name,
+  });
+
   const sessionController: MockSessionController = {
     setPreset,
     getPreset: () => preset,
@@ -864,6 +909,7 @@ export function createMockSessionEnvironment(
       active = new Map();
       acceptedKeys = new Set();
       problems = new Map();
+      storyDouble.reset();
     },
     setProblem(problem, operations) {
       for (const operation of operations ?? ["*" as const]) {
@@ -910,6 +956,7 @@ export function createMockSessionEnvironment(
     account,
     security,
     team,
+    stories: storyDouble.stories,
     access,
     sessionController,
     invalidatePendingSessionMutations: () => {

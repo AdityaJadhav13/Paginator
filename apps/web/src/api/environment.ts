@@ -7,6 +7,7 @@ import { createApiAccountService } from "./account-service.ts";
 import { createApiClient, type ApiClientOptions } from "./client.ts";
 import { createApiSecurityService } from "./security-service.ts";
 import { createApiSessionService } from "./session-service.ts";
+import { createApiStoryService } from "./story-service.ts";
 import { createApiTeamService } from "./team-service.ts";
 import { createApiWorkspace } from "./workspace.ts";
 
@@ -41,6 +42,7 @@ export function createApiEnvironment(options: Omit<ApiClientOptions, "onSignedOu
     account: createApiAccountService(client),
     security: createApiSecurityService(client),
     team: createApiTeamService(client),
+    stories: createApiStoryService(client),
     access: {
       getAccess: (input) => access.getAccess(input),
       selectOrganization: (input) => changes(() => access.selectOrganization(input)),

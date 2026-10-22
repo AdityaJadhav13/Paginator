@@ -21,6 +21,18 @@ export type {
 } from "./team-service.ts";
 export type { AccountService, InvitationDto, SignUpInput } from "./account-service.ts";
 export type {
+  PasteResultDto,
+  StoryDto,
+  StoryFilterDto,
+  StoryInputDto,
+  StoryListItemDto,
+  StoryPageDto,
+  StoryPatchDto,
+  StoryService,
+  StoryStatusDto,
+  TransitionTargetDto,
+} from "./story-service.ts";
+export type {
   OrgAccessDto,
   WorkspaceAccessDto,
   WorkspaceAccessError,

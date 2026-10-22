@@ -179,7 +179,9 @@ describe("The Marathi review list", () => {
 
   it("carries the open question on the Marathi term for a release on its three strings", () => {
     const noted = REVIEW.filter((item) => item.note).map((item) => item.key);
-    expect(noted.sort()).toEqual(["grant.release_approve", "invalid.release", "nav.release"]);
+    expect(noted.filter((key) => key.includes("release")).sort()).toEqual(["grant.release_approve", "invalid.release", "nav.release"]);
+    // the two invite buttons that read the same in Marathi, as the owner chose
+    expect(noted.filter((key) => key.startsWith("team.invite")).sort()).toEqual(["team.invite", "team.invite.submit"]);
     expect(Object.keys(REVIEW_NOTES).every((key) => isCatalogueKey(key))).toBe(true);
   });
 

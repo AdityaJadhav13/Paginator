@@ -7,6 +7,7 @@ import { reach, type Permission, type PublicationAccess } from "@pageinator/cont
 import { paths } from "../../app/routes.ts";
 import type { PlainKey } from "../../i18n/index.ts";
 import type { OrgAccessDto } from "../../services/index.ts";
+import { storyScope } from "../stories/access.ts";
 
 export interface NavEntry {
   readonly label: PlainKey;
@@ -32,7 +33,7 @@ const ORG_ENTRIES: readonly Rule[] = [
 const PUBLICATION_ENTRIES: readonly Rule[] = [
   { label: "glossary.overview", permission: "overview.view", built: false, to: (o, p) => paths.pubOverview(o, p) },
   { label: "nav.editions", permission: "edition.view", built: false, to: (o, p) => paths.pubEditions(o, p) },
-  { label: "glossary.stories", permission: "story.view", built: false, to: (o, p) => paths.pubStories(o, p) },
+  { label: "glossary.stories", permission: "story.view", built: true, to: (o, p) => paths.pubStories(o, p) },
   { label: "nav.media", permission: "media.view", built: false, to: (o, p) => paths.pubMedia(o, p) },
   { label: "nav.ads", permission: "ads.view", built: false, to: (o, p) => paths.pubAds(o, p) },
   { label: "nav.templates", permission: "templates.view", built: false, to: (o, p) => paths.pubTemplates(o, p) },
@@ -64,6 +65,8 @@ function allowed(rule: Rule, org: OrgAccessDto, publicationId: string | undefine
   if (rule.permission === "signed_in") return true;
   // the API refuses every screen of the organisation (403 two_step_required) until this session has two-step
   if (org.twoStep.required && !org.twoStep.satisfied) return false;
+  // a ◐ story.view is a Reporter's own stories or a Photo Editor's read; Advertising's is the ads desk's (L2.6)
+  if (rule.permission === "story.view" && publicationId) return storyScope(org, publicationId) !== "none";
   return may(org, rule.permission, publicationId);
 }
 

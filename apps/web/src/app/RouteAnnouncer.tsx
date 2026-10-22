@@ -26,6 +26,8 @@ export function RouteAnnouncer() {
       return;
     }
     previousPathname.current = location.pathname;
+    // the same screen giving itself its own address (a story just created): the person keeps typing where they were
+    if ((location.state as { keepFocus?: unknown } | null)?.keepFocus === true) return;
     const focusHeading = () => {
       const heading = document.getElementById(ROUTE_HEADING_ID);
       if (!(heading instanceof HTMLElement) || heading.hasAttribute("data-pg-transient-route-heading")) return false;

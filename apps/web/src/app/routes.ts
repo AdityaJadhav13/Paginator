@@ -55,6 +55,7 @@ export const PATTERNS = {
   pubOverview: "pub/:pubId/overview",
   pubEditions: "pub/:pubId/editions",
   pubStories: "pub/:pubId/stories",
+  pubStory: "pub/:pubId/stories/:storyId",
   pubMedia: "pub/:pubId/media",
   pubAds: "pub/:pubId/ads",
   pubTemplates: "pub/:pubId/templates",
@@ -105,6 +106,9 @@ export const paths = {
   pubOverview: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/overview`,
   pubEditions: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/editions`,
   pubStories: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/stories`,
+  pubStoryNew: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/stories/new`,
+  pubStory: (orgId: string, pubId: string, storyId: string) =>
+    `/org/${orgId}/pub/${pubId}/stories/${encodeURIComponent(storyId)}`,
   pubMedia: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/media`,
   pubAds: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/ads`,
   pubTemplates: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/templates`,

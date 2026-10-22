@@ -87,6 +87,11 @@ export function WorkspaceRouteProvider({
   const [state, setState] = useState<WorkspaceRouteState>({ status: "loading" });
   const requestRef = useRef(0);
   const lastResolutionPathRef = useRef<string | undefined>(undefined);
+  // the context is resolved again only when what it names changes: moving between two pages of the same publication
+  // (a story's list and the story, a new story taking its own address) keeps the screen mounted
+  const pathnameRef = useRef(location.pathname);
+  pathnameRef.current = location.pathname;
+  const contextKey = [params.orgId, params.pubId, params.editionId, params.releaseId].join("|");
 
   useEffect(() => {
     const request = ++requestRef.current;
@@ -96,7 +101,7 @@ export function WorkspaceRouteProvider({
     if (currentSession.status === "signed-out") {
       setState({
         status: "signed-out",
-        returnTo: session.intentionalSignOut ? "" : location.pathname,
+        returnTo: session.intentionalSignOut ? "" : pathnameRef.current,
       });
       return;
     }
@@ -118,9 +123,9 @@ export function WorkspaceRouteProvider({
 
     const assertiveFailure = revision > 0 || (
       lastResolutionPathRef.current !== undefined &&
-      lastResolutionPathRef.current !== location.pathname
+      lastResolutionPathRef.current !== pathnameRef.current
     );
-    lastResolutionPathRef.current = location.pathname;
+    lastResolutionPathRef.current = pathnameRef.current;
     const expectedSessionGeneration = getSessionMutationGeneration();
     const isCurrent = () =>
       active &&
@@ -196,7 +201,7 @@ export function WorkspaceRouteProvider({
     return () => {
       active = false;
     };
-  }, [getSessionMutationGeneration, location.pathname, params.editionId, params.orgId, params.pubId, params.releaseId, releases, revision, session, workspace]);
+  }, [contextKey, getSessionMutationGeneration, params.editionId, params.orgId, params.pubId, params.releaseId, releases, revision, session, workspace]);
 
   return createElement(
     WorkspaceRouteContext.Provider,

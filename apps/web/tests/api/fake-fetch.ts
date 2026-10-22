@@ -5,6 +5,8 @@ export interface RecordedCall {
   readonly headers: Headers;
   readonly body: unknown;
   readonly credentials: RequestCredentials | undefined;
+  readonly cache: RequestCache | undefined;
+  readonly keepalive: boolean | undefined;
 }
 
 export type Answer = Response | (() => Response | Promise<Response>) | Error;
@@ -25,6 +27,8 @@ export function fakeFetch(route: (call: RecordedCall) => Answer) {
       headers: new Headers(init.headers),
       body: typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : init.body,
       credentials: init.credentials,
+      cache: init.cache,
+      keepalive: init.keepalive,
     };
     calls.push(call);
     const answer = route(call);

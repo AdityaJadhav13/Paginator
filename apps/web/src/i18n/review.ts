@@ -26,6 +26,10 @@ export const REVIEWED: Readonly<Partial<Record<CatalogueKey, MarathiReview>>> = 
  * while the string waits for review.
  */
 export const REVIEW_NOTES: Readonly<Partial<Record<CatalogueKey, string>>> = {
+  "team.invite":
+    "Reads the same as team.invite.submit (निमंत्रण पाठवा, one verb for inviting, as the owner asked): one opens the invitation dialog, the other sends it from inside it. Check both read well where they stand.",
+  "team.invite.submit":
+    "Reads the same as team.invite (निमंत्रण पाठवा): the button inside the invitation dialog that sends it.",
   "grant.release_approve":
     "Open question for the owner's reviewer: the Marathi term for \"release\" (an edition sent to press and kept in the archive). The draft avoids प्रकाशन, which is Publication.",
   "nav.release":
