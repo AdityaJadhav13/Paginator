@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import __version__, docx, editing, images
+from . import messages as M
+from .messages import annotate
 from .store import AD_BUSY, decorate, parse_pages
 from .util import ARTICLE_ID, SLOT_ID, DeskError, path_id
 
@@ -414,18 +416,18 @@ class Api:
         body = req.json()
         story, to = body.get("story"), body.get("to")
         if not isinstance(story, str) or not STORY_KEY.fullmatch(story):
-            raise DeskError(400, "Say which story to move.")
+            raise DeskError(400, M.msg("m.move.whichStory"))
         if not isinstance(to, int) or isinstance(to, bool):
-            raise DeskError(400, "Say which page to move the story to, as a page number.")
+            raise DeskError(400, M.msg("m.move.whichPage"))
         base_rev = self._rev(body)
         if to == page:
-            raise DeskError(400, "The story is on this page already: choose another page.")
+            raise DeskError(400, M.msg("m.move.samePage"))
         target = next((p for p in self.store.run_status(eid, rid).get("pages") or []
                        if isinstance(p, dict) and p.get("page") == to), None)
         if target is None:
-            raise DeskError(400, f"This layout has no page {to}.")
+            raise DeskError(400, M.msg("m.move.noPage", page=to))
         if target.get("state") != "done":
-            raise DeskError(400, f"Page {to} was not laid out in this layout: a story cannot move there.")
+            raise DeskError(400, M.msg("m.move.notLaidOut", page=to))
         run_dir = self.store.run_dir(eid, rid)
         with editing.save_lock(run_dir):                    # as a save: one at a time in a run (then the edition's lock)
             with self.store.lock(eid):
@@ -653,7 +655,8 @@ class Handler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _json_reply(obj: Any) -> Reply:
-        return Reply((json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8"))
+        # the Desk's own messages in it are mapped to {code, params} ("msgs"), so the screens can say them in Marathi
+        return Reply((json.dumps(annotate(obj), ensure_ascii=False) + "\n").encode("utf-8"))
 
     def _start(self, code: int, headers: list[tuple[str, str]]) -> None:
         self.send_response(code)
@@ -696,7 +699,7 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
             return
         try:
-            body = (json.dumps({"error": message}, ensure_ascii=False) + "\n").encode("utf-8")
+            body = (json.dumps(annotate({"error": message}), ensure_ascii=False) + "\n").encode("utf-8")
             self._start(code, [("Content-Type", "application/json; charset=utf-8"),
                                ("Content-Length", str(len(body))), ("Cache-Control", "no-store")])
             self.wfile.write(body)

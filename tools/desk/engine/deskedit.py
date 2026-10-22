@@ -54,6 +54,7 @@ from pathlib import Path
 import deskgen as DG
 import deskprinted
 from deskcommon import PHOTO_ID, log, read_json, write_json
+from deskmsg import MESSAGES, data, msg
 
 G, CP, X, MM = DG.G, DG.CP, DG.X, DG.MM
 SNAP_MM = G.UNIT                                         # positions and heights snap to the search's unit …
@@ -61,25 +62,24 @@ MIN_H_MM = 10.0                                          # … no module is shor
 OVERSET_TRIES = 3                                        # rows added to a module whose text does not fit, at most
 FIXED_KINDS = ("ad", "image", "graphic")
 SAME_MM = 0.01
-STALE = "this page was changed in another window or tab; it is shown again as it is now"
-LOCKED_MOVE = "{name} is locked: unlock it (Shift+L) to move it"
-LOCKED_TAKE = "{name} is locked: unlock it (Shift+L) to take it off the page"
-LOCKED_THERE = "{name} is locked on page {page}: unlock it there to bring it here"
-SAVE_HELD = ("this page cannot be saved yet: {name} is also on page {page}, locked there. Unlock it on page {page}, or "
-             "take it off this page, then save")
-ALL_LOCKED = "every story on this page is locked: unlock one to try another layout"
-NO_FILL_AROUND = "no other layout fills the space around the locked stories exactly: unlock one, or move it"
+# the engine's refusals: messages of messages.json (deskmsg), sent as English text and as {code, params}
+STALE = msg("m.edit.stale")
+LOCKED_MOVE = MESSAGES["m.edit.lockedMove"]             # templates, as before (the messages are made with msg())
+LOCKED_TAKE = MESSAGES["m.edit.lockedTake"]
+LOCKED_THERE = MESSAGES["m.edit.lockedThere"]
+SAVE_HELD = MESSAGES["m.edit.saveHeld"]
+ALL_LOCKED = msg("m.edit.allLocked")
+NO_FILL_AROUND = msg("m.edit.noFillAround")
 ZOOM_MAX = 4.0                                           # a crop enlarges its photo in the frame at most this much
-CROP_BAD = "a photo crop must give the photo's id, a focus point (two numbers) and a zoom (a number)"
-CROP_LOST = "the photo of {name} could not be found on the page to crop it: nothing was changed"
-MOVE_NOT_HERE = "{name} is not on this page"
-MOVE_NO_PAGE = "this layout has no page {page!r}"
-MOVE_SAME_PAGE = "{name} is on this page already: choose another page"
-MOVE_NOT_LAID_OUT = "page {page} was not laid out in this layout: a story cannot move there"
-MOVE_LOCKED_THERE = "{name} is also on page {page}, locked there: unlock it there to move it"
-MOVE_CANNOT_SET = "{name} cannot be set {w} {cols} wide on page {page}: change its width here, then move it"
-MOVE_NO_ROOM = ("there is no free place on page {page} for {name} ({w} {cols} × {h:g} mm): make room there, or narrow it "
-                "here, then move it")
+CROP_BAD = msg("m.edit.cropBad")
+CROP_LOST = MESSAGES["m.edit.cropLost"]
+MOVE_NOT_HERE = MESSAGES["m.edit.moveNotHere"]
+MOVE_NO_PAGE = MESSAGES["m.edit.moveNoPage"]
+MOVE_SAME_PAGE = MESSAGES["m.edit.moveSamePage"]
+MOVE_NOT_LAID_OUT = MESSAGES["m.edit.moveNotLaidOut"]
+MOVE_LOCKED_THERE = MESSAGES["m.edit.moveLockedThere"]
+MOVE_CANNOT_SET = MESSAGES["m.edit.moveCannotSet"]
+MOVE_NO_ROOM = MESSAGES["m.edit.moveNoRoom"]
 
 
 def _r(v: float) -> float:
@@ -89,7 +89,7 @@ def _r(v: float) -> float:
 def _finite(v) -> float:
     f = float(v)
     if not math.isfinite(f):
-        raise ValueError("a position or size is not a number")
+        raise ValueError(msg("m.edit.notNumber"))
     return f
 
 
@@ -151,7 +151,7 @@ def crop_window(W0: int, H0: int, fw: float, fh: float, crop: dict | None = None
     z = max(1.0, min(float(crop["zoom"]), zoom_max))
     w, h = min(cw0, max(1, math.ceil(cw0 / z))), min(ch0, max(1, math.ceil(ch0 / z)))
     if z > 1.0 and min(w / (fw / 25.4), h / (fh / 25.4)) < floor * (1 - 1e-9):   # never: ceil keeps it (fail closed)
-        raise ValueError("a photo crop would print below the photo's resolution floor")
+        raise ValueError(msg("m.edit.cropFloor"))
     fx, fy = crop["focus"]
     x = max(0, min(W0 - w, math.floor(fx * W0 - w / 2)))
     y = max(0, min(H0 - h, math.floor(fy * H0 - h / 2)))
@@ -544,7 +544,7 @@ class PageSession:
         (crop_value: missing or null is none). Anything else is refused."""
         locked = m.get("locked")
         if locked is not None and not isinstance(locked, bool):
-            raise ValueError("a story's lock must be true or false")
+            raise ValueError(msg("m.edit.lockBool"))
         return {"locked": bool(locked), "crop": crop_value(m.get("crop"))}
 
     def set_modules(self, modules: list[dict]) -> None:
@@ -618,9 +618,9 @@ class PageSession:
             if is_locked(p):
                 m = first.get(p["story"])
                 if m is None:
-                    raise ValueError(LOCKED_TAKE.format(name=self._name(p["story"])))
+                    raise ValueError(msg("m.edit.lockedTake", name=self._name(p["story"])))
                 if not self._same_place(p, m):
-                    raise ValueError(LOCKED_MOVE.format(name=self._name(p["story"])))
+                    raise ValueError(msg("m.edit.lockedMove", name=self._name(p["story"])))
         mine = {p["story"] for p in self.modules}
         new = [k for k in first if k not in mine]
         if new:
@@ -628,7 +628,7 @@ class PageSession:
             for k in new:
                 there = elsewhere.get(k)
                 if there and there["locked"]:
-                    raise ValueError(LOCKED_THERE.format(name=self._name(k), page=there["page"]))
+                    raise ValueError(msg("m.edit.lockedThere", name=self._name(k), page=there["page"]))
 
     def apply(self, modules: list[dict], base_rev=None) -> dict:
         """A change from the editor, set and drawn; if it cannot be set, the page stays as it was. A change the locks
@@ -722,7 +722,7 @@ class PageSession:
             if crop is not None:
                 raw = DG.gz_raw(s.photo["path"])
                 if len(raw) != W0 * H0 * 4:
-                    raise ValueError(f"the photo of {self._name(s.id)} is damaged (its raster has the wrong size)")
+                    raise ValueError(msg("m.edit.photoDamaged", name=self._name(s.id)))
                 gw = crop_window(W0, H0, ph_w, ph_h)[0]                     # gen1's own window, rectangle and pixels
                 rect = (x * MM, (B.page_h - ph_top - ph_h) * MM, ph_w * MM, ph_h * MM)
                 pixels = _rows(raw, W0, *gw)
@@ -731,7 +731,7 @@ class PageSession:
                           and (B.items[j].width_px, B.items[j].height_px) == gw[2:] and B.items[j].cmyk_bytes == pixels),
                          None)
                 if k is None:
-                    raise ValueError(CROP_LOST.format(name=self._name(s.id)))
+                    raise ValueError(msg("m.edit.cropLost", name=self._name(s.id)))
                 B.items[k] = dataclasses.replace(B.items[k], width_px=win[2], height_px=win[3],
                                                  cmyk_bytes=_rows(raw, W0, *win))
                 info["item"], at = k, k + 1
@@ -809,9 +809,9 @@ class PageSession:
         return els[st["headline"]]["text"] if st.get("headline") in els else None
 
     def _name(self, key: str) -> str:
-        """The story in a message."""
+        """The story in a message: its headline in quotes (shown as it is), or what it is."""
         head = self._headline(key) if key in self.built.story_of else None
-        return f"“{head}”" if head else "the column of short items" if key in self.built.story_of else "a story"
+        return data(f"“{head}”") if head else msg("m.name.shortColumn") if key in self.built.story_of else msg("m.name.aStory")
 
     def pool(self, elsewhere=None) -> list[dict]:
         """Stories of the edition not on this page (the editor can bring one in; one on another page moves here, unless
@@ -856,7 +856,7 @@ class PageSession:
         takes = self._takes()
         held = self._held(takes)
         if held:
-            raise ValueError(SAVE_HELD.format(name=self._name(held[0]), page=held[1]))
+            raise ValueError(msg("m.edit.saveHeld", name=self._name(held[0]), page=held[1]))
         changed = {}
         for n, (keep, _) in sorted(takes.items()):
             saved = read_json(self.run_dir / f"page-{n:02d}.edit.json", {})
@@ -884,19 +884,19 @@ class PageSession:
         self.check_rev(base_rev)
         m = next((x for x in self.modules if x["story"] == story), None)
         if m is None:
-            raise ValueError(MOVE_NOT_HERE.format(name=self._name(story)))
+            raise ValueError(msg("m.edit.moveNotHere", name=self._name(story)))
         if not isinstance(to, int) or isinstance(to, bool) or not 1 <= to <= self.pages:
-            raise ValueError(MOVE_NO_PAGE.format(page=to))
+            raise ValueError(msg("m.edit.moveNoPage", page=to))
         if to == self.page:
-            raise ValueError(MOVE_SAME_PAGE.format(name=self._name(story)))
+            raise ValueError(msg("m.edit.moveSamePage", name=self._name(story)))
         if is_locked(m):
-            raise ValueError(LOCKED_MOVE.format(name=self._name(story)))
+            raise ValueError(msg("m.edit.lockedMove", name=self._name(story)))
         if not (self.run_dir / f"page-{to:02d}.manifest.json").is_file():
-            raise ValueError(MOVE_NOT_LAID_OUT.format(page=to))
+            raise ValueError(msg("m.edit.moveNotLaidOut", page=to))
         held = [n for n in range(1, self.pages + 1) if n not in (self.page, to)
                 and any(x["story"] == story and is_locked(x) for x in self.page_modules(n))]
         if held:                                 # the other page could not take it, nor be saved with it
-            raise ValueError(MOVE_LOCKED_THERE.format(name=self._name(story), page=held[0]))
+            raise ValueError(msg("m.edit.moveLockedThere", name=self._name(story), page=held[0]))
         pinned = self._pinned(story, to)
         target = open_page(to)
         placed, module, before = target.receive(m)
@@ -928,8 +928,8 @@ class PageSession:
         h = self.snap({**m, "h": self._depth({**m, "h": self.snap(m)["h"]})})["h"]     # on this page's grid
         spot = self.free_spot(w, h)
         if spot is None:
-            raise ValueError(MOVE_NO_ROOM.format(page=self.page, name=self._name(key), w=w,
-                                                 cols="column" if w == 1 else "columns", h=h))
+            raise ValueError(msg("m.edit.moveNoRoom", page=self.page, name=self._name(key), w=w,
+                                 cols="column" if w == 1 else "columns", h=h))
         x, y = spot
         before = (list(self.modules), self.rev)
         self.apply(self.modules + [{**m, "x": x, "y": y, "w": w, "h": h, "locked": False}])
@@ -958,8 +958,8 @@ class PageSession:
         finally:
             self.modules = kept
         if o is None:
-            raise ValueError(MOVE_CANNOT_SET.format(name=self._name(key), w=w, cols="column" if w == 1 else "columns",
-                                                    page=self.page))
+            raise ValueError(msg("m.edit.moveCannotSet", name=self._name(key), w=w,
+                                 cols="column" if w == 1 else "columns", page=self.page))
         return m["h"] + by if fit == "over" else m["h"] - by if fit == "short" else m["h"]
 
     def free_spot(self, w: int, h: float) -> tuple[float, float] | None:
@@ -1012,15 +1012,14 @@ class PageSession:
         self.check_rev(base_rev)
         keys = self.order()
         if not keys:
-            raise ValueError("this page has no stories to lay out")
+            raise ValueError(msg("m.edit.noStories"))
         held = [m for m in self.modules if is_locked(m)]
         locked = {m["story"] for m in held}
         free = [k for k in keys if k not in locked]
         if not free:
             raise ValueError(ALL_LOCKED)
         if len(free) > G.MAX_STORIES:
-            raise ValueError(f"this page has {len(free)} stories{' not locked' if held else ''}; another layout needs "
-                             f"{G.MAX_STORIES} or fewer")
+            raise ValueError(msg("m.edit.tooManyFree" if held else "m.edit.tooMany", n=len(free), max=G.MAX_STORIES))
         g = self._free_generator(keys, free) if held else self.generator()
         lead = None if keys[0] in locked else next((m for m in self.modules if m["story"] == keys[0]), None)
         mid = (G.ORIGIN + G.ORIGIN + G.span_mm(G.NCOL)) / 2
@@ -1044,10 +1043,10 @@ class PageSession:
         finally:
             g.ban_lead = set()
         if res is None:
-            raise ValueError(NO_FILL_AROUND if held else "no other layout fills this page exactly with these stories")
+            raise ValueError(NO_FILL_AROUND if held else msg("m.edit.noFill"))
         placed = [pl for k, tree in res[1] for pl in g.place(tree, G.ORIGIN + regions[k][0] * G.PITCH, regions[k][2])]
         if sorted(g.stories[i].id for i, *_ in placed) != sorted(free):      # never a story lost on the way
-            raise ValueError("another layout did not place every story of this page; the page is kept as it was")
+            raise ValueError(msg("m.edit.notAllPlaced"))
         crop = {m["story"]: m.get("crop") for m in self.modules}             # a crop goes with its story
         return self.apply([dict(m) for m in held] + [{"story": g.stories[i].id, "x": x, "y": y, "w": w, "h": h,
                                                       "locked": False, "crop": crop.get(g.stories[i].id)}
@@ -1221,7 +1220,7 @@ class PageSession:
         self.check_rev(base_rev)
         held = self._held(self._takes())
         if held:
-            raise ValueError(SAVE_HELD.format(name=self._name(held[0]), page=held[1]))
+            raise ValueError(msg("m.edit.saveHeld", name=self._name(held[0]), page=held[1]))
         B, rep, n_fixed, placed, notes, text, photos = self.render()
         work = self.run_dir / "work" / f"page-{self.page:02d}"
         work.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -1269,7 +1268,7 @@ def _atomic(path: Path, data: bytes) -> None:
 def request_ok(req: dict, keys: tuple) -> None:
     missing = [k for k in keys if k not in req]
     if missing:
-        raise ValueError(f"missing {', '.join(missing)}")
+        raise ValueError(msg("m.edit.missing", fields=data(", ".join(missing))))
 
 
 def dumps(obj) -> str:

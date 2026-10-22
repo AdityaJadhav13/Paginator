@@ -1585,3 +1585,49 @@ class FontInstanceCacheTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkerTextTest(unittest.TestCase):
+    """The layout worker's own words (deskgen, deskworker: never changed) are recognised as messages of messages.json,
+    with the same English to the character; any other text is shown as it is."""
+
+    SAMPLES = {   # as deskgen words them (its f-strings, with values)
+        "m.run.tooManyModules": f"{14} modules: more than the layout search takes ({11})",
+        "m.run.noStoriesPage": "no stories for this page",
+        "m.run.outOfTime": "the layout search ran out of time",
+        "m.run.notFillExactly": "these stories do not fill the page exactly",
+        "m.warn.overset": f"{3} lines of text did not fit",
+        "m.warn.unsetN": f"{2} paragraphs could not be set (a character the stand-in fonts lack)",
+        "m.warn.touch": "two lines of a story touch in ink somewhere: check the page",
+    }
+
+    IN_DESKGEN = {
+        "m.run.tooManyModules": "modules: more than the layout search takes (",
+        "m.run.noStoriesPage": '"no stories for this page"',
+        "m.run.outOfTime": '"the layout search ran out of time"',
+        "m.run.notFillExactly": '"these stories do not fill the page exactly"',
+        "m.warn.overset": "lines of text did not fit",
+        "m.warn.unsetN": "paragraphs could not be set (a character the stand-in fonts lack)",
+        "m.warn.touch": '"two lines of a story touch in ink somewhere: check the page"',
+    }
+
+    def test_each_worker_text_is_its_message(self):
+        source = Path(DG.__file__).read_text("utf-8")
+        for code, text in self.SAMPLES.items():
+            with self.subTest(code=code):
+                said = DE.worker_text(text)
+                self.assertEqual(said, text)
+                self.assertEqual(said.wire["code"], code)
+                self.assertIn(self.IN_DESKGEN[code], source)   # deskgen still says these words (else: follow it)
+
+    def test_other_text_is_shown_as_it_is(self):
+        said = DE.worker_text("ValueError: something else")
+        self.assertEqual(said, "ValueError: something else")
+        self.assertEqual(said.wire, {"data": "ValueError: something else"})
+        self.assertEqual(DE.worker_text("3 lines of text did not fit!"), "3 lines of text did not fit!")
+
+    def test_a_refusal_carries_its_code(self):
+        with self.assertRaises(ValueError) as e:
+            DEd.request_ok({"id": 1}, ("session", "page"))
+        self.assertEqual(str(e.exception), "missing session, page")
+        self.assertEqual(e.exception.args[0].wire, {"code": "m.edit.missing", "params": {"fields": {"data": "session, page"}}})

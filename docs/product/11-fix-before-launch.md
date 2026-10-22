@@ -149,14 +149,14 @@ From the feature's code review and its independent verification, 2026-10-22.
 | MR-12 | `test/` | No test redraws the real DOM (switch, typed input kept); that is checked only by the browser runs of the builder and the verifier | The catalogue and paste parsing have `node:test` tests |
 | MR-13 | `app.js` toasts, live announcer | A toast or an announcement made just before a switch stays in the old language | They vanish within seconds |
 | MR-14 | `app.js` ad upload | An upload error shown on an ad card disappears when the language changes (the step is drawn again) | Upload again to see it |
-| MR-15 | server and engine messages | Shown in English in Marathi mode (status, progress, reasons, warnings) | Planned as a later step |
+| MR-15 | server and engine messages | Done in L1-5c for the messages staff meet: they carry codes, and the Marathi screens say them in Marathi. What is still English is listed under "Desk: the server's and the engine's messages (L1-5c)" | See that list |
 | MR-16 | `strings.js` `arts.deleteMessage` | "with its photo" also when the article has none | Wording |
 | MR-17 | paste dialog | An error from an earlier paste stays until the next submit or reopening | Wording of state, nothing lost |
 | MR-18 | `strings.js` `res.pagePdf` | Gives "पान 1 · पहिले ची PDF": the postposition after the role reads badly | Wording; on the REVIEW list |
 | MR-19 | `static/editor.js` | After a switch made in another tab, the editor draws again in the new language its notice, busy note, save state, story panel lines, panels, menu, title and labels. What stays in the old language: a refusal said by a menu item (worked out when the menu opened) and the live-region announcements already read | They are gone within seconds |
 | MR-20 | `static/editor.js` rulers | The rulers' unit is drawn as "mm" (9 px, on the canvas) in both languages | A unit symbol on a measuring scale; Devanagari would not fit at that size |
 | MR-21 | `static/editor.html` | No language switch in the editor's header: at 1280 px the Marathi header has no room; the editor follows the main screen's choice | The main screen is one click away (← डेस्क) |
-| MR-22 | `static/editor.js` refusals | The engine's refusals (for example "there is no free place on page 4 …") are shown in English in a Marathi notice | Planned with the server's messages (MR-15) |
+| MR-22 | `static/editor.js` refusals | Done in L1-5c: the engine's refusals ("there is no free place on page 4 …", the locks) show in Marathi | — |
 | MR-23 | `static/editor.js` `notice()` | On the English screen a notice that names a Marathi headline is marked `lang="mr"` as a whole | Screen-reader voice only |
 | MR-24 | `strings.js` `pe.alsoOn` | The plural follows the number of stories, not of pages ("…on page 2, 3 too") | Wording |
 | MR-25 | `strings.js` `pe.fitHeight` | "Fit height to text" now reads "मजकुराइतकी उंची करा"; the English stays | Wording; on the REVIEW list |
@@ -172,7 +172,40 @@ From the feature's code review and its independent verification, 2026-10-22.
 | MR-35 | `static/editor.css`, `static/app.css` | system-ui comes before the Devanagari faces, so Latin letters and digits keep the system face; on a system whose UI face has Devanagari, that face is used | As the design system orders them (§3.3) |
 | MR-36 | `static/editor.js` rulers | The corner of the rulers says "mm" in both languages (see MR-20) | A unit symbol at 9 px |
 | MR-37 | `static/editor.html` header | At 1280 px the edition and layout in the header are cut short (their tooltip has them); pre-existing, as VIEW-9 | Cosmetic |
-| MR-38 | server, engine | The move's messages from the server and engine (`MOVED_HERE`, the "no free place on page N" refusal) are English: worth translating first, as the editor shows them most | Planned with MR-15 |
+| MR-38 | server, engine | Done in L1-5c: `MOVED_HERE` and the move refusals have codes and show in Marathi | — |
+
+## Desk: the server's and the engine's messages (L1-5c, `engine/messages.json`)
+
+142 messages have codes and show in Marathi: the engine's refusals (moves, locks, crops, another layout), the save and
+press reasons, `MOVED_HERE`, the layout warnings and not-placed reasons, the run's progress and end, and the server's
+article, edition, paste, Word, picture and move checks. A refused move gives the page its earlier reason back with its
+code (fixed after the verification's MINOR-1). These are still English on the Marathi screen, or small gaps left:
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| MSG-1 | `deskserver/api.py` | About 30 checks of a request's form ("rev must be a whole number.", "Say which page …" outside a move, upload content types, a body that is not JSON) | The screens never send such requests |
+| MSG-2 | `deskserver/util.py` | "There is no such {what}.", "The {field} must be text.", "The {field} is too long (…)", "The file … is damaged" (`{what}`/`{field}` are English words: they need their own codes) | Rare: the screens limit the text boxes |
+| MSG-3 | `deskserver/store.py`, `images.py`, `editing.py` | Internal and damaged-file errors (no such edition, run, picture or font; a damaged articles file or index; a conversion that did not give CMYK) | They need the owner's help, not a translation |
+| MSG-4 | `deskserver/api.py` `/api/status`, `engine_client.py` | The engine status panel's message (engine, setup, colour profile) and "The layout engine is missing (…)" | Seen once, at setup |
+| MSG-5 | `deskserver/docx.py` | The Word import's notes (more than 200 stories, empty headings, formatting not kept) and a damaged-file refusal | Word import shows them in a list the owner reads once |
+| MSG-6 | `deskserver/jobs.py`, `engine/desk_engine.py` | A crash of the engine ("The layout engine was stopped (signal …)", "stopped with an error …", its last output), `error_text()` of an unexpected error, `setup`/`samples` errors | Faults, not news work; their English helps the owner report them |
+| MSG-7 | `engine/deskworker.py`, `deskgen.py` | The worker's texts other than the seven it recognises (`desk_engine.WORKER_TEXTS`), shown as they come | Part of the measurement cache's key: they stay as they are |
+| MSG-8 | `deskserver/measure.py` | Background measuring's errors | Logged, rarely shown |
+| MSG-9 | `test/test_server.py` (`test_messages_carry_their_codes_for_the_screens`) | The locked-story refusal accepts `"data"` as well as `m.edit.lockedMove`, so the engine → server path (`m.save.notChanged` wrapping an `m.edit.*` code) is not tested end to end: make the fake engine send `msgs`, or unit-test `EditService._call` | `test_engine.py` tests the engine's side and `test_messages.py` the wrapping; only the join is untested |
+| MSG-10 | `static/strings.js` `tmn()` | Never used: a headline or file name inside a translated message is not given its own `lang` (the whole text takes the screen's) | The Devanagari and Latin text still render with the right fonts; only a screen reader's language is affected |
+| MSG-11 | `engine/desk_engine.py` (error answer, `str(e).strip("'")`) | A KeyError's quotes are stripped before comparing, so `m.edit.unknownCommand` (its `{cmd!r}` quotes) and `m.edit.moveNoPage` with a page that is not a whole number fall back to `m.edit.invalid`'s code: the English stays right, the Marathi says "not valid" | The screens never send an unknown command or a non-number page |
+| MSG-12 | `deskserver/api.py:442` | A move that failed part-way ("… Page {to} stays marked “needs saving” until it is saved …") is an f-string, English on the Marathi screen | Only when the engine stops in the middle of a move |
+| MSG-13 | `status.json` of runs made before L1-5c | No `msgs` map: their reasons and warnings show in English on the Marathi screen until the edition is laid out again or the page saved | Older scratch runs only; document in CONTRACT.md when the format is next touched |
+| MSG-14 | `engine/deskmsg.py` `annotate()` | Changes the document it is given (adds or drops `"msgs"`) as well as returning it | Every caller writes or sends the document right after; no caller reuses it |
+| MSG-15 | `deskedit.py`, `deskserver/*` | English words inside a message's params are sent as data: the field names of `m.edit.missing`, "column"/"columns" of `m.edit.moveCannotSet`/`moveNoRoom`, `{what}` of `m.warn.charRemoved`, the reasons of `m.store.wordNone` | Each needs its own code; the sentence around them is Marathi |
+| MSG-16 | `static/strings.js` (Marathi of `m.save.notPlacedEdited`, `m.warn.notFill`/`m.run.notFillExactly`, `m.name.shortColumn`) | Wording to settle in the native review: `notPlacedEdited` is long, the two "do not fill" texts should match, and the short-items column takes a feminine ती in some sentences | First draft for native review (D-5) anyway |
+| MSG-17 | `static/strings.js` (numbers in messages) | Numbers are shown as the server formats them (e.g. 3700), not with Indian digit grouping (3,700 / 37,00,000) | The numbers in messages are small (pages, lines, cm², mm) |
+| MSG-18 | `engine/deskedit.py` | A local named `data` in some functions shadows the imported `data()` helper (the server modules call it as `M.data` for this reason) | No function both shadows and calls it today; rename when next edited |
+| MSG-19 | `engine/desk_engine.py` (CLI output), `Built.skipped` | The engine's command-line output and `Built.skipped` are not annotated with `msgs` | The server builds its answers from them with `annotate`; the CLI is for the developer |
+| MSG-20 | `static/app.js` `said()`, `static/editor.js` `fromServer()` | No unit test that the screens pass the answer's `msgs` (the browser checks of phase G cover them) | Covered end to end by the browser check |
+| MSG-21 | screens, Marathi | Still English inside Marathi sentences: a Python float error inside `m.edit.engineFailed`, a file error's own text inside `m.save.filesNotFinished` and `m.run.notMerged`, the Word import's refusals (MSG-5) | Faults or rare refusals |
+| MSG-22 | `static/strings.js` `tm()` | A wire with `"params": null` leaves its placeholder in the Marathi text (the server always sends an object) | The server never sends `null` |
+| MSG-23 | `static/app.js` (run screen) | The run's end message ("4 pages made." with failures and check problems) is in `status.message` with its code, but the run screen shows the server's message only while the run is going (`patchRun`: none once it has ended) | The page cards and the check results say the same, in Marathi |
 
 ## Licence check (`tools/ts/check-licences.ts`)
 

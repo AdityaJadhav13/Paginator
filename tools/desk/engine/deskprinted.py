@@ -22,13 +22,13 @@ from pathlib import Path
 
 from deskarticles import is_subheading
 from deskcommon import DamagedFile, nfc
+from deskmsg import msg
 
 EDITION_FIELDS = ("volume", "issue", "price")
 VERSION = 3                       # how signatures are made: a record made another way is never compared (3: the
                                   # folio as it prints, spaces included)
-OLDER = ("This page was made by an older version of the Desk, which recorded what its PDF prints in another way: "
-         "open it in the page editor and save it (or lay out again).")
-ISSUE_NOT_SET = "Issue number (अंक) not set in step 1: the front page keeps the old number"
+OLDER = msg("m.press.olderRecord")           # messages of messages.json (deskmsg): English text and {code, params}
+ISSUE_NOT_SET = msg("m.warn.issueNotSet")
 
 
 def _n(v) -> str:
@@ -141,17 +141,11 @@ def stale(printed: dict, articles: dict, briefs: set[str], edition: dict, ads: d
     gone = [a for a in recorded if a not in articles]
     changed = [a for a, s in recorded.items() if a in articles and article_sig(articles[a], a in briefs) != s]
     if changed:
-        out.append(f"{_count(changed, 'article')} changed since the page's PDF was made: open the page and save it "
-                   "(Save page sets the current text first).")
+        out.append(msg("m.press.changed1") if len(changed) == 1 else msg("m.press.changedN", n=len(changed)))
     if gone:
-        out.append(f"{_count(gone, 'article')} deleted from the edition: open the page and save it (Save page takes "
-                   f"{'it' if len(gone) == 1 else 'them'} off first).")
+        out.append(msg("m.press.gone1") if len(gone) == 1 else msg("m.press.goneN", n=len(gone)))
     if printed.get("folio") is not None and printed["folio"] != folio_sig(edition):
-        out.append("The volume, issue or price changed: open the page and save it.")
+        out.append(msg("m.press.folio"))
     if any(ads.get(slot) != s for slot, s in (printed.get("ads") or {}).items()):
-        out.append("An advertisement on this page changed: open the page and save it (Save page sets the new one first).")
+        out.append(msg("m.press.ad"))
     return out
-
-
-def _count(ids: list, word: str) -> str:
-    return f"An {word} on this page was" if len(ids) == 1 else f"{len(ids)} {word}s on this page were"

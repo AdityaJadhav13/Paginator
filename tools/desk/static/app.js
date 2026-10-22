@@ -7,7 +7,7 @@
 // Every word this screen shows is in strings.js, in English and Marathi (t() looks it up in the language shown).
 // The paper's own content and the server's messages are shown as they come.
 
-import { LANGS, LANG_STORE_KEY, lang, saveLang, savedLang, setLang, t, tIn, tn } from "./strings.js";
+import { LANGS, LANG_STORE_KEY, lang, saveLang, savedLang, setLang, t, tIn, tm, tn } from "./strings.js";
 import { splitPaste } from "./paste.js";
 
 // ===================================================================== constants
@@ -476,8 +476,13 @@ function deskError(key, params = {}, status = 0) {
  */
 function errMsg(err) {
   if (err && err.key) return () => t(err.key, err.params);
+  if (err && err.msgs) return () => tm(err.text, err.msgs).trim(); // the server's own message, by its code
   return err ? str(err.message) : "";
 }
+
+/** A text the server or the engine sent (a reason, a warning, a status message), in the language shown when its answer
+ * gave its code (msgs: that answer's map), else as it came. */
+const said = (text, msgs) => tm(str(text), msgs);
 
 const msg = (m) => (typeof m === "function" ? m() : str(m));
 
@@ -528,8 +533,11 @@ async function api(method, path, options = {}) {
     // not JSON (or the connection dropped): handled below as an unreadable answer
   }
   if (!response.ok) {
-    if (isObj(data) && typeof data.error === "string" && data.error.trim())
-      throw new ApiError(data.error.trim(), response.status);
+    if (isObj(data) && typeof data.error === "string" && data.error.trim()) {
+      const err = new ApiError(tm(data.error, data.msgs).trim(), response.status);
+      if (isObj(data.msgs) && data.msgs[data.error]) Object.assign(err, { text: data.error, msgs: data.msgs });
+      throw err;
+    }
     throw deskError("api.http", { status: String(response.status) }, response.status);
   }
   if (!isObj(data)) throw deskError("api.unreadable", {}, response.status);
@@ -606,6 +614,7 @@ function normaliseDetail(raw) {
       .sort(newestRunFirst),
     measure: isObj(d.measure) ? d.measure : null, // background measuring of the stories: { state, measured, total }
     planError: str(d.plan_error), // why the plan is missing, when the server says
+    msgs: isObj(d.msgs) ? d.msgs : null, // the codes of the server's messages in it
   };
 }
 
@@ -834,6 +843,7 @@ function buildResult(summary, status) {
     placed,
     notPlaced,
     warnings: articleWarningsOf(status),
+    msgs: isObj(status.msgs) ? status.msgs : null, // its reasons and warnings are said with these
   };
 }
 
@@ -845,7 +855,7 @@ function articleResult(a) {
     return {
       kind: "warn",
       icon: "alert",
-      text: reason ? t("result.notPlacedWhy", { reason }) : t("result.notPlaced"),
+      text: reason ? t("result.notPlacedWhy", { reason: said(reason, r.msgs) }) : t("result.notPlaced"),
       reason, // the server's words, in a sentence of the Desk's (shown in their own language)
     };
   }
@@ -1513,7 +1523,9 @@ function detailErrorView() {
 function planMissingNotice() {
   // the server's own reason (plan_error) when it gives one, else the engine status message
   const s = state.status;
-  const reason = (state.detail && state.detail.planError) || (s && !s.offline ? str(s.message) : "");
+  const reason =
+    (state.detail && state.detail.planError && said(state.detail.planError, state.detail.msgs)) ||
+    (s && !s.offline ? str(s.message) : "");
   return notice("warn", reason ? tn("plan.missingWhy", { reason: foreign(reason) }) : t("plan.missing"));
 }
 
@@ -2024,8 +2036,10 @@ function articleThumb(a) {
   return h("div", { class: "thumb" }, img || fallbackText);
 }
 
+/** The last finished layout's warnings for an article, in the language shown. */
 function lastWarningsFor(id) {
-  return state.lastResult ? state.lastResult.warnings.get(id) || [] : [];
+  const r = state.lastResult;
+  return r ? (r.warnings.get(id) || []).map((w) => said(w, r.msgs)) : [];
 }
 
 /** A small badge for an article the last finished layout warned about; the texts are in its title and for readers. */
@@ -2100,7 +2114,9 @@ function articleRow(a) {
             h(
               "span",
               {},
-              result.reason ? tn("result.notPlacedWhy", { reason: foreign(result.reason) }) : result.text,
+              result.reason
+                ? tn("result.notPlacedWhy", { reason: foreign(said(result.reason, state.lastResult.msgs)) })
+                : result.text,
               result.edited ? h("span", { class: "result-edited" }, ` ${t("arts.editedSince")}`) : null,
             ),
           )
@@ -2562,7 +2578,7 @@ async function submitPaste(e) {
         .join("\n---\n");
       updatePasteCount();
       const list = skipped
-        .map((s) => `“${clip(str(s.headline), 60)}” (${str(s.reason) || t("common.notAccepted")})`)
+        .map((s) => `“${clip(str(s.headline), 60)}” (${said(s.reason, res.msgs) || t("common.notAccepted")})`)
         .join("; ");
       showAlert($("#paste-alert"), [
         t("paste.added", { n: created }),
@@ -2623,7 +2639,9 @@ async function importWordFiles(files) {
         added += n;
         if (n) fromFiles += 1;
         for (const s of arr(res.skipped).filter(isObj))
-          problems.push(`${file.name}: “${clip(str(s.headline), 50)}” (${str(s.reason) || t("common.notAccepted")})`);
+          problems.push(
+            `${file.name}: “${clip(str(s.headline), 50)}” (${said(s.reason, res.msgs) || t("common.notAccepted")})`,
+          );
         for (const n of arr(res.notes)) notes.push(`${file.name}: ${str(n)}`);
       } catch (err) {
         problems.push(`${file.name}: ${err.message}`); // the server's words (or the Desk's, in the language then)
@@ -3319,7 +3337,7 @@ function patchRun() {
   // (the engine speaks English: its message is matched with the English label)
   const label = RUN_STATE_KEY[s] ? tIn("en", RUN_STATE_KEY[s]) : s;
   const repeats = !!engineMessage && fold(label).startsWith(fold(engineMessage));
-  setText(ui.message, repeats ? "" : engineMessage);
+  setText(ui.message, repeats || !engineMessage ? "" : said(status.message, status.msgs).trim());
   if (langFor(ui.message.textContent)) ui.message.lang = langFor(ui.message.textContent);
   else ui.message.removeAttribute("lang");
   ui.cancel.hidden = !(status && !terminal);
@@ -3340,8 +3358,8 @@ function patchRun() {
 
   const errors = [];
   if (run.error) errors.push(msg(run.error));
-  if (status && str(status.error)) errors.push(str(status.error));
-  else if (s === "failed" && str(status.message)) errors.push(str(status.message));
+  if (status && str(status.error)) errors.push(said(status.error, status.msgs));
+  else if (s === "failed" && str(status.message)) errors.push(said(status.message, status.msgs));
   const errorText = errors.join(" ");
   if (ui.alert.dataset.text !== errorText) {
     ui.alert.dataset.text = errorText;
@@ -3463,13 +3481,18 @@ function fillCard(li, p, run, n) {
     s === "working" ? spinner() : icon(s === "done" ? "check" : s === "failed" || s === "cancelled" ? "x" : "clock");
   const check = isObj(p.pdfx_check) ? p.pdfx_check : null;
   const warnings = arr(p.warnings).filter((w) => str(w));
+  const msgs = isObj(run.status) ? run.status.msgs : null; // the codes of the server's and the engine's messages
   fill(
     li,
     thumb,
     h("p", { class: "page-card-label" }, name),
     h("p", { class: "page-card-state" }, stateIcon, h("span", {}, `${t(PAGE_STATE_KEY[s])}${withTime}`)),
     s === "failed"
-      ? h("p", { class: "page-card-msg", lang: langFor(p.message) }, str(p.message) || t("run.pageFailed"))
+      ? h(
+          "p",
+          { class: "page-card-msg", lang: langFor(said(p.message, msgs)) },
+          said(p.message, msgs) || t("run.pageFailed"),
+        )
       : null,
     s === "done" && !picture ? h("p", { class: "page-card-msg muted" }, t("run.previewNotReady")) : null,
     warnings.length
@@ -3478,12 +3501,14 @@ function fillCard(li, p, run, n) {
     s === "done" && p.needs_save
       ? h(
           "p",
-          { class: "page-card-warn", lang: langFor(p.needs_save_reason) },
+          { class: "page-card-warn", lang: langFor(said(p.needs_save_reason, msgs)) },
           icon("alert"),
-          str(p.needs_save_reason) || t("run.changedSave"),
+          said(p.needs_save_reason, msgs) || t("run.changedSave"),
         )
       : s === "done" && arr(p.stale).length
-        ? arr(p.stale).map((why) => h("p", { class: "page-card-warn", lang: langFor(why) }, icon("alert"), str(why)))
+        ? arr(p.stale)
+            .map((why) => said(why, msgs))
+            .map((why) => h("p", { class: "page-card-warn", lang: langFor(why) }, icon("alert"), why))
         : s === "done" && p.edited_unsaved
           ? h("p", { class: "page-card-warn" }, icon("alert"), t("run.changedUnsaved"))
           : null,
@@ -3627,7 +3652,8 @@ function buildResults(run, status) {
     .sort((a, b) => int(a.page) - int(b.page));
   const editionId = state.editionId;
   const pdfPages = pages.filter((p) => safeFile(p.pdf));
-  const warnMap = articleWarningsOf(status);
+  // the articles' warnings, in the language shown (results are drawn again when it changes)
+  const warnMap = new Map([...articleWarningsOf(status)].map(([id, ws]) => [id, ws.map((w) => said(w, status.msgs))]));
   const shownWarnings = new Set();
   const timings = timingsLine(status);
   if (timings) out.push(timings);
@@ -3715,7 +3741,7 @@ function buildResults(run, status) {
       const ids = arr(p.articles).filter((id) => typeof id === "string");
       const seconds = num(p.seconds);
       const warnings = arr(p.warnings)
-        .map((w) => str(w))
+        .map((w) => said(w, status.msgs))
         .filter(Boolean);
       report.append(
         h(
@@ -3738,7 +3764,13 @@ function buildResults(run, status) {
                 "p",
                 { class: "report-failed" },
                 icon("x"),
-                h("span", {}, str(p.message) ? tn("res.failedWhy", { reason: foreign(p.message) }) : t("res.failed")),
+                h(
+                  "span",
+                  {},
+                  str(p.message)
+                    ? tn("res.failedWhy", { reason: foreign(said(p.message, status.msgs)) })
+                    : t("res.failed"),
+                ),
               )
             : null,
           ids.length
@@ -3821,7 +3853,7 @@ function buildResults(run, status) {
                 "p",
                 { class: "not-placed-reason" },
                 icon("alert"),
-                h("span", { lang: langFor(reason) }, reason || t("res.noReason")),
+                h("span", { lang: langFor(said(reason, status.msgs)) }, said(reason, status.msgs) || t("res.noReason")),
               ),
               h("p", { class: "not-placed-hint" }, notPlacedHint(reason)),
               notes.length ? articleWarningList(notes) : null,

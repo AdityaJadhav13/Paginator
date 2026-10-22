@@ -226,6 +226,12 @@ Medians measured on the paper's own printed pages (one front, `pages − 2` insi
   `localhost:<port>` are refused (DNS rebinding). Every `POST`/`PUT`/`DELETE` must carry the header
   `X-Desk: 1` (a cross-site page cannot send it without a CORS preflight, which the server never grants).
 - Errors: `{"error": "plain-language message"}` with 400/404/409/413/500.
+- **The Desk's own messages** (`engine/deskmsg.py`, registry `engine/messages.json`): an answer, `status.json`,
+  `engine-status.json` and an edit-service answer carry their English texts as before, plus a top-level
+  `"msgs": {"<English text>": form}` for each text that is one of the Desk's messages. A form is
+  `{"code": "m.…", "params": {…}}` (a value is a number, a string, `{"data": text}` (shown as it is: a headline, a
+  file name) or a form itself) or `{"parts": [form, …]}` (sentences). The screens say a code in the language chosen
+  (`static/strings.js` has every code) and show the English text for any text without one, or with a code they lack.
 
 | Method | Path | Body → Result |
 |---|---|---|

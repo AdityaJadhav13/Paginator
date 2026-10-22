@@ -39,6 +39,7 @@ from PIL import Image
 
 from . import jobs
 from .engine_client import EngineClient
+from . import messages as M
 from .press import OUTSIDE_WORDS, OVERLAP_WORDS, PLACEMENT
 from .press import deskprinted  # the engine's own record of what a page prints (press puts the engine on the path)
 from .util import DeskError, atomic_file, read_json, write_json
@@ -83,7 +84,7 @@ class EditService:
         if not (ready.get("ok") and (ready.get("result") or {}).get("ready")):
             self._discard()
             why = ready.get("error") if isinstance(ready, dict) else None
-            raise DeskError(500, "The page editor's engine did not start" + (f": {why}" if why else ". See edit-service.log in the desk home."))
+            raise DeskError(500, M.msg("m.save.engineNotStarted", why=M.data(why)) if why else M.msg("m.save.engineNotStartedLog"))
 
     def _call(self, req: dict, timeout: float) -> dict:
         with self.lock:
@@ -97,7 +98,7 @@ class EditService:
                 self.proc.stdin.flush()
             except OSError:
                 self._discard()
-                raise DeskError(500, "The page editor's engine stopped. Try again.") from None
+                raise DeskError(500, M.msg("m.save.engineStopped")) from None
             timer = threading.Timer(timeout, self._kill)
             timer.start()
             try:
@@ -105,15 +106,15 @@ class EditService:
                     line = self.proc.stdout.readline()
                     if not line:
                         self._discard()
-                        raise DeskError(500, "The page editor's engine stopped or took too long. Try again.")
+                        raise DeskError(500, M.msg("m.save.engineSlow"))
                     ans = json.loads(line)
                     if ans.get("id") == rid:
                         break
             finally:
                 timer.cancel()
         if not ans.get("ok"):
-            err = str(ans.get("error") or "")
-            raise DeskError(409 if STALE_MARK in err else 400, f"The page could not be changed: {err}.")
+            err = M.from_wire(str(ans.get("error") or ""), ans.get("msgs"))   # the engine's refusal, with its code
+            raise DeskError(409 if STALE_MARK in err else 400, M.msg("m.save.notChanged", reason=err if isinstance(err, M.Msg) else M.data(err)))
         return ans["result"]
 
     def _kill(self) -> None:
@@ -239,9 +240,8 @@ press_state = jobs.press_state
 refresh_stale = jobs.refresh_stale
 
 
-UNFINISHED = "The last save of this page did not finish: save it again."
-NOT_PLACED_EDITED = ("Taken off the pages in the editor, or moved to a page not saved yet: bring it back onto a page, or "
-                     "save the page it moved to.")
+UNFINISHED = M.msg("m.save.unfinished")
+NOT_PLACED_EDITED = M.msg("m.save.notPlacedEdited")
 _save_locks: dict[str, threading.Lock] = {}
 _saving: dict[str, int] = {}                         # edition id → saves in progress (it is not deleted meanwhile)
 _save_guard = threading.Lock()
@@ -318,10 +318,10 @@ def note_revs(run_dir: Path, revs: dict, problems: dict | None = None) -> None:
             entry["edited_unsaved"] = changed = True
     if changed:
         status.update(press_state(status))
-        write_json(run_dir / "status.json", status)
+        M.write_status(run_dir / "status.json", status)
 
 
-MOVED_HERE = "A story was moved here from page {page}: check its place and save the page."
+MOVED_HERE = "m.save.movedHere"                  # a message of messages.json: M.msg(MOVED_HERE, page=…)
 MARK_KEYS = ("needs_save", "needs_save_reason")
 
 
@@ -336,10 +336,11 @@ def before_move(run_dir: Path, page: int, to: int) -> dict | None:
     entry = next((p for p in pages if p.get("page") == to), None)
     if entry is None:
         return None
-    mark = {"page": to, "reason": MOVED_HERE.format(page=page), "before": {k: entry[k] for k in MARK_KEYS if k in entry}}
+    before = {k: M.from_wire(entry[k], status.get("msgs")) for k in MARK_KEYS if k in entry}   # an earlier reason keeps its code
+    mark = {"page": to, "reason": M.msg(MOVED_HERE, page=page), "before": before}
     entry.update(needs_save=True, needs_save_reason=mark["reason"])      # the entry itself: the list keeps its order
     status.update(press_state(status))
-    write_json(run_dir / "status.json", status)
+    M.write_status(run_dir / "status.json", status)
     return mark
 
 
@@ -358,7 +359,7 @@ def unmark_move(run_dir: Path, mark: dict | None) -> None:
         else:
             entry.pop(k, None)
     status.update(press_state(status))
-    write_json(run_dir / "status.json", status)
+    M.write_status(run_dir / "status.json", status)
 
 
 def _warnings(problems: list) -> list[str]:
@@ -366,18 +367,18 @@ def _warnings(problems: list) -> list[str]:
     out = []
     lines = sum(int(p.get("lines") or 0) for p in problems if p.get("kind") == "overset")
     if lines:
-        out.append(f"{lines} lines of text did not fit")
+        out.append(M.msg("m.warn.overset", n=lines))
     if any(p.get("kind") == "unset" for p in problems):
-        out.append("paragraphs could not be set (a character the stand-in fonts lack)")
+        out.append(M.msg("m.warn.unset"))
     if any(p.get("kind") == "touch" for p in problems):
-        out.append("two lines of a story touch in ink somewhere: check the page")
+        out.append(M.msg("m.warn.touch"))
     if any(p.get("kind") == "overlap" for p in problems):
         out.append(OVERLAP_WORDS)
     if any(p.get("kind") == "outside" for p in problems):
         out.append(OUTSIDE_WORDS)
     for p in problems:
         if p.get("kind") == "empty":
-            out.append(f"About {round((p.get('mm2') or 0) / 100)} cm² of the news area is left empty: add a short item or a photo")
+            out.append(M.msg("m.warn.emptyArea", n=round((p.get("mm2") or 0) / 100)))
     return out
 
 
@@ -389,16 +390,17 @@ def locked_elsewhere(state: dict) -> str | None:
     if held is None:
         return None
     if not isinstance(held, dict) or not all(isinstance(n, int) and not isinstance(n, bool) for n in held.values()):
-        return "This page cannot be saved yet: the engine's list of its stories locked on other pages cannot be read."
+        return M.msg("m.save.heldUnreadable")
     if not held:
         return None
     story, n = min(held.items(), key=lambda kv: (kv[1], str(kv[0])))
     head = next((x.get("headline") for x in state.get("notes") or [] if isinstance(x, dict) and x.get("story") == story), "")
-    name = f"“{head}”" if isinstance(head, str) and head else "the column of short items"
+    name = M.data(f"“{head}”") if isinstance(head, str) and head else M.msg("m.name.shortColumn")
     more = len(held) - 1
-    return (f"This page cannot be saved yet: {name} is also on page {n}, locked there. Unlock it on page {n}, or take it "
-            "off this page, then save." + (f" {more} more {'story' if more == 1 else 'stories'} on this page "
-                                           f"{'is' if more == 1 else 'are'} locked on another page too." if more else ""))
+    said = M.msg("m.save.held", name=name, page=n)
+    if not more:
+        return said
+    return M.join(said, M.msg("m.save.heldMore1") if more == 1 else M.msg("m.save.heldMoreN", n=more))
 
 
 def before_save(run_dir: Path, page: int, others: list[int]) -> None:
@@ -410,11 +412,10 @@ def before_save(run_dir: Path, page: int, others: list[int]) -> None:
         if p.get("page") == page:
             p.update(pdfx_check=None, needs_save=True, needs_save_reason=UNFINISHED)
         elif p.get("page") in others:
-            p.update(needs_save=True, needs_save_reason=f"Page {page} is taking a story from this page: when page {page} "
-                                                        "has been saved, open this page, fill the space and save it.")
+            p.update(needs_save=True, needs_save_reason=M.msg("m.save.taking", page=page))
     status["pages"] = pages
     status.update(press_state(status))
-    write_json(run_dir / "status.json", status)
+    M.write_status(run_dir / "status.json", status)
 
 
 def saved_page(run_dir: Path, page: int, saved: dict) -> list[Path]:
@@ -430,10 +431,10 @@ def saved_page(run_dir: Path, page: int, saved: dict) -> list[Path]:
         for p in pages:
             if p.get("page") == int(n):
                 p.update(articles=articles, needs_save=True,
-                         needs_save_reason=f"A story moved from this page to page {page}: open it, fill the space and save it.")
+                         needs_save_reason=M.msg("m.save.movedFrom", page=page))
     status["pages"] = pages
     status.update(press_state(status))
-    write_json(run_dir / "status.json", status)
+    M.write_status(run_dir / "status.json", status)
     return [run_dir / p["pdf"] for p in pages if p.get("state") == "done" and isinstance(p.get("pdf"), str)
             and jobs.PAGE_PDF.fullmatch(p["pdf"]) and (run_dir / p["pdf"]).is_file()]
 
@@ -450,7 +451,7 @@ def save_files(run_dir: Path, page: int, repo_root: Path, pdfs: list[Path]) -> t
         jobs.merge_pdfs(pdfs, run_dir / "edition.pdf")
         jobs.zip_pdfs(pdfs, run_dir / "press-files.zip")
     except Exception as e:  # noqa: BLE001 — said on the page; the files are made again by the next save
-        return verdict, f"The page was saved, but its files could not be finished: {e}"
+        return verdict, M.msg("m.save.filesNotFinished", error=M.data(str(e)))
     return verdict, None
 
 
@@ -480,7 +481,7 @@ def after_save(run_dir: Path, page: int, saved: dict, verdict: dict, error: str 
     status["pages"] = pages
     refresh_stale(status, run_dir)                          # still printing older content? then it stays to save
     status.update(press_state(status))
-    write_json(run_dir / "status.json", status)
+    M.write_status(run_dir / "status.json", status)
     return {"page": page, "pdfx_check": verdict, "error": error, "stale": entry.get("stale") or [], **press_state(status)}
 
 
@@ -504,6 +505,6 @@ def _recount_not_placed(run_dir: Path, status: dict, pages: list[dict]) -> None:
     for a in req.get("articles") or []:
         aid = a.get("id")
         if aid and aid not in placed:
-            out.append({"article": aid, "reason": "Deleted from the edition after the layout."} if aid not in live else
+            out.append({"article": aid, "reason": M.msg("m.save.deletedAfter")} if aid not in live else
                        before.get(aid) or {"article": aid, "reason": NOT_PLACED_EDITED})
     status["not_placed"] = out

@@ -13,6 +13,7 @@ import json
 import multiprocessing as mp
 import os
 import pickle
+import re
 import select
 import shutil
 import signal
@@ -29,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import deskarticles as DA  # noqa: E402
 import deskfonts  # noqa: E402
+import deskmsg as DM  # noqa: E402
 import deskprinted  # noqa: E402
 import deskgen as DG  # noqa: E402
 import deskplan as DP  # noqa: E402
@@ -185,6 +187,31 @@ def cmd_import(home: Path, args) -> dict:
 
 
 # ------------------------------------------------------------------------------------------- generate
+# What the layout worker (deskgen, deskworker: part of the measurement cache's key, so never changed) says, recognised by
+# its words: (pattern, code, the values' names). A text it says otherwise is shown as it is.
+WORKER_TEXTS = [
+    (r"(\d+) modules: more than the layout search takes \((\d+)\)", "m.run.tooManyModules", ("n", "max")),
+    (r"no stories for this page", "m.run.noStoriesPage", ()),
+    (r"the layout search ran out of time", "m.run.outOfTime", ()),
+    (r"these stories do not fill the page exactly", "m.run.notFillExactly", ()),
+    (r"(\d+) lines of text did not fit", "m.warn.overset", ("n",)),
+    (r"(\d+) paragraphs could not be set \(a character the stand-in fonts lack\)", "m.warn.unsetN", ("n",)),
+    (r"two lines of a story touch in ink somewhere: check the page", "m.warn.touch", ()),
+]
+
+
+def worker_text(text):
+    """A text of the layout worker as a message of messages.json when its words are one (the same English, to the
+    character), else as it is (shown in its own language)."""
+    for pattern, code, names in WORKER_TEXTS:
+        m = re.fullmatch(pattern, str(text))
+        if m:
+            said = DM.msg(code, **{k: int(v) for k, v in zip(names, m.groups(), strict=True)})
+            if said == text:
+                return said
+    return DM.data(str(text)) if isinstance(text, str) else text
+
+
 class Status:
     def __init__(self, run_dir: Path):
         self.path = run_dir / "engine-status.json"
@@ -194,7 +221,7 @@ class Status:
 
     def save(self):
         self.data["updated"] = now_iso()
-        write_json(self.path, self.data)
+        write_json(self.path, DM.annotate(self.data))         # its messages mapped to {code, params} ("msgs")
 
     def set(self, **kw):
         self.data.update(kw)
@@ -218,7 +245,7 @@ def clean_text(text: str, warn: list, what: str) -> str:
             t = t.replace(ch, rep)
         else:
             t = t.replace(ch, "")
-            warn.append(f"{what}: removed a character the fonts do not have (U+{ord(ch):04X})")
+            warn.append(DM.msg("m.warn.charRemoved", what=DM.data(what), code=ord(ch)))
     return t
 
 
@@ -307,7 +334,7 @@ class Built:
             if not ARTICLE_ID.match(str(a.get("id", ""))):
                 continue
             if not (a.get("headline") or "").strip() or not any(k == "para" for k, _ in DA.blocks(a.get("body") or "")):
-                self.skipped.append({"article": a["id"], "reason": "It needs a headline and some body text"})
+                self.skipped.append({"article": a["id"], "reason": DM.msg("m.plan.needsText")})
                 continue
             w = []
             a = {**a, **{k: clean_text(a.get(k) or "", w, f"{(a.get('headline') or '')[:40]} ({k})")
@@ -324,7 +351,7 @@ class Built:
         for a in arts:                                # the same headline twice in one edition (EDT004): say so
             k = DS.headline_key(a["headline"])
             if k in first:
-                self.warn.append({"article": a["id"], "warnings": [f"Same headline as another article ({first[k]}) — is it the same story twice?"]})
+                self.warn.append({"article": a["id"], "warnings": [DM.msg("m.warn.sameHeadline", article=first[k])]})
             else:
                 first[k] = a["id"]
         self.photo_dir = ed_dir / "photos"
@@ -338,7 +365,7 @@ class Built:
                 min_ppi = min(G.MIN_PPI, 0.95 * (rec.get("ppi") or G.MIN_PPI))     # as gen1.Story allows
                 if rec["width_px"] / (G.COL_W / 25.4) < min_ppi:
                     self.warn.append({"article": a["id"], "warnings": [
-                        f"Photo too small to print even one column wide ({rec['width_px']} pixels across) — the story runs without it"]})
+                        DM.msg("m.warn.photoSmall", px=rec["width_px"])]})
                     a["photo"] = None
             if a.get("page") is not None and not (isinstance(a["page"], int) and 1 <= a["page"] <= pages_n):
                 a["page"] = None
@@ -553,18 +580,18 @@ def cmd_generate(home: Path, args) -> dict:
     day = date.fromisoformat(edition["date"])
     status.data["pages"] = [{"page": i + 1, "role": "back" if r == "back" else "front" if r == "front" else "inside", "state": "waiting",
                              "articles": [], "pdf": None, "seconds": None, "message": "", "warnings": []} for i, r in enumerate(roles)]
-    status.set(state="planning", message="Reading the articles")
+    status.set(state="planning", message=DM.msg("m.run.reading"))
     run_pictures(ed_dir, run_dir, req.get("articles") or [])
     b = Built(edition, req.get("articles") or [], run_dir)                 # the run's own photos
     write_json(run_dir / "plan.json", {"schema": "pageinator.desk.run-plan/1", "stories": b.plan()})   # frozen for the editor
     status.set(article_warnings=b.warn)
     if not b.items:
-        status.set(state="failed", message="No articles with a headline and body text")
+        status.set(state="failed", message=DM.msg("m.run.noArticles"))
         return {"pages": 0, "failed": pages_n}
     mphotos = DG.link_photo_dir(run_dir / "work" / "photos", [(b.photo_dir, {p: b.photos_idx[p] for p in b.photo_ids})])
     cal = DG.Calibration(ds)
     ex = make_pool(home, ds, cal, max(len(b.items), pages_n),
-                   on_stop=lambda: status.set(state="failed", message="Stopped before it finished"))
+                   on_stop=lambda: status.set(state="failed", message=DM.msg("m.run.stopped")))
     try:
         return generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, day, b, mphotos, cal)
     except Exception as e:  # noqa: BLE001
@@ -582,12 +609,12 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
 
     # 1. measure every story (cached by content; usually measured in the background already)
     def progress(done, total):
-        status.set(state="planning", message=f"Measured {done} of {total} stories")
+        status.set(state="planning", message=DM.msg("m.run.measured", done=done, total=total))
     options, failed_measure = measure_items(ex, home, ds, cfg, cal, b, mphotos, progress)
     t_measured = time.time()
 
     # 2. plan the pages
-    status.set(message="Choosing the stories for each page")
+    status.set(message=DM.msg("m.run.choosing"))
     tpls = {r: DG.Template(ds, cfg["templates"][r], r) for r in set(roles)}
     live = [it for it in items if it["key"] in options]
     per = cfg.get("needs_per_role") or {}
@@ -603,13 +630,12 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
             not_placed.append({"article": aid, "reason": reason})
     for k, why in failed_measure.items():
         for aid in article_of[k]:
-            not_placed.append({"article": aid, "reason": f"could not be measured ({why})"})
+            not_placed.append({"article": aid, "reason": DM.msg("m.plan.notMeasured", why=DM.data(why))})
     full_page = [(0, G.NCOL, tpls["inside"].news_top, tpls["inside"].news_bottom)]
     for k in left:
         alone = planner.status([k], full_page)[0] if planner.has_options(k, 0) else "lead-less"
-        reason = ("Its headline is too long to set (at most four lines) — shorten the headline" if not planner.placeable(k) else
-                  "Too long for a whole page — shorten it" if alone == "over" else
-                  "No room left — add pages, lower another story's priority, or pin it to a page")
+        reason = DM.msg("m.plan.headlineTooLong" if not planner.placeable(k) else
+                        "m.plan.tooLong" if alone == "over" else "m.plan.noRoom")
         for aid in article_of[k]:
             not_placed.append({"article": aid, "reason": reason})
     t_planned = time.time()
@@ -617,7 +643,7 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
                timings={"measure_s": round(t_measured - t0, 1), "plan_s": round(t_planned - t_measured, 1)})
 
     # 3. lay out every page in parallel
-    status.set(state="layout", message="Laying out the pages")
+    status.set(state="layout", message=DM.msg("m.run.layingOut"))
     futs = {}
     for pg, role in zip(plan, roles, strict=True):
         n = pg["page"]
@@ -625,19 +651,19 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
         keys = pg["keys"]
         ps["articles"] = [aid for k in keys for aid in article_of[k]]
         if not keys:
-            ps.update(state="failed", message="No stories left for this page")
+            ps.update(state="failed", message=DM.msg("m.run.noStoriesLeft"))
             continue
         if role == "front" and not str(edition.get("issue") or "").strip():
             ps["warnings"].append(deskprinted.ISSUE_NOT_SET)
         if pg["shrink_units"] is None:
-            ps["warnings"].append("These stories do not fill the page exactly; the layout may fail")
+            ps["warnings"].append(DM.msg("m.warn.notFill"))
         tpl = tpls[role]
         regions = tpl.regions
         if pg["shrink_units"]:
             c0, w, top, _ = regions[0]
             Hs = DP.region_heights(regions)[0]
             regions = [(c0, w, top, top + (Hs - pg["shrink_units"]) * G.UNIT + 0.01)]
-            ps["warnings"].append(f"About {round(pg['shrink_units'] * G.UNIT)} mm of the page is left empty at the foot — add a short item or a photo")
+            ps["warnings"].append(DM.msg("m.warn.emptyFoot", mm=round(pg["shrink_units"] * G.UNIT)))
         srcs = [(tpl.photo_dir, {e["id"]: tpl.photo_index[e["id"]] for e in tpl.keep if e["kind"] == "image" and e["id"] in tpl.photo_index}),
                 (b.photo_dir, {p: photos_idx[p] for p in photo_ids})]
         renames = {}
@@ -672,18 +698,19 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
             ps["seconds"] = r.get("seconds")
             if r.get("ok"):
                 write_json(run_dir / f"page-{n:02d}.manifest.json", {**r["manifest"], "sha256": r["sha256"], "warnings": r.get("warnings", [])})
-                ps.update(state="done", pdf=f"page-{n:02d}.pdf", message="", warnings=ps["warnings"] + r.get("warnings", []))
+                ps.update(state="done", pdf=f"page-{n:02d}.pdf", message="",
+                          warnings=ps["warnings"] + [worker_text(w) for w in r.get("warnings", [])])
             else:
                 log(f"page {n} failed:", r.get("message"), r.get("trace", ""))
-                ps.update(state="failed", message=r.get("message") or "layout failed")
+                ps.update(state="failed", message=worker_text(r.get("message")) if r.get("message") else DM.msg("m.run.pageFailed"))
                 for aid in ps["articles"]:
-                    status.data["not_placed"].append({"article": aid, "reason": f"Page {n} could not be laid out: {r.get('message')}"})
+                    status.data["not_placed"].append({"article": aid, "reason": DM.msg("m.plan.pageFailed", n=n, message=worker_text(str(r.get("message"))))})
         status.save()
     failed = sum(p["state"] != "done" for p in status.data["pages"])
     status.data["timings"]["layout_s"] = round(time.time() - t_planned, 1)
     write_printed(run_dir, status.data["pages"], b.source, deskprinted.briefs_of(b.plan()), edition, tpls, roles, day)
     status.set(state="done" if failed < len(roles) else "failed", seconds=round(time.time() - t0, 1),
-               message="All pages laid out" if not failed else f"{failed} of {len(roles)} pages could not be laid out")
+               message=DM.msg("m.run.allLaidOut") if not failed else DM.msg("m.run.someFailed", failed=failed, total=len(roles)))
     return {"pages": len(roles), "failed": failed}
 
 
@@ -778,7 +805,7 @@ def cmd_edit_service(home: Path, args) -> dict:
     sessions = eng.sessions
 
     def answer(obj):
-        sys.stdout.write(DE.dumps(obj) + "\n")
+        sys.stdout.write(DE.dumps(DM.annotate(obj)) + "\n")     # its messages mapped to {code, params} ("msgs")
         sys.stdout.flush()
     answer({"id": 0, "ok": True, "result": {"ready": True, "engine": ENGINE_VERSION}})
     last = time.monotonic()
@@ -811,7 +838,7 @@ def cmd_edit_service(home: Path, args) -> dict:
                 DE.request_ok(req, ("session",))
                 s = sessions.get(req["session"])
                 if s is None:
-                    raise ValueError("this page is not open: open it again")
+                    raise ValueError(DM.msg("m.edit.notOpen"))
                 if cmd != "close":
                     s.sync()                                            # text another page set reaches this one first
                 if cmd == "move":                                       # to another page of the run, opened if need be
@@ -840,14 +867,19 @@ def cmd_edit_service(home: Path, args) -> dict:
                     sessions.pop(req["session"], None)
                     res = {"closed": True}
             else:
-                raise ValueError(f"unknown command {cmd!r}")
+                raise ValueError(DM.msg("m.edit.unknownCommand", cmd=cmd))
             answer({"id": rid, "ok": True, "result": res})
         except (ValueError, KeyError) as e:                             # the request cannot be done: said plainly
             log(traceback.format_exc())
-            answer({"id": rid, "ok": False, "error": str(e).strip("'") or "the request is not valid"})
+            said = str(e).strip("'")                                    # (a KeyError's quotes)
+            first = e.args[0] if e.args else None
+            if isinstance(first, DM.Msg) and said == first:             # a refusal of messages.json, as it is
+                said = first
+            answer({"id": rid, "ok": False, "error": said or DM.msg("m.edit.invalid")})
         except Exception as e:  # noqa: BLE001 — one bad request never ends the service
             log(traceback.format_exc())
-            answer({"id": rid, "ok": False, "error": f"something went wrong in the engine ({type(e).__name__}: {e})"})
+            answer({"id": rid, "ok": False,
+                    "error": DM.msg("m.edit.engineFailed", kind=type(e).__name__, error=DM.data(str(e)))})
     return {"stopped": True}
 
 

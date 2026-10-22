@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { GLOSSARY_KEYS, LANGS, REVIEW, SAME_KEYS, STRINGS, lang, setLang, t, tIn, tn } from "../static/strings.js";
+import { GLOSSARY_KEYS, LANGS, REVIEW, SAME_KEYS, STRINGS, lang, setLang, t, tIn, tm, tn } from "../static/strings.js";
 
 const STATIC = join(import.meta.dirname, "..", "static");
 const APP = readFileSync(join(STATIC, "app.js"), "utf8");
@@ -13,6 +13,13 @@ const EDITOR = readFileSync(join(STATIC, "editor.js"), "utf8");
 const EDITOR_HTML = readFileSync(join(STATIC, "editor.html"), "utf8");
 const EDITOR_VIEW = readFileSync(join(STATIC, "editor-view.js"), "utf8");
 const KEYS = Object.keys(STRINGS.en);
+// the server's and the engine's messages: their codes and English templates (tools/desk/engine/messages.json)
+const REGISTRY = Object.fromEntries(
+  Object.entries(JSON.parse(readFileSync(join(STATIC, "..", "engine", "messages.json"), "utf8"))).filter(([k]) =>
+    k.startsWith("m."),
+  ),
+);
+const isServer = (key) => key.startsWith("m.");
 const PLACEHOLDER = /\{(\w+)\}/g;
 const DEVANAGARI = /\p{Script=Devanagari}/u;
 const DEVANAGARI_DIGIT = /[०-९]/u;
@@ -27,6 +34,7 @@ test("English and Marathi have the same keys, and the same kind of entry for eac
   for (const key of KEYS) {
     const en = STRINGS.en[key];
     const mr = STRINGS.mr[key];
+    if (isServer(key)) continue; // the English is the server's template; the Marathi may have plural forms (below)
     assert.equal(isPlural(en), isPlural(mr), `${key}: plural in one language only`);
     if (isPlural(en)) {
       assert.deepEqual(Object.keys(en).sort(), ["one", "other"], `${key}: English forms`);
@@ -47,7 +55,7 @@ test("no value is empty", () => {
 });
 
 test("each placeholder of a language is in the other one, form by form", () => {
-  for (const key of KEYS) {
+  for (const key of KEYS.filter((k) => !isServer(k))) {
     const mr = new Map(forms(STRINGS.mr[key]));
     for (const [form, en] of forms(STRINGS.en[key])) {
       assert.deepEqual(placeholders(mr.get(form)), placeholders(en), `${key} ${form}: ${en} | ${mr.get(form)}`);
@@ -65,7 +73,9 @@ test("Marathi is in Devanagari with Latin digits; English has no Devanagari", ()
         assert.ok(DEVANAGARI.test(words), `mr ${key} ${form} is not in Marathi: ${text}`);
     }
     for (const [form, text] of forms(STRINGS.en[key])) {
-      if (key !== "lang.mr") assert.ok(!DEVANAGARI.test(text), `en ${key} ${form} has Devanagari: ${text}`);
+      // (the issue warning names the folio's own word, अंक, in English too)
+      if (key !== "lang.mr" && key !== "m.warn.issueNotSet")
+        assert.ok(!DEVANAGARI.test(text), `en ${key} ${form} has Devanagari: ${text}`);
     }
   }
 });
@@ -154,7 +164,8 @@ test("no English text in the screens' HTML outside strings.js (the page title an
 });
 
 test("every key in the catalogue is used", () => {
-  for (const key of KEYS) assert.ok(usedInApp.has(key) || usedInHtml.has(key), `${key} is not used`);
+  for (const key of KEYS.filter((k) => !isServer(k)))
+    assert.ok(usedInApp.has(key) || usedInHtml.has(key), `${key} is not used`);
 });
 
 test("t(): placeholders, plural forms, Latin digits with Indian grouping, fall-backs", () => {
@@ -185,4 +196,43 @@ test("the engine status says it is checking from the first paint, before /api/st
   assert.match(HTML, /<span class="engine-label" id="engine-label" data-t="engine.checking"><\/span>/);
   const init = APP.slice(APP.indexOf("function init()"));
   assert.ok(init.indexOf("renderStatus()") > 0 && init.indexOf("renderStatus()") < init.indexOf("refreshStatus()"));
+});
+
+test("every code the server and the engine can send has its words in both languages", () => {
+  const plain = (template) => template.replace(/\{(\w+)(![rsa])?(:[^}]*)?\}/g, "{$1}");
+  const fields = (template) => new Set([...plain(template).matchAll(PLACEHOLDER)].map((m) => m[1]));
+  assert.ok(Object.keys(REGISTRY).length > 100, "the registry is read");
+  assert.deepEqual(KEYS.filter(isServer).sort(), Object.keys(REGISTRY).sort(), "the m.* keys are the registry's codes");
+  for (const [code, template] of Object.entries(REGISTRY)) {
+    assert.equal(STRINGS.en[code], plain(template), `${code}: the English is the server's template`);
+    for (const [form, text] of forms(STRINGS.mr[code])) {
+      for (const name of placeholders(text))
+        assert.ok(fields(template).has(name), `mr ${code} ${form}: {${name}} is not sent`);
+      if (form) assert.ok(text.includes("{n}") || form === "one", `mr ${code} ${form}: a plural form shows {n}`);
+    }
+    if (isPlural(STRINGS.mr[code])) assert.ok(fields(template).has("n"), `${code}: Marathi plurals need {n}`);
+  }
+});
+
+test("tm(): a server message in the language shown, its own English text otherwise", () => {
+  const text = "A story was moved here from page 2: check its place and save the page.";
+  const msgs = { [text]: { code: "m.save.movedHere", params: { page: 2 } } };
+  setLang("en");
+  assert.equal(tm(text, msgs), text); // the English screen shows the server's own text
+  setLang("mr");
+  assert.equal(tm(text, msgs), "पान 2 वरून इथे एक बातमी हलवली आहे: तिची जागा तपासा आणि पान जतन करा.");
+  assert.equal(tm(text, {}), text); // no code: as it came
+  assert.equal(tm(text, { [text]: { code: "m.no.such", params: {} } }), text); // a code this catalogue lacks
+  const nested = { code: "m.save.notChanged", params: { reason: { code: "m.no.such", params: {} } } };
+  assert.equal(tm("x", { x: nested }), "x"); // unknown at any depth: the whole text as it came
+  const named = { code: "m.edit.lockedMove", params: { name: { data: "“शीर्षक”" } } };
+  assert.equal(tm("y", { y: named }), "“शीर्षक” ला कुलूप आहे: ती हलवण्यासाठी कुलूप काढा (Shift+L)");
+  const parts = {
+    parts: [
+      { code: "m.run.madeN", params: { n: 4 } },
+      { code: "m.run.madeFailed", params: { n: 1 } },
+    ],
+  };
+  assert.equal(tm("z", { z: parts }), "4 पाने तयार झाली. 1 पान तयार होऊ शकले नाही: त्या पानावरच्या नोंदी पाहा.");
+  setLang("en");
 });

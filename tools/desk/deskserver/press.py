@@ -13,12 +13,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 import deskprinted  # noqa: E402  (the engine's own definition of what a page prints)
 
-from .util import read_json, write_json  # noqa: E402
+from . import messages as M  # noqa: E402
+from .util import read_json  # noqa: E402
 
 
 PLACEMENT = ("overlap", "outside")              # problems a print file must never have (deskedit.PageSession.problems)
-OVERLAP_WORDS = "stories overlap on the page"
-OUTSIDE_WORDS = "a story is outside the news area or over an advertisement"
+OVERLAP_WORDS = M.msg("m.warn.overlap")
+OUTSIDE_WORDS = M.msg("m.warn.outside")
 
 
 def placement_problems(page: dict) -> bool:
@@ -55,10 +56,8 @@ def press_state(status: dict) -> dict:
             "pages_with_overlaps": overlaps}
 
 
-OLDER_DESK = ("This page was made by an older version of the Desk, which did not record what its PDF prints: lay "
-              "the edition out again.")         # (a record made another way: deskprinted.OLDER)
-DAMAGED = ("This page could not be checked against the edition (a file of the layout or the edition cannot be read): "
-           "put the file back from a backup, or lay the edition out again.")
+OLDER_DESK = M.msg("m.press.olderDesk")        # (a record made another way: deskprinted.OLDER)
+DAMAGED = M.msg("m.press.damaged")
 
 
 def edition_now(ed_dir: Path) -> dict:
@@ -77,12 +76,12 @@ def _layout_changed(run_dir: Path, edition: dict, pages: list[dict]) -> dict[int
     out: dict[int, list[str]] = {}
     then, now = laid.get("pages"), edition.get("pages")
     if then is not None and now is not None and then != now:
-        why = f"The edition now has {now} pages; this layout has {then}: lay the edition out again."
+        why = M.msg("m.press.pagesChanged", now=now, then=then)
         for p in pages:
             out.setdefault(p.get("page"), []).append(why)
     ads_now = bool(edition.get("back_page_ads", True))                  # the engine's default too (page_roles)
     if bool(laid.get("back_page_ads", True)) != ads_now:
-        why = f"Back-page ads were switched {'on' if ads_now else 'off'} after this layout: lay the edition out again."
+        why = M.msg("m.press.backAdsOn" if ads_now else "m.press.backAdsOff")
         last = max((p.get("page") for p in pages if isinstance(p.get("page"), int)), default=None)
         for p in pages:
             if p.get("page") == last:                                    # the back page, with or without ad spaces
@@ -138,7 +137,7 @@ def recheck_status(status: dict, run_dir: Path, now: dict | None = None) -> bool
     status.update(press_state(status))
     if seen() == before:
         return False
-    write_json(run_dir / "status.json", status)
+    M.write_status(run_dir / "status.json", status)
     return True
 
 
@@ -148,4 +147,4 @@ def mark_damaged(status: dict, run_dir: Path) -> None:
         if isinstance(p, dict) and p.get("state") == "done":
             p["stale"] = [DAMAGED]
     status.update(press_state(status))
-    write_json(run_dir / "status.json", status)
+    M.write_status(run_dir / "status.json", status)

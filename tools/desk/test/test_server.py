@@ -2300,6 +2300,39 @@ class EditTests(DeskCase):
         saved2 = self.call("POST", f"{url2}/save", {"rev": moved["rev"]}).json()
         self.assertEqual((saved2["press_ready"], saved2["pages_to_save"], saved2["pages_with_repeats"]), (True, [], []))
 
+    def test_messages_carry_their_codes_for_the_screens(self):
+        """Beside its English text (unchanged), an answer or a run status maps each of the Desk's own messages to its
+        code and values ("msgs"), so the screens can say it in Marathi (tools/desk/engine/deskmsg.py)."""
+        # a story moved to another page: that page's mark, in the run's status
+        eid, rid, first, second, page2, moved = self.moved_run("2026-07-30")
+        status = self.call("GET", f"/api/editions/{eid}/runs/{rid}").json()
+        reason = next(p for p in status["pages"] if p["page"] == 1)["needs_save_reason"]
+        self.assertEqual(reason, "A story was moved here from page 2: check its place and save the page.")
+        self.assertEqual(status["msgs"][reason], {"code": "m.save.movedHere", "params": {"page": 2}})
+        # the server's own refusal of a move
+        url2 = f"/api/editions/{eid}/runs/{rid}/pages/2"
+        said = self.call("POST", f"{url2}/move-story", {"story": "d" + first[2:], "to": 2}, expect=400).json()
+        self.assertEqual(said["msgs"][said["error"]], {"code": "m.move.samePage", "params": {}})
+        # the engine's refusal (a locked story): the server's sentence, with the engine's words inside it
+        eid2, rid2, _, second2 = self.two_page_run("2026-08-01")
+        url = f"/api/editions/{eid2}/runs/{rid2}/pages/2"
+        page = self.call("POST", f"{url}/edit", {}).json()
+        locked = self.call("PUT", f"{url}/edit", {"modules": [{**page["modules"][0], "locked": True}],
+                                                  "rev": page["rev"]}).json()
+        said = self.call("POST", f"{url}/move-story", {"story": "d" + second2[2:], "to": 1, "rev": locked["rev"]},
+                         expect=400).json()
+        self.assertEqual(said["error"], "The page could not be changed: “Second story” is locked: unlock it (Shift+L) to "
+                                        "move it.")
+        form = said["msgs"][said["error"]]
+        self.assertEqual(form["code"], "m.save.notChanged")
+        self.assertIn(form["params"]["reason"].get("code", "data"), ("m.edit.lockedMove", "data"))
+        # a run asked for an edition without articles
+        empty = self.edition("2026-07-31")
+        said = self.call("POST", f"/api/editions/{empty}/runs", expect=400).json()
+        self.assertEqual(said, {"error": "There are no articles in this edition yet.",
+                                "msgs": {"There are no articles in this edition yet.": {"code": "m.run.noArticlesYet",
+                                                                                        "params": {}}}})
+
     def test_a_move_is_refused_for_a_locked_story_the_same_page_a_page_not_laid_out_or_an_older_view(self):
         eid, rid, first, second = self.two_page_run("2026-07-26")
         url1, url2 = (f"/api/editions/{eid}/runs/{rid}/pages/{n}" for n in (1, 2))

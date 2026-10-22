@@ -34,7 +34,7 @@ import {
   windowAt,
   zoomToRect,
 } from "./editor-view.js";
-import { LANGS, LANG_STORE_KEY, lang, saveLang, savedLang, setLang, t, tn } from "./strings.js";
+import { LANGS, LANG_STORE_KEY, lang, saveLang, savedLang, setLang, t, tm, tn } from "./strings.js";
 
 const $ = (sel) => document.querySelector(sel);
 const PT_PER_MM = 72 / 25.4;
@@ -57,6 +57,8 @@ const L =
   (key, params = {}) =>
   () =>
     t(key, params);
+/** A text the server or the engine sent, as a lazy text: in the language shown when its answer gave its code (msgs). */
+const fromServer = (text, msgs) => () => tm(String(text || ""), msgs);
 const msgText = (m) =>
   typeof m === "function"
     ? m()
@@ -136,8 +138,11 @@ async function api(method, path, body) {
   const data = await res.json().catch(() => undefined);
   if (res.ok && data === undefined) throw new Error(t("pe.errUnreadable")); // cut off, or damaged
   if (!res.ok) {
-    const err = new Error((data && data.error) || t("pe.errStatus", { status: String(res.status) }));
+    const text = data && data.error;
+    const err = new Error(text ? tm(text, data.msgs) : t("pe.errStatus", { status: String(res.status) }));
     err.status = res.status;
+    // drawn again in another language (a notice keeps it)
+    err.say = text ? fromServer(text, data.msgs) : L("pe.errStatus", { status: String(res.status) });
     throw err;
   }
   return data;
@@ -215,7 +220,7 @@ async function openPage() {
     if (S.fitTo !== "width") S.fitTo = null; // a story zoomed to was on another page
     refit();
   } catch (e) {
-    if (gen === S.gen) showProblem(e.message);
+    if (gen === S.gen) showProblem(e.say || e.message);
   } finally {
     if (gen === S.gen) {
       S.opening = false;
@@ -267,9 +272,10 @@ function sayOpened(entry, data, later) {
   else setSaved("pe.stAuto");
   const parts = [];
   if (later) parts.push(() => t("pe.newerRun", { newer: when(later.started), older: when(S.run && S.run.started) }));
-  if (entry.needs_save && entry.needs_save_reason) parts.push(entry.needs_save_reason);
+  const msgs = S.run && S.run.msgs; // the run's status: the codes of its reasons
+  if (entry.needs_save && entry.needs_save_reason) parts.push(fromServer(entry.needs_save_reason, msgs));
   else if (entry.edited_unsaved) parts.push(L("pe.changesKept"));
-  for (const why of entry.stale || []) parts.push(why);
+  for (const why of entry.stale || []) parts.push(fromServer(why, msgs));
   const also = alsoText(data);
   parts.push(...also);
   notice(parts, also.length && !later ? "also" : "");
@@ -353,9 +359,9 @@ async function send(modules) {
       S.queued = null; // the changes made on what failed are not sent
       S.refusals += 1; // nor a save or another layout asked meanwhile
       S.saveAfter = false;
-      if (e.status === 409) await resync(gen, e.message);
+      if (e.status === 409) await resync(gen, e.say || e.message);
       else {
-        showProblem(e.message);
+        showProblem(e.say || e.message);
         await resync(gen);
       }
     }
@@ -455,8 +461,8 @@ async function exclusive(text, job) {
     outcome = "failed";
     S.saveAfter = false; // a Save asked meanwhile was for the page the job was to make: not for what is shown now
     if (gen === S.gen) {
-      if (e.status === 409) await resync(gen, e.message);
-      else showProblem(e.message);
+      if (e.status === 409) await resync(gen, e.say || e.message);
+      else showProblem(e.say || e.message);
     }
     S.saveAfter = false; // nor one asked while the page was shown again
   } finally {
@@ -631,8 +637,8 @@ function savePage() {
             : savedLabel(r.pdfx_check)),
     );
     const said = []; // the server's words and lazy texts
-    if (r.error) said.push(r.error);
-    if (again) said.push(...r.stale);
+    if (r.error) said.push(fromServer(r.error, r.msgs));
+    if (again) said.push(...r.stale.map((why) => fromServer(why, r.msgs)));
     if (moved) said.push(L("pe.changedWhileSaved"));
     const changed = Object.keys(r.pages_changed || {})
       .map(Number)
@@ -2647,7 +2653,7 @@ async function openText(story) {
     const first = $("#story-articles textarea[data-field='body']");
     if (first) first.focus();
   } catch (e) {
-    storyState(e.message);
+    storyState(e.say || e.message);
   }
 }
 
@@ -2756,7 +2762,7 @@ async function flushText() {
         } catch (e) {
           // what was not saved goes back to the boxes' list (typing since then wins), and is said
           for (const [a, f] of batch.slice(i)) T.pending.set(a, { ...f, ...(T.pending.get(a) || {}) });
-          T.error = [e.message, L("pe.textStillHere")];
+          T.error = [e.say || e.message, L("pe.textStillHere")];
           ok = false;
           break;
         }
@@ -2773,7 +2779,7 @@ async function flushText() {
           } catch (e) {
             if (e.status !== 409) throw e;
             // the text is saved, but the page changed in another window: it is shown as it is now, and the save stops
-            await resync(gen, e.message);
+            await resync(gen, e.say || e.message);
             T.textSaved = true;
             T.error = L("pe.textSavedOther");
             ok = false;
@@ -2794,7 +2800,7 @@ async function flushText() {
     storyFit();
   } catch (e) {
     ok = false;
-    T.error = [e.message, L("pe.textStillHere")];
+    T.error = [e.say || e.message, L("pe.textStillHere")];
     storyState(T.error);
   } finally {
     T.saving = false;

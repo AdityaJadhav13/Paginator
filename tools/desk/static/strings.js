@@ -1543,6 +1543,441 @@ const TABLE = {
     "Shift+2 निवडलेल्या बातमीवर झूम करते, Shift+1 संपूर्ण पान दाखवते आणि Shift+3 पानाची रुंदी; Shift+R मोजपट्ट्या दाखवते किंवा लपवते (पानाच्या डाव्या वरच्या कोपऱ्यापासून मिलिमीटर, स्तंभांच्या क्रमांकांसह).",
   ],
 
+  // ======================================================================== the server's and the engine's messages
+  // Generated from tools/desk/engine/messages.json (the codes the server and the engine send): the English is each
+  // template as the server words it (format specs dropped); a Marathi entry may leave out a value only English needs
+  // ({cols}), and may have plural forms by {n}. test_strings.mjs checks both against messages.json.
+  "m.name.shortColumn": ["the column of short items", "छोट्या बातम्यांचा स्तंभ"],
+  "m.name.aStory": ["a story", "एक बातमी"],
+  "m.edit.stale": [
+    "this page was changed in another window or tab; it is shown again as it is now",
+    "हे पान दुसऱ्या विंडो किंवा टॅबमध्ये बदलले; ते आता आहे तसे पुन्हा दाखवले आहे",
+  ],
+  "m.edit.notNumber": ["a position or size is not a number", "एखादी जागा किंवा आकार संख्या नाही"],
+  "m.edit.cropBad": [
+    "a photo crop must give the photo's id, a focus point (two numbers) and a zoom (a number)",
+    "छायाचित्राच्या कापासाठी छायाचित्राचा आयडी, केंद्रबिंदू (दोन संख्या) आणि झूम (एक संख्या) हवे",
+  ],
+  "m.edit.cropFloor": [
+    "a photo crop would print below the photo's resolution floor",
+    "हा काप छायाचित्राच्या किमान रेझोल्यूशनपेक्षा कमी छापला जाईल",
+  ],
+  "m.edit.cropLost": [
+    "the photo of {name} could not be found on the page to crop it: nothing was changed",
+    "{name} चे छायाचित्र कापण्यासाठी पानावर सापडले नाही: काहीही बदलले नाही",
+  ],
+  "m.edit.photoDamaged": [
+    "the photo of {name} is damaged (its raster has the wrong size)",
+    "{name} चे छायाचित्र खराब झाले आहे (त्याच्या रास्टरचा आकार चुकीचा आहे)",
+  ],
+  "m.edit.lockBool": ["a story's lock must be true or false", "बातमीचे कुलूप ‘हो’ किंवा ‘नाही’ असेच असावे"],
+  "m.edit.lockedMove": [
+    "{name} is locked: unlock it (Shift+L) to move it",
+    "{name} ला कुलूप आहे: ती हलवण्यासाठी कुलूप काढा (Shift+L)",
+  ],
+  "m.edit.lockedTake": [
+    "{name} is locked: unlock it (Shift+L) to take it off the page",
+    "{name} ला कुलूप आहे: ती पानावरून काढण्यासाठी कुलूप काढा (Shift+L)",
+  ],
+  "m.edit.lockedThere": [
+    "{name} is locked on page {page}: unlock it there to bring it here",
+    "{name} ला पान {page} वर कुलूप आहे: ती इथे आणण्यासाठी तिथले कुलूप काढा",
+  ],
+  "m.edit.saveHeld": [
+    "this page cannot be saved yet: {name} is also on page {page}, locked there. Unlock it on page {page}, or take it off this page, then save",
+    "हे पान अजून जतन करता येत नाही: {name} पान {page} वरही आहे आणि तिथे तिला कुलूप आहे. पान {page} वर कुलूप काढा, किंवा ती या पानावरून काढा, मग जतन करा",
+  ],
+  "m.edit.allLocked": [
+    "every story on this page is locked: unlock one to try another layout",
+    "या पानावरच्या सर्व बातम्यांना कुलूप आहे: दुसरी मांडणी पाहण्यासाठी एखाद्या बातमीचे कुलूप काढा",
+  ],
+  "m.edit.noFillAround": [
+    "no other layout fills the space around the locked stories exactly: unlock one, or move it",
+    "कुलूप असलेल्या बातम्यांभोवतीची जागा दुसरी कोणतीही मांडणी अचूक भरत नाही: एखादे कुलूप काढा, किंवा ती बातमी हलवा",
+  ],
+  "m.edit.noFill": [
+    "no other layout fills this page exactly with these stories",
+    "या बातम्यांनी हे पान अचूक भरणारी दुसरी कोणतीही मांडणी नाही",
+  ],
+  "m.edit.noStories": ["this page has no stories to lay out", "या पानावर मांडण्यासाठी बातम्या नाहीत"],
+  "m.edit.tooMany": [
+    "this page has {n} stories; another layout needs {max} or fewer",
+    "या पानावर {n} बातम्या आहेत; दुसऱ्या मांडणीसाठी {max} किंवा कमी हव्यात",
+  ],
+  "m.edit.tooManyFree": [
+    "this page has {n} stories not locked; another layout needs {max} or fewer",
+    "या पानावर कुलूप नसलेल्या {n} बातम्या आहेत; दुसऱ्या मांडणीसाठी {max} किंवा कमी हव्यात",
+  ],
+  "m.edit.notAllPlaced": [
+    "another layout did not place every story of this page; the page is kept as it was",
+    "दुसऱ्या मांडणीत या पानाच्या सर्व बातम्या आल्या नाहीत; पान होते तसेच ठेवले आहे",
+  ],
+  "m.edit.moveNotHere": ["{name} is not on this page", "{name} या पानावर नाही"],
+  "m.edit.moveNoPage": ["this layout has no page {page}", "या मांडणीत पान {page} नाही"],
+  "m.edit.moveSamePage": [
+    "{name} is on this page already: choose another page",
+    "{name} आधीच या पानावर आहे: दुसरे पान निवडा",
+  ],
+  "m.edit.moveNotLaidOut": [
+    "page {page} was not laid out in this layout: a story cannot move there",
+    "या मांडणीत पान {page} ची मांडणी झाली नाही: तिथे बातमी हलवता येत नाही",
+  ],
+  "m.edit.moveLockedThere": [
+    "{name} is also on page {page}, locked there: unlock it there to move it",
+    "{name} पान {page} वरही आहे आणि तिथे तिला कुलूप आहे: ती हलवण्यासाठी तिथले कुलूप काढा",
+  ],
+  "m.edit.moveCannotSet": [
+    "{name} cannot be set {w} {cols} wide on page {page}: change its width here, then move it",
+    "{name} पान {page} वर {w} स्तंभ रुंदीत मांडता येत नाही: इथे तिची रुंदी बदला, मग हलवा",
+  ],
+  "m.edit.moveNoRoom": [
+    "there is no free place on page {page} for {name} ({w} {cols} × {h} mm): make room there, or narrow it here, then move it",
+    "पान {page} वर {name} साठी मोकळी जागा नाही ({w} स्तंभ × {h} मिमी): तिथे जागा करा, किंवा इथे ती अरुंद करा, मग हलवा",
+  ],
+  "m.edit.notOpen": ["this page is not open: open it again", "हे पान उघडलेले नाही: ते पुन्हा उघडा"],
+  "m.edit.unknownCommand": ["unknown command {cmd}", "अज्ञात आदेश {cmd}"],
+  "m.edit.missing": ["missing {fields}", "{fields} नाही"],
+  "m.edit.invalid": ["the request is not valid", "ही विनंती योग्य नाही"],
+  "m.edit.engineFailed": [
+    "something went wrong in the engine ({kind}: {error})",
+    "इंजिनमध्ये काहीतरी चुकले ({kind}: {error})",
+  ],
+  "m.move.whichStory": ["Say which story to move.", "कोणती बातमी हलवायची ते सांगा."],
+  "m.move.whichPage": [
+    "Say which page to move the story to, as a page number.",
+    "बातमी कोणत्या पानावर हलवायची ते पान क्रमांकाने सांगा.",
+  ],
+  "m.move.samePage": [
+    "The story is on this page already: choose another page.",
+    "ही बातमी आधीच या पानावर आहे: दुसरे पान निवडा.",
+  ],
+  "m.move.noPage": ["This layout has no page {page}.", "या मांडणीत पान {page} नाही."],
+  "m.move.notLaidOut": [
+    "Page {page} was not laid out in this layout: a story cannot move there.",
+    "या मांडणीत पान {page} ची मांडणी झाली नाही: तिथे बातमी हलवता येत नाही.",
+  ],
+  "m.save.notChanged": ["The page could not be changed: {reason}.", "पान बदलता आले नाही: {reason}."],
+  "m.save.engineNotStarted": [
+    "The page editor's engine did not start: {why}",
+    "पान संपादनाचे इंजिन सुरू झाले नाही: {why}",
+  ],
+  "m.save.engineNotStartedLog": [
+    "The page editor's engine did not start. See edit-service.log in the desk home.",
+    "पान संपादनाचे इंजिन सुरू झाले नाही. डेस्कच्या होम फोल्डरमधील edit-service.log पाहा.",
+  ],
+  "m.save.engineStopped": [
+    "The page editor's engine stopped. Try again.",
+    "पान संपादनाचे इंजिन थांबले. पुन्हा प्रयत्न करा.",
+  ],
+  "m.save.engineSlow": [
+    "The page editor's engine stopped or took too long. Try again.",
+    "पान संपादनाचे इंजिन थांबले किंवा त्याला खूप वेळ लागला. पुन्हा प्रयत्न करा.",
+  ],
+  "m.save.unfinished": [
+    "The last save of this page did not finish: save it again.",
+    "या पानाचे मागचे जतन पूर्ण झाले नाही: ते पुन्हा जतन करा.",
+  ],
+  "m.save.movedHere": [
+    "A story was moved here from page {page}: check its place and save the page.",
+    "पान {page} वरून इथे एक बातमी हलवली आहे: तिची जागा तपासा आणि पान जतन करा.",
+  ],
+  "m.save.taking": [
+    "Page {page} is taking a story from this page: when page {page} has been saved, open this page, fill the space and save it.",
+    "पान {page} या पानावरून एक बातमी घेत आहे: पान {page} जतन झाल्यावर हे पान उघडा, जागा भरा आणि जतन करा.",
+  ],
+  "m.save.movedFrom": [
+    "A story moved from this page to page {page}: open it, fill the space and save it.",
+    "या पानावरून एक बातमी पान {page} वर हलवली: हे पान उघडा, जागा भरा आणि जतन करा.",
+  ],
+  "m.save.filesNotFinished": [
+    "The page was saved, but its files could not be finished: {error}",
+    "पान जतन झाले, पण त्याच्या फायली पूर्ण होऊ शकल्या नाहीत: {error}",
+  ],
+  "m.save.heldUnreadable": [
+    "This page cannot be saved yet: the engine's list of its stories locked on other pages cannot be read.",
+    "हे पान अजून जतन करता येत नाही: इतर पानांवर कुलूप असलेल्या बातम्यांची इंजिनची यादी वाचता येत नाही.",
+  ],
+  "m.save.held": [
+    "This page cannot be saved yet: {name} is also on page {page}, locked there. Unlock it on page {page}, or take it off this page, then save.",
+    "हे पान अजून जतन करता येत नाही: {name} पान {page} वरही आहे आणि तिथे तिला कुलूप आहे. पान {page} वर कुलूप काढा, किंवा ती या पानावरून काढा, मग जतन करा.",
+  ],
+  "m.save.heldMore1": [
+    "1 more story on this page is locked on another page too.",
+    "या पानावरच्या आणखी एका बातमीला दुसऱ्या पानावरही कुलूप आहे.",
+  ],
+  "m.save.heldMoreN": [
+    "{n} more stories on this page are locked on another page too.",
+    "या पानावरच्या आणखी {n} बातम्यांना दुसऱ्या पानांवरही कुलूप आहे.",
+  ],
+  "m.save.notPlacedEdited": [
+    "Taken off the pages in the editor, or moved to a page not saved yet: bring it back onto a page, or save the page it moved to.",
+    "पान संपादनात पानावरून काढली, किंवा अजून जतन न केलेल्या पानावर हलवली: ती पुन्हा पानावर आणा, किंवा ती हलवलेले पान जतन करा.",
+  ],
+  "m.save.deletedAfter": ["Deleted from the edition after the layout.", "मांडणीनंतर अंकातून हटवली."],
+  "m.press.olderDesk": [
+    "This page was made by an older version of the Desk, which did not record what its PDF prints: lay the edition out again.",
+    "हे पान डेस्कच्या जुन्या व्हर्जनने तयार केले, ज्याने त्याची PDF काय छापते याची नोंद ठेवली नाही: अंकाची पुन्हा मांडणी करा.",
+  ],
+  "m.press.olderRecord": [
+    "This page was made by an older version of the Desk, which recorded what its PDF prints in another way: open it in the page editor and save it (or lay out again).",
+    "हे पान डेस्कच्या जुन्या व्हर्जनने तयार केले, ज्याने त्याची PDF काय छापते याची नोंद वेगळ्या प्रकारे ठेवली: ते पान संपादनात उघडून जतन करा (किंवा पुन्हा मांडणी करा).",
+  ],
+  "m.press.damaged": [
+    "This page could not be checked against the edition (a file of the layout or the edition cannot be read): put the file back from a backup, or lay the edition out again.",
+    "हे पान अंकाशी तपासता आले नाही (मांडणीची किंवा अंकाची एखादी फाइल वाचता येत नाही): ती फाइल बॅकअपमधून परत आणा, किंवा अंकाची पुन्हा मांडणी करा.",
+  ],
+  "m.press.pagesChanged": [
+    "The edition now has {now} pages; this layout has {then}: lay the edition out again.",
+    "अंकात आता {now} पाने आहेत; या मांडणीत {then} आहेत: अंकाची पुन्हा मांडणी करा.",
+  ],
+  "m.press.backAdsOn": [
+    "Back-page ads were switched on after this layout: lay the edition out again.",
+    "या मांडणीनंतर शेवटच्या पानावरच्या जाहिराती चालू केल्या: अंकाची पुन्हा मांडणी करा.",
+  ],
+  "m.press.backAdsOff": [
+    "Back-page ads were switched off after this layout: lay the edition out again.",
+    "या मांडणीनंतर शेवटच्या पानावरच्या जाहिराती बंद केल्या: अंकाची पुन्हा मांडणी करा.",
+  ],
+  "m.press.changed1": [
+    "An article on this page was changed since the page's PDF was made: open the page and save it (Save page sets the current text first).",
+    "पानाची PDF तयार झाल्यानंतर या पानावरची एक बातमी बदलली: पान उघडून जतन करा (‘पान जतन करा’ आधी सध्याचा मजकूर मांडते).",
+  ],
+  "m.press.changedN": [
+    "{n} articles on this page were changed since the page's PDF was made: open the page and save it (Save page sets the current text first).",
+    "पानाची PDF तयार झाल्यानंतर या पानावरच्या {n} बातम्या बदलल्या: पान उघडून जतन करा (‘पान जतन करा’ आधी सध्याचा मजकूर मांडते).",
+  ],
+  "m.press.gone1": [
+    "An article on this page was deleted from the edition: open the page and save it (Save page takes it off first).",
+    "या पानावरची एक बातमी अंकातून हटवली: पान उघडून जतन करा (‘पान जतन करा’ आधी ती काढते).",
+  ],
+  "m.press.goneN": [
+    "{n} articles on this page were deleted from the edition: open the page and save it (Save page takes them off first).",
+    "या पानावरच्या {n} बातम्या अंकातून हटवल्या: पान उघडून जतन करा (‘पान जतन करा’ आधी त्या काढते).",
+  ],
+  "m.press.folio": [
+    "The volume, issue or price changed: open the page and save it.",
+    "वर्ष, अंक क्रमांक किंवा किंमत बदलली: पान उघडून जतन करा.",
+  ],
+  "m.press.ad": [
+    "An advertisement on this page changed: open the page and save it (Save page sets the new one first).",
+    "या पानावरची एक जाहिरात बदलली: पान उघडून जतन करा (‘पान जतन करा’ आधी नवी जाहिरात मांडते).",
+  ],
+  "m.warn.issueNotSet": [
+    "Issue number (अंक) not set in step 1: the front page keeps the old number",
+    "पायरी 1 मध्ये अंक क्रमांक दिलेला नाही: पहिल्या पानावर जुनाच क्रमांक राहतो",
+  ],
+  "m.warn.overlap": ["stories overlap on the page", "पानावर बातम्या एकमेकींवर येतात"],
+  "m.warn.outside": [
+    "a story is outside the news area or over an advertisement",
+    "एखादी बातमी बातम्यांच्या जागेबाहेर आहे किंवा जाहिरातीवर येते",
+  ],
+  "m.warn.overset": [
+    "{n} lines of text did not fit",
+    { one: "मजकुराची {n} ओळ बसली नाही", other: "मजकुराच्या {n} ओळी बसल्या नाहीत" },
+  ],
+  "m.warn.unsetN": [
+    "{n} paragraphs could not be set (a character the stand-in fonts lack)",
+    {
+      one: "{n} परिच्छेद मांडता आला नाही (तात्पुरत्या फॉन्टमध्ये नसलेले अक्षर)",
+      other: "{n} परिच्छेद मांडता आले नाहीत (तात्पुरत्या फॉन्टमध्ये नसलेले अक्षर)",
+    },
+  ],
+  "m.warn.unset": [
+    "paragraphs could not be set (a character the stand-in fonts lack)",
+    "काही परिच्छेद मांडता आले नाहीत (तात्पुरत्या फॉन्टमध्ये नसलेले अक्षर)",
+  ],
+  "m.warn.touch": [
+    "two lines of a story touch in ink somewhere: check the page",
+    "एखाद्या बातमीच्या दोन ओळी कुठेतरी शाईत एकमेकींना भिडतात: पान तपासा",
+  ],
+  "m.warn.emptyArea": [
+    "About {n} cm² of the news area is left empty: add a short item or a photo",
+    "बातम्यांच्या जागेतील सुमारे {n} सेमी² रिकामे राहिले आहे: एखादी छोटी बातमी किंवा छायाचित्र जोडा",
+  ],
+  "m.warn.notFill": [
+    "These stories do not fill the page exactly; the layout may fail",
+    "या बातम्यांनी पान अचूक भरत नाही; मांडणी अयशस्वी होऊ शकते",
+  ],
+  "m.warn.emptyFoot": [
+    "About {mm} mm of the page is left empty at the foot — add a short item or a photo",
+    "पानाच्या तळाशी सुमारे {mm} मिमी रिकामे राहिले आहे — एखादी छोटी बातमी किंवा छायाचित्र जोडा",
+  ],
+  "m.warn.charRemoved": [
+    "{what}: removed a character the fonts do not have (U+{code})",
+    "{what}: फॉन्टमध्ये नसलेले एक अक्षर काढले (U+{code})",
+  ],
+  "m.warn.sameHeadline": [
+    "Same headline as another article ({article}) — is it the same story twice?",
+    "दुसऱ्या बातमीचाच मथळा ({article}) — एकच बातमी दोनदा आहे का?",
+  ],
+  "m.warn.photoSmall": [
+    "Photo too small to print even one column wide ({px} pixels across) — the story runs without it",
+    "छायाचित्र एका स्तंभाइतकेही छापण्यासाठी खूप लहान आहे ({px} पिक्सेल रुंद) — बातमी छायाचित्राशिवाय जाते",
+  ],
+  "m.run.reading": ["Reading the articles", "बातम्या वाचत आहे"],
+  "m.run.noArticles": ["No articles with a headline and body text", "मथळा आणि मुख्य मजकूर असलेली एकही बातमी नाही"],
+  "m.run.stopped": ["Stopped before it finished", "पूर्ण होण्यापूर्वी थांबले"],
+  "m.run.measured": ["Measured {done} of {total} stories", "{total} पैकी {done} बातम्यांचे मोजमाप झाले"],
+  "m.run.choosing": ["Choosing the stories for each page", "प्रत्येक पानासाठी बातम्या निवडत आहे"],
+  "m.run.layingOut": ["Laying out the pages", "पानांची मांडणी करत आहे"],
+  "m.run.noStoriesLeft": ["No stories left for this page", "या पानासाठी बातम्या उरल्या नाहीत"],
+  "m.run.allLaidOut": ["All pages laid out", "सर्व पानांची मांडणी झाली"],
+  "m.run.someFailed": [
+    "{failed} of {total} pages could not be laid out",
+    "{total} पैकी {failed} पानांची मांडणी होऊ शकली नाही",
+  ],
+  "m.run.pageFailed": ["layout failed", "मांडणी अयशस्वी"],
+  "m.run.tooManyModules": [
+    "{n} modules: more than the layout search takes ({max})",
+    "{n} भाग: मांडणीचा शोध घेऊ शकतो त्यापेक्षा जास्त ({max})",
+  ],
+  "m.run.noStoriesPage": ["no stories for this page", "या पानासाठी बातम्या नाहीत"],
+  "m.run.outOfTime": ["the layout search ran out of time", "मांडणीच्या शोधाची वेळ संपली"],
+  "m.run.notFillExactly": ["these stories do not fill the page exactly", "या बातम्यांनी पान अचूक भरत नाही"],
+  "m.run.restarted": [
+    "The server was restarted while this run was in progress. Start it again.",
+    "ही मांडणी सुरू असताना सर्व्हर पुन्हा सुरू झाला. ती पुन्हा सुरू करा.",
+  ],
+  "m.run.waiting": [
+    "Waiting for another edition's pages to finish.",
+    "दुसऱ्या अंकाची पाने पूर्ण होण्याची वाट पाहत आहे.",
+  ],
+  "m.run.starting": ["Starting…", "सुरू होत आहे…"],
+  "m.run.cancelledBefore": ["Cancelled before it started.", "सुरू होण्यापूर्वीच रद्द केली."],
+  "m.run.cancelled": ["Cancelled.", "रद्द केली."],
+  "m.run.engineStarted": ["The layout engine has started.", "मांडणी इंजिन सुरू झाले."],
+  "m.run.engineNotStarted": [
+    "The layout engine could not be started: {error}.",
+    "मांडणी इंजिन सुरू करता आले नाही: {error}.",
+  ],
+  "m.run.putting": [
+    "Putting the edition PDF and the press files together…",
+    "अंकाची PDF आणि छापखान्यासाठीच्या फायली एकत्र करत आहे…",
+  ],
+  "m.run.noPages": [
+    "The layout engine finished but made no pages.",
+    "मांडणी इंजिनचे काम संपले, पण एकही पान तयार झाले नाही.",
+  ],
+  "m.run.notMerged": [
+    "The pages were made, but they could not be put into one file: {error}",
+    "पाने तयार झाली, पण ती एका फाइलमध्ये एकत्र करता आली नाहीत: {error}",
+  ],
+  "m.run.checking": [
+    "Checking every page with the independent PDF/X-1a checker…",
+    "प्रत्येक पान स्वतंत्र PDF/X-1a तपासणी-साधनाने तपासत आहे…",
+  ],
+  "m.run.made1": ["1 page made.", "1 पान तयार झाले."],
+  "m.run.madeN": ["{n} pages made.", "{n} पाने तयार झाली."],
+  "m.run.madeFailed": [
+    "{n} could not be made: see the notes on those pages.",
+    {
+      one: "{n} पान तयार होऊ शकले नाही: त्या पानावरच्या नोंदी पाहा.",
+      other: "{n} पाने तयार होऊ शकली नाहीत: त्या पानांवरच्या नोंदी पाहा.",
+    },
+  ],
+  "m.run.checkProblems": [
+    "The PDF/X-1a check found problems in {files}: do not send those to the press.",
+    "PDF/X-1a तपासणीत {files} मध्ये समस्या सापडल्या: त्या छापखान्याकडे पाठवू नका.",
+  ],
+  "m.run.noArticlesYet": ["There are no articles in this edition yet.", "या अंकात अजून एकही बातमी नाही."],
+  "m.run.alreadyRunning": [
+    "Pages for this edition are already being made. Wait for them, or cancel that run first.",
+    "या अंकाची पाने आधीच तयार होत आहेत. ती पूर्ण होईपर्यंत थांबा, किंवा ती मांडणी आधी रद्द करा.",
+  ],
+  "m.run.finished": ["This run has already finished.", "ही मांडणी आधीच पूर्ण झाली आहे."],
+  "m.plan.needsText": ["It needs a headline and some body text", "तिला मथळा आणि थोडा मुख्य मजकूर हवा"],
+  "m.plan.notMeasured": ["could not be measured ({why})", "मोजमाप करता आले नाही ({why})"],
+  "m.plan.headlineTooLong": [
+    "Its headline is too long to set (at most four lines) — shorten the headline",
+    "तिचा मथळा मांडण्यासाठी खूप मोठा आहे (जास्तीत जास्त चार ओळी) — मथळा छोटा करा",
+  ],
+  "m.plan.tooLong": ["Too long for a whole page — shorten it", "संपूर्ण पानासाठीही खूप मोठी — ती छोटी करा"],
+  "m.plan.noRoom": [
+    "No room left — add pages, lower another story's priority, or pin it to a page",
+    "जागा उरली नाही — पाने वाढवा, दुसऱ्या बातमीचे प्राधान्य कमी करा, किंवा ती एखाद्या पानावर पिन करा",
+  ],
+  "m.plan.pinnedFull": [
+    "More than {max} stories are pinned to page {page} — pin it to another page",
+    "पान {page} वर {max} पेक्षा जास्त बातम्या पिन केल्या आहेत — ती दुसऱ्या पानावर पिन करा",
+  ],
+  "m.plan.pageFailed": ["Page {n} could not be laid out: {message}", "पान {n} ची मांडणी होऊ शकली नाही: {message}"],
+  "m.store.pasteText": ["Paste the articles as text.", "बातम्या मजकूर म्हणून पेस्ट करा."],
+  "m.store.dateFormat": [
+    "Give the edition's date as YYYY-MM-DD, for example 2026-10-21.",
+    "अंकाची तारीख YYYY-MM-DD अशी द्या, उदाहरणार्थ 2026-10-21.",
+  ],
+  "m.store.notADate": ["{value} is not a real date.", "{value} ही खरी तारीख नाही."],
+  "m.store.pages": ["An edition has 4, 8 or 16 pages.", "अंकात 4, 8 किंवा 16 पाने असतात."],
+  "m.store.priority": [
+    "Priority is 1 (Lead), 2 (Top), 3 (Normal) or 4 (Minor).",
+    "प्राधान्य 1 (मुख्य), 2 (महत्त्वाची), 3 (सामान्य) किंवा 4 (दुय्यम) असते.",
+  ],
+  "m.store.pageRange": [
+    "The page must be empty (the Desk chooses) or a page number from 1 to {pages}.",
+    "पान रिकामे (डेस्क ठरवेल) किंवा 1 ते {pages} मधला पान क्रमांक असावा.",
+  ],
+  "m.store.needHeadline": ["Every article needs a headline.", "प्रत्येक बातमीला मथळा हवा."],
+  "m.store.needText": ["Every article needs some text.", "प्रत्येक बातमीला थोडा मजकूर हवा."],
+  "m.store.tooManyEditions": ["There are too many editions for this date.", "या तारखेचे खूप अंक आहेत."],
+  "m.store.dateFixed": [
+    "The date of an edition cannot be changed. Make a new edition for the other date.",
+    "अंकाची तारीख बदलता येत नाही. दुसऱ्या तारखेसाठी नवा अंक तयार करा.",
+  ],
+  "m.store.deleteRunning": [
+    "Pages for this edition are being made. Cancel that first, then delete it.",
+    "या अंकाची पाने तयार होत आहेत. आधी ते रद्द करा, मग अंक हटवा.",
+  ],
+  "m.store.deleteSaving": [
+    "A page of this edition is being changed or saved. Wait a moment, then delete it.",
+    "या अंकाचे एक पान बदलले किंवा जतन केले जात आहे. थोडे थांबा, मग अंक हटवा.",
+  ],
+  "m.store.adBusy": [
+    "Ads cannot be changed while the pages are being made. Wait until that finishes, or cancel it.",
+    "पाने तयार होत असताना जाहिराती बदलता येत नाहीत. ते पूर्ण होईपर्यंत थांबा, किंवा ते रद्द करा.",
+  ],
+  "m.store.wordNone": [
+    "No story in this Word file could be added: {reasons}",
+    "या Word फाइलमधील एकही बातमी जोडता आली नाही: {reasons}",
+  ],
+  "m.store.wordNoneBare": ["No story in this Word file could be added.", "या Word फाइलमधील एकही बातमी जोडता आली नाही."],
+  "m.store.pasteNone": [
+    "No articles were found. Put each article's headline on its first line, its text below it, and a line with only --- between articles.",
+    "एकही बातमी सापडली नाही. प्रत्येक बातमीचा मथळा पहिल्या ओळीत, त्याखाली तिचा मजकूर, आणि दोन बातम्यांच्या मध्ये फक्त --- असलेली ओळ ठेवा.",
+  ],
+  "m.store.pasteParts": [
+    "{n} part(s) had a headline but no text.",
+    { one: "{n} भागाला मथळा होता पण मजकूर नव्हता.", other: "{n} भागांना मथळा होता पण मजकूर नव्हता." },
+  ],
+  "m.img.tooManyPixels": [
+    "This picture has too many pixels for the Desk. Save it smaller and try again.",
+    "या चित्रात डेस्कसाठी खूप जास्त पिक्सेल आहेत. ते लहान करून जतन करा आणि पुन्हा प्रयत्न करा.",
+  ],
+  "m.img.notAPicture": [
+    "This file is not a picture the Desk can read. Use a JPEG, PNG or WebP file.",
+    "ही फाइल डेस्कला वाचता येणारे चित्र नाही. JPEG, PNG किंवा WebP फाइल वापरा.",
+  ],
+  "m.img.format": [
+    "This picture is a {fmt} file. Use a JPEG, PNG or WebP file.",
+    "हे चित्र {fmt} फाइल आहे. JPEG, PNG किंवा WebP फाइल वापरा.",
+  ],
+  "m.img.damaged": [
+    "The picture file is damaged or incomplete. Try saving it again.",
+    "चित्राची फाइल खराब किंवा अपूर्ण आहे. ती पुन्हा जतन करून पाहा.",
+  ],
+  "m.img.tooLarge": [
+    "This picture file is larger than 40 MB. Save it smaller and try again.",
+    "ही चित्राची फाइल 40 MB पेक्षा मोठी आहे. ती लहान करून जतन करा आणि पुन्हा प्रयत्न करा.",
+  ],
+  "m.img.none": ["No picture was sent.", "कोणतेही चित्र पाठवले नाही."],
+  "m.img.noProfile": [
+    "Photos cannot be converted for print: the newsprint colour profile is missing. Put it at ~/PageinatorPrivate/icc/ or set PAGEINATOR_ICC to its file.",
+    "छायाचित्रे छपाईसाठी रूपांतरित करता येत नाहीत: वृत्तपत्र कागदाचे रंग-प्रोफाइल नाही. ते ~/PageinatorPrivate/icc/ मध्ये ठेवा, किंवा PAGEINATOR_ICC मध्ये त्याची फाइल द्या.",
+  ],
+  "m.img.badProfile": [
+    "The newsprint colour profile could not be used: it must be a CMYK printer profile ({error}).",
+    "वृत्तपत्र कागदाचे रंग-प्रोफाइल वापरता आले नाही: ते CMYK प्रिंटरचे प्रोफाइल असावे ({error}).",
+  ],
+
   // ---- shared words
   "common.cancel": ["Cancel", "रद्द करा"],
   "common.close": ["Close", "बंद करा"],
@@ -1705,4 +2140,57 @@ export function tn(key, params = {}) {
   }
   parts.push(text.slice(last));
   return parts.filter((part) => part !== "");
+}
+
+// ===================================================================== the server's and the engine's messages
+
+/* The server and the engine send each of their messages as English text, and, in the same answer's "msgs" map, that
+ * text's form {code, params} (tools/desk/engine/deskmsg.py). A value in params is a number, a string, {data} (text
+ * shown as it is: a headline, a file name) or a message of its own; {parts} is several sentences. The English screen
+ * shows the server's own text, exactly as before; the Marathi screen says the code in Marathi, and falls back to the
+ * English text for a code it does not know (at any depth). */
+
+const UNKNOWN = Symbol("unknown");
+
+/** A wire form in the language shown: text (or, with node(), a list of text and nodes); UNKNOWN when a code is not here. */
+function said(wire, node) {
+  if (wire === null || typeof wire !== "object") return wire;
+  if (typeof wire.data === "string") return node ? node(wire.data) : wire.data;
+  if (Array.isArray(wire.parts)) {
+    const parts = wire.parts.map((w) => said(w, node));
+    if (parts.includes(UNKNOWN)) return UNKNOWN;
+    return node ? parts.flatMap((p, i) => (i ? [" ", ...[p].flat()] : [p].flat())) : parts.join(" ");
+  }
+  const code = wire.code;
+  if (typeof code !== "string" || !code.startsWith("m.") || STRINGS[current][code] === undefined) return UNKNOWN;
+  const params = {};
+  for (const [k, v] of Object.entries(wire.params || {})) {
+    const p = said(v, node);
+    if (p === UNKNOWN) return UNKNOWN;
+    params[k] = node && Array.isArray(p) ? spanOf(p) : p;
+  }
+  return node ? tn(code, params) : t(code, params);
+}
+
+/** Several parts as one value for tn() (a placeholder takes one node): a fragment. */
+function spanOf(parts) {
+  const f = document.createDocumentFragment();
+  for (const p of parts) f.append(p);
+  return f;
+}
+
+/** A message the server or the engine sent (text, and the answer's msgs map), in the language shown. */
+export function tm(text, msgs) {
+  const wire = current !== "en" && msgs && typeof msgs === "object" ? msgs[text] : undefined;
+  if (wire === undefined) return text;
+  const out = said(wire);
+  return out === UNKNOWN || typeof out !== "string" ? text : out;
+}
+
+/** The same, as text and nodes: node(text) gives each {data} value (a headline) its own element (its own lang). */
+export function tmn(text, msgs, node) {
+  const wire = current !== "en" && msgs && typeof msgs === "object" ? msgs[text] : undefined;
+  if (wire === undefined) return [text];
+  const out = said(wire, node);
+  return out === UNKNOWN ? [text] : [out].flat();
 }

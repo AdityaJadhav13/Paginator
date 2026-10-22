@@ -115,8 +115,8 @@ jobs:
         run: |
           uv venv --python 3.11.14 .venv
           uv pip install --python .venv --require-hashes -r requirements.lock
-      - name: server and Word import tests
-        run: experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py
+      - name: server, Word import and message tests
+        run: experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py tools/desk/test/test_messages.py
       - name: engine tests
         run: tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py
       - name: browser module tests (page editor view, words, paste)

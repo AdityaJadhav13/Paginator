@@ -11,6 +11,7 @@ from pathlib import Path
 
 from PIL import Image, ImageCms, ImageOps
 
+from . import messages as M
 from .util import DeskError
 
 MAX_UPLOAD_BYTES = 40 * 1024 * 1024
@@ -21,9 +22,9 @@ AD_PPI = 200                   # ads are fitted inside their slot at up to this 
 DEFAULT_ICC = "~/PageinatorPrivate/icc/WAN-IFRAnewspaper26v5_TIC220.icc"
 
 FORMATS = {"JPEG": "jpg", "MPO": "jpg", "PNG": "png", "WEBP": "webp"}   # MPO: JPEGs from some cameras and phones
-TOO_MANY_PIXELS = "This picture has too many pixels for the Desk. Save it smaller and try again."
+TOO_MANY_PIXELS = M.msg("m.img.tooManyPixels")
 MAX_PIXELS = 100_000_000                                  # 100 megapixels: far above any camera, far below a bomb
-NOT_A_PICTURE = "This file is not a picture the Desk can read. Use a JPEG, PNG or WebP file."
+NOT_A_PICTURE = M.msg("m.img.notAPicture")
 LANCZOS = Image.Resampling.LANCZOS
 
 _xform_lock = threading.Lock()
@@ -58,8 +59,7 @@ def _transform() -> ImageCms.ImageCmsTransform:
     try:
         st = path.stat()
     except OSError:
-        raise DeskError(500, "Photos cannot be converted for print: the newsprint colour profile is missing. "
-                             "Put it at ~/PageinatorPrivate/icc/ or set PAGEINATOR_ICC to its file.") from None
+        raise DeskError(500, M.msg("m.img.noProfile")) from None
     key = (str(path), st.st_mtime_ns, st.st_size)
     with _xform_lock:
         xform = _xform_cache.get(key)
@@ -69,8 +69,7 @@ def _transform() -> ImageCms.ImageCmsTransform:
                     ImageCms.createProfile("sRGB"), ImageCms.getOpenProfile(str(path)), "RGB", "CMYK",
                     renderingIntent=ImageCms.Intent.PERCEPTUAL, flags=ImageCms.Flags.BLACKPOINTCOMPENSATION)
             except (ImageCms.PyCMSError, OSError) as e:
-                raise DeskError(500, "The newsprint colour profile could not be used: it must be a CMYK printer "
-                                     f"profile ({e}).") from None
+                raise DeskError(500, M.msg("m.img.badProfile", error=M.data(str(e)))) from None
             _xform_cache.clear()
             _xform_cache[key] = xform
         return xform
@@ -100,7 +99,7 @@ def _open(data: bytes, min_long_side: int) -> tuple[Image.Image, str]:
     if size[0] * size[1] > MAX_PIXELS:                   # before decoding: a small file can unpack to gigabytes
         raise DeskError(413, TOO_MANY_PIXELS)
     if fmt not in FORMATS:
-        raise DeskError(400, f"This picture is a {fmt} file. Use a JPEG, PNG or WebP file.")
+        raise DeskError(400, M.msg("m.img.format", fmt=fmt))
     try:
         img = Image.open(io.BytesIO(data))
         if fmt in ("JPEG", "MPO"):
@@ -110,7 +109,7 @@ def _open(data: bytes, min_long_side: int) -> tuple[Image.Image, str]:
     except Image.DecompressionBombError:
         raise DeskError(413, TOO_MANY_PIXELS) from None
     except Exception:
-        raise DeskError(400, "The picture file is damaged or incomplete. Try saving it again.") from None
+        raise DeskError(400, M.msg("m.img.damaged")) from None
     try:
         img = ImageOps.exif_transpose(img)
     except Exception:          # damaged EXIF: keep the picture as stored
@@ -167,9 +166,9 @@ def _cmyk_gz(img: Image.Image) -> tuple[bytes, int, int]:
 
 def _check_size(data: bytes) -> None:
     if not data:
-        raise DeskError(400, "No picture was sent.")
+        raise DeskError(400, M.msg("m.img.none"))
     if len(data) > MAX_UPLOAD_BYTES:
-        raise DeskError(413, "This picture file is larger than 40 MB. Save it smaller and try again.")
+        raise DeskError(413, M.msg("m.img.tooLarge"))
 
 
 # --------------------------------------------------------------------------------------------- pipelines

@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 import deskarticles  # noqa: E402  (the engine's own text parser: the Desk counts words the way it lays them out)
 
 from . import images  # noqa: E402
+from . import messages as M  # noqa: E402
 from .press import edition_now, mark_damaged, recheck_status
 from .util import (EDITION_ID, PHOTO_ID, RUN_ID, SLOT_ID, ARTICLE_ID, DeskError, clean_text, ensure_dir, new_id,
                    now_iso, path_id, read_json, remove_quietly, write_bytes, write_json)
@@ -31,7 +32,7 @@ EDITION_TEXT_LIMIT = 200      # volume, issue, price
 TEXT_FIELDS = (("headline", "headline", LINE_LIMIT), ("kicker", "kicker", LINE_LIMIT), ("deck", "deck", LINE_LIMIT),
                ("byline", "byline", LINE_LIMIT), ("body", "article text", BODY_LIMIT))
 EDITION_TEXT = (("volume", "volume"), ("issue", "issue number"), ("price", "price"))
-AD_BUSY = "Ads cannot be changed while the pages are being made. Wait until that finishes, or cancel it."
+AD_BUSY = M.msg("m.store.adBusy")
 
 PHOTO_FILE = re.compile(r"(p-[0-9a-f]{10})\.(?:orig\.[a-z0-9]{2,5}|jpg|cmyk\.gz)")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -60,7 +61,7 @@ def parse_bulk(text: Any) -> list[dict]:
     non-empty line, when it starts with `Byline:` (any case) or `वार्ताहर:`, is the byline; the rest is the body.
     Chunks with nothing in them are skipped."""
     if not isinstance(text, str):
-        raise DeskError(400, "Paste the articles as text.")
+        raise DeskError(400, M.msg("m.store.pasteText"))
     text = unicodedata.normalize("NFC", text.replace("\r\n", "\n").replace("\r", "\n"))
     chunks: list[list[str]] = [[]]
     for line in text.split("\n"):
@@ -82,12 +83,12 @@ def parse_bulk(text: Any) -> list[dict]:
 
 def _date(value: Any) -> str:
     if not isinstance(value, str) or not _DATE.fullmatch(value.strip()):
-        raise DeskError(400, "Give the edition's date as YYYY-MM-DD, for example 2026-10-21.")
+        raise DeskError(400, M.msg("m.store.dateFormat"))
     value = value.strip()
     try:
         date.fromisoformat(value)
     except ValueError:
-        raise DeskError(400, f"{value} is not a real date.") from None
+        raise DeskError(400, M.msg("m.store.notADate", value=value)) from None
     return value
 
 
@@ -102,7 +103,7 @@ def _int(value: Any) -> Any:
 def parse_pages(value: Any) -> int:
     value = _int(value)
     if not isinstance(value, int) or isinstance(value, bool) or value not in PAGES:
-        raise DeskError(400, "An edition has 4, 8 or 16 pages.")
+        raise DeskError(400, M.msg("m.store.pages"))
     return value
 
 
@@ -117,7 +118,7 @@ def _bool(value: Any, message: str) -> bool:
 def _priority(value: Any) -> int:
     value = _int(value)
     if not isinstance(value, int) or isinstance(value, bool) or value not in PRIORITIES:
-        raise DeskError(400, "Priority is 1 (Lead), 2 (Top), 3 (Normal) or 4 (Minor).")
+        raise DeskError(400, M.msg("m.store.priority"))
     return value
 
 
@@ -126,7 +127,7 @@ def _page(value: Any, pages: int) -> int | None:
         return None
     value = _int(value)
     if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= pages:
-        raise DeskError(400, f"The page must be empty (the Desk chooses) or a page number from 1 to {pages}.")
+        raise DeskError(400, M.msg("m.store.pageRange", pages=pages))
     return value
 
 
@@ -139,9 +140,9 @@ def _apply(article: dict, fields: dict, edition: dict) -> None:
     if "page" in fields:
         article["page"] = _page(fields["page"], edition.get("pages") if edition.get("pages") in PAGES else 16)
     if not article["headline"]:
-        raise DeskError(400, "Every article needs a headline.")
+        raise DeskError(400, M.msg("m.store.needHeadline"))
     if not article["body"]:
-        raise DeskError(400, "Every article needs some text.")
+        raise DeskError(400, M.msg("m.store.needText"))
 
 
 def _find(articles: list[dict], aid: str) -> dict:
@@ -239,7 +240,7 @@ class Store:
                 continue
             break
         else:
-            raise DeskError(409, "There are too many editions for this date.")
+            raise DeskError(409, M.msg("m.store.tooManyEditions"))
         os.chmod(d, 0o700)
         for sub in ("photos", "ads", "runs"):
             ensure_dir(d / sub)
@@ -259,7 +260,7 @@ class Store:
             d = self.require(eid)
             edition = read_json(d / "edition.json")
             if "date" in fields and fields["date"] != edition.get("date"):
-                raise DeskError(400, "The date of an edition cannot be changed. Make a new edition for the other date.")
+                raise DeskError(400, M.msg("m.store.dateFixed"))
             if "pages" in fields:
                 edition["pages"] = parse_pages(fields["pages"])
             if "back_page_ads" in fields:
@@ -278,9 +279,9 @@ class Store:
         with self.lock(eid):
             d = self.require(eid)
             if self.is_active(eid):
-                raise DeskError(409, "Pages for this edition are being made. Cancel that first, then delete it.")
+                raise DeskError(409, M.msg("m.store.deleteRunning"))
             if self.is_saving(eid):
-                raise DeskError(409, "A page of this edition is being changed or saved. Wait a moment, then delete it.")
+                raise DeskError(409, M.msg("m.store.deleteSaving"))
             self.edition_closing(eid)
             ensure_dir(self.trash_dir)
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -410,10 +411,10 @@ class Store:
             if not created:
                 if source == "word":
                     reasons = "; ".join(sorted({s["reason"] for s in skipped}))
-                    raise DeskError(400, "No story in this Word file could be added" + (f": {reasons}" if reasons else "."))
-                hint = f" {len(skipped)} part(s) had a headline but no text." if skipped else ""
-                raise DeskError(400, "No articles were found. Put each article's headline on its first line, its text "
-                                     "below it, and a line with only --- between articles." + hint)
+                    raise DeskError(400, M.msg("m.store.wordNone", reasons=M.data(reasons)) if reasons
+                                    else M.msg("m.store.wordNoneBare"))
+                raise DeskError(400, M.join(M.msg("m.store.pasteNone"),
+                                            M.msg("m.store.pasteParts", n=len(skipped)) if skipped else ""))
             self._save(d, doc)
             self.articles_changed(eid)
             return {"created": len(created), "articles": [decorate(a) for a in created], "skipped": skipped}

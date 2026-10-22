@@ -115,7 +115,9 @@ choice, and switching keeps what you are typing. The page editor follows it (als
 it has no switch of its own, because its header has no room for one at 1280 px. Keys keep their names as printed on
 the keyboard (Shift+L, Ctrl+Z, Esc) and act by the key's position, so a Marathi keyboard layout changes nothing. The
 words are in `static/strings.js`; the Marathi is a first draft that a native editor checks (its `REVIEW` list). The
-articles, headlines and the server's and engine's messages are shown as they are (the messages in English for now).
+articles and headlines are shown as they are. The server's and the engine's own messages (refusals, reasons, warnings) are said
+in the language chosen by their code (`engine/messages.json`); those that have none yet (listed in
+`docs/product/11-fix-before-launch.md`, MSG-1 onwards) are shown in English.
 
 ## Limits
 
@@ -155,7 +157,7 @@ The contract between them is in [`CONTRACT.md`](CONTRACT.md).
 
 `pnpm run test:desk` runs the three suites from the repository root, and CI's `desk` job runs the same three commands.
 The tests use fictional data only and need nothing from `~/PageinatorPrivate`.
-- `experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py`
+- `experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py tools/desk/test/test_messages.py`
 - `tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py`
 - `node --test tools/desk/test/*.mjs`: the page editor's ruler and zoom arithmetic (`test_editor_view.mjs`), the main
   screen's words in English and Marathi (`test_strings.mjs`), and the paste preview read as the server reads it
