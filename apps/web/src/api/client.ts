@@ -6,6 +6,8 @@
  *   - JSON bodies only;
  *   - an `Idempotency-Key` on a change when the caller gives one (creates and transitions: the same key on every
  *     retry of one action), never on a GET;
+ *   - nothing from it kept in the browser's HTTP cache (`cache: "no-store"`): story text must not stay behind on a
+ *     shared computer;
  *   - every failure as an `ApiProblem`: the API's error envelope, Better Auth's `{code, message}`, or none at all;
  *   - a 401 `signed_out` also tells the app (`onSignedOut`), which sends the person to sign in again, keeping their
  *     place.
@@ -25,6 +27,8 @@ export interface RequestOptions {
   readonly idempotencyKey?: string;
   /** Extra headers for this request. */
   readonly headers?: Readonly<Record<string, string>>;
+  /** Let the request outlive the page (a save as the page is left); browsers cap such a body at 64 KiB. */
+  readonly keepalive?: boolean;
 }
 
 export interface ApiClient {
@@ -118,6 +122,8 @@ export function problemFromAnswer(status: number, body: unknown, headers: Header
       message: typeof envelope["message"] === "string" ? envelope["message"] : "",
       ...(requestId === undefined ? {} : { requestId }),
       ...(details === undefined ? {} : { details }),
+      // story_changed carries the story as it is now (plan §5.1)
+      ...(envelope["current"] === undefined ? {} : { current: envelope["current"] }),
       ...extras,
     };
   }
@@ -167,6 +173,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         method,
         headers,
         credentials: "same-origin",
+        cache: "no-store",
+        ...(requestOptions.keepalive ? { keepalive: true } : {}),
         signal: controller.signal,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });

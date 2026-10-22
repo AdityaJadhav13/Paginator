@@ -79,6 +79,9 @@
   /* Account pages (Account → Security) and the QR code on them */
   --pg-account-measure: 40rem;
   --pg-qr-size: 12rem;
+  /* The story editor: the body box's least height, and the least width of a version shown side by side */
+  --pg-editor-body-min: 20rem;
+  --pg-editor-version-min: 16rem;
 
   /* ── Radius ─────────────────────────────────────────────────────────── */
   --pg-radius-sm: 0.25rem;

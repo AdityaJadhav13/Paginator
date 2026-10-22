@@ -41,6 +41,7 @@ export function safeReturnTo(value: string | null, fallback: string): string {
   if (parts[2] !== "pub" || !parts[3]) return fallback;
   if (parts.length === 5 && PUB_LEAF.test(parts[4] ?? "")) return value;
   if (parts[4] === "archive" && parts.length === 6 && parts[5]) return value;
+  if (parts[4] === "stories" && parts.length === 6 && parts[5]) return value;
   if (parts[4] === "editions" && parts[5] && parts.length === 6) return value;
   if (parts[4] === "editions" && parts[5] && parts.length === 7 && EDITION_LEAF.test(parts[6] ?? "")) return value;
   return fallback;

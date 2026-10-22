@@ -79,7 +79,10 @@ export function WorkspaceShell() {
   const section = publication ? t("shell.publication") : t("shell.organization");
 
   const breadcrumbItems: BreadcrumbItem[] = [{ label: organization.name, to: paths.orgHome(organization.id) }];
-  if (publication) breadcrumbItems.push({ label: publication.name, to: paths.pubOverview(organization.id, publication.id) });
+  // a publication's built page is its Stories; its overview is a development placeholder
+  const publicationHome = (pubId: string) =>
+    DEVELOPMENT ? paths.pubOverview(organization.id, pubId) : paths.pubStories(organization.id, pubId);
+  if (publication) breadcrumbItems.push({ label: publication.name, to: publicationHome(publication.id) });
   if (resolution.edition && publication) {
     breadcrumbItems.push({
       label: resolution.edition.label,
@@ -88,9 +91,15 @@ export function WorkspaceShell() {
   }
   if (resolution.release) breadcrumbItems.push({ label: t("nav.release"), to: location.pathname });
   else {
-    const segment = location.pathname.split("/").filter(Boolean).pop();
-    const key = segment ? SEGMENT_LABEL[segment] : undefined;
-    if (key) breadcrumbItems.push({ label: t(key), to: location.pathname });
+    const parts = location.pathname.split("/").filter(Boolean);
+    const segment = parts[parts.length - 1];
+    if (publication && parts[4] === "stories" && parts.length === 6) {
+      breadcrumbItems.push({ label: t("glossary.stories"), to: paths.pubStories(organization.id, publication.id) });
+      breadcrumbItems.push({ label: t("glossary.story"), to: location.pathname });
+    } else {
+      const key = segment ? SEGMENT_LABEL[segment] : undefined;
+      if (key) breadcrumbItems.push({ label: t(key), to: location.pathname });
+    }
   }
 
   return (
@@ -144,7 +153,19 @@ export function WorkspaceShell() {
                     <Field label={t("shell.publication")}>
                       <Select
                         value={publication.id}
-                        onChange={(event) => navigate(paths.pubOverview(organization.id, event.target.value))}
+                        onChange={(event) => {
+                          // the same page of the other publication; a story belongs to one, so its list
+                          const parts = location.pathname.split("/").filter(Boolean);
+                          const leaf = parts[4];
+                          const next = event.target.value;
+                          navigate(
+                            leaf === "stories"
+                              ? paths.pubStories(organization.id, next)
+                              : leaf && parts.length === 5
+                                ? `/org/${organization.id}/pub/${next}/${leaf}`
+                                : publicationHome(next),
+                          );
+                        }}
                       >
                         {resolution.publications.map((pub) => (
                           <option key={pub.id} value={pub.id}>

@@ -362,8 +362,8 @@ describe("Reserved edition-planning nav seam (§9.4, BLV2-02)", () => {
 
 describe("Placeholders never imply the feature behind them works", () => {
   it("names the owning future unit and contains no fabricated data", async () => {
-    renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/stories");
-    expect(await screen.findByText(/not yet implemented/i)).toHaveTextContent("UI010–011");
+    renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/media");
+    expect(await screen.findByText(/not yet implemented/i)).toHaveTextContent("UI011");
     // Scoped to <main> only: the breadcrumb trail in the header is a
     // legitimate <ol> (role="list"), not fabricated story data.
     const main = document.querySelector("main")!;

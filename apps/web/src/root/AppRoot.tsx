@@ -24,6 +24,9 @@ import { OrgHome } from "../features/people/OrgHome.tsx";
 import { SecurityScreen } from "../features/people/SecurityScreen.tsx";
 import { PeopleProvider } from "../features/people/services-context.tsx";
 import { TeamScreen } from "../features/people/TeamScreen.tsx";
+import { StoriesProvider } from "../features/stories/stories-context.tsx";
+import { StoriesScreen } from "../features/stories/StoriesScreen.tsx";
+import { StoryEditor } from "../features/stories/StoryEditor.tsx";
 import { I18nProvider } from "../i18n/index.ts";
 import type { ServiceEnvironment } from "../services/index.ts";
 import { PlaceholderScreen } from "../demo/ui002/PlaceholderScreen.tsx";
@@ -86,6 +89,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
       <EnvironmentContext.Provider value={activeEnvironment}>
         <AccountProvider account={activeEnvironment.account}>
           <PeopleProvider security={activeEnvironment.security} team={activeEnvironment.team}>
+          <StoriesProvider stories={activeEnvironment.stories}>
           <SessionProvider
             session={activeEnvironment.session}
             access={activeEnvironment.access}
@@ -116,6 +120,8 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
               <Route path={PATTERNS.workspaceRoot} element={<WorkspaceBoundary />}>
                 <Route index element={<OrgHome />} />
                 <Route path={PATTERNS.orgTeam} element={<TeamScreen />} />
+                <Route path={PATTERNS.pubStories} element={<StoriesScreen />} />
+                <Route path={PATTERNS.pubStory} element={<StoryEditor />} />
                 {DEVELOPMENT && (
                   <>
                     <Route path={PATTERNS.orgSettings} element={placeholder("orgSettings")} />
@@ -123,7 +129,6 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                     <Route path={PATTERNS.orgStorage} element={placeholder("orgStorage")} />
                     <Route path={PATTERNS.pubOverview} element={placeholder("pubOverview")} />
                     <Route path={PATTERNS.pubEditions} element={placeholder("pubEditions")} />
-                    <Route path={PATTERNS.pubStories} element={placeholder("pubStories")} />
                     <Route path={PATTERNS.pubMedia} element={placeholder("pubMedia")} />
                     <Route path={PATTERNS.pubAds} element={placeholder("pubAds")} />
                     <Route path={PATTERNS.pubTemplates} element={placeholder("pubTemplates")} />
@@ -156,6 +161,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
               <Route path="/org/:orgId/*" element={<ScopedNotFoundShell />} />
             </Routes>
           </SessionProvider>
+          </StoriesProvider>
           </PeopleProvider>
         </AccountProvider>
       </EnvironmentContext.Provider>

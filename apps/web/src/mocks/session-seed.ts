@@ -84,6 +84,22 @@ const SESSION_SEED = {
       emailVerified: true,
       twoFactorEnabled: false,
     },
+    {
+      userId: "user-demo-sahyadri-reporter",
+      name: "Sahyadri Demo Reporter",
+      email: "pune.reporter@sahyadri.example",
+      password: "fictional pune reporter password",
+      emailVerified: true,
+      twoFactorEnabled: false,
+    },
+    {
+      userId: "user-demo-sahyadri-photo",
+      name: "Sahyadri Demo Photo Editor",
+      email: "photo@sahyadri.example",
+      password: "fictional photo editor password",
+      emailVerified: true,
+      twoFactorEnabled: false,
+    },
   ] satisfies readonly MockAccount[],
   organizations: {
     "user-demo-sahyadri-editor": [
@@ -123,6 +139,20 @@ const SESSION_SEED = {
         organizationId: "org-demo-sahyadri",
         orgRole: "member",
         publications: [{ publicationId: "pub-demo-pune-daily", roles: ["sub_editor"], grants: [] }],
+      },
+    ],
+    "user-demo-sahyadri-reporter": [
+      {
+        organizationId: "org-demo-sahyadri",
+        orgRole: "member",
+        publications: [{ publicationId: "pub-demo-pune-daily", roles: ["reporter"], grants: [] }],
+      },
+    ],
+    "user-demo-sahyadri-photo": [
+      {
+        organizationId: "org-demo-sahyadri",
+        orgRole: "member",
+        publications: [{ publicationId: "pub-demo-pune-daily", roles: ["photo_editor"], grants: [] }],
       },
     ],
   } satisfies Readonly<Record<string, readonly MockOrgRole[]>>,
@@ -187,6 +217,9 @@ const PRESET_USERS: Readonly<Record<Exclude<MockSessionPreset, "signed-out">, st
   "sahyadri-editor": "user-demo-sahyadri-editor",
   "konkan-reviewer": "user-demo-konkan-reviewer",
   "sahyadri-owner": "user-demo-sahyadri-owner",
+  "sahyadri-subeditor": "user-demo-sahyadri-subeditor",
+  "sahyadri-reporter": "user-demo-sahyadri-reporter",
+  "sahyadri-photo-editor": "user-demo-sahyadri-photo",
 };
 
 export function userForPreset(preset: Exclude<MockSessionPreset, "signed-out">): string {

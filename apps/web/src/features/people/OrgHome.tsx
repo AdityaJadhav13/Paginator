@@ -10,6 +10,7 @@ import { useI18n } from "../../i18n/index.ts";
 import { useSession } from "../auth/SessionProvider.tsx";
 import { may } from "./navigation.ts";
 import { roleName, rolesAndGrants } from "./roles.ts";
+import { storyScope } from "../stories/access.ts";
 
 export function OrgHome() {
   const { orgId } = useParams<{ orgId: string }>();
@@ -42,6 +43,14 @@ export function OrgHome() {
                         roles: rolesAndGrants(publication, language, t),
                       })
                     : publication.name}
+                  {!blocked && storyScope(org, publication.id) !== "none" && (
+                    <>
+                      {" "}
+                      <Link to={paths.pubStories(org.org.id, publication.id)}>
+                        {t("orgHome.stories", { publication: publication.name })}
+                      </Link>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>

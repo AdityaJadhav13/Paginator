@@ -30,6 +30,8 @@ export type ApiProblem =
       /** The API's request id, for "Reference: …". */
       readonly requestId?: string;
       readonly details?: readonly FieldProblemDto[];
+      /** With 409 story_changed: the story as it is now, unread (the story service checks it with its schema). */
+      readonly current?: unknown;
       /** From Retry-After (or Better Auth's X-Retry-After), in seconds. */
       readonly retryAfterSeconds?: number;
     };

@@ -73,6 +73,33 @@ describe("auth.css", () => {
   });
 });
 
+describe("stories.css (PRs 21–22)", () => {
+  const storiesCss = stripComments(readFileSync(resolve(__dirname, "../../src/features/stories/stories.css"), "utf8"));
+
+  it("keeps UI001's rules: tokens only, logical properties only, no fixed width", () => {
+    expect(storiesCss).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(storiesCss).not.toMatch(/\b(rgba?|hsla?|oklch)\(/);
+    for (const match of storiesCss.matchAll(/var\(\s*(--[\w-]+)/g)) expect(match[1]).toMatch(/^--pg-/);
+    for (const pattern of [
+      /(^|[\s;{])(margin|padding|border)-(left|right|top|bottom)(-\w+)?\s*:/,
+      /(^|[\s;{])(left|right|top|bottom|float)\s*:/,
+      /(^|[\s;{])text-align\s*:\s*(left|right)/,
+      /(^|[\s;{])(width|height|min-width|max-width|min-height)\s*:/,
+    ]) {
+      expect(storiesCss, String(pattern)).not.toMatch(pattern);
+    }
+    expect(storiesCss).not.toContain("!important");
+  });
+
+  it("lets the table scroll inside its own box and the editor shrink to 320 px", () => {
+    expect(/\.pg-stories__table-wrap\s*\{([^}]*)\}/.exec(storiesCss)?.[1]).toMatch(/overflow-x:\s*auto/);
+    const editor = /\.pg-editor\s*\{([^}]*)\}/.exec(storiesCss)?.[1] ?? "";
+    expect(editor).toMatch(/max-inline-size:\s*var\(--pg-account-measure\)/);
+    expect(editor).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(/\.pg-editor__version\s*\{([^}]*)\}/.exec(storiesCss)?.[1]).toMatch(/min-inline-size:\s*0/);
+  });
+});
+
 describe("Where sign-in sends a person back to", () => {
   const INVITE = "/invite/6f1c2e3a-4b5d-4e6f-8a7b-9c0d1e2f3a4b";
 
@@ -86,6 +113,7 @@ describe("Where sign-in sends a person back to", () => {
       "/org/o",
       "/org/o/team",
       "/account/security",
+      "/org/o/pub/p/stories/s",
       INVITE,
     ]) {
       expect(safeReturnTo(path, "fallback"), path).toBe(path);
