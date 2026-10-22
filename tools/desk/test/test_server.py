@@ -56,7 +56,7 @@ def fake_rgb_to_cmyk(img: Image.Image) -> Image.Image:
 # does), "half" makes page 1 and fails page 2. Its "issue" picks how `measure` behaves: "" works, "slowmeasure" takes
 # 1.5 s, "failmeasure" exits 1 with {"error"}.
 FAKE_ENGINE = r'''
-import json, os, signal, sys, time
+import json, os, re, signal, sys, time
 from pathlib import Path
 sys.path.insert(0, ENGINE_DIR)                                   # set by the test: the Desk's engine folder
 import deskprinted                                               # what a page prints, as the real engine records it
@@ -190,8 +190,17 @@ if cmd == "generate":
     reply({"pages": 2, "failed": 0})
 if cmd == "edit-service":
     # A page's stories are its articles in the run's status.json ("d" + the article id's hex, as the Desk keys them);
-    # a story whose article is on another page there was brought from that page. Every change moves the revision on,
-    # and a change made on an older revision is refused, as the real engine does.
+    # a story whose article is on another page there was brought from that page. Another page's stories are those of
+    # its open page, else of its edit file, else its articles in status.json (as the real engine reads them), and a
+    # save takes its stories off those (as the real engine does). Every change moves the revision on, and a change made
+    # on an older revision is refused, as the real engine does. So are the changes its locks refuse: moving, resizing or
+    # removing a locked story, bringing in one locked on another page and saving a page while one of its stories is
+    # locked on another page. A move takes the story off the page at once and adds it to the other page (opened if need
+    # be) at column 1, 400 mm from the top, unless it is there already, and is refused when a story is there; with
+    # fake-move-stops in the run, the engine stops right after the other page took it (fake-move-slow: it takes 1 s).
+    # Stories whose boxes are over each other are an "overlap" problem, as the real engine reports them.
+    # A photo crop that is not one is refused, and a saved page records the crops it prints, as the real engine records
+    # them.
     STALE = "this page was changed in another window or tab; it is shown again as it is now"
     def answer(obj):
         sys.stdout.write(json.dumps(obj) + "\n")
@@ -201,13 +210,54 @@ if cmd == "edit-service":
     def on_pages(s):
         st = json.loads((run_dir(s) / "status.json").read_text())
         return {p["page"]: list(p.get("articles") or []) for p in st["pages"]}
+    def others(s):
+        out = {}
+        for n, arts in on_pages(s).items():
+            if n == s["page"]:
+                continue
+            other = sessions.get("%s/%s/%s" % (s["edition"], s["run"], n))
+            edit = run_dir(s) / ("page-%02d.edit.json" % n)
+            saved = json.loads(edit.read_text()) if edit.exists() else {}
+            if other is not None:
+                out[n] = other["modules"]
+            elif saved.get("modules") is not None and saved.get("page") == n:
+                out[n] = saved["modules"]
+            else:
+                out[n] = [{"story": "d" + a[2:], "locked": False} for a in arts]
+        return out
+    def where(s):                                  # story -> {page, locked}; locked on any other page counts
+        w = {}
+        for n, mods in sorted(others(s).items()):
+            for m in mods:
+                if not (m["story"] in w and w[m["story"]]["locked"]):
+                    w[m["story"]] = {"page": n, "locked": bool(m.get("locked"))}
+        return w
+    def overlaps(mods):                            # as deskedit.PageSession.problems: boxes over each other
+        def box(m):
+            return (float(m["x"]), float(m["y"]), float(m["x"]) + m["w"] * 36.5 + (m["w"] - 1) * 4.19,
+                    float(m["y"]) + float(m["h"]))
+        out = []
+        for i in range(len(mods)):
+            for j in range(i + 1, len(mods)):
+                a, b = box(mods[i]), box(mods[j])
+                if min(a[2], b[2]) - max(a[0], b[0]) > 0.5 and min(a[3], b[3]) - max(a[1], b[1]) > 0.5:
+                    out.append({"kind": "overlap", "stories": [mods[i]["story"], mods[j]["story"]], "mm": 1.0})
+        return out
+    def story_name(s, story):
+        a = s["text"].get("a-" + story[1:]) or {}
+        return "“%s”" % a["headline"] if a.get("headline") else "the column of short items"
     def draw(s):
-        where = {"d" + a[2:]: n for n, arts in on_pages(s).items() if n != s["page"] for a in arts}
-        return {"page": s["page"], "role": "front", "rev": s["rev"], "modules": s["modules"], "notes": [], "problems": [],
+        w = where(s)
+        also = [m["story"] for m in s["modules"] if m["story"] in w]
+        return {"page": s["page"], "role": "front", "rev": s["rev"], "modules": s["modules"],
+                "notes": [{"story": m["story"], "fit": "fits", "by_mm": 0.0, "articles": ["a-" + m["story"][1:]],
+                           "headline": (s["text"].get("a-" + m["story"][1:]) or {}).get("headline", "")} for m in s["modules"]],
+                "problems": overlaps(s["modules"]),
                 "pool": [], "grid": {"page_w_mm": 347.0, "page_h_mm": 540.0, "origin_mm": 12.82, "column_mm": 36.5,
                                      "gutter_mm": 4.19, "columns": 8, "news_top_mm": 30.0, "news_bottom_mm": 520.0, "snap_mm": 0.5},
                 "items": [{"t": "rect", "x": 20.0, "y": 40.0, "w": 10.0, "h": 5.0, "c": [0, 0, 0, 1]}], "fonts": {},
-                "also_on_pages": {m["story"]: where[m["story"]] for m in s["modules"] if m["story"] in where}}
+                "also_on_pages": {k: w[k]["page"] for k in also},
+                "locked_on_pages": {k: w[k]["page"] for k in also if w[k]["locked"]}}
     def session(req):
         s = sessions.get(req["session"])
         if s is None:
@@ -216,6 +266,43 @@ if cmd == "edit-service":
     def check(s, req):
         if req.get("base_rev") is not None and req["base_rev"] != s["rev"]:
             raise ValueError(STALE)
+    def same_place(a, b):
+        return int(a["w"]) == int(b["w"]) and all(abs(float(a[k]) - float(b[k])) < 0.01 for k in ("x", "y", "h"))
+    def check_locks(s, modules):                   # as deskedit.PageSession._check_locks
+        first = {}
+        for m in modules:
+            first.setdefault(m["story"], m)
+        for p in s["modules"]:
+            if p.get("locked"):
+                if p["story"] not in first:
+                    raise ValueError("%s is locked: unlock it (Shift+L) to take it off the page" % story_name(s, p["story"]))
+                if not same_place(p, first[p["story"]]):
+                    raise ValueError("%s is locked: unlock it (Shift+L) to move it" % story_name(s, p["story"]))
+        w, mine = where(s), {p["story"] for p in s["modules"]}
+        for k in first:
+            if k not in mine and k in w and w[k]["locked"]:
+                raise ValueError("%s is locked on page %d: unlock it there to bring it here" % (story_name(s, k), w[k]["page"]))
+    def check_crops(modules):                      # as deskedit.crop_value: none, or a photo, a focus and a zoom
+        num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+        for m in modules:
+            c = m.get("crop")
+            if c is not None and not (isinstance(c, dict) and re.fullmatch(r"p-[0-9a-f]{10}", str(c.get("photo")))
+                                      and isinstance(c.get("focus"), list) and len(c["focus"]) == 2
+                                      and all(num(v) for v in c["focus"]) and num(c.get("zoom"))):
+                raise ValueError("a photo crop must give the photo's id, a focus point (two numbers) and a zoom (a number)")
+    def open_session(edition, run, page, reload=False):
+        key = "%s/%s/%s" % (edition, run, page)
+        if key not in sessions or reload:
+            edit = home / "editions" / edition / "runs" / run / ("page-%02d.edit.json" % page)
+            rev0 = json.loads(edit.read_text()).get("rev", 0) if edit.exists() else 0   # as the engine keeps it
+            s = {"page": page, "edition": edition, "run": run, "rev": rev0}
+            rq = json.loads((run_dir(s) / "request.json").read_text())
+            s["text"] = {a["id"]: a for a in rq["articles"]}           # the run's text until Update text
+            s["folio"] = {k: rq["edition"].get(k, "") for k in ("volume", "issue", "price")}
+            s["modules"] = [{"story": "d" + a[2:], "x": 12.82 + 40.69 * (2 * k % 8), "y": 30.0, "w": 2, "h": 100.0,
+                             "locked": False, "crop": None} for k, a in enumerate(on_pages(s).get(page, []))]
+            sessions[key] = s
+        return key, sessions[key]
     answer({"id": 0, "ok": True, "result": {"ready": True}})
     sessions = {}
     for line in sys.stdin:
@@ -225,32 +312,62 @@ if cmd == "edit-service":
             if c == "open":
                 if (home / "editions" / req["edition"] / "runs" / req["run"] / "fake-open-slow").exists():
                     time.sleep(1.0)
-                key = "%s/%s/%s" % (req["edition"], req["run"], req["page"])
-                if key not in sessions or req.get("reload"):
-                    edit = home / "editions" / req["edition"] / "runs" / req["run"] / ("page-%02d.edit.json" % req["page"])
-                    rev0 = json.loads(edit.read_text()).get("rev", 0) if edit.exists() else 0   # as the engine keeps it
-                    s = {"page": req["page"], "edition": req["edition"], "run": req["run"], "rev": rev0}
-                    rq = json.loads((run_dir(s) / "request.json").read_text())
-                    s["text"] = {a["id"]: a for a in rq["articles"]}           # the run's text until Update text
-                    s["folio"] = {k: rq["edition"].get(k, "") for k in ("volume", "issue", "price")}
-                    s["modules"] = [{"story": "d" + a[2:], "x": 12.82 + 40.69 * (2 * k % 8), "y": 30.0, "w": 2, "h": 100.0,
-                                     "locked": False} for k, a in enumerate(on_pages(s).get(req["page"], []))]
-                    sessions[key] = s
-                res = dict(draw(sessions[key]), session=key)
+                key, s = open_session(req["edition"], req["run"], req["page"], req.get("reload"))
+                res = dict(draw(s), session=key)
+            elif c == "move":                             # as deskedit.PageSession.move_to
+                s = session(req)
+                check(s, req)
+                story, to = req["story"], req["page"]
+                m = next((x for x in s["modules"] if x["story"] == story), None)
+                if m is None:
+                    raise ValueError("%s is not on this page" % story_name(s, story))
+                if not isinstance(to, int) or to not in on_pages(s):
+                    raise ValueError("this layout has no page %s" % to)
+                if to == s["page"]:
+                    raise ValueError("%s is on this page already: choose another page" % story_name(s, story))
+                if m.get("locked"):
+                    raise ValueError("%s is locked: unlock it (Shift+L) to move it" % story_name(s, story))
+                held = sorted(n for n, mods in others(s).items()
+                              if n != to and any(x["story"] == story and x.get("locked") for x in mods))
+                if held:
+                    raise ValueError("%s is also on page %d, locked there: unlock it there to move it" % (story_name(s, story), held[0]))
+                if (run_dir(s) / "fake-move-slow").exists():
+                    time.sleep(1.0)
+                _, t = open_session(s["edition"], s["run"], to)
+                placed = "already" if any(x["story"] == story for x in t["modules"]) else "free"
+                new = dict(m, x=12.82, y=400.0, locked=False)
+                if placed == "free" and any(story in o["stories"] for o in overlaps(t["modules"] + [new])):
+                    raise ValueError("there is no free place on page %d for %s (%d columns × %g mm): make room there, "
+                                     "or narrow it here, then move it" % (to, story_name(s, story), m["w"], m["h"]))
+                if placed == "free":                      # the page it goes to is written first
+                    t["modules"] = t["modules"] + [new]
+                    t["rev"] += 1
+                if (run_dir(s) / "fake-move-stops").exists():
+                    os._exit(3)
+                s["modules"] = [x for x in s["modules"] if x["story"] != story]
+                s["rev"] += 1
+                res = dict(draw(s), moved={"story": story, "page": to, "rev": t["rev"], "placed": placed, "pinned": None,
+                                           "module": next(x for x in t["modules"] if x["story"] == story)})
             elif c == "set":
                 s = session(req)
                 check(s, req)
                 if (run_dir(s) / "fake-set-slow").exists():
                     time.sleep(1.0)
+                check_locks(s, req["modules"])
+                check_crops(req["modules"])
                 s["modules"] = req["modules"]
                 s["rev"] += 1
                 res = draw(s)
             elif c == "state":
                 res = draw(session(req))
-            elif c == "alternative":                      # another layout: every story moves to column 7
+                if (run_dir(session(req)) / "fake-state-hides-locks").exists():   # a lock made after the save looked
+                    res["locked_on_pages"] = {}
+            elif c == "alternative":                      # another layout: every story not locked moves to column 7
                 s = session(req)
                 check(s, req)
-                s["modules"] = [dict(m, x=12.82 + 40.69 * 6) for m in s["modules"]]
+                if s["modules"] and all(m.get("locked") for m in s["modules"]):
+                    raise ValueError("every story on this page is locked: unlock one to try another layout")
+                s["modules"] = [m if m.get("locked") else dict(m, x=12.82 + 40.69 * 6) for m in s["modules"]]
                 s["rev"] += 1
                 res = draw(s)
             elif c == "refresh":                          # new text: what changed is read from fake-refresh.json
@@ -274,6 +391,11 @@ if cmd == "edit-service":
             elif c == "export":
                 s = session(req)
                 check(s, req)
+                held = sorted((v["page"], k) for k, v in where(s).items()
+                              if v["locked"] and k in {m["story"] for m in s["modules"]})
+                if held:                                  # before anything is written, as the real engine
+                    raise ValueError("this page cannot be saved yet: %s is also on page %d, locked there. Unlock it on "
+                                     "page %d, or take it off this page, then save" % (story_name(s, held[0][1]), held[0][0], held[0][0]))
                 if (run_dir(s) / "fake-export-fails").exists():
                     raise RuntimeError("a fictional disk problem while saving")
                 import pikepdf
@@ -282,8 +404,9 @@ if cmd == "edit-service":
                 name = "page-%02d.pdf" % s["page"]
                 pdf.save(run_dir(s) / name)
                 mine = ["a-" + m["story"][1:] for m in s["modules"]]
-                changed = {str(n): [a for a in arts if a not in mine] for n, arts in on_pages(s).items()
-                           if n != s["page"] and set(arts) & set(mine)}
+                stories = {m["story"] for m in s["modules"]}        # taken off what the other pages hold now
+                changed = {str(n): ["a-" + x["story"][1:] for x in mods if x["story"] not in stories]
+                           for n, mods in others(s).items() if any(x["story"] in stories for x in mods)}
                 for n in changed:                         # those pages' editors lose the stories, as the real engine does
                     other = sessions.get("%s/%s/%s" % (s["edition"], s["run"], n))
                     if other is not None:
@@ -292,7 +415,12 @@ if cmd == "edit-service":
                 printed = {"v": deskprinted.VERSION,
                            "articles": {a: deskprinted.article_sig(s["text"][a], False) for a in mine if s["text"].get(a)},
                            "folio": deskprinted.folio_sig(s["folio"]) if s["page"] == 1 else None, "ads": {}}
-                res = {"pdf": name, "sha256": "0" * 64, "rev": s["rev"], "problems": [], "articles": mine, "pages_changed": changed,
+                crops = {"a-" + m["story"][1:]: deskprinted.crop_sig(m["crop"]["photo"], 2000, 1500, [0, 0, 1000, 750])
+                         for m in s["modules"] if m.get("crop")}            # the crops it prints (a fictional window)
+                if crops:
+                    printed["crops"] = crops
+                res = {"pdf": name, "sha256": "0" * 64, "rev": s["rev"], "problems": overlaps(s["modules"]), "articles": mine,
+                       "pages_changed": changed,
                        "printed": printed}
                 if (run_dir(s) / "fake-export-no-printed").exists():    # an engine that records nothing
                     del res["printed"]
@@ -1850,7 +1978,7 @@ class EditTests(DeskCase):
             return {"page": n, "state": "done", "articles": arts, "pdfx_check": {"passed": True}, **kw}
         ok = {"state": "done", "pages": [page(1, ["a-1"]), page(2, ["a-2"])]}
         self.assertEqual(jobs.press_state(ok), {"press_ready": True, "pages_to_save": [], "pages_failing_check": [],
-                                                "pages_with_repeats": []})
+                                                "pages_with_repeats": [], "pages_with_overlaps": []})
         twice = {"state": "done", "pages": [page(1, ["a-1", "a-2"]), page(2, ["a-2"]), page(3, ["a-3"])]}
         self.assertEqual((jobs.press_state(twice)["press_ready"], jobs.press_state(twice)["pages_with_repeats"]), (False, [1, 2]))
         self.assertFalse(jobs.press_state({**ok, "state": "cancelled"})["press_ready"])
@@ -1880,7 +2008,8 @@ class EditTests(DeskCase):
         reasons = {x["article"]: x["reason"] for x in st["not_placed"]}
         self.assertEqual(sorted(reasons), sorted(ids))
         self.assertEqual(reasons.pop(first), "a fictional reason")                # the layout's own reason is kept
-        self.assertEqual(list(reasons.values()), ["Taken off the pages in the editor: bring it back onto a page."])
+        self.assertEqual(list(reasons.values()), ["Taken off the pages in the editor, or moved to a page not saved yet: "
+                                                  "bring it back onto a page, or save the page it moved to."])
 
     def test_a_save_that_cannot_finish_leaves_the_page_needing_a_save(self):
         eid, rid = self.finished_run("2026-07-06")
@@ -1959,6 +2088,487 @@ class EditTests(DeskCase):
         r = self.call("GET", f"/files/rasters/{key}.jpg")
         self.assertEqual(r.headers.get("content-type"), "image/jpeg")
         self.call("GET", f"/files/rasters/{'01' * 12}.jpg", expect=404)
+
+    # ---- locks: a locked story keeps its place; a page holding a story locked on another page is not saved
+
+    def run_files(self, eid: str, rid: str) -> dict:
+        """The run's status and page files as bytes (a refused change writes none of them)."""
+        run = self.edition_dir(eid) / "runs" / rid
+        return {p.name: p.read_bytes() for p in sorted(run.iterdir()) if p.name == "status.json" or p.suffix == ".pdf"}
+
+    def test_a_lock_is_kept_and_a_locked_story_cannot_be_moved(self):
+        eid, rid = self.finished_run("2026-07-20")
+        url = f"/api/editions/{eid}/runs/{rid}/pages/1"
+        opened = self.call("POST", f"{url}/edit", {}).json()
+        m = opened["modules"][0]
+        locked = self.call("PUT", f"{url}/edit", {"modules": [{**m, "locked": True}], "rev": opened["rev"]}).json()
+        self.assertEqual((locked["modules"][0]["locked"], locked["rev"]), (True, opened["rev"] + 1))
+        st = self.status(eid, rid)
+        self.assertTrue(self.page_of(st, 1)["edited_unsaved"])                    # a lock is a change of the page
+        self.assertEqual((st["press_ready"], st["pages_to_save"]), (False, [1]))
+        before = self.run_files(eid, rid)
+        for change, why in (([{**m, "locked": True, "x": m["x"] + 40.69}], "move it"),
+                            ([{**m, "locked": True, "w": 3}], "move it"),
+                            ([{**m, "locked": False, "h": m["h"] + 5}], "move it"),       # unlocked and moved at once
+                            ([], "take it off the page")):
+            with self.subTest(why=why, change=change):
+                said = self.call("PUT", f"{url}/edit", {"modules": change, "rev": locked["rev"]}, expect=400).json()
+                self.assertEqual(said["error"], f"The page could not be changed: “Lead story” is locked: unlock it "
+                                                f"(Shift+L) to {why}.")
+                self.assertEqual(self.run_files(eid, rid), before)               # nothing marked or written
+        again = self.call("POST", f"{url}/edit", {}).json()
+        self.assertEqual((again["rev"], again["modules"]), (locked["rev"], locked["modules"]))
+        unlocked = self.call("PUT", f"{url}/edit", {"modules": [{**m, "locked": False}], "rev": locked["rev"]}).json()
+        self.assertFalse(unlocked["modules"][0]["locked"])                         # unlocked where it is
+        moved = self.call("PUT", f"{url}/edit", {"modules": [{**m, "x": m["x"] + 40.69}], "rev": unlocked["rev"]}).json()
+        self.assertEqual(moved["rev"], unlocked["rev"] + 1)
+        saved = self.call("POST", f"{url}/save", {"rev": moved["rev"]}).json()
+        self.assertEqual((saved["error"], saved["press_ready"]), (None, True))
+
+    def test_a_crop_goes_through_to_the_engine_and_marks_the_page_until_saved(self):
+        eid, rid = self.finished_run("2026-07-24")
+        url = f"/api/editions/{eid}/runs/{rid}/pages/1"
+        opened = self.call("POST", f"{url}/edit", {}).json()
+        m = opened["modules"][0]
+        self.assertIsNone(m["crop"])
+        crop = {"photo": "p-0000000001", "focus": [0.25, 0.75], "zoom": 2.0}
+        cropped = self.call("PUT", f"{url}/edit", {"modules": [{**m, "crop": crop}], "rev": opened["rev"]}).json()
+        self.assertEqual((cropped["modules"][0]["crop"], cropped["rev"]), (crop, opened["rev"] + 1))
+        st = self.status(eid, rid)
+        self.assertTrue(self.page_of(st, 1)["edited_unsaved"])                    # a crop is a change of the page
+        self.assertEqual((st["press_ready"], st["pages_to_save"]), (False, [1]))
+        before = self.run_files(eid, rid)
+        for bad in ("centre", {"photo": "p-0000000001"}, {**crop, "zoom": "2"}, {**crop, "photo": "../p-0000000001"}):
+            with self.subTest(bad=bad):
+                said = self.call("PUT", f"{url}/edit", {"modules": [{**m, "crop": bad}], "rev": cropped["rev"]},
+                                 expect=400).json()
+                self.assertEqual(said["error"], "The page could not be changed: a photo crop must give the photo's id, "
+                                                "a focus point (two numbers) and a zoom (a number).")
+                self.assertEqual(self.run_files(eid, rid), before)               # nothing marked or written
+        saved = self.call("POST", f"{url}/save", {"rev": cropped["rev"]}).json()
+        self.assertEqual((saved["error"], saved["stale"], saved["press_ready"]), (None, [], True))   # never compared
+        page = self.page_of(self.status(eid, rid), 1)
+        self.assertEqual((list(page["printed"]["crops"]), page["edited_unsaved"]), (["a-" + m["story"][1:]], False))
+
+    def test_a_page_cannot_be_saved_while_a_story_on_it_is_locked_on_another_page(self):
+        eid, rid, first, second = self.two_page_run("2026-07-21")
+        url1, url2 = (f"/api/editions/{eid}/runs/{rid}/pages/{n}" for n in (1, 2))
+        story = "d" + second[2:]
+        page1 = self.call("POST", f"{url1}/edit", {}).json()
+        brought = {**page1["modules"][0], "story": story, "x": 12.82 + 40.69 * 4}
+        page1 = self.call("PUT", f"{url1}/edit", {"modules": [page1["modules"][0], brought], "rev": page1["rev"]}).json()
+        self.assertEqual((page1["also_on_pages"], page1["locked_on_pages"]), ({story: 2}, {}))
+        page2 = self.call("POST", f"{url2}/edit", {}).json()
+        page2 = self.call("PUT", f"{url2}/edit", {"modules": [{**page2["modules"][0], "locked": True}],
+                                                  "rev": page2["rev"]}).json()             # locked on page 2 meanwhile
+        page1 = self.call("POST", f"{url1}/edit", {}).json()
+        self.assertEqual(page1["locked_on_pages"], {story: 2})
+        before = self.run_files(eid, rid)
+        said = self.call("POST", f"{url1}/save", {"rev": page1["rev"]}, expect=400).json()
+        self.assertEqual(said["error"], "This page cannot be saved yet: “Second story” is also on page 2, locked there. "
+                                        "Unlock it on page 2, or take it off this page, then save.")
+        self.assertEqual(self.run_files(eid, rid), before)                         # no page marked, no file written
+        st = self.status(eid, rid)
+        self.assertEqual([bool(self.page_of(st, n).get("needs_save")) for n in (1, 2)], [False, False])
+        # taken off page 1, the story cannot be brought back while it is locked on page 2
+        page1 = self.call("PUT", f"{url1}/edit", {"modules": [page1["modules"][0]], "rev": page1["rev"]}).json()
+        before = self.run_files(eid, rid)
+        said = self.call("PUT", f"{url1}/edit", {"modules": [page1["modules"][0], brought], "rev": page1["rev"]},
+                         expect=400).json()
+        self.assertEqual(said["error"], "The page could not be changed: “Second story” is locked on page 2: unlock it "
+                                        "there to bring it here.")
+        self.assertEqual(self.run_files(eid, rid), before)
+        # unlocked on page 2, it comes to page 1, and page 1's save takes it off page 2
+        page2 = self.call("PUT", f"{url2}/edit", {"modules": [{**page2["modules"][0], "locked": False}],
+                                                  "rev": page2["rev"]}).json()
+        page1 = self.call("PUT", f"{url1}/edit", {"modules": [page1["modules"][0], brought], "rev": page1["rev"]}).json()
+        saved = self.call("POST", f"{url1}/save", {"rev": page1["rev"]}).json()
+        self.assertEqual((saved["pages_changed"], saved["articles"], saved["error"]), ({"2": []}, [first, second], None))
+        self.assertEqual(self.page_of(self.status(eid, rid), 2)["articles"], [])
+
+    def test_a_lock_made_while_a_page_is_saved_refuses_the_save_and_leaves_both_pages_marked(self):
+        # the server looked before the story was locked on the other page; the engine refuses at the save itself,
+        # before it writes anything, and both pages stay "needs saving" (fail closed)
+        eid, rid, first, second = self.two_page_run("2026-07-22")
+        url1, url2 = (f"/api/editions/{eid}/runs/{rid}/pages/{n}" for n in (1, 2))
+        page1 = self.call("POST", f"{url1}/edit", {}).json()
+        brought = {**page1["modules"][0], "story": "d" + second[2:], "x": 12.82 + 40.69 * 4}
+        page1 = self.call("PUT", f"{url1}/edit", {"modules": [page1["modules"][0], brought], "rev": page1["rev"]}).json()
+        page2 = self.call("POST", f"{url2}/edit", {}).json()
+        self.call("PUT", f"{url2}/edit", {"modules": [{**page2["modules"][0], "locked": True}], "rev": page2["rev"]})
+        run = self.edition_dir(eid) / "runs" / rid
+        pdfs = {n: (run / n).read_bytes() for n in ("page-01.pdf", "page-02.pdf")}
+        (run / "fake-state-hides-locks").write_text("x")
+        try:
+            said = self.call("POST", f"{url1}/save", {"rev": page1["rev"]}, expect=400).json()
+        finally:
+            (run / "fake-state-hides-locks").unlink()
+        self.assertIn("this page cannot be saved yet: “Second story” is also on page 2, locked there", said["error"])
+        self.assertEqual({n: (run / n).read_bytes() for n in pdfs}, pdfs)
+        st = self.status(eid, rid)
+        self.assertEqual([self.page_of(st, n)["needs_save"] for n in (1, 2)], [True, True])
+        self.assertEqual((st["press_ready"], st["pages_to_save"]), (False, [1, 2]))
+
+    def test_another_layout_keeps_a_locked_story(self):
+        eid, rid, first, second = self.two_page_run("2026-07-23")
+        url = f"/api/editions/{eid}/runs/{rid}/pages/1"
+        page = self.call("POST", f"{url}/edit", {}).json()
+        lead = page["modules"][0]
+        other = {**lead, "story": "d" + second[2:], "x": 12.82 + 40.69 * 3}
+        page = self.call("PUT", f"{url}/edit", {"modules": [{**lead, "locked": True}, other], "rev": page["rev"]}).json()
+        alt = self.call("POST", f"{url}/alternative", {"variant": 1, "rev": page["rev"]}).json()
+        self.assertEqual(alt["modules"][0], {**lead, "locked": True})                 # where it was, still locked
+        self.assertNotEqual(alt["modules"][1]["x"], other["x"])                       # the other one laid out again
+        self.assertTrue(self.page_of(self.status(eid, rid), 1)["edited_unsaved"])
+        both = self.call("PUT", f"{url}/edit", {"modules": [dict(m, locked=True) for m in alt["modules"]],
+                                                "rev": alt["rev"]}).json()
+        before = self.run_files(eid, rid)
+        said = self.call("POST", f"{url}/alternative", {"variant": 1, "rev": both["rev"]}, expect=400).json()
+        self.assertEqual(said["error"], "The page could not be changed: every story on this page is locked: unlock one "
+                                        "to try another layout.")
+        self.assertEqual(self.run_files(eid, rid), before)
+
+    def test_the_save_refusal_names_the_story_and_fails_closed_on_a_list_it_cannot_read(self):
+        notes = [{"story": "d0000000001", "headline": "Fictional lead"}, {"story": "dbriefs1", "headline": ""}]
+        self.assertIsNone(editing.locked_elsewhere({"locked_on_pages": {}, "notes": notes}))
+        self.assertIsNone(editing.locked_elsewhere({"notes": notes}))                  # an engine without locks
+        one = editing.locked_elsewhere({"locked_on_pages": {"d0000000001": 3}, "notes": notes})
+        self.assertEqual(one, "This page cannot be saved yet: “Fictional lead” is also on page 3, locked there. Unlock "
+                              "it on page 3, or take it off this page, then save.")
+        two = editing.locked_elsewhere({"locked_on_pages": {"d0000000001": 3, "dbriefs1": 2}, "notes": notes})
+        self.assertTrue(two.startswith("This page cannot be saved yet: the column of short items is also on page 2"))
+        self.assertTrue(two.endswith(" 1 more story on this page is locked on another page too."))
+        for bad in ([], {"d0000000001": "3"}, {"d0000000001": True}, "x"):
+            with self.subTest(bad=bad):
+                self.assertIn("cannot be read", editing.locked_elsewhere({"locked_on_pages": bad, "notes": notes}))
+
+
+    # ---- moving a story to another page (push): it leaves its page at once; each page prints it once it is saved
+
+    NOT_PLACED = ("Taken off the pages in the editor, or moved to a page not saved yet: bring it back onto a page, or "
+                  "save the page it moved to.")
+
+    def move(self, eid, rid, page, story, to, rev, expect=200):
+        return self.call("POST", f"/api/editions/{eid}/runs/{rid}/pages/{page}/move-story",
+                         {"story": story, "to": to, "rev": rev}, expect=expect).json()
+
+    def moved_run(self, day: str):
+        """A two-page run whose second story was moved from page 2 to page 1, neither page saved since."""
+        eid, rid, first, second = self.two_page_run(day)
+        page2 = self.call("POST", f"/api/editions/{eid}/runs/{rid}/pages/2/edit", {}).json()
+        moved = self.move(eid, rid, 2, "d" + second[2:], 1, page2["rev"])
+        return eid, rid, first, second, page2, moved
+
+    def test_moving_a_story_marks_both_pages_until_both_are_saved(self):
+        eid, rid, first, second, page2, moved = self.moved_run("2026-07-24")
+        url1, url2 = (f"/api/editions/{eid}/runs/{rid}/pages/{n}" for n in (1, 2))
+        story = "d" + second[2:]
+        self.assertEqual((moved["modules"], moved["rev"]), ([], page2["rev"] + 1))         # it left page 2 at once
+        self.assertEqual({k: moved["moved"][k] for k in ("story", "page", "placed")}, {"story": story, "page": 1,
+                                                                                       "placed": "free"})
+        st = self.status(eid, rid)
+        p1, p2 = self.page_of(st, 1), self.page_of(st, 2)
+        self.assertTrue(p2["edited_unsaved"])
+        self.assertEqual((p1["needs_save"], p1["needs_save_reason"], p1["edited_unsaved"], p1["rev_seen"]),
+                         (True, "A story was moved here from page 2: check its place and save the page.", True,
+                          moved["moved"]["rev"]))                                   # both pages from the one answer
+        self.assertEqual((st["press_ready"], st["pages_to_save"], st["pages_with_repeats"]), (False, [1, 2], []))
+        # the page it left saved first: the article prints nowhere yet and is listed so; the other page is still to save
+        saved2 = self.call("POST", f"{url2}/save", {"rev": moved["rev"]}).json()
+        self.assertEqual((saved2["articles"], saved2["pages_changed"], saved2["press_ready"], saved2["pages_to_save"]),
+                         ([], {}, False, [1]))
+        self.assertEqual(self.status(eid, rid)["not_placed"], [{"article": second, "reason": self.NOT_PLACED}])
+        # the page it went to holds it; saved, it prints it once and the press files are current
+        page1 = self.call("POST", f"{url1}/edit", {}).json()
+        self.assertEqual(([m["story"] for m in page1["modules"]], page1["rev"]),
+                         (["d" + first[2:], story], moved["moved"]["rev"]))
+        saved1 = self.call("POST", f"{url1}/save", {"rev": page1["rev"]}).json()
+        self.assertEqual((saved1["articles"], saved1["press_ready"], saved1["pages_to_save"], saved1["pages_with_repeats"]),
+                         ([first, second], True, [], []))
+        st = self.status(eid, rid)
+        self.assertEqual((st["not_placed"], [self.page_of(st, n)["needs_save"] for n in (1, 2)]), ([], [False, False]))
+
+    def test_saving_the_target_first_shows_the_article_on_two_pages_until_the_source_is_saved(self):
+        eid, rid, first, second, page2, moved = self.moved_run("2026-07-25")
+        url1, url2 = (f"/api/editions/{eid}/runs/{rid}/pages/{n}" for n in (1, 2))
+        page1 = self.call("POST", f"{url1}/edit", {}).json()
+        saved1 = self.call("POST", f"{url1}/save", {"rev": page1["rev"]}).json()
+        self.assertEqual((saved1["articles"], saved1["pages_changed"]), ([first, second], {}))   # it left page 2 already
+        self.assertEqual((saved1["press_ready"], saved1["pages_to_save"], saved1["pages_with_repeats"]),
+                         (False, [2], [1, 2]))                                      # page 2's PDF still prints it
+        self.assertEqual(self.page_of(self.status(eid, rid), 2)["articles"], [second])
+        saved2 = self.call("POST", f"{url2}/save", {"rev": moved["rev"]}).json()
+        self.assertEqual((saved2["press_ready"], saved2["pages_to_save"], saved2["pages_with_repeats"]), (True, [], []))
+
+    def test_messages_carry_their_codes_for_the_screens(self):
+        """Beside its English text (unchanged), an answer or a run status maps each of the Desk's own messages to its
+        code and values ("msgs"), so the screens can say it in Marathi (tools/desk/engine/deskmsg.py)."""
+        # a story moved to another page: that page's mark, in the run's status
+        eid, rid, first, second, page2, moved = self.moved_run("2026-07-30")
+        status = self.call("GET", f"/api/editions/{eid}/runs/{rid}").json()
+        reason = next(p for p in status["pages"] if p["page"] == 1)["needs_save_reason"]
+        self.assertEqual(reason, "A story was moved here from page 2: check its place and save the page.")
+        self.assertEqual(status["msgs"][reason], {"code": "m.save.movedHere", "params": {"page": 2}})
+        # the server's own refusal of a move
+        url2 = f"/api/editions/{eid}/runs/{rid}/pages/2"
+        said = self.call("POST", f"{url2}/move-story", {"story": "d" + first[2:], "to": 2}, expect=400).json()
+        self.assertEqual(said["msgs"][said["error"]], {"code": "m.move.samePage", "params": {}})
+        # the engine's refusal (a locked story): the server's sentence, with the engine's words inside it
+        eid2, rid2, _, second2 = self.two_page_run("2026-08-01")
+        url = f"/api/editions/{eid2}/runs/{rid2}/pages/2"
+        page = self.call("POST", f"{url}/edit", {}).json()
+        locked = self.call("PUT", f"{url}/edit", {"modules": [{**page["modules"][0], "locked": True}],
+                                                  "rev": page["rev"]}).json()
+        said = self.call("POST", f"{url}/move-story", {"story": "d" + second2[2:], "to": 1, "rev": locked["rev"]},
+                         expect=400).json()
+        self.assertEqual(said["error"], "The page could not be changed: “Second story” is locked: unlock it (Shift+L) to "
+                                        "move it.")
+        form = said["msgs"][said["error"]]
+        self.assertEqual(form["code"], "m.save.notChanged")
+        self.assertIn(form["params"]["reason"].get("code", "data"), ("m.edit.lockedMove", "data"))
+        # a run asked for an edition without articles
+        empty = self.edition("2026-07-31")
+        said = self.call("POST", f"/api/editions/{empty}/runs", expect=400).json()
+        self.assertEqual(said, {"error": "There are no articles in this edition yet.",
+                                "msgs": {"There are no articles in this edition yet.": {"code": "m.run.noArticlesYet",
+                                                                                        "params": {}}}})
+
+    def test_a_move_is_refused_for_a_locked_story_the_same_page_a_page_not_laid_out_or_an_older_view(self):
+        eid, rid, first, second = self.two_page_run("2026-07-26")
+        url1, url2 = (f"/api/editions/{eid}/runs/{rid}/pages/{n}" for n in (1, 2))
+        story = "d" + second[2:]
+        page2 = self.call("POST", f"{url2}/edit", {}).json()
+        locked = self.call("PUT", f"{url2}/edit", {"modules": [{**page2["modules"][0], "locked": True}],
+                                                   "rev": page2["rev"]}).json()
+        before = self.run_files(eid, rid)
+        for body, code, says in (
+                ({"story": story, "to": 1, "rev": locked["rev"]}, 400,
+                 "The page could not be changed: “Second story” is locked: unlock it (Shift+L) to move it."),
+                ({"story": story, "to": 1, "rev": page2["rev"]}, 409, "another window or tab"),    # an older view
+                ({"story": "d" + first[2:], "to": 1, "rev": locked["rev"]}, 400, "“Lead story” is not on this page"),
+                ({"story": story, "to": 2, "rev": locked["rev"]}, 400, "The story is on this page already"),
+                ({"story": story, "to": 3, "rev": locked["rev"]}, 400, "This layout has no page 3."),
+                ({"story": "x", "to": 1}, 400, "Say which story to move."),
+                ({"story": story, "to": "1"}, 400, "Say which page"),
+                ({"story": story, "to": True}, 400, "Say which page"),
+                ({"story": story, "to": 1, "rev": "3"}, 400, "rev must be a whole number.")):
+            with self.subTest(body=body):
+                said = self.call("POST", f"{url2}/move-story", body, expect=code).json()
+                self.assertIn(says, said["error"])
+                self.assertEqual(self.run_files(eid, rid), before)                   # nothing marked or written
+        again = self.call("POST", f"{url2}/edit", {}).json()
+        self.assertEqual((again["rev"], again["modules"]), (locked["rev"], locked["modules"]))
+        self.assertEqual([m["story"] for m in self.call("POST", f"{url1}/edit", {}).json()["modules"]], ["d" + first[2:]])
+        # a page that was not laid out
+        eid2 = self.edition("2026-07-27", volume="half")
+        self.article(eid2, headline="Lead story", body=words(80), priority=1)
+        self.article(eid2, headline="Second story", body=words(60), priority=2)
+        rid2 = self.call("POST", f"/api/editions/{eid2}/runs").json()["run"]
+        self.wait_run(eid2, rid2)
+        page = self.call("POST", f"/api/editions/{eid2}/runs/{rid2}/pages/1/edit", {}).json()
+        before = self.run_files(eid2, rid2)
+        said = self.move(eid2, rid2, 1, page["modules"][0]["story"], 2, page["rev"], expect=400)
+        self.assertEqual(said["error"], "Page 2 was not laid out in this layout: a story cannot move there.")
+        self.assertEqual(self.run_files(eid2, rid2), before)
+
+    def test_a_move_makes_the_target_pages_older_view_stale(self):
+        eid, rid, first, second = self.two_page_run("2026-07-28")
+        url1 = f"/api/editions/{eid}/runs/{rid}/pages/1"
+        page1 = self.call("POST", f"{url1}/edit", {}).json()                       # page 1 open in another tab
+        page2 = self.call("POST", f"/api/editions/{eid}/runs/{rid}/pages/2/edit", {}).json()
+        moved = self.move(eid, rid, 2, "d" + second[2:], 1, page2["rev"])
+        self.assertEqual(moved["moved"]["rev"], page1["rev"] + 1)
+        self.call("POST", f"{url1}/save", {"rev": page1["rev"]}, expect=409)
+        self.call("PUT", f"{url1}/edit", {"modules": page1["modules"], "rev": page1["rev"]}, expect=409)
+        now = self.call("POST", f"{url1}/edit", {}).json()
+        self.assertEqual([m["story"] for m in now["modules"]], ["d" + first[2:], "d" + second[2:]])
+
+    def test_undo_after_a_move_brings_the_story_back_and_a_save_takes_it_off_the_target(self):
+        eid, rid, first, second, page2, moved = self.moved_run("2026-07-29")
+        url1, url2 = (f"/api/editions/{eid}/runs/{rid}/pages/{n}" for n in (1, 2))
+        story = "d" + second[2:]
+        undone = self.call("PUT", f"{url2}/edit", {"modules": page2["modules"], "rev": moved["rev"]}).json()
+        self.assertEqual(undone["also_on_pages"], {story: 1})                       # in both pages' edits now
+        saved2 = self.call("POST", f"{url2}/save", {"rev": undone["rev"]}).json()
+        self.assertEqual((saved2["pages_changed"], saved2["press_ready"], saved2["pages_to_save"]), ({"1": [first]}, False, [1]))
+        self.assertIn("to page 2", self.page_of(self.status(eid, rid), 1)["needs_save_reason"])
+        page1 = self.call("POST", f"{url1}/edit", {}).json()
+        self.assertEqual([m["story"] for m in page1["modules"]], ["d" + first[2:]])
+        done = self.call("POST", f"{url1}/save", {"rev": page1["rev"]}).json()
+        self.assertEqual((done["press_ready"], done["pages_to_save"], done["pages_with_repeats"]), (True, [], []))
+
+    def test_an_engine_that_stops_mid_move_leaves_the_page_it_was_going_to_marked(self):
+        eid, rid, first, second = self.two_page_run("2026-07-30")
+        page2 = self.call("POST", f"/api/editions/{eid}/runs/{rid}/pages/2/edit", {}).json()
+        run = self.edition_dir(eid) / "runs" / rid
+        pdfs = {n: (run / n).read_bytes() for n in ("page-01.pdf", "page-02.pdf")}
+        (run / "fake-move-stops").write_text("x")
+        try:
+            said = self.move(eid, rid, 2, "d" + second[2:], 1, page2["rev"], expect=500)
+        finally:
+            (run / "fake-move-stops").unlink()
+        self.assertIn("Page 1 stays marked “needs saving” until it is saved", said["error"])
+        self.assertEqual({n: (run / n).read_bytes() for n in pdfs}, pdfs)
+        st = self.status(eid, rid)
+        self.assertEqual((self.page_of(st, 1)["needs_save"], st["press_ready"], st["pages_to_save"]), (True, False, [1]))
+        for n in (1, 2):                                                            # checked and saved again: current
+            url = f"/api/editions/{eid}/runs/{rid}/pages/{n}"
+            page = self.call("POST", f"{url}/edit", {}).json()
+            done = self.call("POST", f"{url}/save", {"rev": page["rev"]}).json()
+        self.assertEqual((done["press_ready"], done["pages_to_save"]), (True, []))
+
+    def test_one_answer_marks_both_pages_and_a_refused_move_takes_its_mark_back(self):
+        run = self.tmp / "unit-run"
+        run.mkdir(exist_ok=True)
+
+        def page(n, **kw):
+            return {"page": n, "state": "done", "articles": [f"a-{n:010x}"], "pdfx_check": {"passed": True}, **kw}
+        status = {"state": "done", "pages": [page(1), page(2, pdf_rev=7, rev_seen=7)]}
+        status.update(jobs.press_state(status))
+        write_json(run / "status.json", status)
+        raw = (run / "status.json").read_bytes()
+        mark = editing.before_move(run, 2, 1)
+        st = json.loads((run / "status.json").read_text())
+        self.assertEqual((st["pages"][0]["needs_save"], st["press_ready"], st["pages_to_save"]), (True, False, [1]))
+        editing.unmark_move(run, mark)
+        self.assertEqual((run / "status.json").read_bytes(), raw)                   # as it was, byte for byte
+        mark = editing.before_move(run, 2, 1)                                       # marked again by something else
+        st = json.loads((run / "status.json").read_text())
+        st["pages"][0]["needs_save_reason"] = editing.UNFINISHED
+        write_json(run / "status.json", st)
+        editing.unmark_move(run, mark)
+        self.assertEqual(json.loads((run / "status.json").read_text())["pages"][0]["needs_save"], True)
+        write_json(run / "status.json", status)
+        editing.note_revs(run, {1: 3, 2: 8, 3: 1, 4: True})
+        st = json.loads((run / "status.json").read_text())
+        self.assertEqual([(p["rev_seen"], p["edited_unsaved"]) for p in st["pages"]], [(3, True), (8, True)])
+        self.assertEqual(st["pages_to_save"], [1, 2])
+
+    # ---- the fixes after review: moves and saves take turns; no move to a full page; overlaps are never ready
+
+    def four_article_run(self, day: str) -> tuple[str, str, list[str]]:
+        """A finished run of four articles: the first and third on page 1, the second and fourth on page 2."""
+        eid = self.edition(day)
+        ids = [self.article(eid, headline=f"Story {i + 1}", body=words(60 - i), priority=2)["id"] for i in range(4)]
+        rid = self.call("POST", f"/api/editions/{eid}/runs").json()["run"]
+        self.assertEqual(self.wait_run(eid, rid)["state"], "done")
+        return eid, rid, ids
+
+    def test_a_move_waits_for_a_save_in_the_run_and_the_page_it_goes_to_stays_marked(self):
+        eid, rid, first, second = self.two_page_run("2026-08-10")
+        url1, url2 = (f"/api/editions/{eid}/runs/{rid}/pages/{n}" for n in (1, 2))
+        page1 = self.call("POST", f"{url1}/edit", {}).json()
+        page2 = self.call("POST", f"{url2}/edit", {}).json()
+        release, checking, quick = threading.Event(), threading.Event(), jobs.check_pdfx
+
+        def slow_check(root, pdf):                    # the save of page 1, held in its PDF/X check (its save lock held)
+            checking.set()
+            release.wait(10)
+            return quick(root, pdf)
+        jobs.check_pdfx = slow_check
+        out = {}
+        try:
+            save = threading.Thread(target=lambda: out.update(save=self.call("POST", f"{url1}/save", {"rev": page1["rev"]})))
+            save.start()
+            self.assertTrue(checking.wait(10))
+            move = threading.Thread(target=lambda: out.update(move=self.move(eid, rid, 2, "d" + second[2:], 1, page2["rev"])))
+            move.start()
+            move.join(1.0)
+            self.assertTrue(move.is_alive())                                        # it waits for the save …
+            self.assertEqual(self.page_of(self.status(eid, rid), 1)["needs_save_reason"], editing.UNFINISHED)
+            release.set()
+            save.join(30)
+            move.join(30)
+        finally:
+            jobs.check_pdfx = quick
+            release.set()
+        self.assertEqual(out["move"]["moved"]["placed"], "free")
+        st = self.status(eid, rid)                    # … so the save ending never clears the mark the move made
+        self.assertEqual((self.page_of(st, 1)["needs_save"], self.page_of(st, 1)["needs_save_reason"]),
+                         (True, "A story was moved here from page 2: check its place and save the page."))
+        self.assertEqual((st["press_ready"], st["pages_to_save"]), (False, [1, 2]))
+
+    def test_two_windows_moving_at_once_take_turns(self):
+        eid, rid, ids = self.four_article_run("2026-08-11")
+        url2 = f"/api/editions/{eid}/runs/{rid}/pages/2"
+        page2 = self.call("POST", f"{url2}/edit", {}).json()
+        run = self.edition_dir(eid) / "runs" / rid
+        events, real = [], {}
+        for name in ("before_move", "unmark_move", "note_revs"):      # what each move does to the status, in order
+            real[name] = getattr(editing, name)
+
+            def logged(*a, _name=name, **k):
+                events.append((threading.current_thread().name, _name))
+                return real[_name](*a, **k)
+            setattr(editing, name, logged)
+        (run / "fake-move-slow").write_text("x")
+        said = {}
+        try:
+            windows = [threading.Thread(name=f"w{i}", target=lambda i=i, aid=aid: said.update({i: self.call(
+                "POST", f"{url2}/move-story", {"story": "d" + aid[2:], "to": 1, "rev": page2["rev"]}, expect=None)}))
+                for i, aid in enumerate((ids[1], ids[3]))]
+            for t in windows:
+                t.start()
+            for t in windows:
+                t.join(30)
+        finally:
+            (run / "fake-move-slow").unlink()
+            for name, fn in real.items():
+                setattr(editing, name, fn)
+        self.assertEqual(sorted(r.status for r in said.values()), [200, 409])      # the second window's view was older
+        handlers = list(dict.fromkeys(t for t, _ in events))                     # the server's thread of each move
+        self.assertEqual(len(handlers), 2)
+        self.assertEqual([t for t, _ in events], [handlers[0]] * 2 + [handlers[1]] * 2)   # one move, then the other
+        self.assertEqual(sorted([e for t, e in events if t == h] for h in handlers),
+                         [["before_move", "note_revs"], ["before_move", "unmark_move"]])
+        st = self.status(eid, rid)
+        self.assertEqual((self.page_of(st, 1)["needs_save"], st["press_ready"]), (True, False))
+
+    def test_a_move_to_a_page_with_no_free_place_is_refused_and_writes_nothing(self):
+        eid, rid, first, second = self.two_page_run("2026-08-12")
+        url1 = f"/api/editions/{eid}/runs/{rid}/pages/1"
+        page1 = self.call("POST", f"{url1}/edit", {}).json()
+        full = self.call("PUT", f"{url1}/edit", {"modules": [{**page1["modules"][0], "y": 400.0}], "rev": page1["rev"]}).json()
+        page2 = self.call("POST", f"/api/editions/{eid}/runs/{rid}/pages/2/edit", {}).json()
+        before = self.run_files(eid, rid)
+        said = self.move(eid, rid, 2, "d" + second[2:], 1, page2["rev"], expect=400)
+        self.assertEqual(said["error"], "The page could not be changed: there is no free place on page 1 for “Second "
+                                        "story” (2 columns × 100 mm): make room there, or narrow it here, then move it.")
+        self.assertEqual(self.run_files(eid, rid), before)                          # marked and written: nothing
+        self.assertEqual(self.call("POST", f"{url1}/edit", {}).json()["modules"], full["modules"])
+
+    def test_a_page_with_stories_over_each_other_is_never_press_ready(self):
+        eid, rid, ids = self.four_article_run("2026-08-13")
+        url1 = f"/api/editions/{eid}/runs/{rid}/pages/1"
+        page = self.call("POST", f"{url1}/edit", {}).json()
+        a, b = page["modules"]
+        over = self.call("PUT", f"{url1}/edit", {"modules": [a, {**b, "x": a["x"]}], "rev": page["rev"]}).json()  # dragged
+        self.assertEqual([p["kind"] for p in over["problems"]], ["overlap"])
+        st = self.status(eid, rid)
+        self.assertEqual((st["press_ready"], st["pages_with_overlaps"]), (False, [1]))
+        saved = self.call("POST", f"{url1}/save", {"rev": over["rev"]}).json()
+        self.assertEqual((saved["press_ready"], saved["pages_to_save"], saved["pages_with_overlaps"]), (False, [], [1]))
+        self.assertIn("stories overlap on the page", self.page_of(self.status(eid, rid), 1)["warnings"])
+        apart = self.call("PUT", f"{url1}/edit", {"modules": [a, b], "rev": over["rev"]}).json()
+        self.assertEqual(apart["problems"], [])
+        done = self.call("POST", f"{url1}/save", {"rev": apart["rev"]}).json()
+        self.assertEqual((done["press_ready"], done["pages_with_overlaps"]), (True, []))
+
+    def test_overlaps_and_stories_outside_count_from_the_saved_check_and_the_latest_answer(self):
+        def page(n, **kw):
+            return {"page": n, "state": "done", "articles": [f"a-{n:010x}"], "pdfx_check": {"passed": True}, **kw}
+        for kw, ready in (({"layout_problems": ["outside"]}, False), ({"layout_problems_now": ["overlap"]}, False),
+                          ({"layout_problems": "x"}, False), ({"layout_problems": [], "layout_problems_now": []}, True),
+                          ({"edited": True, "warnings": [press.OVERLAP_WORDS]}, False),     # saved by an older Desk
+                          ({"edited": True, "warnings": [press.OUTSIDE_WORDS]}, False),
+                          ({"edited": True, "warnings": []}, True), ({}, True)):
+            with self.subTest(kw=kw):
+                st = press.press_state({"state": "done", "pages": [page(1), page(2, **kw)]})
+                self.assertEqual((st["press_ready"], st["pages_with_overlaps"]), (ready, [] if ready else [2]))
+        self.assertEqual(editing.placement([{"kind": "outside"}, {"kind": "overlap"}, {"kind": "short"}]),
+                         ["outside", "overlap"])
+        self.assertEqual((editing.placement(None), editing.placement("x"), editing.placement([3])),
+                         (None, ["unreadable"], ["unreadable"]))
 
 
 class MeasureTests(DeskCase):

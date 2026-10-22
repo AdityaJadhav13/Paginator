@@ -17,6 +17,8 @@ from collections.abc import Iterator
 from io import BytesIO
 from xml.etree import ElementTree as ET
 
+from .ziplimits import directory
+
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 STRICT = "{http://purl.oclc.org/ooxml/wordprocessingml/main}"        # the same elements in strict Open XML
 MC = "{http://schemas.openxmlformats.org/markup-compatibility/2006}"
@@ -27,6 +29,8 @@ OLE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"   # a password-protected .docx, or an 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_XML = 16 * 1024 * 1024                  # the most of document.xml unpacked and read (200 stories are far less)
 MAX_STORIES = 200
+MAX_ENTRIES = 5000                          # files a .docx lists (Word's own: a few dozen, plus pictures)
+MAX_DIRECTORY = 4 * 1024 * 1024             # its central directory, read whole by zipfile before anything else
 DAMAGED = "This Word file is damaged. Save it again and try again."
 NOT_WORD = "This is not a Word (.docx) file. Save it as .docx and try again."
 TOO_LARGE = "This Word file is too large to read."
@@ -57,6 +61,9 @@ def _document(data: bytes) -> ET.Element:
     if data.startswith(OLE):
         raise DocxError("This Word file is protected with a password, or is an old .doc file: save it as .docx "
                         "without a password and try again.")
+    listed = directory(data)                          # before zipfile reads a central directory of any size
+    if listed is not None and (listed.entries > MAX_ENTRIES or listed.size > MAX_DIRECTORY):
+        raise DocxError(TOO_LARGE)
     try:
         z = zipfile.ZipFile(BytesIO(data))
     except (zipfile.BadZipFile, ValueError, NotImplementedError):    # not a zip, or a cut-off or garbled one

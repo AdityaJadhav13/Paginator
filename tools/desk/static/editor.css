@@ -54,13 +54,26 @@ input {
   border-bottom: 1px solid var(--border);
 }
 .ed-back {
+  flex: none;
   color: var(--accent);
   text-decoration: none;
   font-weight: 600;
+  white-space: nowrap;
 }
 .ed-title {
   flex: 0 1 auto;
+  display: flex;
+  gap: 0.3em;
+  min-width: 0;
   white-space: nowrap;
+}
+.ed-title strong {
+  flex: none; /* the page number always shows; the edition and layout give way */
+}
+#subtitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ed-tools {
   display: flex;
@@ -80,9 +93,27 @@ input {
   color: var(--text);
   cursor: pointer;
 }
+.ed-tools button,
+.ed-save button {
+  flex: none;
+  white-space: nowrap; /* the page's title gives way when the header is narrow, not the buttons */
+}
 .ed-tools button:disabled {
   opacity: 0.4;
   cursor: default;
+}
+.ed-tools button[aria-pressed="true"] {
+  background: #eef2ff;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ed-tools button.icon {
+  width: 34px;
+  padding: 0;
+}
+.ed-tools button.icon svg {
+  display: block;
+  margin: auto;
 }
 .ed-tools .sep {
   width: 1px;
@@ -97,11 +128,22 @@ input {
   font-variant-numeric: tabular-nums;
 }
 .ed-save {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 10px;
 }
 .save-state {
+  /* a slot of its own, at most two lines: the header's height never follows the status (else the page view would
+     be fitted again at every change). 16em holds every status the editor shows in two lines; the tooltip has it too */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  width: 16em;
+  max-height: 2.5em;
+  line-height: 1.25;
+  text-align: right;
   color: var(--muted);
   font-size: 13px;
 }
@@ -165,6 +207,42 @@ textarea:focus-visible {
 }
 .ed-notice[hidden] {
   display: none;
+}
+.ed-notice button.action {
+  border-color: currentColor;
+  padding: 0 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.ed-notice button.action[hidden] {
+  display: none;
+}
+.move-to {
+  display: flex;
+  gap: 6px;
+}
+.move-to select,
+.move-to button {
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.move-to select {
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+}
+.move-to button {
+  padding: 0 12px;
+  cursor: pointer;
+}
+.move-to select:disabled,
+.move-to button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .ed-main {
   flex: 1;
@@ -358,6 +436,9 @@ button.row {
   border-radius: 999px;
   font-size: 13px;
 }
+.ed-canvas-wrap.rulers .ed-busy {
+  top: 32px; /* below the top ruler */
+}
 
 #p-headline {
   font-size: 17px;
@@ -425,6 +506,100 @@ button.row {
 .buttons button {
   text-align: left;
 }
+.buttons button:disabled,
+.seg button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.field.two input:disabled {
+  background: #f3f4f6;
+  color: var(--muted);
+}
+button.lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+button.lock[aria-pressed="true"] {
+  background: #eef2ff;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.lock-note {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #eef2ff;
+  color: #1e3a8a;
+  line-height: 1.45;
+}
+.lock-note[hidden] {
+  display: none;
+}
+.story-list li.locked button.row {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.story-list li.locked button.row:hover {
+  background: none;
+}
+
+.ed-menu {
+  position: absolute;
+  z-index: 3;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.22);
+}
+.ed-menu[hidden] {
+  display: none;
+}
+.ed-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.ed-menu button:hover,
+.ed-menu button:focus {
+  background: #eef2ff;
+}
+.ed-menu button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ed-menu button.danger {
+  color: var(--error);
+}
+.ed-menu button[aria-disabled="true"] {
+  color: #9aa3ae;
+  cursor: default;
+}
+.ed-menu .key {
+  color: var(--muted);
+  font-size: 12px;
+}
 .problems {
   list-style: none;
   margin: 0;
@@ -461,4 +636,67 @@ button.row {
   * {
     transition: none !important;
   }
+}
+
+/* the selected story's photo: its resolution, the zoom, crop and focal point */
+.photo-tools .ppi {
+  margin: 0.25rem 0;
+}
+.photo-tools .ppi.ok {
+  color: #166534;
+}
+.photo-tools .ppi.warn {
+  color: #b45309;
+}
+.photo-tools .zoom-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.photo-tools .zoom-field input {
+  flex: 1;
+  min-width: 0;
+}
+.photo-tools output {
+  min-width: 3.5em;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.photo-tools button[aria-pressed="true"] {
+  background: #fef3c7;
+  border-color: #d97706;
+}
+
+/* ------------------------------------------------------------------ the Marathi editor (02-design-system §3.3)
+   Devanagari interface text in the system's Devanagari face (Kohinoor Devanagari on macOS, Nirmala UI on Windows; no
+   web fonts), never below 13 px, with room for its ascenders and descenders. Keys and digits stay in system-ui. */
+:root[lang="mr"] {
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Nirmala UI",
+    "Kohinoor Devanagari",
+    "Noto Sans Devanagari",
+    Mangal,
+    sans-serif;
+}
+:root[lang="mr"] :is(.small, .story-list li .meta, .ed-article label, .ed-menu .key) {
+  font-size: 13px;
+}
+:root[lang="mr"] :is(.help, .lock-note, .problems li, .fit, .ed-notice, .field .label, .field.two) {
+  line-height: 1.6;
+}
+:root[lang="mr"] :is(.story-list li, #p-headline) {
+  line-height: 1.55;
+}
+/* the save state keeps one height whatever it says (two lines at most, the rest in its tooltip), so the header's
+   height never changes with it */
+:root[lang="mr"] .save-state {
+  line-height: 1.4;
+  height: 2.8em;
+  max-height: 2.8em;
+}
+:root[lang="mr"] .ed-notice button.action {
+  line-height: 1.4;
 }

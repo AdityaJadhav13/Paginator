@@ -33,11 +33,19 @@
    ```
    This also points git at the tracked hooks (`git config core.hooksPath .githooks`), so the privacy guard runs
    before every push. It leaves an existing `core.hooksPath` alone, with a warning.
+4. For the Desk and `pnpm run test:desk` only: its two Python 3.11.14 environments, built with uv as CI builds them.
+   `tools/desk/requirements.lock` holds the exact versions of `experiments/phase0/pdfx1/requirements.txt`, with hashes.
+   ```sh
+   uv venv --python 3.11.14 experiments/phase0/pdfx1/.venv
+   uv pip install --python experiments/phase0/pdfx1/.venv --require-hashes -r tools/desk/requirements.lock
+   uv venv --python 3.11.14 tools/oracle/v0/.venv
+   uv pip install --python tools/oracle/v0/.venv --require-hashes -r tools/oracle/v0/requirements.lock
+   ```
 
 ## Everyday commands
 | Command | Does |
 |---|---|
-| `pnpm run ci` | Everything CI runs: guards, dependency graph, lint, format check, typecheck, tests, web build |
+| `pnpm run ci` | Everything CI runs except the oracle's tests and the Desk's (`pnpm run test:desk`): guards, dependency graph, lint, format check, typecheck, tests, web build |
 | `pnpm test` | All tests but the database's: web (jsdom), kernel (node), api with the shared contracts (node) |
 | `pnpm run test:db` | The API's database and tenancy tests (`apps/api/test/db`, `apps/api/test/tenancy`) on the local Postgres, one email through Mailpit, and photo uploads on SeaweedFS in a bucket of the run's own (`pnpm dev:up` first). Each file works in a clone of a freshly migrated template database; the run drops them all. It reads `.env.dev`, and fails, never skips, without them |
 | `pnpm run typecheck` | `tsc -b` (TypeScript 7) for packages, plus the web app's own typecheck |
@@ -52,6 +60,7 @@
 | `pnpm run guard` | Privacy guard, frozen-evidence guard and oracle check. Locally, on a branch stacked on another, set `GUARD_BASE=origin/<base>` |
 | `pnpm run check:oracle` | The frozen oracle: its manifest's SHA-256s, and every tracked file against `tools/ts/oracle-files.json` |
 | `pnpm run test:private` | Private parity tests against pilot goldens (needs `PAGEINATOR_PRIVATE_GOLDENS`; fails, never skips, when missing) |
+| `pnpm run test:desk` | The Desk's tests (fictional data only): server and Word import in `experiments/phase0/pdfx1/.venv`, engine in `tools/oracle/v0/.venv`, the page editor's view arithmetic in Node. CI's `desk` job runs the same three commands |
 
 ## Local services
 The database, the S3 store and the mail catcher run in Docker as the compose project `pageinator`

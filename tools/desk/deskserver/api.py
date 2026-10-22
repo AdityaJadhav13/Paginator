@@ -20,7 +20,9 @@ from socketserver import TCPServer
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import __version__, docx, editing, images
+from . import __version__, bundle, docx, editing, images
+from . import messages as M
+from .messages import annotate
 from .store import AD_BUSY, decorate, parse_pages
 from .util import ARTICLE_ID, SLOT_ID, DeskError, path_id
 
@@ -40,6 +42,7 @@ STATIC_TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=
 STATIC_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 FILE_TYPES = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".zip": "application/zip"}
 RUN_FILE = re.compile(r"page-\d{2}\.(?:pdf|png|thumb\.png)|edition\.pdf|press-files\.zip")
+STORY_KEY = re.compile(r"d[0-9a-f]{10}|dbriefs\d{1,3}")             # a story of a run: an article's, or short items'
 PHOTO_JPG = re.compile(r"(p-[0-9a-f]{10})\.jpg")
 AD_JPG = re.compile(r"([a-z0-9-]{1,40})\.jpg")
 QUIET = re.compile(r"/api/editions/[^/]+/runs/[^/]+|/files/.*")    # polled by the UI: logged only when they fail
@@ -69,6 +72,7 @@ ROUTES = [(method, re.compile(pattern), name, body) for method, pattern, name, b
     ("POST", r"/api/editions/([^/]+)/articles", "create_article", "json"),
     ("POST", r"/api/editions/([^/]+)/articles/bulk", "bulk_articles", "json"),
     ("POST", r"/api/editions/([^/]+)/articles/import-docx", "import_docx", "docx"),
+    ("POST", r"/api/editions/([^/]+)/articles/import-bundle", "import_bundle", "bundle"),
     ("PUT", r"/api/editions/([^/]+)/articles/([^/]+)", "update_article", "json"),
     ("DELETE", r"/api/editions/([^/]+)/articles/([^/]+)", "delete_article", None),
     ("PUT", r"/api/editions/([^/]+)/articles/([^/]+)/photo", "put_photo", "image"),
@@ -88,6 +92,7 @@ ROUTES = [(method, re.compile(pattern), name, body) for method, pattern, name, b
     ("POST", r"/api/editions/([^/]+)/runs/([^/]+)/pages/(\d{1,2})/save", "edit_save", "json"),
     ("POST", r"/api/editions/([^/]+)/runs/([^/]+)/pages/(\d{1,2})/alternative", "edit_alternative", "json"),
     ("POST", r"/api/editions/([^/]+)/runs/([^/]+)/pages/(\d{1,2})/refresh", "edit_refresh", "json"),
+    ("POST", r"/api/editions/([^/]+)/runs/([^/]+)/pages/(\d{1,2})/move-story", "edit_move", "json"),
     ("GET", r"/api/glyphs/([0-9a-f]{24})", "glyphs", None),
     ("GET", r"/files/rasters/([0-9a-f]{24})\.jpg", "raster_file", None),
 ]]
@@ -246,6 +251,10 @@ class Api:
             raise DeskError(400, str(e)) from None
         return {**self.store.create_many(req.args[0], got["articles"], "word"), "notes": got["notes"]}
 
+    def import_bundle(self, req: Request) -> dict:
+        """A Pageinator stories file (pageinator.story-bundle/1, the raw .zip is the request body): CONTRACT.md §6."""
+        return bundle.import_bundle(self.store, req.args[0], req.body)
+
     def update_article(self, req: Request) -> dict:
         return self.store.update_article(req.args[0], path_id(ARTICLE_ID, req.args[1], "article"), req.json())
 
@@ -357,7 +366,7 @@ class Api:
     def _changed(self, eid: str, rid: str, page: int, res: dict) -> dict:
         """The engine's answer for a page: marked changed when its revision is not the one its PDF was made from."""
         with self.store.lock(eid):
-            editing.note_rev(self.store.run_dir(eid, rid), page, res.get("rev"))
+            editing.note_rev(self.store.run_dir(eid, rid), page, res.get("rev"), res.get("problems"))
         return res
 
     @staticmethod
@@ -397,6 +406,51 @@ class Api:
             eid, rid, page = self._edit_page(req)
             return self._changed(eid, rid, page, self.desk.editing.refresh(f"{eid}/{rid}/{page}", self._rev(req.json())))
 
+    def edit_move(self, req: Request) -> dict:
+        with self._page_work(req):
+            return self._move(req)
+
+    def _move(self, req: Request) -> dict:
+        """A story of this page moved to another page of the run at once (the engine's move). Checked first, so a
+        refusal here marks and writes nothing. The page it goes to is marked "needs saving" before the engine is asked
+        (an engine that stops part-way leaves it marked; a refusal by the engine takes the mark back), then both pages
+        are marked from the engine's one answer, under one lock of the edition. The whole move holds the run's save
+        lock, as a save does: a save of either page, or another move, never runs in between (a save ending meanwhile
+        would clear the mark; another move's refusal would put back a mark from before this one)."""
+        eid, rid, page = self._edit_page(req)
+        body = req.json()
+        story, to = body.get("story"), body.get("to")
+        if not isinstance(story, str) or not STORY_KEY.fullmatch(story):
+            raise DeskError(400, M.msg("m.move.whichStory"))
+        if not isinstance(to, int) or isinstance(to, bool):
+            raise DeskError(400, M.msg("m.move.whichPage"))
+        base_rev = self._rev(body)
+        if to == page:
+            raise DeskError(400, M.msg("m.move.samePage"))
+        target = next((p for p in self.store.run_status(eid, rid).get("pages") or []
+                       if isinstance(p, dict) and p.get("page") == to), None)
+        if target is None:
+            raise DeskError(400, M.msg("m.move.noPage", page=to))
+        if target.get("state") != "done":
+            raise DeskError(400, M.msg("m.move.notLaidOut", page=to))
+        run_dir = self.store.run_dir(eid, rid)
+        with editing.save_lock(run_dir):                    # as a save: one at a time in a run (then the edition's lock)
+            with self.store.lock(eid):
+                mark = editing.before_move(run_dir, page, to)
+            try:
+                res = self.desk.editing.move(f"{eid}/{rid}/{page}", story, to, base_rev)
+            except DeskError as e:
+                if e.status in (400, 409):                  # the engine refused it: neither page changed
+                    with self.store.lock(eid):
+                        editing.unmark_move(run_dir, mark)
+                    raise
+                raise DeskError(e.status, f"{e.message} Page {to} stays marked “needs saving” until it is saved: open "
+                                          "it to see whether the story reached it.") from None
+            moved = res.get("moved") if isinstance(res.get("moved"), dict) else {}
+            with self.store.lock(eid):
+                editing.note_revs(run_dir, {page: res.get("rev"), to: moved.get("rev")}, {page: res.get("problems")})
+        return res
+
     def edit_save(self, req: Request) -> dict:
         """The page's PDF, its check and the run's press files. The edition's lock is held only while status.json is
         read and written, so article saves go on during the slow parts; saves in one run go one at a time."""
@@ -412,6 +466,9 @@ class Api:
             if base_rev is not None and state.get("rev") != base_rev:
                 raise DeskError(409, "The page could not be saved: it was changed in another window or tab; it is "
                                      "shown again as it is now.")
+            held = editing.locked_elsewhere(state)               # before any page is marked: a refusal marks none
+            if held:
+                raise DeskError(400, held)
             others = sorted({n for n in (state.get("also_on_pages") or {}).values() if isinstance(n, int)})
             with self.store.lock(eid):
                 editing.before_save(run_dir, page, others)
@@ -577,6 +634,8 @@ class Handler(BaseHTTPRequestHandler):
             raise DeskError(413, "This picture file is larger than 40 MB. Save it smaller and try again.")
         if kind == "docx" and n > docx.MAX_BYTES:
             raise DeskError(413, "This Word file is larger than 20 MB.")
+        if kind == "bundle" and n > bundle.MAX_BYTES:
+            raise DeskError(413, M.msg("m.bundle.tooLarge"))
         if kind == "json" and n > JSON_LIMIT:
             raise DeskError(413, "The request is too large (the most is 2 MB of text).")
         data = self.rfile.read(n) if n else b""
@@ -603,7 +662,8 @@ class Handler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _json_reply(obj: Any) -> Reply:
-        return Reply((json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8"))
+        # the Desk's own messages in it are mapped to {code, params} ("msgs"), so the screens can say them in Marathi
+        return Reply((json.dumps(annotate(obj), ensure_ascii=False) + "\n").encode("utf-8"))
 
     def _start(self, code: int, headers: list[tuple[str, str]]) -> None:
         self.send_response(code)
@@ -646,7 +706,7 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
             return
         try:
-            body = (json.dumps({"error": message}, ensure_ascii=False) + "\n").encode("utf-8")
+            body = (json.dumps(annotate({"error": message}), ensure_ascii=False) + "\n").encode("utf-8")
             self._start(code, [("Content-Type", "application/json; charset=utf-8"),
                                ("Content-Length", str(len(body))), ("Cache-Control", "no-store")])
             self.wfile.write(body)

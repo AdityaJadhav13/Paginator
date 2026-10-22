@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:private": "PAGEINATOR_PRIVATE_RUN=1 vitest run --project private",
     "test:db": "PAGEINATOR_DB_RUN=1 vitest run --project api-db --project tenancy",
+    "test:desk": "experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py tools/desk/test/test_messages.py tools/desk/test/test_bundle.py && tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py && node --test tools/desk/test/*.mjs",
     "check:oracle": "node tools/ts/check-oracle-manifest.ts",
     "dev:up": "docker compose -p pageinator --env-file .env.dev -f infra/docker/compose.dev.yml up -d --wait",
     "dev:down": "docker compose -p pageinator --env-file .env.dev -f infra/docker/compose.dev.yml down",
