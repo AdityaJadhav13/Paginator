@@ -9,6 +9,9 @@ import { GLOSSARY_KEYS, LANGS, REVIEW, SAME_KEYS, STRINGS, lang, setLang, t, tIn
 const STATIC = join(import.meta.dirname, "..", "static");
 const APP = readFileSync(join(STATIC, "app.js"), "utf8");
 const HTML = readFileSync(join(STATIC, "index.html"), "utf8");
+const EDITOR = readFileSync(join(STATIC, "editor.js"), "utf8");
+const EDITOR_HTML = readFileSync(join(STATIC, "editor.html"), "utf8");
+const EDITOR_VIEW = readFileSync(join(STATIC, "editor-view.js"), "utf8");
 const KEYS = Object.keys(STRINGS.en);
 const PLACEHOLDER = /\{(\w+)\}/g;
 const DEVANAGARI = /\p{Script=Devanagari}/u;
@@ -78,15 +81,76 @@ test("every key is on the REVIEW list unless it is marked glossary-only or the s
 // keys appear in app.js only as whole string literals ("ns.name"), never built at run time, so they can be checked
 const NAMESPACES = [...new Set(KEYS.map((k) => k.split(".")[0]))];
 const KEY_LITERAL = new RegExp(`["'\`]((?:${NAMESPACES.join("|")})\\.[A-Za-z0-9_.]+)["'\`]`, "g");
-const usedInApp = new Set([...APP.matchAll(KEY_LITERAL)].map((m) => m[1]));
-const usedInHtml = new Set([...HTML.matchAll(/\bdata-t(?:-[a-z-]+)?="([^"]+)"/g)].map((m) => m[1]));
+const keysIn = (code) => new Set([...code.matchAll(KEY_LITERAL)].map((m) => m[1]));
+const keysInHtml = (html) => new Set([...html.matchAll(/\bdata-(?:t(?:-[a-z-]+)?|help)="([^"]+)"/g)].map((m) => m[1]));
+const usedInApp = new Set([...keysIn(APP), ...keysIn(EDITOR)]);
+const usedInHtml = new Set([...keysInHtml(HTML), ...keysInHtml(EDITOR_HTML)]);
 
-test("every key app.js and index.html use is in the catalogue", () => {
-  assert.ok(usedInApp.size > 300, `only ${usedInApp.size} keys found in app.js`);
-  assert.ok(usedInHtml.size > 50, `only ${usedInHtml.size} keys found in index.html`);
-  for (const key of usedInApp) assert.ok(KEYS.includes(key), `app.js uses ${key}, which is not in strings.js`);
-  for (const key of usedInHtml) assert.ok(KEYS.includes(key), `index.html uses ${key}, which is not in strings.js`);
-  assert.ok(!/\bt\(\s*`/.test(APP), "a key built at run time (t(`…`)) cannot be checked");
+test("every key the main screen and the page editor use is in the catalogue", () => {
+  for (const [name, code, least] of [
+    ["app.js", APP, 300],
+    ["editor.js", EDITOR, 200],
+  ]) {
+    const used = keysIn(code);
+    assert.ok(used.size > least, `only ${used.size} keys found in ${name}`);
+    for (const key of used) assert.ok(KEYS.includes(key), `${name} uses ${key}, which is not in strings.js`);
+    assert.ok(!/\btn?\(\s*`/.test(code), `${name}: a key built at run time (t(\`…\`)) cannot be checked`);
+  }
+  for (const [name, html, least] of [
+    ["index.html", HTML, 50],
+    ["editor.html", EDITOR_HTML, 50],
+  ]) {
+    const used = keysInHtml(html);
+    assert.ok(used.size > least, `only ${used.size} keys found in ${name}`);
+    for (const key of used) assert.ok(KEYS.includes(key), `${name} uses ${key}, which is not in strings.js`);
+  }
+});
+
+// A string literal that reads as English words (a sentence, or a phrase of three words or more): every word the
+// screens show comes from strings.js. Class lists, selectors and canvas fonts are not caught (no capital, no
+// sentence, hyphens or punctuation).
+const SENTENCE = /^[A-Z][a-z]+ [a-z]+|^[A-Za-z']+( [A-Za-z']+){2,}$|[A-Za-z]{2,} [A-Za-z]{2,}[.…?!:]$/;
+function englishLiterals(code) {
+  const lines = code
+    .split("\n")
+    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)) // comment lines
+    .map((l) => l.replace(/\s\/\/ .*$/, "")); // a comment after code
+  const out = [];
+  for (const m of lines.join("\n").matchAll(/"([^"\\\n]*)"|`([^`\\]*)`/g)) {
+    const text = (m[1] ?? m[2]).replace(/\$\{[^}]*\}/g, " ").trim();
+    if (SENTENCE.test(text)) out.push(text);
+  }
+  return out;
+}
+
+test("no English words are written into the screens' code (they come from strings.js)", () => {
+  for (const [name, code] of [
+    ["app.js", APP],
+    ["editor.js", EDITOR],
+    ["editor-view.js", EDITOR_VIEW],
+  ])
+    assert.deepEqual(englishLiterals(code), [], name);
+  // the check catches what it is for
+  assert.deepEqual(englishLiterals('notice("The page is saved.");\nh("span", {}, "no photo here");'), [
+    "The page is saved.",
+    "no photo here",
+  ]);
+});
+
+test("no English text in the screens' HTML outside strings.js (the page title and the noscript note aside)", () => {
+  for (const [name, html] of [
+    ["index.html", HTML],
+    ["editor.html", EDITOR_HTML],
+  ]) {
+    const text = html
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/<(title|noscript|script|style|pre)\b[\s\S]*?<\/\1>/g, "")
+      .replace(/<[^>]+>/g, "\n");
+    const words = text.split("\n").filter((line) => /[A-Za-z]{2,}/.test(line));
+    assert.deepEqual(words, [], name);
+    // attributes a person reads are keys (data-t-…), never text
+    assert.deepEqual([...html.matchAll(/\s(title|aria-label|placeholder|alt)="[^"]*[A-Za-z]{2,}[^"]*"/g)], [], name);
+  }
 });
 
 test("every key in the catalogue is used", () => {

@@ -98,6 +98,18 @@ export default defineConfig(
     // Pageinator Desk's screens: plain browser modules, no build step
     files: ["tools/desk/static/**/*.js"],
     languageOptions: { globals: globals.browser, sourceType: "module" },
+    rules: {
+      // t, tn, tIn and lang are strings.js's lookups: a local of that name hides them (a "t is not a function" or
+      // "cannot access t before initialization" error, at run time only)
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            ":matches(:function, BlockStatement, ForStatement, ForOfStatement, ForInStatement, SwitchCase) :matches(VariableDeclarator > Identifier.id, ObjectPattern > Property > Identifier.value, ArrayPattern > Identifier, RestElement > Identifier, AssignmentPattern > Identifier.left)[name=/^(t|tn|tIn|lang)$/], :function > Identifier.params[name=/^(t|tn|tIn|lang)$/], CatchClause > Identifier.param[name=/^(t|tn|tIn|lang)$/]",
+          message: "t, tn, tIn and lang are the strings.js lookups: name this local otherwise.",
+        },
+      ],
+    },
   },
   {
     files: KERNEL_SRC,

@@ -67,6 +67,9 @@ input {
   min-width: 0;
   white-space: nowrap;
 }
+.ed-title strong {
+  flex: none; /* the page number always shows; the edition and layout give way */
+}
 #subtitle {
   min-width: 0;
   overflow: hidden;
@@ -662,4 +665,38 @@ button.lock[aria-pressed="true"] {
 .photo-tools button[aria-pressed="true"] {
   background: #fef3c7;
   border-color: #d97706;
+}
+
+/* ------------------------------------------------------------------ the Marathi editor (02-design-system §3.3)
+   Devanagari interface text in the system's Devanagari face (Kohinoor Devanagari on macOS, Nirmala UI on Windows; no
+   web fonts), never below 13 px, with room for its ascenders and descenders. Keys and digits stay in system-ui. */
+:root[lang="mr"] {
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Nirmala UI",
+    "Kohinoor Devanagari",
+    "Noto Sans Devanagari",
+    Mangal,
+    sans-serif;
+}
+:root[lang="mr"] :is(.small, .story-list li .meta, .ed-article label, .ed-menu .key) {
+  font-size: 13px;
+}
+:root[lang="mr"] :is(.help, .lock-note, .problems li, .fit, .ed-notice, .field .label, .field.two) {
+  line-height: 1.6;
+}
+:root[lang="mr"] :is(.story-list li, #p-headline) {
+  line-height: 1.55;
+}
+/* the save state keeps one height whatever it says (two lines at most, the rest in its tooltip), so the header's
+   height never changes with it */
+:root[lang="mr"] .save-state {
+  line-height: 1.4;
+  height: 2.8em;
+  max-height: 2.8em;
+}
+:root[lang="mr"] .ed-notice button.action {
+  line-height: 1.4;
 }

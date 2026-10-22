@@ -153,6 +153,26 @@ From the feature's code review and its independent verification, 2026-10-22.
 | MR-16 | `strings.js` `arts.deleteMessage` | "with its photo" also when the article has none | Wording |
 | MR-17 | paste dialog | An error from an earlier paste stays until the next submit or reopening | Wording of state, nothing lost |
 | MR-18 | `strings.js` `res.pagePdf` | Gives "पान 1 · पहिले ची PDF": the postposition after the role reads badly | Wording; on the REVIEW list |
+| MR-19 | `static/editor.js` | After a switch made in another tab, the editor draws again in the new language its notice, busy note, save state, story panel lines, panels, menu, title and labels. What stays in the old language: a refusal said by a menu item (worked out when the menu opened) and the live-region announcements already read | They are gone within seconds |
+| MR-20 | `static/editor.js` rulers | The rulers' unit is drawn as "mm" (9 px, on the canvas) in both languages | A unit symbol on a measuring scale; Devanagari would not fit at that size |
+| MR-21 | `static/editor.html` | No language switch in the editor's header: at 1280 px the Marathi header has no room; the editor follows the main screen's choice | The main screen is one click away (← डेस्क) |
+| MR-22 | `static/editor.js` refusals | The engine's refusals (for example "there is no free place on page 4 …") are shown in English in a Marathi notice | Planned with the server's messages (MR-15) |
+| MR-23 | `static/editor.js` `notice()` | On the English screen a notice that names a Marathi headline is marked `lang="mr"` as a whole | Screen-reader voice only |
+| MR-24 | `strings.js` `pe.alsoOn` | The plural follows the number of stories, not of pages ("…on page 2, 3 too") | Wording |
+| MR-25 | `strings.js` `pe.fitHeight` | "Fit height to text" now reads "मजकुराइतकी उंची करा"; the English stays | Wording; on the REVIEW list |
+| MR-26 | `static/editor.js` | Code for a `#lang-switch` in the editor is wired although the editor has no switch (MR-21) | Harmless; ready for a switch if one fits later |
+| MR-27 | `static/editor.js` drag label | `getComputedStyle(document.body)` is read on every drag frame for the label's font | A drag is short; cache it if profiling shows it |
+| MR-28 | `strings.js` `pe.articlesLeft` | "article" is translated "बातमी", as everywhere else, though here it means an article inside a story | Wording; on the REVIEW list |
+| MR-29 | `strings.js` `pe.*` | "{Name} ला" leaves a space before the postposition; sentences use the feminine ती/तिला also for "छोट्या बातम्यांचा स्तंभ" (masculine) | Grammar; on the REVIEW list |
+| MR-30 | `strings.js` `pe.refresh` | "मजकूर अद्ययावत" is a noun phrase where the other buttons are verbs (shortened to fit the header) | Wording; on the REVIEW list |
+| MR-31 | `strings.js` `date.time` | Times are always 24-hour ("14:05") | A clear, fixed format for both languages |
+| MR-32 | `strings.js` `t()` | Numbers use Indian grouping (1,23,456) in both languages | The paper's own convention |
+| MR-33 | `static/editor.js` `problemMsg` | A problem kind the editor does not know is shown by its engine name (English) | The engine has no other kinds today |
+| MR-34 | `strings.js` `pe.pTouchMany` | The list of headlines (Marathi) and its "आणि"/"and" are one span, marked by its first script | Screen-reader voice only |
+| MR-35 | `static/editor.css`, `static/app.css` | system-ui comes before the Devanagari faces, so Latin letters and digits keep the system face; on a system whose UI face has Devanagari, that face is used | As the design system orders them (§3.3) |
+| MR-36 | `static/editor.js` rulers | The corner of the rulers says "mm" in both languages (see MR-20) | A unit symbol at 9 px |
+| MR-37 | `static/editor.html` header | At 1280 px the edition and layout in the header are cut short (their tooltip has them); pre-existing, as VIEW-9 | Cosmetic |
+| MR-38 | server, engine | The move's messages from the server and engine (`MOVED_HERE`, the "no free place on page N" refusal) are English: worth translating first, as the editor shows them most | Planned with MR-15 |
 
 ## Licence check (`tools/ts/check-licences.ts`)
 

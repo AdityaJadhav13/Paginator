@@ -110,10 +110,12 @@ never in this repository.
 
 ## Languages
 
-The main screen is in English or Marathi: **English / मराठी** at the top right. The browser remembers the choice, and
-switching keeps what you are typing. The words are in `static/strings.js`; the Marathi is a first draft that a native
-editor checks (its `REVIEW` list). The articles, headlines and the server's messages are shown as they are (the
-server's messages in English for now). The page editor is still in English.
+The Desk is in English or Marathi: **English / मराठी** at the top right of the main screen. The browser remembers the
+choice, and switching keeps what you are typing. The page editor follows it (also while it is open in another tab);
+it has no switch of its own, because its header has no room for one at 1280 px. Keys keep their names as printed on
+the keyboard (Shift+L, Ctrl+Z, Esc) and act by the key's position, so a Marathi keyboard layout changes nothing. The
+words are in `static/strings.js`; the Marathi is a first draft that a native editor checks (its `REVIEW` list). The
+articles, headlines and the server's and engine's messages are shown as they are (the messages in English for now).
 
 ## Limits
 

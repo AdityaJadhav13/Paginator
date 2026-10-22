@@ -800,15 +800,15 @@ const TABLE = {
     "this layout no longer fits the edition: lay the edition out again",
     "ही मांडणी आता अंकाशी जुळत नाही: अंकाची पुन्हा मांडणी करा",
   ],
-  // "Save page" is the page editor's button; the editor is still in English (its Marathi is the next part)
+  // "Save page" / "पान जतन करा" is the page editor's button (pe.save)
   "press.toSave": [
     {
       one: "page {pages} still to save in the page editor (open it and press Save page)",
       other: "pages {pages} still to save in the page editor (open them and press Save page)",
     },
     {
-      one: "पान {pages} अजून जतन करायचे आहे (पान संपादनात ते उघडून Save page दाबा)",
-      other: "पाने {pages} अजून जतन करायची आहेत (पान संपादनात ती उघडून Save page दाबा)",
+      one: "पान {pages} अजून जतन करायचे आहे (पान संपादनात ते उघडून ‘पान जतन करा’ दाबा)",
+      other: "पाने {pages} अजून जतन करायची आहेत (पान संपादनात ती उघडून ‘पान जतन करा’ दाबा)",
     },
   ],
   "press.failing": [
@@ -926,6 +926,622 @@ const TABLE = {
   // {lead}: new.needsLead, in bold; {list}: "52 stories, 4 short items, …"
   "new.needs": ["{lead} {list}. Bring about 15–20% extra.", "{lead} {list} लागतात. सुमारे 15–20% जास्त आणा."],
   "new.needsLead": ["A paper of {n} pages usually needs about", "{n} पानांच्या अंकाला साधारण"],
+
+  // ======================================================================== the page editor (editor.html, editor.js)
+  // Keys keep their names as printed on the keyboard (Ctrl+Z, Shift+L, Esc, Page Up) in both languages.
+  "pe.errTimeout": ["The Desk did not answer in time.", "डेस्कने वेळेत उत्तर दिले नाही."],
+  "pe.errUnreadable": ["The Desk's answer could not be read.", "डेस्कचे उत्तर वाचता आले नाही."],
+  "pe.errStatus": ["The Desk answered {status}.", "डेस्कने {status} असे उत्तर दिले."],
+  "pe.busyOpening": ["Opening the page…", "पान उघडत आहे…"],
+  "pe.undoAfresh": ["Undo starts afresh from here.", "पूर्ववत आता इथून नव्याने सुरू होते."],
+  "pe.newerRun": [
+    "A newer layout of this edition was made ({newer}). This page belongs to the older layout ({older}): changes here do not reach the newer one.",
+    "या अंकाची नवी मांडणी झाली आहे ({newer}). हे पान जुन्या मांडणीचे आहे ({older}): इथले बदल नव्या मांडणीत जात नाहीत.",
+  ],
+  "pe.changesKept": [
+    "Your changes to this page are kept. Save page makes its print file.",
+    "या पानातील तुमचे बदल राखून ठेवले आहेत. ‘पान जतन करा’ दाबल्यावर त्याची छपाईची फाइल तयार होते.",
+  ],
+  "pe.alsoOn": [
+    {
+      one: "A story here is still on page {pages} too: saving this page takes it off that page.",
+      other: "{n} stories here are still on page {pages} too: saving this page takes them off those pages.",
+    },
+    {
+      one: "इथली एक बातमी अजून पान {pages} वरही आहे: हे पान जतन केल्यावर ती त्या पानावरून निघते.",
+      other: "इथल्या {n} बातम्या अजून पान {pages} वरही आहेत: हे पान जतन केल्यावर त्या त्या पानांवरून निघतात.",
+    },
+  ],
+  "pe.alsoLockedOne": [
+    "{Name} is also on page {pages}, locked there: this page cannot be saved until it is unlocked there or taken off this page.",
+    "{Name} पान {pages} वरही आहे आणि तिथे तिला कुलूप आहे: तिथले कुलूप काढेपर्यंत किंवा ती या पानावरून काढेपर्यंत हे पान जतन करता येणार नाही.",
+  ],
+  "pe.alsoLocked": [
+    {
+      one: "{n} story here is also on page {pages}, locked there: this page cannot be saved until it is unlocked there or taken off this page.",
+      other:
+        "{n} stories here are also on page {pages}, locked there: this page cannot be saved until they are unlocked there or taken off this page.",
+    },
+    {
+      one: "इथली {n} बातमी पान {pages} वरही आहे आणि तिथे तिला कुलूप आहे: तिथले कुलूप काढेपर्यंत किंवा ती या पानावरून काढेपर्यंत हे पान जतन करता येणार नाही.",
+      other:
+        "इथल्या {n} बातम्या पान {pages} वरही आहेत आणि तिथे त्यांना कुलूप आहे: तिथली कुलपे काढेपर्यंत किंवा त्या या पानावरून काढेपर्यंत हे पान जतन करता येणार नाही.",
+    },
+  ],
+  "pe.held": [
+    "This page cannot be saved yet: {name} is also on page {page}, locked there. Unlock it on page {page}, or take it off this page, then save.",
+    "हे पान अजून जतन करता येत नाही: {name} पान {page} वरही आहे आणि तिथे तिला कुलूप आहे. पान {page} वर कुलूप काढा, किंवा ती या पानावरून काढा, मग जतन करा.",
+  ],
+  "pe.cropReset": [
+    "The photo of {name} changed: its crop is reset.",
+    "{name} चे छायाचित्र बदलले: त्याचा काप पूर्वीसारखा केला आहे.",
+  ],
+  "pe.busyAnother": ["Laying the page out another way…", "पानाची दुसरी मांडणी करत आहे…"],
+  "pe.alt1": ["Lead on the other side.", "मुख्य बातमी दुसऱ्या बाजूला."],
+  "pe.alt2": ["Lead at another width.", "मुख्य बातमी दुसऱ्या रुंदीत."],
+  "pe.alt3": ["Lead on the other side, at another width.", "मुख्य बातमी दुसऱ्या बाजूला, दुसऱ्या रुंदीत."],
+  "pe.altAround": [
+    "The stories that are not locked are laid out another way around the locked ones, which stay where they are.",
+    "कुलूप नसलेल्या बातम्यांची कुलूप असलेल्या बातम्यांभोवती दुसरी मांडणी केली आहे; कुलूप असलेल्या बातम्या जागीच राहतात.",
+  ],
+  "pe.altSame": [
+    "Laid out around the locked stories, the page came out as it was: unlock a story to try other layouts.",
+    "कुलूप असलेल्या बातम्यांभोवती मांडल्यावर पान होते तसेच आले: इतर मांडण्या पाहण्यासाठी एखाद्या बातमीचे कुलूप काढा.",
+  ],
+  "pe.altUndo": ["Undo brings back the last one.", "पूर्ववत केल्यास आधीची मांडणी परत येते."],
+  "pe.setNewText": [
+    { one: "{n} story is set with the new text.", other: "{n} stories are set with the new text." },
+    { one: "{n} बातमी नव्या मजकुरासह मांडली.", other: "{n} बातम्या नव्या मजकुरासह मांडल्या." },
+  ],
+  "pe.folioSet": [
+    "The volume, issue or price on this page is set as the edition has it now.",
+    "या पानावरचे वर्ष, अंक क्रमांक किंवा किंमत अंकात आता आहे तसे मांडले.",
+  ],
+  "pe.adsSet": [
+    {
+      one: "An advertisement on this page is set as the edition has it now.",
+      other: "{n} advertisements on this page are set as the edition has them now.",
+    },
+    {
+      one: "या पानावरची एक जाहिरात अंकात आता आहे तशी मांडली.",
+      other: "या पानावरच्या {n} जाहिराती अंकात आता आहेत तशा मांडल्या.",
+    },
+  ],
+  "pe.storiesLeft": [
+    {
+      one: "{n} story left the page: its articles were deleted or emptied.",
+      other: "{n} stories left the page: their articles were deleted or emptied.",
+    },
+    {
+      one: "{n} बातमी पानावरून निघाली: तिच्यातील मजकूर हटवला किंवा रिकामा केला गेला.",
+      other: "{n} बातम्या पानावरून निघाल्या: त्यांच्यातील मजकूर हटवला किंवा रिकामा केला गेला.",
+    },
+  ],
+  "pe.articlesLeft": [
+    {
+      one: "{n} article left the page: deleted from the edition, or emptied.",
+      other: "{n} articles left the page: deleted from the edition, or emptied.",
+    },
+    {
+      one: "{n} बातमी पानावरून निघाली: अंकातून हटवली, किंवा रिकामी केली.",
+      other: "{n} बातम्या पानावरून निघाल्या: अंकातून हटवल्या, किंवा रिकाम्या केल्या.",
+    },
+  ],
+  "pe.leftLocked": [
+    {
+      one: "{Names} left the page although it was locked.",
+      other: "{Names} left the page although they were locked.",
+    },
+    {
+      one: "कुलूप असूनही {Names} पानावरून निघाली.",
+      other: "कुलूप असूनही {Names} पानावरून निघाल्या.",
+    },
+  ],
+  "pe.nowStory": [
+    "“{head}” would now be a story of its own (its length, photo, priority or page changed); on this layout it stays with the short items until the edition is laid out again.",
+    "“{head}” आता स्वतंत्र बातमी व्हायला हवी (तिची लांबी, छायाचित्र, प्राधान्य किंवा पान बदलले); अंकाची पुन्हा मांडणी होईपर्यंत या मांडणीत ती छोट्या बातम्यांतच राहते.",
+  ],
+  "pe.nowBrief": [
+    "“{head}” would now be a short item; on this layout it stays a story of its own until the edition is laid out again.",
+    "“{head}” आता छोटी बातमी व्हायला हवी; अंकाची पुन्हा मांडणी होईपर्यंत या मांडणीत ती स्वतंत्र बातमीच राहते.",
+  ],
+  "pe.busyRefresh": ["Setting the articles' current text…", "बातम्यांचा सध्याचा मजकूर मांडत आहे…"],
+  "pe.saveToMake": ["Save page to make the print file.", "छपाईची फाइल तयार करण्यासाठी पान जतन करा."],
+  "pe.noTextChanged": [
+    "No text on this page has changed since it was last set.",
+    "मागच्या मांडणीनंतर या पानावरचा कोणताही मजकूर बदललेला नाही.",
+  ],
+  "pe.busyWaiting": ["Waiting for your last change…", "तुमच्या शेवटच्या बदलाची वाट पाहत आहे…"],
+  "pe.notSaved": ["The page was not saved.", "पान जतन झाले नाही."],
+  "pe.notSavedText": [
+    "The page was not saved: your typed text could not be saved first.",
+    "पान जतन झाले नाही: तुम्ही टाइप केलेला मजकूर आधी जतन करता आला नाही.",
+  ],
+  "pe.checkThenSave": ["Check the page, then press Save page again.", "पान तपासा, मग पुन्हा ‘पान जतन करा’ दाबा."],
+  "pe.busyCurrent": ["Setting the edition's current text first…", "आधी अंकातील सध्याचा मजकूर मांडत आहे…"],
+  "pe.saveAnyway": [
+    {
+      one: "This page still has a problem:\n\n{list}\n\nThe print file will show the page as it is now. Save it anyway?",
+      other:
+        "This page still has {n} problems:\n\n{list}\n\nThe print file will show the page as it is now. Save it anyway?",
+    },
+    {
+      one: "या पानावर अजून एक समस्या आहे:\n\n{list}\n\nछपाईच्या फाइलमध्ये पान आत्ता आहे तसेच दिसेल. तरीही जतन करायचे?",
+      other:
+        "या पानावर अजून {n} समस्या आहेत:\n\n{list}\n\nछपाईच्या फाइलमध्ये पान आत्ता आहे तसेच दिसेल. तरीही जतन करायचे?",
+    },
+  ],
+  "pe.busySaving": ["Making the print file and checking it…", "छपाईची फाइल तयार करून तपासत आहे…"],
+  "pe.changedWhileSaved": [
+    "The page was changed again (in another window or tab) while it was saved: save it again.",
+    "जतन होत असताना पान पुन्हा बदलले (दुसऱ्या विंडो किंवा टॅबमध्ये): ते पुन्हा जतन करा.",
+  ],
+  "pe.leftPages": [
+    {
+      one: "Stories moved here have left page {pages}: open it, fill the space and save.",
+      other: "Stories moved here have left page {pages}: open them, fill the space and save.",
+    },
+    {
+      one: "इथे हलवलेल्या बातम्या पान {pages} वरून निघाल्या आहेत: ते पान उघडा, जागा भरा आणि जतन करा.",
+      other: "इथे हलवलेल्या बातम्या पान {pages} वरून निघाल्या आहेत: ती पाने उघडा, जागा भरा आणि जतन करा.",
+    },
+  ],
+  "pe.pressCurrent": [
+    "Every page is saved and checked: the press files on the Desk are current.",
+    "प्रत्येक पान जतन करून तपासले आहे: डेस्कवरच्या छापखान्यासाठीच्या फायली सध्याच्या पानांशी जुळतात.",
+  ],
+  "pe.pressNot": [
+    "The press files are not current yet: {reasons}.",
+    "छापखान्यासाठीच्या फायली अजून सध्याच्या पानांशी जुळत नाहीत: {reasons}.",
+  ],
+  "pe.pressNotAll": ["not every page is done", "सगळी पाने पूर्ण झालेली नाहीत"],
+  "pe.pressSave": [
+    { one: "page {pages} still to save", other: "pages {pages} still to save" },
+    { one: "पान {pages} अजून जतन करायचे आहे", other: "पाने {pages} अजून जतन करायची आहेत" },
+  ],
+  "pe.pressFail": [
+    { one: "page {pages} not passing the PDF/X-1a check", other: "pages {pages} not passing the PDF/X-1a check" },
+    { one: "पान {pages} PDF/X-1a तपासणीत उत्तीर्ण नाही", other: "पाने {pages} PDF/X-1a तपासणीत उत्तीर्ण नाहीत" },
+  ],
+  "pe.pressRepeats": [
+    {
+      one: "page {pages} prints the same article as another: take it off one of them",
+      other: "pages {pages} print the same article: take it off one of them",
+    },
+    {
+      one: "पान {pages} वर दुसऱ्या पानावरचीच बातमी छापली जाते: ती त्यांपैकी एका पानावरून काढा",
+      other: "पाने {pages} वर एकच बातमी छापली जाते: ती त्यांपैकी एका पानावरून काढा",
+    },
+  ],
+  "pe.pressOverlaps": [
+    {
+      one: "page {pages} has stories over each other or outside the news area: move them apart",
+      other: "pages {pages} have stories over each other or outside the news area: move them apart",
+    },
+    {
+      one: "पान {pages} वर बातम्या एकमेकींवर येतात किंवा बातम्यांच्या जागेबाहेर जातात: त्या वेगळ्या करा",
+      other: "पाने {pages} वर बातम्या एकमेकींवर येतात किंवा बातम्यांच्या जागेबाहेर जातात: त्या वेगळ्या करा",
+    },
+  ],
+
+  "pe.lockedMove": [
+    "{Name} is locked: unlock it ({key}) to move it.",
+    "{Name} ला कुलूप आहे: ती हलवण्यासाठी कुलूप काढा ({key}).",
+  ],
+  "pe.lockedSize": [
+    "{Name} is locked: unlock it ({key}) to move it or change its size.",
+    "{Name} ला कुलूप आहे: ती हलवण्यासाठी किंवा तिचा आकार बदलण्यासाठी कुलूप काढा ({key}).",
+  ],
+  "pe.lockedOff": [
+    "{Name} is locked: unlock it ({key}) to take it off the page.",
+    "{Name} ला कुलूप आहे: ती पानावरून काढण्यासाठी कुलूप काढा ({key}).",
+  ],
+  "pe.lockedPage": [
+    "{Name} is locked: unlock it ({key}) to move it to another page.",
+    "{Name} ला कुलूप आहे: ती दुसऱ्या पानावर हलवण्यासाठी कुलूप काढा ({key}).",
+  ],
+  "pe.sayUnlocked": ["{Name} is unlocked.", "{Name} चे कुलूप काढले."],
+  "pe.sayLocked": [
+    "{Name} is locked in place: its place, width and height stay as they are.",
+    "{Name} ला कुलूप लावले: तिची जागा, रुंदी आणि उंची आहे तशीच राहते.",
+  ],
+  "pe.noneLocked": ["No story on this page is locked.", "या पानावरच्या कोणत्याही बातमीला कुलूप नाही."],
+  "pe.sayAllUnlocked": ["Every story on this page is unlocked.", "या पानावरच्या सर्व बातम्यांची कुलपे काढली."],
+  "pe.sayPhoto": [
+    "Photo mode: drag the photo of {name} to move it in its frame. V or Esc to stop.",
+    "छायाचित्र मोड: {name} चे छायाचित्र चौकटीत हलवण्यासाठी ओढा. थांबण्यासाठी V किंवा Esc.",
+  ],
+  "pe.sayFocal": [
+    "Click the subject of the photo: the frame keeps it as near its centre as it can. Enter or Esc to finish.",
+    "छायाचित्रातील मुख्य विषयावर क्लिक करा: चौकट तो शक्य तितका मध्यभागी ठेवते. संपवण्यासाठी Enter किंवा Esc.",
+  ],
+  "pe.saySelect": ["Selecting stories.", "बातम्या निवडण्याचा मोड."],
+  "pe.noPhoto": ["{Name} has no photo.", "{Name} ला छायाचित्र नाही."],
+  "pe.sayReset": [
+    "The photo of {name} prints as laid out again.",
+    "{name} चे छायाचित्र पुन्हा मूळ मांडणीप्रमाणे छापले जाईल.",
+  ],
+  "pe.sayEdge": ["The photo is at its edge in that direction.", "त्या दिशेला छायाचित्र कडेपर्यंत आले आहे."],
+  "pe.ppiSoft": ["{n} ppi: below 150 ppi, it may print soft", "{n} ppi: 150 ppi पेक्षा कमी, छपाई धूसर होऊ शकते"],
+  "pe.ppiSharp": ["{n} ppi: prints sharp", "{n} ppi: स्पष्ट छापले जाते"],
+  "pe.lockedThere": [
+    "{Name} is locked on page {page}: unlock it there to bring it here.",
+    "{Name} ला पान {page} वर कुलूप आहे: ती इथे आणण्यासाठी तिथले कुलूप काढा.",
+  ],
+  "pe.noOtherPage": [
+    "No other page of this layout was laid out.",
+    "या मांडणीत दुसऱ्या कोणत्याही पानाची मांडणी झालेली नाही.",
+  ],
+  "pe.busyMoving": ["Moving {name} to page {page}…", "{name} पान {page} वर हलवत आहे…"],
+  "pe.goTo": ["Go to page {page}", "पान {page} वर जा"],
+  "pe.movedAlready": [
+    "{Name} was already on page {page} (brought in there); it is now only there.",
+    "{Name} आधीच पान {page} वर होती (तिथे आणलेली); आता ती फक्त तिथेच आहे.",
+  ],
+  "pe.movedTo": [
+    {
+      one: "{Name} moved to page {page} ({n} column × {h} mm, column {col}, {y} mm from the top).",
+      other: "{Name} moved to page {page} ({n} columns × {h} mm, column {col}, {y} mm from the top).",
+    },
+    {
+      one: "{Name} पान {page} वर हलवली ({n} स्तंभ × {h} मिमी, स्तंभ {col}, वरून {y} मिमी).",
+      other: "{Name} पान {page} वर हलवली ({n} स्तंभ × {h} मिमी, स्तंभ {col}, वरून {y} मिमी).",
+    },
+  ],
+  "pe.movedToPage": ["{Name} moved to page {page}.", "{Name} पान {page} वर हलवली."],
+  "pe.movedPrints": [
+    "It prints there once page {page} is saved; save this page too.",
+    "पान {page} जतन केल्यावर ती तिथे छापली जाईल; हे पानही जतन करा.",
+  ],
+  "pe.movedPinned": [
+    "It is pinned to page {page} in its article: the next layout puts it back there.",
+    "तिच्या बातमीत ती पान {page} वर पिन केलेली आहे: पुढची मांडणी तिला परत तिथेच ठेवेल.",
+  ],
+  "pe.movedUndo": ["Undo brings it back here.", "पूर्ववत केल्यास ती परत इथे येते."],
+  "pe.swapHow": [
+    "Click the story to swap with, on the page or in the list “On this page” (Esc to stop).",
+    "जिच्याशी अदलाबदल करायची ती बातमी पानावर किंवा “या पानावर” यादीत क्लिक करा (थांबण्यासाठी Esc).",
+  ],
+  "pe.beingSaved": ["The page is being saved.", "पान जतन होत आहे."],
+  "pe.saveSoon": ["The page is saved as soon as it is set.", "पान मांडले जाताच जतन होईल."],
+  "pe.selectFirstLock": [
+    "Select a story on the page first: {key} locks it in place.",
+    "आधी पानावरची एखादी बातमी निवडा: {key} तिला कुलूप लावते.",
+  ],
+  "pe.selectFirstZoom": [
+    "Select a story on the page first: {key} zooms to it.",
+    "आधी पानावरची एखादी बातमी निवडा: {key} तिच्यावर झूम करते.",
+  ],
+  "pe.unlockAll": ["Unlock all on page", "पानावरची सर्व कुलपे काढा"],
+  "pe.fitsAlready": ["It already fits its box.", "ती आधीच तिच्या चौकटीत बसते."],
+  "pe.cannotSetWidth": ["It cannot be set at this width.", "या रुंदीत ती मांडता येत नाही."],
+  "pe.notCropped": [
+    "The photo is not cropped: it prints as the layout crops it.",
+    "छायाचित्र कापलेले नाही: मांडणी कापते तसेच ते छापले जाते.",
+  ],
+  "pe.editText": ["Edit text", "मजकूर संपादित करा"],
+  "pe.fitHeight": ["Fit height to text", "मजकुराइतकी उंची करा"],
+  "pe.swap": ["Swap with…", "अदलाबदल करा…"],
+  "pe.moveTo": ["Move to page", "दुसऱ्या पानावर हलवा"],
+  "pe.lock": ["Lock in place", "कुलूप लावा"],
+  "pe.unlock": ["Unlock", "कुलूप काढा"],
+  "pe.crop": ["Crop photo", "छायाचित्र कापा"],
+  "pe.focal": ["Set focal point", "केंद्रबिंदू ठरवा"],
+  "pe.reset": ["Reset crop", "काप रद्द करा"],
+  "pe.remove": ["Remove from page", "पानावरून काढा"],
+  "pe.back": ["Back", "मागे"],
+  "pe.pageN": ["Page {n}", "पान {n}", GLOSSARY],
+  "pe.notLaidOut": [
+    "Page {page} was not laid out in this layout: a story cannot move there.",
+    "या मांडणीत पान {page} ची मांडणी झाली नाही: तिथे बातमी हलवता येत नाही.",
+  ],
+  "pe.menuMove": ["Move {head} to page", "{head} दुसऱ्या पानावर हलवा"],
+  "pe.menuStory": ["Story {head}", "बातमी {head}"],
+  "pe.menuPage": ["The page", "पान", GLOSSARY],
+
+  "pe.size": [
+    { one: "{n} col × {h} mm", other: "{n} col × {h} mm" },
+    { one: "{n} स्तंभ × {h} मिमी", other: "{n} स्तंभ × {h} मिमी" },
+  ],
+  "pe.shortItems": ["(short items)", "(छोट्या बातम्या)"],
+  "pe.shortColumn": ["the column of short items", "छोट्या बातम्यांचा स्तंभ"],
+  "pe.aShortItem": ["a short item", "एक छोटी बातमी"],
+  "pe.anArticle": ["an article", "एक बातमी"],
+  "pe.fitOk": ["Fits its box exactly.", "चौकटीत अचूक बसते."],
+  "pe.fitOver": [
+    "The text needs {mm} mm more — make the box taller or wider.",
+    "मजकुराला आणखी {mm} मिमी जागा लागते — चौकट उंच किंवा रुंद करा.",
+  ],
+  "pe.fitShort": ["{mm} mm empty at the foot — make the box shorter.", "तळाशी {mm} मिमी रिकामे — चौकट लहान करा."],
+  "pe.fitNone": ["Cannot be set at this width — make it wider.", "या रुंदीत मांडता येत नाही — रुंद करा."],
+  "pe.heldTag": [
+    "locked on page {page} too: unlock it there, or take it off here, to save this page",
+    "पान {page} वरही कुलूप लावलेली: हे पान जतन करण्यासाठी तिथले कुलूप काढा, किंवा ती इथून काढा",
+  ],
+  "pe.alsoTag": ["still on page {page} until you save", "जतन करेपर्यंत पान {page} वरही"],
+  "pe.lockedTag": ["locked", "कुलूप"],
+  "pe.poolLocked": [
+    "Locked on page {page}: unlock it there to bring it here",
+    "पान {page} वर कुलूप लावलेली: ती इथे आणण्यासाठी तिथले कुलूप काढा",
+  ],
+  "pe.poolMove": [
+    "Move this story here from page {page} (it leaves that page when you save this one)",
+    "ही बातमी पान {page} वरून इथे हलवा (हे पान जतन केल्यावर ती त्या पानावरून निघते)",
+  ],
+  "pe.poolBring": ["Bring this story onto the page", "ही बातमी पानावर आणा"],
+  "pe.kindBriefs": ["short items", "छोट्या बातम्या"],
+  "pe.kindStory": ["story", "बातमी", GLOSSARY],
+  "pe.poolLockedOn": ["locked on page {page}", "पान {page} वर कुलूप"],
+  "pe.poolNowOn": ["now on page {page}", "सध्या पान {page} वर"],
+  "pe.poolNowhere": ["not on any page", "कोणत्याही पानावर नाही"],
+  "pe.pageNotLaid": ["Page {n} (not laid out)", "पान {n} (मांडणी नाही)"],
+  "pe.moveTitle": [
+    "The story leaves this page now and goes onto that page; it prints there once that page is saved",
+    "बातमी आत्ता हे पान सोडून त्या पानावर जाते; ते पान जतन केल्यावर ती तिथे छापली जाते",
+  ],
+  "pe.zoomFloor": [
+    "It prints at the lowest resolution allowed for it already ({ppi} ppi): it can be moved in its frame, not enlarged.",
+    "ते आधीच त्याला चालणाऱ्या सर्वात कमी रेझोल्यूशनवर छापले जाते ({ppi} ppi): ते चौकटीत हलवता येते, मोठे करता येत नाही.",
+  ],
+  "pe.zoomSharp": ["Enlarged as far as it prints sharp ({ppi} ppi).", "स्पष्ट छापले जाईल तितके मोठे केले ({ppi} ppi)."],
+  "pe.zoomMax": ["Enlarged 400 %, the most a photo is enlarged.", "400 % मोठे केले; छायाचित्र यापेक्षा मोठे होत नाही."],
+  "pe.pOverlap": ["{a} and {b} overlap by {mm} mm.", "{a} आणि {b} एकमेकींवर {mm} मिमी येतात."],
+  "pe.pOutside": [
+    "{name} is outside the news area, or over an advertisement or picture.",
+    "{name} बातम्यांच्या जागेबाहेर आहे, किंवा जाहिरातीवर किंवा चित्रावर येते.",
+  ],
+  "pe.pOver": ["{name}: the text needs {mm} mm more.", "{name}: मजकुराला आणखी {mm} मिमी जागा लागते."],
+  "pe.pOversetLines": [
+    {
+      one: "{name}: {n} line of text does not fit and would not print.",
+      other: "{name}: {n} lines of text do not fit and would not print.",
+    },
+    {
+      one: "{name}: मजकुराची {n} ओळ बसत नाही आणि छापली जाणार नाही.",
+      other: "{name}: मजकुराच्या {n} ओळी बसत नाहीत आणि छापल्या जाणार नाहीत.",
+    },
+  ],
+  "pe.pOversetWords": [
+    {
+      one: "{name}: {n} word of a subheading does not fit and would not print.",
+      other: "{name}: {n} words of a subheading do not fit and would not print.",
+    },
+    {
+      one: "{name}: उपशीर्षकाचा {n} शब्द बसत नाही आणि छापला जाणार नाही.",
+      other: "{name}: उपशीर्षकाचे {n} शब्द बसत नाहीत आणि छापले जाणार नाहीत.",
+    },
+  ],
+  "pe.pUnset": [
+    {
+      one: "{name}: {n} paragraph could not be set and would not print.",
+      other: "{name}: {n} paragraphs could not be set and would not print.",
+    },
+    {
+      one: "{name}: {n} परिच्छेद मांडता आला नाही आणि छापला जाणार नाही.",
+      other: "{name}: {n} परिच्छेद मांडता आले नाहीत आणि छापले जाणार नाहीत.",
+    },
+  ],
+  "pe.pShort": ["{name}: {mm} mm empty at its foot.", "{name}: तळाशी {mm} मिमी रिकामे."],
+  "pe.pCannotSet": ["{name} cannot be set at this width.", "{name} या रुंदीत मांडता येत नाही."],
+  "pe.pTouchMany": [
+    "{names}: lines of these stories touch in ink. Check the page before sending it.",
+    "{names}: या बातम्यांच्या ओळी शाईत एकमेकींना भिडतात. पाठवण्यापूर्वी पान तपासा.",
+  ],
+  "pe.pTouchOne": [
+    "{name}: two of its lines touch in ink. Check the page before sending it.",
+    "{name}: तिच्या दोन ओळी शाईत एकमेकींना भिडतात. पाठवण्यापूर्वी पान तपासा.",
+  ],
+  "pe.pEmpty": ["About {n} cm² of the news area is empty.", "बातम्यांच्या जागेतील सुमारे {n} सेमी² रिकामे आहे."],
+  "pe.listAnd": ["{list} and {last}", "{list} आणि {last}"],
+  "pe.selectStory": ["Select the story", "बातमी निवडा"],
+  "pe.noProblems": [
+    "No problems: every story fits and nothing overlaps.",
+    "काही समस्या नाही: प्रत्येक बातमी बसते आणि काहीही एकमेकांवर येत नाही.",
+  ],
+  // the save state beside "Save page": two lines at most in its slot (the whole of it in its tooltip)
+  "pe.stChanged": ["Changed · not saved", "बदलले · जतन नाही"],
+  "pe.stSetting": ["Setting the page…", "पान मांडत आहे…"],
+  "pe.stNeeds": ["Needs saving", "जतन करायचे आहे"],
+  "pe.stAuto": ["Automatic layout", "स्वयं-मांडणी"],
+  "pe.savedPassed": ["Saved · PDF/X-1a check passed", "जतन झाले · PDF/X-1a तपासणीत उत्तीर्ण"],
+  "pe.savedProblems": [
+    {
+      one: "Saved · PDF/X-1a check: {n} problem, do not send this page",
+      other: "Saved · PDF/X-1a check: {n} problems, do not send this page",
+    },
+    {
+      one: "जतन झाले · PDF/X-1a तपासणी: {n} समस्या, हे पान पाठवू नका",
+      other: "जतन झाले · PDF/X-1a तपासणी: {n} समस्या, हे पान पाठवू नका",
+    },
+  ],
+  "pe.savedNoCheck": [
+    "Saved · the PDF/X-1a check could not run, do not send this page",
+    "जतन झाले · PDF/X-1a तपासणी होऊ शकली नाही, हे पान पाठवू नका",
+  ],
+  "pe.savedUnfinished": ["Saved · its files are not finished", "जतन झाले · त्याच्या फायली पूर्ण झालेल्या नाहीत"],
+  "pe.savedAgain": ["Saved · needs saving again", "जतन झाले · पुन्हा जतन करायचे आहे"],
+  "pe.savedChangedSince": ["Saved · changed again since", "जतन झाले · त्यानंतर पुन्हा बदलले"],
+  "pe.busyKeeping": ["Keeping your last change…", "तुमचा शेवटचा बदल राखत आहे…"],
+  "pe.busyNewText": ["Setting the page with the new text…", "नव्या मजकुरासह पान मांडत आहे…"],
+  "pe.typedNotSaved": [
+    "Your typed text could not be saved: see the story panel.",
+    "तुम्ही टाइप केलेला मजकूर जतन करता आला नाही: बातमीचा भाग पाहा.",
+  ],
+  "pe.earlier": ["an earlier time", "आधीच्या वेळी"],
+  "pe.layoutOf": ["layout of {time}", "{time} ची मांडणी"],
+  "pe.docTitle": ["Page {n} · {edition} · {app}", "पान {n} · {edition} · {app}", GLOSSARY],
+  "pe.leaveTyping": [
+    "Your last typing is not set on the page yet: it may be lost if you leave now.",
+    "तुम्ही शेवटी टाइप केलेला मजकूर अजून पानावर मांडलेला नाही: आत्ता बाहेर पडल्यास तो हरवू शकतो.",
+  ],
+  "pe.leaveSetting": [
+    "The page is still being set: your last change may be lost if you leave now.",
+    "पान अजून मांडले जात आहे: आत्ता बाहेर पडल्यास तुमचा शेवटचा बदल हरवू शकतो.",
+  ],
+  "pe.leaveDirty": [
+    "Your changes to page {page} are kept, but its print file is made only when you save the page.",
+    "पान {page} मधील तुमचे बदल राखून ठेवले आहेत, पण पान जतन केल्यावरच त्याची छपाईची फाइल तयार होते.",
+  ],
+  "pe.leave": ["{why}\n\nLeave the editor?", "{why}\n\nपान संपादनातून बाहेर पडायचे?"],
+  "pe.fDeck": ["Deck", "उपमथळा", GLOSSARY],
+  "pe.fBody": [
+    "Text — an empty line between paragraphs; a line starting with ## is a subheading",
+    "मजकूर — परिच्छेदांमध्ये एक रिकामी ओळ; ## ने सुरू होणारी ओळ उपशीर्षक असते",
+  ],
+  "pe.reading": ["Reading the text…", "मजकूर वाचत आहे…"],
+  "pe.gone": [
+    {
+      one: "One article of this story is no longer in the edition, so that text cannot be changed here.",
+      other: "{n} articles of this story are no longer in the edition, so that text cannot be changed here.",
+    },
+    {
+      one: "या बातमीतील एक मजकूर आता अंकात नाही, म्हणून तो इथे बदलता येत नाही.",
+      other: "या बातमीतील {n} मजकूर आता अंकात नाहीत, म्हणून ते इथे बदलता येत नाहीत.",
+    },
+  ],
+  "pe.typeToChange": [
+    "Type to change the text; the page is set again when you pause.",
+    "मजकूर बदलण्यासाठी टाइप करा; तुम्ही थांबल्यावर पान पुन्हा मांडले जाते.",
+  ],
+  "pe.noArticles": ["This story's articles are no longer in the edition.", "या बातमीचा मजकूर आता अंकात नाही."],
+  "pe.notOnPage": ["This story is not on the page now.", "ही बातमी आता पानावर नाही."],
+  "pe.typing": ["Typing…", "टाइप होत आहे…"],
+  "pe.savingText": ["Saving the text…", "मजकूर जतन होत आहे…"],
+  "pe.needParagraph": [
+    "A story needs at least one paragraph of text: the page keeps the last text that had one.",
+    "बातमीत किमान एक परिच्छेद हवा: पानावर तो असलेला शेवटचा मजकूर राहतो.",
+  ],
+  "pe.textStillHere": [
+    "Your text is still here; change it to try again.",
+    "तुमचा मजकूर इथे आहे; पुन्हा प्रयत्नासाठी तो बदला.",
+  ],
+  "pe.textSavedOther": [
+    "Your text is saved, but the page was changed in another window or tab; it is shown again as it is now.",
+    "तुमचा मजकूर जतन झाला, पण पान दुसऱ्या विंडो किंवा टॅबमध्ये बदलले; ते आता आहे तसे पुन्हा दाखवले आहे.",
+  ],
+  "pe.textSavedNotSet": [
+    "The text is saved, but the page could not be set with it: press Update text.",
+    "मजकूर जतन झाला, पण त्यासह पान मांडता आले नाही: ‘मजकूर अद्ययावत’ दाबा.",
+  ],
+  "pe.textShown": ["Saved · the page shows this text", "जतन झाले · पानावर हाच मजकूर आहे"],
+  "pe.sayShows": ["The page shows your text.", "पानावर तुमचा मजकूर दिसतो."],
+  "pe.textNotSaved": ["Your text could not be saved.", "तुमचा मजकूर जतन करता आला नाही."],
+  "pe.closeAgain": ["Close again to let it go.", "तो सोडून देण्यासाठी पुन्हा बंद करा."],
+
+  "pe.toDesk": ["← Desk", "← डेस्क"],
+  "pe.tools": ["Page tools", "पानाची साधने"],
+  "pe.prev": ["Previous page", "मागचे पान"],
+  "pe.prevTitle": ["Previous page ({keys})", "मागचे पान ({keys})"],
+  "pe.next": ["Next page", "पुढचे पान"],
+  "pe.nextTitle": ["Next page ({keys})", "पुढचे पान ({keys})"],
+  "pe.undo": ["Undo", "पूर्ववत", GLOSSARY],
+  "pe.undoTitle": ["Undo ({keys})", "पूर्ववत ({keys})", GLOSSARY],
+  "pe.redo": ["Redo", "पुन्हा करा", GLOSSARY],
+  "pe.redoTitle": ["Redo ({keys})", "पुन्हा करा ({keys})", GLOSSARY],
+  "pe.alt": ["Try another layout", "दुसरी मांडणी पाहा", GLOSSARY],
+  "pe.altTitle": [
+    "The same stories, laid out another way (you can undo it)",
+    "त्याच बातम्या, दुसऱ्या प्रकारे मांडलेल्या (पूर्ववत करता येते)",
+  ],
+  "pe.refresh": ["Update text", "मजकूर अद्ययावत"],
+  "pe.refreshTitle": [
+    "Set the page again with the articles' current text",
+    "बातम्यांच्या सध्याच्या मजकुरासह पान पुन्हा मांडा",
+  ],
+  "pe.zoomOut": ["Zoom out", "लहान करा", GLOSSARY],
+  "pe.zoomOutTitle": ["Zoom out ({keys})", "लहान करा ({keys})", GLOSSARY],
+  "pe.fit": ["Fit", "संपूर्ण पान", GLOSSARY],
+  "pe.fitTitle": ["Fit the page ({keys})", "संपूर्ण पान दाखवा ({keys})"],
+  "pe.zoomIn": ["Zoom in", "मोठे करा", GLOSSARY],
+  "pe.zoomInTitle": ["Zoom in ({keys})", "मोठे करा ({keys})", GLOSSARY],
+  "pe.width": ["Fit the page's width", "पानाची रुंदी दाखवा"],
+  "pe.widthTitle": ["Fit the page's width ({keys})", "पानाची रुंदी दाखवा ({keys})"],
+  "pe.zoomSel": ["Zoom to the selected story", "निवडलेल्या बातमीवर झूम करा"],
+  "pe.zoomSelTitle": ["Zoom to the selected story ({keys})", "निवडलेल्या बातमीवर झूम करा ({keys})"],
+  "pe.rulers": ["Rulers", "मोजपट्ट्या"],
+  "pe.rulersTitle": ["Show or hide the rulers ({keys})", "मोजपट्ट्या दाखवा किंवा लपवा ({keys})"],
+  "pe.save": ["Save page", "पान जतन करा"],
+  "pe.saveTitle": ["Make this page's print file ({keys})", "या पानाची छपाईची फाइल तयार करा ({keys})"],
+  "pe.closeNotice": ["Close this message", "हा संदेश बंद करा"],
+  "pe.stories": ["Stories", "बातम्या", GLOSSARY],
+  "pe.onPage": ["On this page", "या पानावर"],
+  "pe.others": ["Other stories", "इतर बातम्या"],
+  "pe.othersHint": ["(click to bring in)", "(पानावर आणण्यासाठी क्लिक करा)"],
+  "pe.searchPlaceholder": ["Search headlines", "मथळे शोधा", GLOSSARY],
+  "pe.searchLabel": ["Search other stories", "इतर बातम्यांमध्ये शोधा"],
+  "pe.canvas": [
+    "The page. Select a story with a click, move it by dragging, resize it with its handles; double-click it or press Enter to change its text. Shift+L locks it in place or unlocks it; a right-click or Shift+F10 opens its menu.",
+    "पान. बातमी क्लिक करून निवडा, ओढून हलवा, तिच्या कडांनी आकार बदला; मजकूर बदलण्यासाठी तिच्यावर डबल-क्लिक करा किंवा Enter दाबा. Shift+L कुलूप लावते किंवा काढते; राइट-क्लिक किंवा Shift+F10 तिचा मेन्यू उघडते.",
+  ],
+  "pe.canvasPhoto": [
+    "The page, photo mode: drag the selected story's photo to move it in its frame, or move it with the arrow keys (with Shift, further); double-click it to set its focal point. V or Esc returns to selecting stories.",
+    "पान, छायाचित्र मोड: निवडलेल्या बातमीचे छायाचित्र चौकटीत हलवण्यासाठी ओढा, किंवा बाणांच्या कळांनी हलवा (Shift सोबत जास्त); केंद्रबिंदू ठरवण्यासाठी त्यावर डबल-क्लिक करा. V किंवा Esc ने बातम्या निवडण्याकडे परत.",
+  ],
+  "pe.canvasFocal": [
+    "The page, focal point: click the subject of the photo; the frame keeps it as near its centre as it can. Enter or Esc finishes.",
+    "पान, केंद्रबिंदू: छायाचित्रातील मुख्य विषयावर क्लिक करा; चौकट तो शक्य तितका मध्यभागी ठेवते. Enter किंवा Esc ने संपते.",
+  ],
+  "pe.textOf": ["Text of {title}", "{title} चा मजकूर"],
+  "pe.closeStory": ["Close the story text (Esc)", "बातमीचा मजकूर बंद करा (Esc)"],
+  "pe.selected": ["Selected story", "निवडलेली बातमी"],
+  "pe.selectToChange": ["Select a story on the page to change it.", "बदलण्यासाठी पानावरची बातमी निवडा."],
+  "pe.lockTitle": [
+    "Keep this story's place, width and height for this layout ({keys})",
+    "या मांडणीसाठी या बातमीची जागा, रुंदी आणि उंची कायम ठेवा ({keys})",
+  ],
+  "pe.lockNote": [
+    "Locked in place for this layout: its place, width and height stay as they are, and it stays on this page. Unlock it ({key}) to change them. Its text can still change.",
+    "या मांडणीसाठी कुलूप लावले आहे: तिची जागा, रुंदी आणि उंची आहे तशीच राहते, आणि ती याच पानावर राहते. ते बदलण्यासाठी कुलूप काढा ({key}). तिचा मजकूर मात्र बदलता येतो.",
+  ],
+  "pe.widthLabel": ["Width", "रुंदी"],
+  "pe.widthCols": ["Width in columns", "स्तंभांत रुंदी"],
+  "pe.height": ["Height", "उंची"],
+  "pe.fromTop": ["From top", "वरून अंतर"],
+  "pe.mm": ["mm", "मिमी"],
+  "pe.column": ["Column", "स्तंभ", GLOSSARY],
+  "pe.firstColumn": ["First column", "पहिला स्तंभ"],
+  "pe.enlarge": ["Enlarge", "मोठे करा", GLOSSARY],
+  "pe.cropTitle": [
+    "Move the photo in its frame by dragging it, or with the arrow keys ({keys}; V or Esc to stop)",
+    "छायाचित्र ओढून, किंवा बाणांच्या कळांनी, चौकटीत हलवा ({keys}; थांबण्यासाठी V किंवा Esc)",
+  ],
+  "pe.focalTitle": [
+    "Click the photo's subject: the frame keeps it as near its centre as it can, at every size",
+    "छायाचित्रातील मुख्य विषयावर क्लिक करा: प्रत्येक आकारात चौकट तो शक्य तितका मध्यभागी ठेवते",
+  ],
+  "pe.resetTitle": ["Print the photo as the layout crops it", "मांडणी कापते तसेच छायाचित्र छापा"],
+  "pe.textTitle": [
+    "Type this story's text; the page is set again as you pause ({keys})",
+    "या बातमीचा मजकूर टाइप करा; तुम्ही थांबल्यावर पान पुन्हा मांडले जाते ({keys})",
+  ],
+  "pe.fitHeightTitle": ["The height the text needs at this width", "या रुंदीत मजकुराला लागणारी उंची"],
+  "pe.swapTitle": [
+    "Then click another story to exchange places",
+    "मग जागा अदलाबदल करण्यासाठी दुसऱ्या बातमीवर क्लिक करा",
+  ],
+  "pe.removeTitle": ["Back to the other stories ({keys})", "इतर बातम्यांमध्ये परत ({keys})"],
+  "pe.move": ["Move", "हलवा"],
+  "pe.checks": ["Checks", "तपासण्या"],
+  "pe.help1": [
+    "Drag a story to move it; drag its right or bottom edge, or its corner, to resize. The left and right arrows move the selected story by a column, up and down by half a millimetre (with Shift, 5 mm); Delete takes it off the page. Double-click a story, or press Enter, to type its text: the page is set again when you pause. Every change is set by the same engine that makes the print file, and kept as you go; {save} makes the page's PDF and checks it.",
+    "बातमी हलवण्यासाठी ओढा; आकार बदलण्यासाठी तिची उजवी किंवा खालची कड, किंवा कोपरा ओढा. डावा आणि उजवा बाण निवडलेली बातमी एका स्तंभाने हलवतात, वर आणि खाली अर्ध्या मिलिमीटरने (Shift सोबत 5 मिमी); Delete ती पानावरून काढते. मजकूर टाइप करण्यासाठी बातमीवर डबल-क्लिक करा, किंवा Enter दाबा: तुम्ही थांबल्यावर पान पुन्हा मांडले जाते. प्रत्येक बदल छपाईची फाइल बनवणारे तेच इंजिन मांडते, आणि तो लगेच राखला जातो; {save} पानाची PDF तयार करून तपासते.",
+  ],
+  "pe.help2": [
+    "Shift+L locks the selected story in place for this layout, or unlocks it: a locked story keeps its place, width and height and stays on the page, and {another} lays the other stories out around it. A right-click on a story, or Shift+F10, opens its menu; on the page's empty space it unlocks every story.",
+    "Shift+L या मांडणीसाठी निवडलेल्या बातमीला कुलूप लावते, किंवा काढते: कुलूप असलेल्या बातमीची जागा, रुंदी आणि उंची कायम राहते आणि ती पानावरच राहते; {another} इतर बातम्या तिच्याभोवती मांडते. बातमीवर राइट-क्लिक, किंवा Shift+F10, तिचा मेन्यू उघडते; पानाच्या रिकाम्या जागेवर तो सर्व बातम्यांची कुलपे काढतो.",
+  ],
+  "pe.help3": [
+    "A (or {crop}) moves the selected story's photo in its frame: drag it, or use the arrow keys; {enlarge} enlarges it as far as it still prints sharp. Double-click the photo, or press {focal}, and click its subject: the frame keeps it as near its centre as it can when the story is resized or laid out again. V or Esc stops; {reset} prints the photo as the layout crops it.",
+    "A (किंवा {crop}) निवडलेल्या बातमीचे छायाचित्र चौकटीत हलवते: ते ओढा, किंवा बाणांच्या कळा वापरा; {enlarge} ते स्पष्ट छापले जाईल तितके मोठे करते. छायाचित्रावर डबल-क्लिक करा, किंवा {focal} दाबा, आणि मुख्य विषयावर क्लिक करा: बातमीचा आकार बदलला किंवा पुन्हा मांडणी झाली तरी चौकट तो शक्य तितका मध्यभागी ठेवते. V किंवा Esc ने थांबते; {reset} मांडणी कापते तसेच छायाचित्र छापते.",
+  ],
+  "pe.help4": [
+    "{move} (here or in the story's menu) takes the story off this page at once and puts it on the page you choose, at the first free place there (a page with no free place for it refuses it); it prints there once that page is saved, so save both pages. Undo brings it back here.",
+    "{move} (इथे किंवा बातमीच्या मेन्यूमध्ये) बातमी लगेच या पानावरून काढून तुम्ही निवडलेल्या पानावर तिथल्या पहिल्या मोकळ्या जागी ठेवते (मोकळी जागा नसलेले पान ती नाकारते); ते पान जतन केल्यावर ती तिथे छापली जाते, म्हणून दोन्ही पाने जतन करा. पूर्ववत केल्यास ती परत इथे येते.",
+  ],
+  "pe.help5": [
+    "Shift+2 zooms to the selected story, Shift+1 shows the whole page and Shift+3 its width; Shift+R shows or hides the rulers (millimetres from the page's top-left corner, with the columns numbered).",
+    "Shift+2 निवडलेल्या बातमीवर झूम करते, Shift+1 संपूर्ण पान दाखवते आणि Shift+3 पानाची रुंदी; Shift+R मोजपट्ट्या दाखवते किंवा लपवते (पानाच्या डाव्या वरच्या कोपऱ्यापासून मिलिमीटर, स्तंभांच्या क्रमांकांसह).",
+  ],
 
   // ---- shared words
   "common.cancel": ["Cancel", "रद्द करा"],

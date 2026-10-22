@@ -34,6 +34,7 @@ import {
   windowAt,
   zoomToRect,
 } from "./editor-view.js";
+import { LANGS, LANG_STORE_KEY, lang, saveLang, savedLang, setLang, t, tn } from "./strings.js";
 
 const $ = (sel) => document.querySelector(sel);
 const PT_PER_MM = 72 / 25.4;
@@ -46,7 +47,26 @@ const ZOOM_MARGIN_PX = 32; // room around a story zoomed to
 const PREFS_KEY = "pageinator-desk.editor.v1"; // the editor's choices kept in this browser (the rulers)
 const BAD = new Set(["overlap", "outside", "over", "cannot_set", "overset", "unset"]); // the print file would show these
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
-const SHIFT = MAC ? "⇧" : "Shift+"; // in messages that name a key
+const SHIFT = MAC ? "⇧" : "Shift+"; // in messages that name a key (keys are named as on the keyboard, in every language)
+const LOCK_KEY = `${SHIFT}L`;
+
+/* A message the editor shows for a while (a notice, the busy note, the story panel's status): a lazy text L(key,
+ * params), worked out each time it is drawn, so another language draws it anew; or the server's own words, as they came;
+ * or a list of both (sentences). msgText() turns it into text. */
+const L =
+  (key, params = {}) =>
+  () =>
+    t(key, params);
+const msgText = (m) =>
+  typeof m === "function"
+    ? m()
+    : Array.isArray(m)
+      ? m
+          .map(msgText)
+          .filter((x) => x)
+          .join(" ")
+      : m || "";
+const DEVANAGARI = /\p{Script=Devanagari}/u;
 const params = new URLSearchParams(location.search);
 const ID = {
   edition: params.get("edition") || "",
@@ -110,13 +130,13 @@ async function api(method, path, body) {
       signal: quick,
     });
   } catch (e) {
-    if (quick && quick.aborted) throw new Error("The Desk did not answer in time.", { cause: e });
+    if (quick && quick.aborted) throw new Error(t("pe.errTimeout"), { cause: e });
     throw e;
   }
   const data = await res.json().catch(() => undefined);
-  if (res.ok && data === undefined) throw new Error("The Desk's answer could not be read."); // cut off, or damaged
+  if (res.ok && data === undefined) throw new Error(t("pe.errUnreadable")); // cut off, or damaged
   if (!res.ok) {
-    const err = new Error((data && data.error) || `The Desk answered ${res.status}.`);
+    const err = new Error((data && data.error) || t("pe.errStatus", { status: String(res.status) }));
     err.status = res.status;
     throw err;
   }
@@ -179,7 +199,7 @@ async function openPage() {
   const gen = S.gen;
   const url = base();
   S.opening = true;
-  showBusy("Opening the page…");
+  showBusy(t("pe.busyOpening"));
   try {
     const data = await api("POST", `${url}/edit`, {});
     // the run's record is read after the engine answered: opening the page can mark it changed
@@ -214,7 +234,7 @@ async function resync(gen, why) {
       S.undo = [];
       S.redo = [];
       S.dirty = true;
-      notice(`${why} Undo starts afresh from here.`, "error");
+      notice([why, L("pe.undoAfresh")], "error");
     }
   } catch {
     if (gen !== S.gen || !S.data) return;
@@ -223,7 +243,7 @@ async function resync(gen, why) {
     renderPanels();
     if (why) notice(why, "error");
   }
-  setSaved(S.dirty ? "Changed · not saved" : "");
+  setSaved(S.dirty ? "pe.stChanged" : "");
 }
 
 const deskChannel = "BroadcastChannel" in window ? new BroadcastChannel("pageinator-desk") : null;
@@ -241,22 +261,18 @@ function sayOpened(entry, data, later) {
   S.dirty = !!(entry.edited_unsaved || entry.needs_save || (entry.stale || []).length);
   const c = entry.pdfx_check || {};
   if (!Object.keys(entry).length) setSaved("");
-  else if (entry.needs_save || (entry.stale || []).length) setSaved("Needs saving");
-  else if (entry.edited_unsaved) setSaved("Changed · not saved");
-  else if (entry.edited) setSaved(savedLabel(c));
-  else setSaved("Automatic layout");
-  const said = [];
-  if (later)
-    said.push(
-      `A newer layout of this edition was made (${when(later.started)}). This page belongs to the older layout ` +
-        `(${when(S.run && S.run.started)}): changes here do not reach the newer one.`,
-    );
-  if (entry.needs_save && entry.needs_save_reason) said.push(entry.needs_save_reason);
-  else if (entry.edited_unsaved) said.push("Your changes to this page are kept. Save page makes its print file.");
-  for (const why of entry.stale || []) said.push(why);
+  else if (entry.needs_save || (entry.stale || []).length) setSaved("pe.stNeeds");
+  else if (entry.edited_unsaved) setSaved("pe.stChanged");
+  else if (entry.edited) setSaved(...savedLabel(c));
+  else setSaved("pe.stAuto");
+  const parts = [];
+  if (later) parts.push(() => t("pe.newerRun", { newer: when(later.started), older: when(S.run && S.run.started) }));
+  if (entry.needs_save && entry.needs_save_reason) parts.push(entry.needs_save_reason);
+  else if (entry.edited_unsaved) parts.push(L("pe.changesKept"));
+  for (const why of entry.stale || []) parts.push(why);
   const also = alsoText(data);
-  if (also) said.push(also);
-  notice(said.join(" "), also && !later ? "also" : "");
+  parts.push(...also);
+  notice(parts, also.length && !later ? "also" : "");
 }
 
 /** Stories on this page that are still on another page too (they leave it when this page is saved), and those of them
@@ -267,24 +283,18 @@ function alsoText(data) {
   const pagesOf = (keys, at) => [...new Set(keys.map((k) => at[k]))].sort((a, b) => a - b);
   const free = Object.keys(also).filter((k) => !(k in held));
   const locked = Object.keys(held);
-  const said = [];
-  if (free.length) {
-    const pages = pagesOf(free, also);
-    const n = free.length;
-    said.push(
-      `${n === 1 ? "A story here is" : `${n} stories here are`} still on page ${pages.join(", ")} too: saving this ` +
-        `page takes ${n === 1 ? "it" : "them"} off ${pages.length === 1 ? "that page" : "those pages"}.`,
-    );
-  }
+  const parts = []; // lazy texts
+  if (free.length) parts.push(L("pe.alsoOn", { n: free.length, pages: pagesOf(free, also).join(", ") }));
   if (locked.length) {
-    const n = locked.length;
-    said.push(
-      `${n === 1 ? `${cap(nameOf(locked[0]))} is` : `${n} stories here are`} also on page ` +
-        `${pagesOf(locked, held).join(", ")}, locked there: this page cannot be saved until ${n === 1 ? "it is" : "they are"} ` +
-        "unlocked there or taken off this page.",
+    const pages = pagesOf(locked, held).join(", ");
+    const one = locked[0];
+    parts.push(
+      locked.length === 1
+        ? () => t("pe.alsoLockedOne", { Name: cap(nameOf(one)), pages })
+        : L("pe.alsoLocked", { n: locked.length, pages }),
     );
   }
-  return said.join(" ");
+  return parts;
 }
 
 /** Why this page cannot be saved now, in the server's words ("" when it can): a story on it is also on another page,
@@ -293,10 +303,7 @@ function heldText(data) {
   const held = Object.entries(data.locked_on_pages || {}).sort((a, b) => a[1] - b[1]);
   if (!held.length) return "";
   const [story, n] = held[0];
-  return (
-    `This page cannot be saved yet: ${nameOf(story)} is also on page ${n}, locked there. Unlock it on page ${n}, or ` +
-    "take it off this page, then save."
-  );
+  return () => t("pe.held", { name: nameOf(story), page: String(n) });
 }
 
 /** Which stories are locked, and where. */
@@ -327,17 +334,18 @@ async function send(modules) {
   S.sending = true;
   S.inflight = modules;
   showBusy();
-  setSaved("Setting the page…");
+  setSaved("pe.stSetting");
   try {
     const data = await api("PUT", `${url}/edit`, { modules, rev: rev() });
     if (await accept(data, gen)) {
       S.dirty = true;
-      setSaved("Changed · not saved");
+      setSaved("pe.stChanged");
       // a crop sent for a photo the story no longer has comes back none (its photo was replaced or removed)
       const lost = modules.filter((m) => m.crop && !(data.modules.find((x) => x.story === m.story) || {}).crop);
       const also = alsoText(data);
-      if (lost.length) notice(lost.map((m) => `The photo of ${nameOf(m.story)} changed: its crop is reset.`).join(" "));
-      else if (also) notice(also, "also");
+      const names = lost.map((m) => nameOf(m.story)); // the stories' names now (their photos are gone)
+      if (lost.length) notice(names.map((name) => L("pe.cropReset", { name })));
+      else if (also.length) notice(also, "also");
       else if (S.noticeKind === "also") notice("");
     }
   } catch (e) {
@@ -434,7 +442,7 @@ async function exclusive(text, job) {
   const refusals = S.refusals;
   const focused = document.activeElement; // a button that is off while the job runs gets the focus back after it
   S.working = true;
-  S.workText = text;
+  S.workText = text; // a lazy text
   tools();
   showBusy();
   let outcome = "ok";
@@ -466,7 +474,7 @@ async function exclusive(text, job) {
 let altVariant = 0;
 
 function another() {
-  return exclusive("Laying the page out another way…", async (gen, url) => {
+  return exclusive(L("pe.busyAnother"), async (gen, url) => {
     const variant = (altVariant % 3) + 1;
     const before = copy(S.modules);
     const data = await api("POST", `${url}/alternative`, { variant, rev: rev() });
@@ -476,20 +484,16 @@ function another() {
     S.redo = [];
     S.edits += 1;
     S.dirty = true;
-    setSaved("Changed · not saved");
+    setSaved("pe.stChanged");
     const moved =
       before.length !== S.modules.length ||
       before.some((b) => !S.modules.some((m) => m.story === b.story && same(m, b)));
-    notice(
-      (!S.modules.some((m) => m.locked)
-        ? ["", "Lead on the other side.", "Lead at another width.", "Lead on the other side, at another width."][
-            variant
-          ]
-        : moved
-          ? "The stories that are not locked are laid out another way around the locked ones, which stay where they are."
-          : "Laid out around the locked stories, the page came out as it was: unlock a story to try other layouts.") +
-        " Undo brings back the last one.",
-    );
+    const how = !S.modules.some((m) => m.locked)
+      ? L(["pe.alt1", "pe.alt2", "pe.alt3"][variant - 1])
+      : moved
+        ? L("pe.altAround")
+        : L("pe.altSame");
+    notice([how, L("pe.altUndo")]);
   });
 }
 
@@ -501,53 +505,35 @@ function refreshSaid(data, locked = new Map()) {
   const n = (data.changed || []).length;
   const d = (data.dropped || []).length;
   const r = (data.removed || []).length;
-  const said = [];
-  if (n) said.push(`${n === 1 ? "1 story is" : `${n} stories are`} set with the new text.`);
-  if (data.folio_changed) said.push("The volume, issue or price on this page is set as the edition has it now.");
+  const said = []; // lazy texts
+  const newText = n ? L("pe.setNewText", { n }) : null; // the typed story set again: said only with other news
+  if (newText) said.push(newText);
+  if (data.folio_changed) said.push(L("pe.folioSet"));
   const ads = (data.ads_changed || []).length;
-  if (ads)
-    said.push(
-      `${ads === 1 ? "An advertisement" : `${ads} advertisements`} on this page ${ads === 1 ? "is" : "are"} set as the edition has ${ads === 1 ? "it" : "them"} now.`,
-    );
-  if (d)
-    said.push(
-      `${d === 1 ? "1 story" : `${d} stories`} left the page: ${d === 1 ? "its" : "their"} articles were deleted or ` +
-        "emptied.",
-    );
-  else if (r)
-    said.push(`${r === 1 ? "1 article" : `${r} articles`} left the page: deleted from the edition, or emptied.`);
+  if (ads) said.push(L("pe.adsSet", { n: ads }));
+  if (d) said.push(L("pe.storiesLeft", { n: d }));
+  else if (r) said.push(L("pe.articlesLeft", { n: r }));
   const gone = (data.dropped || []).filter((k) => locked.has(k)); // a deleted article never prints, locked or not
   if (gone.length)
-    said.push(
-      cap(
-        `${gone.map((k) => locked.get(k)).join(", ")} left the page although ${gone.length === 1 ? "it was" : "they were"} locked.`,
-      ),
-    );
+    said.push(L("pe.leftLocked", { n: gone.length, Names: cap(gone.map((k) => locked.get(k)).join(", ")) }));
   const reset = data.crops_reset || [];
-  for (const k of reset) said.push(`The photo of ${nameOf(k)} changed: its crop is reset.`);
+  for (const k of reset) said.push(L("pe.cropReset", { name: nameOf(k) }));
   for (const k of data.kind_changes || []) {
     const head = (k.headline || articleHead(k.article)).slice(0, 60);
-    said.push(
-      k.now === "story"
-        ? `“${head}” would now be a story of its own (its length, photo, priority or page changed); on this layout ` +
-            "it stays with the short items until the edition is laid out again."
-        : `“${head}” would now be a short item; on this layout it stays a story of its own until the edition is laid ` +
-            "out again.",
-    );
+    said.push(L(k.now === "story" ? "pe.nowStory" : "pe.nowBrief", { head }));
   }
-  return { said, changed: n + d + r > 0 || !!data.folio_changed || ads > 0 || reset.length > 0 };
+  return { said, newText, changed: n + d + r > 0 || !!data.folio_changed || ads > 0 || reset.length > 0 };
 }
 
-/** The save state after a save, from the check's verdict. */
+/** The save state after a save, from the check's verdict: [key, params] for setSaved. */
 function savedLabel(c) {
-  if (c && c.passed) return "Saved · PDF/X-1a check passed";
-  if (c && c.fails)
-    return `Saved · PDF/X-1a check: ${c.fails} problem${c.fails === 1 ? "" : "s"}, do not send this page`;
-  return "Saved · the PDF/X-1a check could not run, do not send this page";
+  if (c && c.passed) return ["pe.savedPassed"];
+  if (c && c.fails) return ["pe.savedProblems", { n: c.fails }];
+  return ["pe.savedNoCheck"];
 }
 
 function refreshText() {
-  return exclusive("Setting the articles' current text…", async (gen, url) => {
+  return exclusive(L("pe.busyRefresh"), async (gen, url) => {
     const locked = lockedNames();
     const data = await api("POST", `${url}/refresh`, { rev: rev() });
     if (!(await accept(data, gen))) return;
@@ -555,15 +541,15 @@ function refreshText() {
     if (changed) {
       S.edits += 1;
       S.dirty = true;
-      setSaved("Changed · not saved");
-      said.push("Save page to make the print file.");
-    } else if (!said.length) said.push("No text on this page has changed since it was last set.");
-    notice(said.join(" "));
+      setSaved("pe.stChanged");
+      said.push(L("pe.saveToMake"));
+    } else if (!said.length) said.push(L("pe.noTextChanged"));
+    notice(said);
   });
 }
 
 function savePage() {
-  return exclusive("Waiting for your last change…", async (gen, url) => {
+  return exclusive(L("pe.busyWaiting"), async (gen, url) => {
     S.textInline = true; // typing on its way is set by this save itself (it holds the page meanwhile)
     S.saveRunning = true;
     S.saveAfter = false; // a Save asked while this one waited for the last change: this save is it
@@ -579,21 +565,21 @@ function savePage() {
     if (!typed) {
       notice(
         T.textSaved
-          ? `The page was not saved. ${T.error}` // the text is saved; the page could not be set with it
-          : `The page was not saved: your typed text could not be saved first. ${T.error || ""}`,
+          ? [L("pe.notSaved"), T.error] // the text is saved; the page could not be set with it
+          : [L("pe.notSavedText"), T.error],
         "error",
       );
       return;
     }
     if (T.others) {
       // setting the typed text also set other changes (text corrected elsewhere, the folio, an ad): look first
-      notice([...T.others, "Check the page, then press Save page again."].join(" "));
+      notice([...T.others, L("pe.checkThenSave")]);
       T.others = null;
       return;
     }
     // the edition's current text, folio and ads first (a correction made elsewhere must not print in its old form);
     // on the page as this window shows it (a change made in another window is refused here, and shown)
-    S.workText = "Setting the edition's current text first…";
+    S.workText = L("pe.busyCurrent");
     showBusy();
     const locked = lockedNames();
     const current = await api("POST", `${url}/refresh`, { rev: rev() });
@@ -602,8 +588,8 @@ function savePage() {
     if (now.changed) {
       S.edits += 1;
       S.dirty = true;
-      setSaved("Changed · not saved");
-      notice([...now.said, "Check the page, then press Save page again."].join(" "));
+      setSaved("pe.stChanged");
+      notice([...now.said, L("pe.checkThenSave")]);
       return;
     }
     const held = heldText(S.data); // the page as the engine has it this moment (the server checks it again)
@@ -614,13 +600,10 @@ function savePage() {
         .slice(0, 6)
         .map((p) => `• ${problemText(p)}`)
         .join("\n");
-      const ok = window.confirm(
-        `This page still has ${bad.length === 1 ? "a problem" : `${bad.length} problems`}:\n\n${list}\n\n` +
-          "The print file will show the page as it is now. Save it anyway?",
-      );
+      const ok = window.confirm(t("pe.saveAnyway", { n: bad.length, list }));
       if (!ok) return;
     }
-    S.workText = "Making the print file and checking it…";
+    S.workText = L("pe.busySaving");
     showBusy();
     const before = S.edits;
     const r = await api("POST", `${url}/save`, { rev: rev() }).finally(tellDesk); // the server marked the page meanwhile
@@ -639,47 +622,40 @@ function savePage() {
     const moved = !again && Array.isArray(r.pages_to_save) && r.pages_to_save.includes(ID.page);
     if (!r.error && !again && !moved && S.edits === before) S.dirty = false;
     setSaved(
-      r.error
-        ? "Saved · its files are not finished"
+      ...(r.error
+        ? ["pe.savedUnfinished"]
         : again
-          ? "Saved · needs saving again"
+          ? ["pe.savedAgain"]
           : moved
-            ? "Saved · changed again since"
-            : savedLabel(r.pdfx_check),
+            ? ["pe.savedChangedSince"]
+            : savedLabel(r.pdfx_check)),
     );
-    const said = [];
+    const said = []; // the server's words and lazy texts
     if (r.error) said.push(r.error);
     if (again) said.push(...r.stale);
-    if (moved) said.push("The page was changed again (in another window or tab) while it was saved: save it again.");
+    if (moved) said.push(L("pe.changedWhileSaved"));
     const changed = Object.keys(r.pages_changed || {})
       .map(Number)
       .sort((a, b) => a - b);
-    if (changed.length)
-      said.push(
-        `Stories moved here have left page ${changed.join(", ")}: open ${changed.length === 1 ? "it" : "them"}, ` +
-          "fill the space and save.",
-      );
-    for (const p of (r.problems || []).filter((x) => x.kind === "touch")) said.push(problemText(p));
-    if (r.press_ready === false) said.push(pressText(r));
-    else if (r.press_ready === true)
-      said.push("Every page is saved and checked: the press files on the Desk are current.");
-    notice(said.join(" "), r.error ? "error" : "");
+    if (changed.length) said.push(L("pe.leftPages", { n: changed.length, pages: changed.join(", ") }));
+    for (const p of (r.problems || []).filter((x) => x.kind === "touch")) said.push(() => problemText(p));
+    if (r.press_ready === false) said.push(() => pressText(r));
+    else if (r.press_ready === true) said.push(L("pe.pressCurrent"));
+    notice(said, r.error ? "error" : "");
     invalidate();
   });
 }
 
 function pressText(r) {
-  const pages = (list) => `page${list.length === 1 ? "" : "s"} ${list.join(", ")}`;
-  const save = r.pages_to_save || [];
-  const fail = r.pages_failing_check || [];
-  const twice = r.pages_with_repeats || [];
-  const over = r.pages_with_overlaps || [];
   const out = [];
-  if (save.length) out.push(`${pages(save)} still to save`);
-  if (fail.length) out.push(`${pages(fail)} not passing the PDF/X-1a check`);
-  if (twice.length) out.push(`${pages(twice)} print the same article: take it off one of them`);
-  if (over.length) out.push(`${pages(over)} have stories over each other or outside the news area: move them apart`);
-  return `The press files are not current yet: ${out.join("; ") || "not every page is done"}.`;
+  for (const [key, list] of [
+    ["pe.pressSave", r.pages_to_save],
+    ["pe.pressFail", r.pages_failing_check],
+    ["pe.pressRepeats", r.pages_with_repeats],
+    ["pe.pressOverlaps", r.pages_with_overlaps],
+  ])
+    if (list && list.length) out.push(t(key, { n: list.length, pages: list.join(", ") }));
+  return t("pe.pressNot", { reasons: out.join("; ") || t("pe.pressNotAll") });
 }
 
 // ------------------------------------------------------------------------------------------- edits
@@ -702,9 +678,14 @@ const sameCrop = (a, b) =>
 const sameAttrs = (a, b) => !!a.locked === !!b.locked && sameCrop(a.crop ?? null, b.crop ?? null);
 const lockedHere = (story) => S.modules.some((m) => m.story === story && m.locked);
 
-/** A change a lock refuses, said on the page (nothing is sent). what: what unlocking would allow ("move it", …). */
+/** Why a lock refuses a change ("" when the story is not locked). what: what unlocking would allow, as a key: "move",
+ * "size" (move it or change its size), "off" (take it off the page), "page" (move it to another page). */
+const LOCK_WHY = { move: "pe.lockedMove", size: "pe.lockedSize", off: "pe.lockedOff", page: "pe.lockedPage" };
+const lockedWhy = (story, what) => t(LOCK_WHY[what], { Name: cap(nameOf(story)), key: LOCK_KEY });
+
+/** A change a lock refuses, said on the page (nothing is sent). */
 function refuseLocked(story, what) {
-  notice(`${cap(nameOf(story))} is locked: unlock it (${SHIFT}L) to ${what}.`, "lock");
+  notice(() => lockedWhy(story, what), "lock");
 }
 
 function pushUndo(modules) {
@@ -745,7 +726,7 @@ function update(story, change) {
   if (!m || same({ ...m, ...change }, m)) return renderPanels();
   if (m.locked) {
     renderPanels(); // the fields show its place again
-    return refuseLocked(story, "move it or change its size");
+    return refuseLocked(story, "size");
   }
   commit(S.modules.map((x) => (x.story === story ? { ...x, ...change } : { ...x })));
 }
@@ -766,20 +747,16 @@ function toggleLock(story) {
   if (!m) return;
   setAttrs(story, { locked: !m.locked });
   if (S.noticeKind === "lock") notice("");
-  say(
-    m.locked
-      ? `${cap(nameOf(story))} is unlocked.`
-      : `${cap(nameOf(story))} is locked in place: its place, width and height stay as they are.`,
-  );
+  say(t(m.locked ? "pe.sayUnlocked" : "pe.sayLocked", { Name: cap(nameOf(story)) }));
 }
 
 /** Every story of the page unlocked (the menu on the page's empty space): one change and one undo step. */
 function unlockAll() {
   if (!canEdit()) return;
-  if (!S.modules.some((m) => m.locked)) return notice("No story on this page is locked.", "lock");
+  if (!S.modules.some((m) => m.locked)) return notice(L("pe.noneLocked"), "lock");
   commit(S.modules.map((m) => ({ ...m, locked: false })));
   if (S.noticeKind === "lock") notice("");
-  say("Every story on this page is unlocked.");
+  say(t("pe.sayAllUnlocked"));
 }
 
 // ------------------------------------------------------------------------------------------- photo crops
@@ -789,14 +766,7 @@ function unlockAll() {
  * sharp; in focal mode (a double-click on the photo in photo mode, "Set focal point") a click on its subject sets the
  * point the frame keeps as near its centre as it can, at every size. A pan and a focal point are one stored point. Each
  * is one change and one undo step, and the engine sets it: what its answer shows is what prints. */
-const CANVAS_LABELS = {
-  photo:
-    "The page, photo mode: drag the selected story's photo to move it in its frame, or move it with the arrow keys " +
-    "(with Shift, further); double-click it to set its focal point. V or Esc returns to selecting stories.",
-  focal:
-    "The page, focal point: click the subject of the photo; the frame keeps it as near its centre as it can. Enter or " +
-    "Esc finishes.",
-};
+const CANVAS_LABELS = { select: "pe.canvas", photo: "pe.canvasPhoto", focal: "pe.canvasFocal" };
 
 /** A story's photo as the engine last drew it (notes[].photo), or null. */
 const photoNote = (story) => (story && S.data ? (noteOf(story) || {}).photo || null : null);
@@ -811,16 +781,16 @@ function setMode(mode, quiet = false) {
   if (S.mode === mode) return;
   S.mode = mode;
   if (S.drag && S.drag.part === "photo") S.drag = null;
-  canvas.setAttribute("aria-label", CANVAS_LABELS[mode] || canvasLabel);
+  canvasLabel();
   const p = photoNote(S.selected);
   if (mode !== "select" && p && p.full) picture(p.full); // the whole photo, once photo mode needs it
   if (!quiet)
     say(
       mode === "photo"
-        ? `Photo mode: drag the photo of ${nameOf(S.selected)} to move it in its frame. V or Esc to stop.`
+        ? t("pe.sayPhoto", { name: nameOf(S.selected) })
         : mode === "focal"
-          ? "Click the subject of the photo: the frame keeps it as near its centre as it can. Enter or Esc to finish."
-          : "Selecting stories.",
+          ? t("pe.sayFocal")
+          : t("pe.saySelect"),
     );
   renderPanels();
   invalidate();
@@ -829,7 +799,7 @@ function setMode(mode, quiet = false) {
 /** Photo mode for a story (A, "Crop photo", the menu); toggle: the panel's button leaves it again. */
 function cropPhoto(story, toggle = false) {
   if (!S.data || !story) return;
-  if (!photoNote(story)) return notice(`${cap(nameOf(story))} has no photo.`, "photo");
+  if (!photoNote(story)) return notice(() => t("pe.noPhoto", { Name: cap(nameOf(story)) }), "photo");
   if (S.swapping) stopSwapping();
   if (S.selected !== story) select(story);
   setMode(toggle && S.mode === "photo" ? "select" : "photo");
@@ -838,7 +808,7 @@ function cropPhoto(story, toggle = false) {
 /** Focal mode for a story's photo ("Set focal point", a double-click on the photo in photo mode). */
 function focalPoint(story) {
   if (!S.data || !story) return;
-  if (!photoNote(story)) return notice(`${cap(nameOf(story))} has no photo.`, "photo");
+  if (!photoNote(story)) return notice(() => t("pe.noPhoto", { Name: cap(nameOf(story)) }), "photo");
   if (S.selected !== story) select(story);
   setMode("focal");
 }
@@ -863,7 +833,7 @@ function resetCrop(story) {
   const m = S.modules.find((x) => x.story === story);
   if (!m || !m.crop) return;
   setAttrs(story, { crop: null });
-  say(`The photo of ${nameOf(story)} prints as laid out again.`);
+  say(t("pe.sayReset", { name: nameOf(story) }));
 }
 
 /** The arrow keys in photo mode: the photo moved in its frame by a step (2 % of the photo; with Shift, 10 %). */
@@ -874,19 +844,17 @@ function panByKey(story, fx, fy) {
   const win = shownWindow(m, p);
   const focus = stepFocus(win, p.px, fx, fy);
   const next = windowAt(focus, win, p.px);
-  if (next[0] === win[0] && next[1] === win[1]) return say("The photo is at its edge in that direction.");
+  if (next[0] === win[0] && next[1] === win[1]) return say(t("pe.sayEdge"));
   setCrop(story, { focus });
 }
 
 /** The resolution as a badge: a warning below 150 ppi (§8.11). → [class, text]. */
 const ppiBadge = (ppi) =>
-  ppi < 150
-    ? ["warn", `${Math.round(ppi)} ppi: below 150 ppi, it may print soft`]
-    : ["ok", `${Math.round(ppi)} ppi: prints sharp`];
+  ppi < 150 ? ["warn", t("pe.ppiSoft", { n: Math.round(ppi) })] : ["ok", t("pe.ppiSharp", { n: Math.round(ppi) })];
 
 function removeStory(story) {
   if (!canEdit()) return;
-  if (lockedHere(story)) return refuseLocked(story, "take it off the page");
+  if (lockedHere(story)) return refuseLocked(story, "off");
   if (S.selected === story) S.selected = null;
   commit(S.modules.filter((m) => m.story !== story).map((m) => ({ ...m })));
 }
@@ -895,7 +863,7 @@ function bringIn(story) {
   if (!canEdit()) return;
   const p = S.data.pool.find((x) => x.story === story);
   if (p && p.locked)
-    return notice(`${cap(nameOf(story))} is locked on page ${p.on_page}: unlock it there to bring it here.`, "lock");
+    return notice(() => t("pe.lockedThere", { Name: cap(nameOf(story)), page: String(p.on_page) }), "lock");
   const g = S.data.grid;
   const h = Math.min(90, g.news_bottom_mm - g.news_top_mm);
   S.selected = story;
@@ -908,7 +876,7 @@ function swap(a, b) {
   const mb = S.modules.find((m) => m.story === b);
   if (!ma || !mb) return;
   const held = [ma, mb].find((m) => m.locked);
-  if (held) return refuseLocked(held.story, "move it");
+  if (held) return refuseLocked(held.story, "move");
   // the places change hands; each story keeps its own attributes (its crop belongs to its photo)
   const place = (m) => ({ x: m.x, y: m.y, w: m.w, h: m.h });
   commit(
@@ -927,8 +895,8 @@ const otherPages = () =>
 
 /** Why the story cannot move to another page now ("" when it can). */
 function moveOff(story) {
-  if (lockedHere(story)) return `${cap(nameOf(story))} is locked: unlock it (${SHIFT}L) to move it to another page.`;
-  if (!otherPages().some((p) => p.done)) return "No other page of this layout was laid out.";
+  if (lockedHere(story)) return lockedWhy(story, "page");
+  if (!otherPages().some((p) => p.done)) return t("pe.noOtherPage");
   return "";
 }
 
@@ -936,9 +904,9 @@ function moveOff(story) {
  * it goes to prints it once that page is saved; until then the press files are not offered as current. */
 function moveToPage(story, n) {
   if (!canEdit() || !S.modules.some((m) => m.story === story)) return;
-  if (lockedHere(story)) return refuseLocked(story, "move it to another page");
+  if (lockedHere(story)) return refuseLocked(story, "page");
   const name = nameOf(story);
-  return exclusive(`Moving ${name} to page ${n}…`, async (gen, url) => {
+  return exclusive(L("pe.busyMoving", { name, page: String(n) }), async (gen, url) => {
     const before = copy(S.modules);
     let data;
     try {
@@ -952,27 +920,37 @@ function moveToPage(story, n) {
     S.redo = [];
     S.edits += 1;
     S.dirty = true;
-    setSaved("Changed · not saved");
+    setSaved("pe.stChanged");
     tellDesk(); // both pages are "to save" now
-    notice(movedText(data.moved || {}, name, n), "moved", { label: `Go to page ${n}`, act: () => goPage(n) });
+    const mv = data.moved || {};
+    notice(() => movedText(mv, name, n), "moved", {
+      label: L("pe.goTo", { page: String(n) }),
+      act: () => goPage(n),
+    });
   });
 }
 
 /** What a move did, in words. */
 function movedText(mv, name, n) {
   const m = mv.module;
-  const where = m
-    ? ` (${m.w} ${m.w === 1 ? "column" : "columns"} × ${Math.round(m.h)} mm, column ${colOf(m.x) + 1}, ` +
-      `${Math.round(m.y)} mm from the top)`
-    : "";
+  const page = String(n);
   const said = [
     mv.placed === "already"
-      ? `${cap(name)} was already on page ${n} (brought in there); it is now only there.`
-      : `${cap(name)} moved to page ${n}${where}.`,
-    `It prints there once page ${n} is saved; save this page too.`,
+      ? t("pe.movedAlready", { Name: cap(name), page })
+      : m
+        ? t("pe.movedTo", {
+            Name: cap(name),
+            page,
+            n: m.w,
+            h: String(Math.round(m.h)),
+            col: String(colOf(m.x) + 1),
+            y: String(Math.round(m.y)),
+          })
+        : t("pe.movedToPage", { Name: cap(name), page }),
+    t("pe.movedPrints", { page }),
   ];
-  if (mv.pinned) said.push(`It is pinned to page ${mv.pinned} in its article: the next layout puts it back there.`);
-  said.push("Undo brings it back here.");
+  if (mv.pinned) said.push(t("pe.movedPinned", { page: String(mv.pinned) }));
+  said.push(t("pe.movedUndo"));
   return said.join(" ");
 }
 
@@ -988,10 +966,10 @@ function fitHeight(story) {
 function startSwapping() {
   if (!S.selected || !canEdit()) return;
   setMode("select", true);
-  if (lockedHere(S.selected)) return refuseLocked(S.selected, "move it");
+  if (lockedHere(S.selected)) return refuseLocked(S.selected, "move");
   S.swapping = true;
   canvas.style.cursor = "crosshair";
-  notice("Click the story to swap with, on the page or in the list “On this page” (Esc to stop).", "swap");
+  notice(L("pe.swapHow"), "swap");
 }
 
 function stopSwapping() {
@@ -1056,7 +1034,14 @@ function hit(px, py) {
 // ------------------------------------------------------------------------------------------- drawing
 
 const canvas = $("#canvas");
-const canvasLabel = canvas.getAttribute("aria-label"); // selecting stories; photo and focal mode say their own
+
+/** The page's own label: what can be done on it in the mode it is in. */
+function canvasLabel() {
+  canvas.setAttribute("aria-label", t(CANVAS_LABELS[S.mode] || CANVAS_LABELS.select));
+}
+
+/** A story's size in words: "2 col × 85 mm". */
+const sizeText = (m) => t("pe.size", { n: m.w, h: String(Math.round(m.h)) });
 const ctx = canvas.getContext("2d");
 let content = null; // offscreen drawing of the page at the current view
 let contentKey = "";
@@ -1241,8 +1226,8 @@ function draw() {
     ctx.fillStyle = "rgba(244, 63, 94, 0.08)";
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     ctx.fillStyle = "#111827";
-    ctx.font = "12px system-ui, sans-serif";
-    ctx.fillText(`${S.drag.ghost.w} col × ${Math.round(S.drag.ghost.h)} mm`, x0 + 6, y0 - 6);
+    ctx.font = `${lang() === "mr" ? 13 : 12}px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.fillText(sizeText(S.drag.ghost), x0 + 6, y0 - 6);
   }
   if (S.mode !== "select") drawPhoto();
   drawRulers(w, h);
@@ -1380,11 +1365,12 @@ function drawRulers(w, h) {
   const across = rulerTicks((R - ox) / s - steps.major, (w - ox) / s, steps);
   ctx.fillStyle = RULER.tick;
   ctx.beginPath();
-  for (const t of across) ctx.rect(Math.round(ox + t.mm * s), R - TICK_PX[t.kind], 1, TICK_PX[t.kind]);
+  for (const tick of across) ctx.rect(Math.round(ox + tick.mm * s), R - TICK_PX[tick.kind], 1, TICK_PX[tick.kind]);
   ctx.fill();
   ctx.fillStyle = RULER.text;
   ctx.textAlign = "left";
-  for (const t of across) if (t.label !== null) ctx.fillText(rulerLabel(t.label), Math.round(ox + t.mm * s) + 3, 1);
+  for (const tick of across)
+    if (tick.label !== null) ctx.fillText(rulerLabel(tick.label), Math.round(ox + tick.mm * s) + 3, 1);
   ctx.font = "600 10px system-ui, -apple-system, sans-serif";
   ctx.textAlign = "center";
   for (const c of cols) {
@@ -1412,16 +1398,16 @@ function drawRulers(w, h) {
   const down = rulerTicks((R - oy) / s - steps.major, (h - oy) / s, steps);
   ctx.fillStyle = RULER.tick;
   ctx.beginPath();
-  for (const t of down) ctx.rect(R - TICK_PX[t.kind], Math.round(oy + t.mm * s), TICK_PX[t.kind], 1);
+  for (const tick of down) ctx.rect(R - TICK_PX[tick.kind], Math.round(oy + tick.mm * s), TICK_PX[tick.kind], 1);
   ctx.fill();
   ctx.fillStyle = RULER.text;
   ctx.textAlign = "right";
-  for (const t of down) {
-    if (t.label === null) continue;
+  for (const tick of down) {
+    if (tick.label === null) continue;
     ctx.save();
-    ctx.translate(1, Math.round(oy + t.mm * s) + 3);
+    ctx.translate(1, Math.round(oy + tick.mm * s) + 3);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillText(rulerLabel(t.label), 0, 0);
+    ctx.fillText(rulerLabel(tick.label), 0, 0);
     ctx.restore();
   }
   ctx.restore();
@@ -1563,7 +1549,7 @@ canvas.addEventListener("pointermove", (e) => {
   if (S.drag.locked) {
     if (!S.drag.told && Math.abs(dx) + Math.abs(dy) >= DRAG_MIN_MM) {
       S.drag.told = true; // said once per drag
-      refuseLocked(S.drag.from.story, "move it");
+      refuseLocked(S.drag.from.story, "move");
     }
     return;
   }
@@ -1631,15 +1617,20 @@ window.addEventListener("keydown", (e) => {
   if (mod && !e.altKey && e.code === "KeyS") {
     e.preventDefault(); // also in a text box: never the browser's own Save dialog
     if (canEdit()) savePage();
-    else if (S.saveRunning) notice("The page is being saved.", "wait");
+    else if (S.saveRunning) notice(L("pe.beingSaved"), "wait");
     else if (S.data) {
       S.saveAfter = true; // asked while the page is being set: saved as soon as it is
-      notice("The page is saved as soon as it is set.", "wait");
+      notice(L("pe.saveSoon"), "wait");
     }
     return;
   }
-  const t = e.target;
-  if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
+  const target = e.target;
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  )
+    return;
   if (mod && e.code === "KeyZ") {
     e.preventDefault();
     if (e.shiftKey) redo();
@@ -1677,11 +1668,11 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     if (e.repeat || !S.data) return;
     if (!S.modules.some((x) => x.story === S.selected))
-      return notice(`Select a story on the page first: ${SHIFT}L locks it in place.`, "lock");
+      return notice(L("pe.selectFirstLock", { key: LOCK_KEY }), "lock");
     return toggleLock(S.selected);
   }
   // the canvas's menu from the keyboard: Shift+F10, or the menu key (a button or a list keeps its own)
-  if ((e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) && (t === canvas || t === document.body)) {
+  if ((e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) && (target === canvas || target === document.body)) {
     e.preventDefault();
     if (!e.repeat && S.data && !S.drag) openMenuFromKeys();
     return;
@@ -1691,7 +1682,7 @@ window.addEventListener("keydown", (e) => {
   if (!S.data || S.drag) return;
   const m = S.modules.find((x) => x.story === S.selected);
   // story keys act only while the page has the focus: not on a button or a list, nor when the focus fell to the body
-  if (!m || t !== canvas) return;
+  if (!m || target !== canvas) return;
   if (e.code === "KeyV" && !e.shiftKey) {
     e.preventDefault();
     return setMode("select");
@@ -1726,7 +1717,7 @@ window.addEventListener("keydown", (e) => {
   const moves = { ArrowUp: [0, -step], ArrowDown: [0, step], ArrowLeft: [-pitch(), 0], ArrowRight: [pitch(), 0] };
   if (moves[e.key]) {
     e.preventDefault();
-    if (m.locked) return refuseLocked(m.story, "move it");
+    if (m.locked) return refuseLocked(m.story, "move");
     const [dx, dy] = moves[e.key];
     const g = snapModule({ ...m, x: m.x + dx, y: m.y + dy });
     update(m.story, { x: g.x, y: g.y });
@@ -1741,36 +1732,38 @@ window.addEventListener("keydown", (e) => {
 const M = { open: false, story: null, items: [], at: [0, 0], keyAt: -1e9, pointerAt: -1e9 }; // at: where it opened (px)
 
 function menuItems(story) {
+  // id: what the item is, in every language (the menu's own logic never reads its label)
   if (!story)
     return [
       {
-        label: "Unlock all on page",
+        id: "unlock-all",
+        label: t("pe.unlockAll"),
         act: unlockAll,
-        off: S.modules.some((m) => m.locked) ? "" : "No story on this page is locked.",
+        off: S.modules.some((m) => m.locked) ? "" : t("pe.noneLocked"),
       },
     ];
   const locked = lockedHere(story);
   const n = noteOf(story);
-  const held = (what) => (locked ? `${cap(nameOf(story))} is locked: unlock it (${SHIFT}L) to ${what}.` : "");
-  const fits =
-    !n || n.fit === "fits" ? "It already fits its box." : n.fit === "none" ? "It cannot be set at this width." : "";
-  const noPhoto = photoNote(story) ? "" : `${cap(nameOf(story))} has no photo.`;
+  const held = (what) => (locked ? lockedWhy(story, what) : "");
+  const fits = !n || n.fit === "fits" ? t("pe.fitsAlready") : n.fit === "none" ? t("pe.cannotSetWidth") : "";
+  const noPhoto = photoNote(story) ? "" : t("pe.noPhoto", { Name: cap(nameOf(story)) });
   const mod = S.modules.find((x) => x.story === story);
-  const uncropped = mod && mod.crop ? "" : "The photo is not cropped: it prints as the layout crops it.";
+  const uncropped = mod && mod.crop ? "" : t("pe.notCropped");
   return [
-    { label: "Edit text", key: "Enter", act: () => openText(story) },
-    { label: "Fit height to text", act: () => fitHeight(story), off: held("change its size") || fits },
-    { label: "Swap with…", act: startSwapping, off: held("move it") },
-    { label: "Move to page", key: "▸", sub: true, act: () => showMenu("move"), off: moveOff(story) },
-    { label: locked ? "Unlock" : "Lock in place", key: `${SHIFT}L`, act: () => toggleLock(story) },
-    { label: "Crop photo", key: "A", act: () => cropPhoto(story), off: noPhoto },
-    { label: "Set focal point", act: () => focalPoint(story), off: noPhoto },
-    { label: "Reset crop", act: () => resetCrop(story), off: noPhoto || uncropped },
+    { id: "text", label: t("pe.editText"), key: "Enter", act: () => openText(story) },
+    { id: "fit", label: t("pe.fitHeight"), act: () => fitHeight(story), off: held("size") || fits },
+    { id: "swap", label: t("pe.swap"), act: startSwapping, off: held("move") },
+    { id: "move", label: t("pe.moveTo"), key: "▸", sub: true, act: () => showMenu("move"), off: moveOff(story) },
+    { id: "lock", label: t(locked ? "pe.unlock" : "pe.lock"), key: LOCK_KEY, act: () => toggleLock(story) },
+    { id: "crop", label: t("pe.crop"), key: "A", act: () => cropPhoto(story), off: noPhoto },
+    { id: "focal", label: t("pe.focal"), act: () => focalPoint(story), off: noPhoto },
+    { id: "reset", label: t("pe.reset"), act: () => resetCrop(story), off: noPhoto || uncropped },
     {
-      label: "Remove from page",
+      id: "remove",
+      label: t("pe.remove"),
       key: MAC ? "⌫" : "Del",
       act: () => removeStory(story),
-      off: held("take it off the page"),
+      off: held("off"),
       danger: true,
     },
   ];
@@ -1779,11 +1772,12 @@ function menuItems(story) {
 /** The pages a story can move to, as the menu's second level (Left or "Back" returns to the first). */
 function movePageItems(story) {
   return [
-    { label: "Back", key: "◂", sub: true, act: () => showMenu("main") },
+    { id: "back", label: t("pe.back"), key: "◂", sub: true, act: () => showMenu("main") },
     ...otherPages().map(({ page, done }) => ({
-      label: `Page ${page}`,
+      id: `page:${page}`,
+      label: t("pe.pageN", { n: page }),
       act: () => moveToPage(story, page),
-      off: done ? "" : `Page ${page} was not laid out in this layout: a story cannot move there.`,
+      off: done ? "" : t("pe.notLaidOut", { page: String(page) }),
     })),
   ];
 }
@@ -1796,14 +1790,12 @@ function showMenu(level) {
   M.items = levelItems();
   $("#menu").setAttribute(
     "aria-label",
-    level === "move" ? `Move ${headOf(M.story)} to page` : `Story ${headOf(M.story)}`,
+    t(level === "move" ? "pe.menuMove" : "pe.menuStory", { head: headOf(M.story) }),
   );
   renderMenu();
   placeMenu();
   const first = M.items.findIndex((it, i) => !it.off && (level !== "move" || i > 0));
-  menuFocus(
-    level === "move" ? (first < 0 ? 0 : first) : M.items.findIndex((it) => it.sub && it.label === "Move to page"),
-  );
+  menuFocus(level === "move" ? (first < 0 ? 0 : first) : M.items.findIndex((it) => it.id === "move"));
 }
 
 /** The menu of a story (or of the page: story null) at a point of the view (px), kept inside the view. */
@@ -1817,7 +1809,7 @@ function openMenu(story, at) {
   M.at = at;
   M.open = true;
   const menu = $("#menu");
-  menu.setAttribute("aria-label", story ? `Story ${headOf(story)}` : "The page");
+  menu.setAttribute("aria-label", story ? t("pe.menuStory", { head: headOf(story) }) : t("pe.menuPage"));
   renderMenu();
   menu.hidden = false;
   placeMenu();
@@ -1838,7 +1830,7 @@ function renderMenu() {
           tabindex: "-1",
           class: it.danger ? "danger" : null,
           "aria-disabled": it.off ? "true" : null,
-          "aria-haspopup": it.sub && it.label !== "Back" ? "menu" : null,
+          "aria-haspopup": it.sub && it.id !== "back" ? "menu" : null,
           title: it.off || null,
           "data-i": i,
         },
@@ -1928,7 +1920,7 @@ $("#menu").addEventListener("keydown", (e) => {
     return menuFocus(to);
   }
   const it = M.items[i];
-  if (e.key === "ArrowRight" && it && it.sub && it.label !== "Back" && !it.off) {
+  if (e.key === "ArrowRight" && it && it.sub && it.id !== "back" && !it.off) {
     e.preventDefault();
     return it.act();
   }
@@ -2002,7 +1994,7 @@ function fitWidth() {
 function zoomToSelection() {
   if (!S.data) return;
   const box = unionBox(S.modules.filter((m) => m.story === S.selected).map(boxOf)); // one story is selected at a time
-  if (!box) return say("Select a story on the page first: Shift+2 zooms to it.");
+  if (!box) return say(t("pe.selectFirstZoom", { key: `${SHIFT}2` }));
   showBox(box);
 }
 
@@ -2113,14 +2105,25 @@ function row(liClass, attrs, ...kids) {
   return el("li", { class: liClass }, el("button", { type: "button", class: "row", ...attrs }, ...kids));
 }
 
-const SHORT_ITEMS = "(short items)";
-const mr = (text) => el("span", text === SHORT_ITEMS ? {} : { lang: "mr" }, text); // Marathi inside English text
-const langOf = (text) => (text === SHORT_ITEMS ? "en" : "mr");
+/** The lang of a text the editor did not write (a headline, a server message): Marathi in Devanagari; English when it
+ * has Latin letters on the Marathi screen; else the screen's own. */
+function langFor(text) {
+  const s = String(text || "");
+  if (DEVANAGARI.test(s)) return "mr";
+  return lang() === "mr" && /[A-Za-z]/.test(s) ? "en" : null;
+}
+const mr = (text) => el("span", { lang: langFor(text) }, text); // a headline inside the editor's own words
+const langOf = (text) => langFor(text) || lang();
 
 const noteOf = (story) => (S.data ? S.data.notes.find((n) => n.story === story) : null);
+/** The column of short items has no headline of its own. */
+const isShorts = (story) => {
+  const n = noteOf(story);
+  return !!n && !n.headline;
+};
 const headOf = (story) => {
   const n = noteOf(story);
-  if (n) return n.headline || SHORT_ITEMS;
+  if (n) return n.headline || t("pe.shortItems");
   const p = S.data ? S.data.pool.find((x) => x.story === story) : null;
   return p ? p.headline : story;
 };
@@ -2128,21 +2131,18 @@ const articleHead = (aid) => {
   const a = T.articles.find((x) => x.id === aid);
   if (a) return (a.headline || "").slice(0, 60);
   const n = S.data ? S.data.notes.find((x) => (x.articles || []).includes(aid)) : null;
-  return n ? (n.headline || "a short item").slice(0, 60) : "an article";
+  return n ? (n.headline || t("pe.aShortItem")).slice(0, 60) : t("pe.anArticle");
 };
 /** A story in a message: its headline in quotes, or the column of short items. */
-const nameOf = (story) => {
-  const head = headOf(story);
-  return head === SHORT_ITEMS ? "the column of short items" : `“${head.slice(0, 60)}”`;
-};
+const nameOf = (story) => (isShorts(story) ? t("pe.shortColumn") : `“${headOf(story).slice(0, 60)}”`);
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1); // a message that starts with a name
 
 function fitText(n) {
   if (!n) return ["", ""];
-  if (n.fit === "fits") return ["ok", "Fits its box exactly."];
-  if (n.fit === "over") return ["bad", `The text needs ${Math.round(n.by_mm)} mm more — make the box taller or wider.`];
-  if (n.fit === "short") return ["warn", `${Math.round(n.by_mm)} mm empty at the foot — make the box shorter.`];
-  return ["bad", "Cannot be set at this width — make it wider."];
+  if (n.fit === "fits") return ["ok", t("pe.fitOk")];
+  if (n.fit === "over") return ["bad", t("pe.fitOver", { mm: String(Math.round(n.by_mm)) })];
+  if (n.fit === "short") return ["warn", t("pe.fitShort", { mm: String(Math.round(n.by_mm)) })];
+  return ["bad", t("pe.fitNone")];
 }
 
 /** Buttons that start a request are off while the page cannot be changed. */
@@ -2171,9 +2171,9 @@ function renderPanels() {
       const n = noteOf(m.story);
       const [cls, text] = fitText(n);
       const elsewhere = held[m.story]
-        ? ` · locked on page ${held[m.story]} too: unlock it there, or take it off here, to save this page`
+        ? t("pe.heldTag", { page: String(held[m.story]) })
         : also[m.story]
-          ? ` · still on page ${also[m.story]} until you save`
+          ? t("pe.alsoTag", { page: String(also[m.story]) })
           : "";
       return row(
         `${m.story === S.selected ? "selected" : ""} ${cls === "ok" && !elsewhere ? "" : "warn"}`,
@@ -2186,7 +2186,7 @@ function renderPanels() {
         el(
           "span",
           { class: "meta" },
-          `${m.w} col × ${Math.round(m.h)} mm${m.locked ? " · locked" : ""} · ${text}${elsewhere}`,
+          [sizeText(m), m.locked ? t("pe.lockedTag") : "", text, elsewhere].filter(Boolean).join(" · "),
         ),
       );
     }),
@@ -2199,10 +2199,10 @@ function renderPanels() {
         p.locked ? "locked" : "",
         {
           title: p.locked
-            ? `Locked on page ${p.on_page}: unlock it there to bring it here`
+            ? t("pe.poolLocked", { page: String(p.on_page) })
             : p.on_page
-              ? `Move this story here from page ${p.on_page} (it leaves that page when you save this one)`
-              : "Bring this story onto the page",
+              ? t("pe.poolMove", { page: String(p.on_page) })
+              : t("pe.poolBring"),
           "data-key": `pool:${p.story}`,
           "aria-disabled": p.locked ? "true" : null, // still says why when pressed
           onclick: () => bringIn(p.story),
@@ -2211,7 +2211,14 @@ function renderPanels() {
         el(
           "span",
           { class: "meta" },
-          `${p.brief ? "short items" : "story"}${p.locked ? ` · locked on page ${p.on_page}` : p.on_page ? ` · now on page ${p.on_page}` : " · not on any page"}`,
+          [
+            t(p.brief ? "pe.kindBriefs" : "pe.kindStory"),
+            p.locked
+              ? t("pe.poolLockedOn", { page: String(p.on_page) })
+              : p.on_page
+                ? t("pe.poolNowOn", { page: String(p.on_page) })
+                : t("pe.poolNowhere"),
+          ].join(" · "),
         ),
       ),
     ),
@@ -2265,26 +2272,25 @@ function renderPanels() {
     const pick = $("#p-move-to");
     const pages = otherPages();
     const shown = pages.map((p) => `${p.page}:${p.done}`).join(",");
-    if (pick.dataset.pages !== shown) {
+    if (pick.dataset.pages !== `${shown}@${lang()}`) {
       const was = pick.value;
       pick.replaceChildren(
         ...pages.map((p) =>
           el(
             "option",
             { value: String(p.page), disabled: !p.done },
-            `Page ${p.page}${p.done ? "" : " (not laid out)"}`,
+            t(p.done ? "pe.pageN" : "pe.pageNotLaid", { n: p.page }),
           ),
         ),
       );
-      pick.dataset.pages = shown;
+      pick.dataset.pages = `${shown}@${lang()}`;
       const keep = pages.find((p) => p.done && String(p.page) === was) || pages.find((p) => p.done);
       if (keep) pick.value = String(keep.page);
     }
     const off = moveOff(m.story);
     pick.disabled = !!off;
     $("#p-move").disabled = !!off;
-    $("#p-move").title =
-      off || "The story leaves this page now and goes onto that page; it prints there once that page is saved";
+    $("#p-move").title = off || t("pe.moveTitle");
     if (!typing.has("#p-height")) $("#p-height").value = Math.round(m.h * 2) / 2;
     if (!typing.has("#p-y")) $("#p-y").value = Math.round(m.y * 2) / 2;
   }
@@ -2324,11 +2330,10 @@ function zoomShown(p, zoom) {
   note.hidden = !(most <= 1 || zoom >= most - 1e-6);
   note.textContent =
     most <= 1
-      ? `It prints at the lowest resolution allowed for it already (${floor} ppi): it can be moved in its frame, not ` +
-        "enlarged."
+      ? t("pe.zoomFloor", { ppi: String(floor) })
       : most < 4
-        ? `Enlarged as far as it prints sharp (${floor} ppi).`
-        : "Enlarged 400 %, the most a photo is enlarged.";
+        ? t("pe.zoomSharp", { ppi: String(floor) })
+        : t("pe.zoomMax");
 }
 
 /** Focus back on the row or button with this key (it was drawn again), or on the story's row elsewhere. */
@@ -2341,52 +2346,50 @@ function refocus(key) {
   if (target && document.activeElement !== target) target.focus();
 }
 
-/** A problem in words: [plain text for a question, the same as text and Marathi parts for the list]. */
-function problemParts(p) {
-  const names = (p.stories || []).map((x) => `“${(headOf(x) || "").slice(0, 40)}”`);
-  const n = (v, one, many) => `${v} ${v === 1 ? one : many}`;
-  const one = names[0] || "";
+/** A problem in words, as [key, params]: names are the stories' headlines (or the column of short items). */
+function problemMsg(p) {
+  const names = (p.stories || []).map((x) => (isShorts(x) ? t("pe.shortColumn") : `“${headOf(x).slice(0, 40)}”`));
+  const name = names[0] || "";
+  const mm = String(Math.round(p.mm || 0));
   switch (p.kind) {
     case "overlap":
-      return [names[0], " and ", names[1], ` overlap by ${Math.round(p.mm)} mm.`];
+      return ["pe.pOverlap", { a: names[0] || "", b: names[1] || "", mm }];
     case "outside":
-      return [one, " is outside the news area, or over an advertisement or picture."];
+      return ["pe.pOutside", { name }];
     case "over":
-      return [one, `: the text needs ${Math.round(p.mm)} mm more.`];
+      return ["pe.pOver", { name, mm }];
     case "overset":
-      return [
-        one,
-        p.lines
-          ? `: ${n(p.lines, "line", "lines")} of text do not fit and would not print.`
-          : `: ${n(p.words, "word", "words")} of a subheading do not fit and would not print.`,
-      ];
+      return p.lines ? ["pe.pOversetLines", { name, n: p.lines }] : ["pe.pOversetWords", { name, n: p.words }];
     case "unset":
-      return [one, `: ${n(p.paragraphs, "paragraph", "paragraphs")} could not be set and would not print.`];
+      return ["pe.pUnset", { name, n: p.paragraphs }];
     case "short":
-      return [one, `: ${Math.round(p.mm)} mm empty at its foot.`];
+      return ["pe.pShort", { name, mm }];
     case "cannot_set":
-      return [one, " cannot be set at this width."];
+      return ["pe.pCannotSet", { name }];
     case "touch":
       return names.length > 1
-        ? [
-            ...names.flatMap((x, i) => (i ? [i === names.length - 1 ? " and " : ", ", x] : [x])),
-            ": lines of these stories touch in ink. Check the page before sending it.",
-          ]
-        : [one, ": two of its lines touch in ink. Check the page before sending it."];
+        ? ["pe.pTouchMany", { names: t("pe.listAnd", { list: names.slice(0, -1).join(", "), last: names.at(-1) }) }]
+        : ["pe.pTouchOne", { name }];
     case "empty":
-      return [`About ${Math.round((p.mm2 || 0) / 100)} cm² of the news area is empty.`];
+      return ["pe.pEmpty", { n: Math.round((p.mm2 || 0) / 100) }];
     default:
-      return [String(p.kind)];
+      return null; // a kind this editor does not know: named as the engine names it
   }
 }
 
-const problemText = (p) => problemParts(p).join("");
+const problemText = (p) => {
+  const m = problemMsg(p);
+  return m ? t(...m) : String(p.kind);
+};
 
+/** The same, for the list: the headlines in their own language. */
 function problemNodes(p) {
-  const names = new Map((p.stories || []).map((x) => [`“${(headOf(x) || "").slice(0, 40)}”`, headOf(x)]));
-  return problemParts(p).map((part) =>
-    names.has(part) && names.get(part) !== SHORT_ITEMS ? el("span", { lang: "mr" }, part) : part,
-  );
+  const m = problemMsg(p);
+  if (!m) return [String(p.kind)];
+  const [key, params] = m;
+  const nodes = { ...params };
+  for (const k of ["name", "a", "b", "names"]) if (k in params) nodes[k] = mr(params[k]);
+  return tn(key, nodes);
 }
 
 function problemItems() {
@@ -2398,7 +2401,7 @@ function problemItems() {
         ? row(
             cls,
             {
-              title: "Select the story",
+              title: t("pe.selectStory"),
               "data-key": `prob:${p.kind}:${p.stories[0]}`,
               onclick: () => select(p.stories[0]),
             },
@@ -2407,7 +2410,7 @@ function problemItems() {
         : el("li", { class: cls }, ...problemNodes(p)),
     );
   }
-  if (!out.length) out.push(el("li", { class: "ok" }, "No problems: every story fits and nothing overlaps."));
+  if (!out.length) out.push(el("li", { class: "ok" }, t("pe.noProblems")));
   return out;
 }
 
@@ -2424,25 +2427,53 @@ function swapWith(story) {
   if (from && story !== from) swap(from, story);
 }
 
-/** The save state beside the button. Read aloud only when a save ends (not at every move: that would be noise). */
-function setSaved(text) {
+// the save states that end a save (read aloud)
+const SAVE_ENDS = new Set([
+  "pe.savedPassed",
+  "pe.savedProblems",
+  "pe.savedNoCheck",
+  "pe.savedUnfinished",
+  "pe.savedAgain",
+  "pe.savedChangedSince",
+]);
+
+/** The save state beside the button, as a key of strings.js ("" for none), kept so it can be shown again in another
+ * language. Read aloud only when a save ends (not at every move: that would be noise). */
+function setSaved(key = "", params = {}) {
+  S.saved = key ? [key, params] : null;
+  showSaved();
+  if (SAVE_ENDS.has(key)) say(t(key, params));
+}
+
+function showSaved() {
+  const text = S.saved ? t(...S.saved) : "";
   $("#save-state").textContent = text;
   $("#save-state").title = text; // the slot shows two lines at most: the whole status on hover
-  if (text.startsWith("Saved")) say(text);
 }
 
 /** A longer message under the toolbar (what changed, what to do next); kind marks who may clear it. Screen readers
  * hear it from a live region that is always there (an error assertively). action: {label, act}, a button beside it
  * ("Go to page 5"); every other message takes it away. */
-function notice(text, kind = "", action = null) {
-  $("#notice-text").textContent = text || "";
-  $("#notice").hidden = !text;
-  $("#notice").classList.toggle("error", kind === "error");
+function notice(message, kind = "", action = null) {
+  const text = msgText(message);
+  S.notice = text ? { message, action } : null; // kept, to be drawn again in another language
   S.noticeKind = text ? kind : "";
   S.noticeAct = text && action ? action.act : null;
+  $("#notice").classList.toggle("error", kind === "error");
+  showNotice();
+  say(text, kind === "error");
+}
+
+/** The notice as it is kept, in the language shown. */
+function showNotice() {
+  const n = S.notice;
+  const text = n ? msgText(n.message) : "";
+  $("#notice-text").textContent = text;
+  if (langFor(text)) $("#notice-text").lang = langFor(text);
+  else $("#notice-text").removeAttribute("lang");
+  $("#notice").hidden = !text;
   $("#notice-action").hidden = !S.noticeAct;
-  $("#notice-action").textContent = S.noticeAct ? action.label : "";
-  say(text || "", kind === "error");
+  $("#notice-action").textContent = S.noticeAct && n && n.action ? msgText(n.action.label) : "";
 }
 
 const sayWaiting = new Map(); // live region → text about to be read
@@ -2465,22 +2496,22 @@ function say(text, urgent = false) {
 function showBusy(text) {
   const b = $("#busy");
   const msg = S.switching
-    ? "Keeping your last change…"
+    ? t("pe.busyKeeping")
     : S.opening
-      ? text || "Opening the page…"
+      ? text || t("pe.busyOpening")
       : S.working
-        ? S.workText
+        ? msgText(S.workText)
         : S.sending || S.queued
-          ? "Setting the page…"
+          ? t("pe.stSetting")
           : T.saving
-            ? "Setting the page with the new text…"
+            ? t("pe.busyNewText")
             : "";
   b.hidden = !msg;
   if (msg && b.textContent !== msg) b.textContent = msg;
 }
 
 function showProblem(msg) {
-  setSaved(S.dirty ? "Changed · not saved" : "");
+  setSaved(S.dirty ? "pe.stChanged" : "");
   notice(msg, "error");
 }
 
@@ -2489,7 +2520,7 @@ async function goPage(n) {
   closeMenu();
   cancelDrag();
   stopSwapping();
-  if (!(await closeText(false))) return notice("Your typed text could not be saved: see the story panel.", "error");
+  if (!(await closeText(false))) return notice(L("pe.typedNotSaved"), "error");
   if (S.switching) return;
   S.switching = true; // no edits while the last ones are answered and the next page opens
   tools();
@@ -2513,33 +2544,53 @@ async function goPage(n) {
   await openPage();
 }
 
+const WEEKDAY_KEYS = ["date.sun", "date.mon", "date.tue", "date.wed", "date.thu", "date.fri", "date.sat"];
+const MONTH_KEYS = [
+  "date.jan",
+  "date.feb",
+  "date.mar",
+  "date.apr",
+  "date.may",
+  "date.jun",
+  "date.jul",
+  "date.aug",
+  "date.sep",
+  "date.oct",
+  "date.nov",
+  "date.dec",
+];
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/** A moment as the Desk shows it ("Wed 21 Oct, 14:05"), in the language shown, with Latin digits. */
 const when = (iso) => {
   const d = iso ? new Date(iso) : null;
-  return d && !Number.isNaN(d.getTime())
-    ? d.toLocaleString(undefined, {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "an earlier time";
+  if (!d || Number.isNaN(d.getTime())) return t("pe.earlier");
+  return t("date.time", {
+    wd: t(WEEKDAY_KEYS[d.getDay()]),
+    d: String(d.getDate()),
+    mon: t(MONTH_KEYS[d.getMonth()]),
+    hh: pad2(d.getHours()),
+    mm: pad2(d.getMinutes()),
+  });
 };
 
 function title() {
-  $("#title").textContent = `Page ${ID.page}`;
-  const parts = [ID.edition, S.pages ? `${S.pages} pages` : "", S.run ? `layout of ${when(S.run.started)}` : ""];
+  $("#title").textContent = t("pe.pageN", { n: ID.page });
+  const parts = [
+    ID.edition,
+    S.pages ? t("count.page", { n: S.pages }) : "",
+    S.run ? t("pe.layoutOf", { time: when(S.run.started) }) : "",
+  ];
   $("#subtitle").textContent = parts.filter(Boolean).join(" · ");
   $("#subtitle").title = $("#subtitle").textContent; // cut short when the toolbar needs the room
-  document.title = `Page ${ID.page} · ${ID.edition} · Pageinator Desk`;
+  document.title = t("pe.docTitle", { n: ID.page, edition: ID.edition, app: t("app.name") });
 }
 
 /** Leaving with a change on its way may lose it; leaving with changes not saved leaves the print file behind. */
 function leaveText() {
-  if (textBusy()) return "Your last typing is not set on the page yet: it may be lost if you leave now.";
-  if (!sent() || S.working) return "The page is still being set: your last change may be lost if you leave now.";
-  if (S.dirty)
-    return `Your changes to page ${ID.page} are kept, but its print file is made only when you save the page.`;
+  if (textBusy()) return t("pe.leaveTyping");
+  if (!sent() || S.working) return t("pe.leaveSetting");
+  if (S.dirty) return t("pe.leaveDirty", { page: String(ID.page) });
   return "";
 }
 
@@ -2559,16 +2610,17 @@ const T = {
   textSaved: false, // the typed text is saved, but the page could not be set with it (changed in another window, …)
   lastOk: true, // the last text save's outcome (a save waiting on one that was on its way uses it)
   invalid: new Set(), // articles whose typed text cannot be used (no paragraph): the page keeps the last good one
-  error: "",
+  error: "", // a message (see msgText()): why the typed text is not on the page
+  state: "", // the status line's message
   letGo: false,
 };
 const TEXT_PAUSE_MS = 900;
 const TEXT_FIELDS = [
-  ["kicker", "Kicker", "input", 1, ""],
-  ["byline", "Byline", "input", 1, ""],
-  ["headline", "Headline", "textarea", 2, "wide"],
-  ["deck", "Deck", "textarea", 2, "wide"],
-  ["body", "Text — an empty line between paragraphs; a line starting with ## is a subheading", "textarea", 12, "wide"],
+  ["kicker", "art.kicker", "input", 1, ""],
+  ["byline", "art.byline", "input", 1, ""],
+  ["headline", "art.headline", "textarea", 2, "wide"],
+  ["deck", "pe.fDeck", "textarea", 2, "wide"],
+  ["body", "pe.fBody", "textarea", 12, "wide"],
 ];
 const textBusy = () => T.saving || T.pending.size > 0 || T.invalid.size > 0; // typed text not on the page yet
 
@@ -2582,7 +2634,7 @@ async function openText(story) {
   $("#story").hidden = false;
   $("#story-title").textContent = headOf(story);
   $("#story-title").lang = langOf(headOf(story));
-  $("#story-state").textContent = "Reading the text…";
+  storyState(L("pe.reading"));
   $("#story-articles").replaceChildren();
   storyFit();
   invalidate();
@@ -2595,7 +2647,7 @@ async function openText(story) {
     const first = $("#story-articles textarea[data-field='body']");
     if (first) first.focus();
   } catch (e) {
-    $("#story-state").textContent = e.message;
+    storyState(e.message);
   }
 }
 
@@ -2621,23 +2673,21 @@ function renderText(gone) {
             if (!e.isComposing) textChanged(a.id, k, input.value);
           });
           input.addEventListener("compositionend", () => textChanged(a.id, k, input.value));
-          return el("label", { class: cls }, el("span", {}, label), input);
+          // the label keeps its key: another language changes it in place, never the box being typed in
+          return el("label", { class: cls }, el("span", { "data-t": label }, t(label)), input);
         }),
       ),
     ),
   );
   if (gone)
-    box.append(
-      el(
-        "p",
-        { class: "muted small" },
-        `${gone === 1 ? "One article" : `${gone} articles`} of this story ${gone === 1 ? "is" : "are"} no longer in ` +
-          "the edition, so that text cannot be changed here.",
-      ),
-    );
-  $("#story-state").textContent = T.articles.length
-    ? "Type to change the text; the page is set again when you pause."
-    : "This story's articles are no longer in the edition.";
+    box.append(el("p", { class: "muted small", "data-t": "pe.gone", "data-n": gone }, t("pe.gone", { n: gone })));
+  storyState(L(T.articles.length ? "pe.typeToChange" : "pe.noArticles"));
+}
+
+/** The story panel's status line (a message: see msgText()), kept to be drawn again in another language. */
+function storyState(message) {
+  T.state = message;
+  $("#story-state").textContent = msgText(message);
 }
 
 /** The story's fit, shown above its text while typing. */
@@ -2646,7 +2696,7 @@ function storyFit() {
   const f = $("#story-fit");
   if (!S.modules.some((m) => m.story === T.story)) {
     f.className = "fit warn";
-    f.textContent = "This story is not on the page now.";
+    f.textContent = t("pe.notOnPage");
     return;
   }
   const [cls, text] = fitText(noteOf(T.story));
@@ -2659,7 +2709,7 @@ function textChanged(aid, field, value) {
   p[field] = value;
   T.pending.set(aid, p);
   T.fresh = true;
-  $("#story-state").textContent = "Typing…";
+  storyState(L("pe.typing"));
   clearTimeout(T.timer);
   T.timer = setTimeout(flushText, TEXT_PAUSE_MS);
 }
@@ -2682,14 +2732,14 @@ async function flushText() {
     while (T.pending.size && gen === S.gen && ok) {
       const batch = [...T.pending];
       T.pending.clear();
-      $("#story-state").textContent = "Saving the text…";
+      storyState(L("pe.savingText"));
       let saved = 0;
       for (const [i, [aid, fields]] of batch.entries()) {
         const send = { ...fields };
         if ("body" in send && !hasParagraph(send.body)) {
           delete send.body; // a story needs some text: the page keeps the last text that had a paragraph
           T.invalid.add(aid);
-          T.error = "A story needs at least one paragraph of text: the page keeps the last text that had one.";
+          T.error = L("pe.needParagraph");
           ok = false;
         }
         try {
@@ -2706,13 +2756,13 @@ async function flushText() {
         } catch (e) {
           // what was not saved goes back to the boxes' list (typing since then wins), and is said
           for (const [a, f] of batch.slice(i)) T.pending.set(a, { ...f, ...(T.pending.get(a) || {}) });
-          T.error = `${e.message} Your text is still here; change it to try again.`;
+          T.error = [e.message, L("pe.textStillHere")];
           ok = false;
           break;
         }
       }
       if (!saved) break;
-      $("#story-state").textContent = "Setting the page with the new text…";
+      storyState(L("pe.busyNewText"));
       for (;;) {
         // a save of the page sets the text itself; else wait until the page can change
         await waitFor(() => canEdit() || S.textInline || gen !== S.gen);
@@ -2725,35 +2775,33 @@ async function flushText() {
             // the text is saved, but the page changed in another window: it is shown as it is now, and the save stops
             await resync(gen, e.message);
             T.textSaved = true;
-            T.error =
-              "Your text is saved, but the page was changed in another window or tab; it is shown again as it is now.";
+            T.error = L("pe.textSavedOther");
             ok = false;
           }
           break;
         }
-        const outcome = await exclusive("Setting the page with the new text…", setText);
+        const outcome = await exclusive(L("pe.busyNewText"), setText);
         if (outcome === "busy") continue;
         if (outcome !== "ok") {
           ok = false;
           T.textSaved = true;
-          T.error = "The text is saved, but the page could not be set with it: press Update text.";
+          T.error = L("pe.textSavedNotSet");
         }
         break;
       }
     }
-    if (gen === S.gen)
-      $("#story-state").textContent = !ok ? T.error : T.pending.size ? "Typing…" : "Saved · the page shows this text";
+    if (gen === S.gen) storyState(!ok ? T.error : L(T.pending.size ? "pe.typing" : "pe.textShown"));
     storyFit();
   } catch (e) {
     ok = false;
-    T.error = `${e.message} Your text is still here; change it to try again.`;
-    $("#story-state").textContent = T.error;
+    T.error = [e.message, L("pe.textStillHere")];
+    storyState(T.error);
   } finally {
     T.saving = false;
     if (T.pending.size && T.fresh) T.timer = setTimeout(flushText, TEXT_PAUSE_MS); // typed while saving
     settled();
   }
-  if (ok && gen === S.gen) say("The page shows your text.");
+  if (ok && gen === S.gen) say(t("pe.sayShows"));
   T.lastOk = ok && !T.pending.size && !T.invalid.size;
   return T.lastOk;
 }
@@ -2769,11 +2817,11 @@ async function setText(gen, url) {
   const locked = lockedNames();
   const data = await api("POST", `${url}/refresh`, { rev: rev() });
   if (!(await accept(data, gen))) return;
-  const { said, changed } = refreshSaid(data, locked);
+  const { said, changed, newText } = refreshSaid(data, locked);
   if (changed) {
     S.edits += 1;
     S.dirty = true;
-    setSaved("Changed · not saved");
+    setSaved("pe.stChanged");
   }
   // the typed story alone needs no word; other stories set with their current text, articles gone, the folio, an ad
   // or a story that would now be of another kind do (and a save waiting on this text stops to let them be checked)
@@ -2784,8 +2832,8 @@ async function setText(gen, url) {
     !!data.folio_changed ||
     (data.ads_changed || []).length > 0 ||
     (data.kind_changes || []).length > 0;
-  const notes = others ? said : said.filter((x) => !x.endsWith("set with the new text."));
-  if (notes.length) notice(notes.join(" "));
+  const notes = others ? said : said.filter((x) => x !== newText);
+  if (notes.length) notice(notes);
   if (others && S.textInline) T.others = notes;
 }
 
@@ -2795,7 +2843,7 @@ async function closeText(refocus = true) {
   if (!T.story) return true;
   if ((T.pending.size || T.invalid.size) && !(await flushText()) && !T.letGo) {
     T.letGo = true;
-    $("#story-state").textContent = `${T.error || "Your text could not be saved."} Close again to let it go.`;
+    storyState([msgText(T.error) ? T.error : L("pe.textNotSaved"), L("pe.closeAgain")]);
     return false;
   }
   await waitFor(() => !T.saving);
@@ -2866,9 +2914,7 @@ $("#p-zoom").addEventListener("blur", () => {
   S.zooming = false;
   renderPanels();
 });
-$("#p-lock-note").textContent =
-  `Locked in place for this layout: its place, width and height stay as they are, and it stays on this page. Unlock ` +
-  `it (${SHIFT}L) to change them. Its text can still change.`;
+
 const typing = new Set(); // number fields being typed in (the panel does not overwrite them meanwhile)
 for (const [id, keyName] of [
   ["#p-height", "h"],
@@ -2888,15 +2934,78 @@ for (const [id, keyName] of [
     update(m.story, snapModule({ ...m, [keyName]: v }, keyName === "h" ? "y" : "h"));
   });
 }
-if (MAC)
-  for (const b of document.querySelectorAll("[title*='Ctrl+'], [title*='Shift+']"))
-    b.title = b.title.replaceAll("Ctrl+", "⌘").replaceAll("Shift+", "⇧");
+// ------------------------------------------------------------------------------------------- language (English, मराठी)
+
+/** Keys as printed on the keyboard (in every language): on a Mac, ⌘ and ⇧. "A | B": either key. */
+const keysText = (keys) =>
+  (MAC ? keys.replaceAll("Ctrl+", "⌘").replaceAll("Shift+", "⇧") : keys).replaceAll(" | ", " / ");
+
+/** The help under the checks: the buttons named as they are labelled, in bold. */
+const HELP_NAMES = {
+  save: "pe.save",
+  another: "pe.alt",
+  crop: "pe.crop",
+  enlarge: "pe.enlarge",
+  focal: "pe.focal",
+  reset: "pe.reset",
+  move: "pe.moveTo",
+};
+
+/** Puts the language shown into the editor's static parts (editor.html) and draws what it shows again. The text boxes
+ * of the story panel are never drawn again (their labels change in place), so nothing typed is lost. */
+function applyLang() {
+  document.documentElement.lang = lang();
+  for (const node of document.querySelectorAll("[data-t]"))
+    node.textContent = t(node.dataset.t, node.dataset.n ? { n: Number(node.dataset.n) } : {});
+  for (const name of ["aria-label", "placeholder"])
+    for (const node of document.querySelectorAll(`[data-t-${name}]`))
+      node.setAttribute(name, t(node.getAttribute(`data-t-${name}`)));
+  for (const node of document.querySelectorAll("[data-t-title]")) {
+    const keys = node.dataset.keys;
+    node.title = t(node.dataset.tTitle, keys ? { keys: keysText(keys) } : {});
+  }
+  const bold = Object.fromEntries(Object.entries(HELP_NAMES).map(([k, key]) => [k, el("strong", {}, t(key))]));
+  for (const p of document.querySelectorAll("[data-help]")) p.replaceChildren(...tn(p.dataset.help, bold));
+  $("#story-head").replaceChildren(...tn("pe.textOf", { title: $("#story-title") }));
+  $("#p-lock-note").textContent = t("pe.lockNote", { key: LOCK_KEY });
+  for (const radio of document.querySelectorAll("#lang-switch input[name='lang']"))
+    radio.checked = radio.value === lang();
+  canvasLabel();
+  showSaved();
+  showNotice();
+  title();
+  showBusy();
+  if (T.story) $("#story-state").textContent = msgText(T.state);
+  if (M.open) {
+    M.items = levelItems();
+    renderMenu();
+  }
+  if (T.story) storyFit();
+  renderPanels();
+}
+
+/** Another language, without a reload: chosen here, or on the Desk's main screen (another tab). */
+function changeLang(value, { save = true } = {}) {
+  if (!LANGS.includes(value) || value === lang()) return applyLang();
+  setLang(value);
+  if (save) saveLang(value);
+  applyLang();
+  invalidate();
+}
+
+for (const radio of document.querySelectorAll("#lang-switch input[name='lang']"))
+  radio.addEventListener("change", () => radio.checked && changeLang(radio.value));
+window.addEventListener("storage", (e) => {
+  if (e.key === LANG_STORE_KEY) changeLang(savedLang(), { save: false });
+});
+setLang(savedLang()); // the language chosen on the Desk's main screen (or here), in this browser
+applyLang();
 showRulers();
 $("#back").href = `/?edition=${encodeURIComponent(ID.edition)}&step=run`;
 $("#back").addEventListener("click", (e) => {
   if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return; // another tab or window
   const why = leaveText();
-  if (why && !window.confirm(`${why}\n\nLeave the editor?`)) {
+  if (why && !window.confirm(t("pe.leave", { why }))) {
     e.preventDefault();
     return;
   }
