@@ -160,3 +160,16 @@ The owner decided on 2026-10-21:
 | L2-121 | `test/db/media.test.ts` downloads | The download test does not assert that the link's `versionId` is the asset's `version_id` | The redirect is built from `version_id`, and the bytes are checked |
 | L2-122 | `src/modules/media/picture.ts` | The HEIC brands `heif` and `hevx` are not named: such a file is refused as "not a JPEG, PNG or WebP" rather than as HEIC | It is refused all the same; only the advice differs |
 | L2-123 | `src/modules/media/picture.ts` | EXIF Orientation is ignored for width and height, while the Desk applies `exif_transpose`: a portrait photo is stored as landscape (matters for L2.2 renditions and layout) | Nothing lays out photos from these sizes before L2.2 |
+| L2-124 | `apps/web` `TwoStepScreen` | When `/me` fails after the code is accepted, the screen has no handling for it | Found in the L2-G review; the server has accepted the code either way |
+| L2-125 | `apps/web` invitations | The text for "too many pending invitations" is wrong | The API's refusal is right; only the wording |
+| L2-126 | `apps/web` Join screen | The advice is the same for 403 and 409 | Only the advice; the API's answers differ |
+| L2-127 | `apps/api` people routes | The people routes do not honour `Idempotency-Key` yet | Found in the L2-G review; to do with the next people-route change |
+| L2-128 | `apps/api` Better Auth `list-sessions` | It sends every session's token to the browser: strip the tokens on the server and revoke sessions by id | Only the person's own sessions, to the person signed in |
+| L2-129 | `apps/web` two-step enrolment | `ACCOUNT_TEMPORARILY_LOCKED` during enrolment shows a generic message | The lock holds; only the wording |
+| L2-130 | `apps/web` device list | A malformed date crashes the device list | Found in the L2-G review; the API sends ISO dates |
+| L2-131 | `apps/web` tests | The tests of the built page and of the QR code are weak | Found in the L2-G review |
+| L2-132 | `apps/web` tests | No test shows that secrets (the TOTP secret, backup codes, tokens) never reach browser storage or the URL | The web writes only the workspace choice and the language to `localStorage` (as of L2-G) |
+| L2-133 | `apps/web` `QrCode` | The QR colours come from theme tokens: draw it dark on light whatever the theme, so every scanner reads it | The page shows the same secret as text beside it |
+| L2-134 | `apps/web` Marathi | AM/PM in times is not given in Marathi | Only the marker |
+| L2-135 | `apps/web` language | Texts made at the time of an action keep the old language after a switch | Only texts already on the screen |
+| L2-136 | `apps/api` sign-in rate limit | The sign-in limit is per IP: a newsroom behind one shared NAT shares it | The per-address limits still apply |
