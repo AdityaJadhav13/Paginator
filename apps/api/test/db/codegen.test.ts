@@ -70,6 +70,6 @@ describe("schema.gen.ts", () => {
     expect(() => render([{ ...column, type: "_interval", element: "interval" }])).toThrow(
       "the type interval[] has no mapping yet",
     );
-    expect(() => render([{ ...column, type: "text", generated: true }])).toThrow("generated columns have no mapping");
+    expect(render([{ ...column, type: "text", generated: true }])).toContain(": GeneratedAlways<");
   });
 });

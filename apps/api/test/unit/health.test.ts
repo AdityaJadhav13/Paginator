@@ -26,13 +26,16 @@ describe("health", () => {
     app = await testApp();
     const res = await app.inject({ url: "/readyz" });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ status: "ready", dependencies: { database: "not_configured" } });
+    expect(res.json()).toEqual({
+      status: "ready",
+      dependencies: { database: "not_configured", storage: "not_configured" },
+    });
   });
 
   it.each([
-    ["answers", answers, 200, { status: "ready", dependencies: { database: "ok" } }],
-    ["says no", saysNo, 503, { status: "not_ready", dependencies: { database: "failing" } }],
-    ["throws", throws, 503, { status: "not_ready", dependencies: { database: "failing" } }],
+    ["answers", answers, 200, { status: "ready", dependencies: { database: "ok", storage: "not_configured" } }],
+    ["says no", saysNo, 503, { status: "not_ready", dependencies: { database: "failing", storage: "not_configured" } }],
+    ["throws", throws, 503, { status: "not_ready", dependencies: { database: "failing", storage: "not_configured" } }],
   ] as const)("/readyz when the database check %s", async (_name, database, status, body) => {
     app = await testApp({}, { database });
     const res = await app.inject({ url: "/readyz" });
@@ -51,7 +54,10 @@ describe("health", () => {
       const res = await pending;
       expect(CHECK_TIMEOUT_MS).toBe(2000);
       expect(res.statusCode).toBe(503);
-      expect(res.json()).toEqual({ status: "not_ready", dependencies: { database: "failing" } });
+      expect(res.json()).toEqual({
+        status: "not_ready",
+        dependencies: { database: "failing", storage: "not_configured" },
+      });
     } finally {
       vi.useRealTimers();
     }

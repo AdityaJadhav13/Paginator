@@ -29,6 +29,7 @@ export type IdentityApp = {
 
 export async function identityApp(db: TestDatabase, env: Record<string, string> = {}): Promise<IdentityApp> {
   const run = inject("database");
+  const storage = inject("storage");
   const config = loadConfig({
     PGN_LOG_LEVEL: "silent",
     PGN_ALLOWED_ORIGINS: ORIGIN,
@@ -39,6 +40,10 @@ export async function identityApp(db: TestDatabase, env: Record<string, string> 
     PGN_AUTH_PASSWORD: run.passwords.auth,
     PGN_LISTEN_PASSWORD: run.passwords.listen,
     PGN_AUTH_SECRET: SECRET,
+    PGN_S3_ENDPOINT: storage.endpoint,
+    PGN_S3_ACCESS_KEY_ID: storage.accessKeyId,
+    PGN_S3_SECRET_ACCESS_KEY: storage.secretAccessKey,
+    PGN_S3_WORK_BUCKET: storage.bucket,
     ...env,
   });
   const sent: Sent[] = [];

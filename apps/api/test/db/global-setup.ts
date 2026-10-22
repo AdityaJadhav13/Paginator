@@ -9,6 +9,7 @@ import { Client, escapeIdentifier } from "pg";
 import type { TestProject } from "vitest/node";
 import { migrate } from "../../src/db/migrate.ts";
 import { type TestSettings, connect, secure } from "./settings.ts";
+import { makeRunBucket } from "./storage-run.ts";
 
 const ENV_FILE = fileURLToPath(new URL("../../../../.env.dev", import.meta.url));
 const PASSWORDS = {
@@ -65,9 +66,19 @@ export default async function setup(project: TestProject): Promise<() => Promise
     throw error;
   }
   project.provide("database", { ...base, template });
+  let bucket: Awaited<ReturnType<typeof makeRunBucket>>;
+  try {
+    bucket = await makeRunBucket(base.run);
+  } catch (error) {
+    await dropRun(admin, base.run);
+    await admin.end();
+    throw error;
+  }
+  project.provide("storage", bucket.storage);
   return async () => {
     await dropRun(admin, base.run);
     await admin.end();
+    await bucket.drop();
   };
 }
 

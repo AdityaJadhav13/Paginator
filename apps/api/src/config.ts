@@ -94,6 +94,30 @@ function isSender(value: string): boolean {
 const LOOPBACK = new Set(["127.0.0.1", "::1", "localhost"]);
 const SMTP_TLS = ["starttls", "implicit", "none"] as const;
 
+/** The object store's settings, shared by the API and scripts/dev-buckets.ts. */
+const STORAGE = {
+  // Files (plan §6): the object store, SeaweedFS on this machine in development (§6.5), S3 in the pilot. Photo
+  // uploads and downloads are on only when the key pair is set. Plain http only for a store on this machine.
+  PGN_S3_ENDPOINT: z
+    .string()
+    .refine(isOrigin, { error: "must be an origin such as https://s3.ap-south-1.amazonaws.com (no path)" })
+    .default("http://127.0.0.1:58333"),
+  PGN_S3_REGION: z
+    .string()
+    .regex(/^[a-z]{2}(-[a-z]+)+-[0-9]$/, { error: "must be a region such as ap-south-1" })
+    .default("ap-south-1"),
+  PGN_S3_ACCESS_KEY_ID: z.string().min(1, { error: "must not be empty" }).optional(),
+  PGN_S3_SECRET_ACCESS_KEY: password().optional(),
+  PGN_S3_WORK_BUCKET: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/, { error: "must be a bucket name" })
+    .default("pgn-dev-work"),
+  PGN_S3_ARCHIVE_BUCKET: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/, { error: "must be a bucket name" })
+    .default("pgn-dev-archive"),
+};
+
 const Env = z
   .object({
     PGN_API_HOST: z.string().min(1, { error: "must not be empty" }).default("127.0.0.1"),
@@ -141,6 +165,7 @@ const Env = z
       .string()
       .refine(isSender, { error: "must be an address, or a name and <address>" })
       .default("Pageinator <no-reply@example.test>"),
+    ...STORAGE,
     // Better Auth reads these from the environment itself, whatever our settings say: the first two can turn its
     // telemetry on, BETTER_AUTH_SECRETS replaces PGN_AUTH_SECRET, and BETTER_AUTH_TRUSTED_ORIGINS widens the
     // origins and redirect targets it accepts. The API refuses to start with any of them.
@@ -165,6 +190,21 @@ const Env = z
     if ((env.PGN_SMTP_USER === undefined) !== (env.PGN_SMTP_PASSWORD === undefined)) {
       context.addIssue({ code: "custom", path: ["PGN_SMTP_USER"], message: "and PGN_SMTP_PASSWORD go together" });
     }
+    if ((env.PGN_S3_ACCESS_KEY_ID === undefined) !== (env.PGN_S3_SECRET_ACCESS_KEY === undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["PGN_S3_ACCESS_KEY_ID"],
+        message: "and PGN_S3_SECRET_ACCESS_KEY go together",
+      });
+    }
+    const store = new URL(env.PGN_S3_ENDPOINT);
+    if (store.protocol === "http:" && !LOOPBACK.has(store.hostname.replace(/^\[|\]$/g, ""))) {
+      context.addIssue({
+        code: "custom",
+        path: ["PGN_S3_ENDPOINT"],
+        message: "may be http only for a store on this machine",
+      });
+    }
   })
   .transform((env) => ({
     host: env.PGN_API_HOST,
@@ -182,6 +222,7 @@ const Env = z
     },
     publicOrigin: env.PGN_PUBLIC_ORIGIN ?? env.PGN_ALLOWED_ORIGINS[0] ?? "",
     authSecret: env.PGN_AUTH_SECRET,
+    storage: storageOf(env),
     mail: {
       host: env.PGN_SMTP_HOST,
       port: env.PGN_SMTP_PORT,
@@ -192,6 +233,32 @@ const Env = z
         : {}),
     },
   }));
+
+type StorageEnv = {
+  PGN_S3_ENDPOINT: string;
+  PGN_S3_REGION: string;
+  PGN_S3_ACCESS_KEY_ID?: string | undefined;
+  PGN_S3_SECRET_ACCESS_KEY?: string | undefined;
+  PGN_S3_WORK_BUCKET: string;
+  PGN_S3_ARCHIVE_BUCKET: string;
+};
+
+function storageOf(env: StorageEnv) {
+  if (env.PGN_S3_ACCESS_KEY_ID === undefined || env.PGN_S3_SECRET_ACCESS_KEY === undefined) return undefined;
+  return {
+    endpoint: env.PGN_S3_ENDPOINT,
+    region: env.PGN_S3_REGION,
+    accessKeyId: env.PGN_S3_ACCESS_KEY_ID,
+    secretAccessKey: env.PGN_S3_SECRET_ACCESS_KEY,
+    // SeaweedFS (and any store on this machine) answers by path; S3 itself by bucket host name
+    forcePathStyle: LOOPBACK.has(new URL(env.PGN_S3_ENDPOINT).hostname.replace(/^\[|\]$/g, "")),
+    workBucket: env.PGN_S3_WORK_BUCKET,
+    archiveBucket: env.PGN_S3_ARCHIVE_BUCKET,
+  };
+}
+
+/** scripts/dev-buckets.ts's settings: the object store's only. */
+const StorageOnlyEnv = z.object(STORAGE).transform((env) => storageOf(env));
 
 /** The migration command's settings (pnpm --filter @pageinator/api db:migrate, and db:codegen): it signs in as
  * pgn_migrator. */
@@ -217,6 +284,10 @@ function parse<T>(schema: z.ZodType<T>, env: Readonly<Record<string, string | un
 
 export function loadConfig(env: Readonly<Record<string, string | undefined>>): Config {
   return parse(Env, env, "The API's");
+}
+
+export function loadStorageConfig(env: Readonly<Record<string, string | undefined>>) {
+  return parse(StorageOnlyEnv, env, "The object store's");
 }
 
 export function loadMigratorConfig(env: Readonly<Record<string, string | undefined>>): MigratorConfig {

@@ -26,6 +26,11 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
   invalid_transition: { status: 409, message: "This story cannot be moved to that state now." },
   request_in_progress: { status: 409, message: "This request is still being handled. Wait a moment, then check." },
   idempotency_key_reused: { status: 422, message: "This request was already sent with different content." },
+  file_too_large: { status: 413, message: "This picture is larger than 40 MB. Save it smaller and try again." },
+  not_a_picture: {
+    status: 422,
+    message: "This file is not a picture Pageinator can read. Use a JPEG, PNG or WebP file.",
+  },
   request_too_large: { status: 413, message: "This request is too large." },
   not_json: { status: 415, message: "This request must be sent as JSON." },
   slow_down: { status: 429, message: "Too many tries. Wait a minute and try again." },

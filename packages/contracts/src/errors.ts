@@ -2,7 +2,7 @@
 // The web shows its own English or Marathi text for `code` and falls back to `message`.
 import { z } from "zod";
 
-/** The codes the API answers with today; later PRs add theirs from §5.1 (edition_exists, file_too_large, …). */
+/** The codes the API answers with today; later PRs add theirs from §5.1 (edition_exists, …). */
 export const ERROR_CODES = [
   "invalid_request",
   "signed_out",
@@ -14,6 +14,8 @@ export const ERROR_CODES = [
   "invalid_transition",
   "request_in_progress",
   "idempotency_key_reused",
+  "file_too_large",
+  "not_a_picture",
   "request_too_large",
   "not_json",
   "slow_down",

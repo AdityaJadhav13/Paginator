@@ -6,11 +6,14 @@ import { z } from "zod";
 
 /** Resolves true when the dependency answers; false, a rejection or no answer within CHECK_TIMEOUT_MS is failing. */
 export type Check = () => Promise<boolean>;
-export type Checks = { database?: Check };
+export type Checks = { database?: Check; storage?: Check };
 export const CHECK_TIMEOUT_MS = 2000;
 
 const State = z.enum(["ok", "failing", "not_configured"]);
-const Readiness = z.object({ status: z.enum(["ready", "not_ready"]), dependencies: z.object({ database: State }) });
+const Readiness = z.object({
+  status: z.enum(["ready", "not_ready"]),
+  dependencies: z.object({ database: State, storage: State }),
+});
 
 async function state(check: Check | undefined): Promise<z.infer<typeof State>> {
   if (!check) return "not_configured";
@@ -31,7 +34,8 @@ export const health: FastifyPluginAsyncZod<{ checks: Checks }> = async (app, { c
   const Alive = z.object({ status: z.literal("ok") });
   app.get("/healthz", { schema: { response: { 200: Alive } } }, async () => ({ status: "ok" as const }));
   app.get("/readyz", { schema: { response: { 200: Readiness, 503: Readiness } } }, async (_request, reply) => {
-    const dependencies = { database: await state(checks.database) };
+    const [database, storage] = await Promise.all([state(checks.database), state(checks.storage)]);
+    const dependencies = { database, storage };
     const ready = !Object.values(dependencies).includes("failing");
     return reply.code(ready ? 200 : 503).send({ status: ready ? "ready" : "not_ready", dependencies });
   });

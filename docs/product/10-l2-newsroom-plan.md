@@ -923,9 +923,14 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 - Deduplication is by `(org_id, sha256)` in the database, within one organisation only (RJ07).
 - Encryption is SSE-S3. SSE-KMS is optional; it costs per request, so it is the owner's choice.
 
+**As built (PR 18):**
+- **Uploads wait under `uploads/orgs/<org>/pubs/<pub>/<upload>`**, not under the organisation's prefix: a lifecycle rule can match a key's start only, so quarantine needs a prefix of its own (`uploads/`, deleted after a day). Completed uploads are copied out to `orgs/<org>/pubs/<pub>/assets/<asset>/original`. Both keys are computed by the database from ids.
+- **One asset per picture and publication** (`(org_id, publication_id, sha256)`), not per organisation: a photo found in another publication would tell a reporter it is there.
+- **The daily 2 GB** is counted in `app.upload_quota`, under the organisation wall only, under a row lock.
+
 ### 6.2 Presigned uploads
 
-1. **Presign.** `POST /uploads` checks the type (JPEG, PNG, WebP) and size, writes an `upload` row, and returns a presigned **POST** (@aws-sdk/s3-presigned-post 3.1153.0) valid for 15 minutes:
+1. **Presign.** `POST /uploads` checks the type (JPEG, PNG, WebP) and size, writes an `upload` row, and returns a presigned **POST** (@aws-sdk/s3-presigned-post 3.1152.0) valid for 15 minutes:
    - exact key;
    - `content-length-range` from 1 byte to 40 MB;
    - Content-Type pinned;
@@ -933,7 +938,7 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
    POST is used rather than PUT so that S3 itself enforces the size limit.
 2. **Upload.** The browser or phone uploads straight to S3, with a progress bar and retry. On phones: `accept="image/jpeg,image/png,image/webp"` with `capture="environment"`. Whether iOS converts HEIC to JPEG for this input is to verify on the newsroom's phones.
 3. **Complete.** `POST /uploads/{u}/complete`:
-   - L2.1: the API does HeadObject (size) and a ranged GET of the first 32 bytes to sniff the magic bytes, then creates the asset as `received`.
+   - L2.1: the API reads the whole object once (at most 40 MB): its SHA-256 (for deduplication and the object's metadata), its type from its magic bytes, and its width and height from the format's own header in its first 2 MB (our own small reader, no image library). A ranged GET of 32 bytes, as first planned, gives neither the hash nor the size. It reads and copies the same object version, so a second upload under the still-valid policy changes nothing. HEIC and AVIF are refused (422 `not_a_picture`) for now. The asset is created as `received`.
    - L2.2 onward: the API also defers `media.ingest`, and the worker decides `ready` or `rejected`.
 4. **The original is never altered.** EXIF (including GPS) stays only in the original; renditions drop all metadata, as the Desk's do.
 
@@ -957,7 +962,8 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 - **SeaweedFS 4.48** (Apache-2.0; the same software as the VPS option) runs `weed server -s3` on 127.0.0.1:58333.
 - `apps/api/scripts/dev-buckets.ts` creates the buckets: versioning on, and Object Lock enabled at creation on the archive bucket, because SeaweedFS needs it at creation.
 - **Unit tests** use an in-memory object-store fake. **Integration tests** use SeaweedFS.
-- **One staging check on real S3** in L2.1 covers POST policy conditions and checksums. SeaweedFS 4.48's notes mention POST-policy uploads and Object Lock; their exact behaviour is to verify by test.
+- **One staging check on real S3** in L2.1 covers POST policy conditions and checksums.
+- **SeaweedFS 4.48, as tested (PR 18):** it enforces every POST policy condition (size, exact key, Content-Type, metadata, expiry); it versions objects and serves a version by its VersionId through a presigned GET with the response headers set; Object Lock is enabled at bucket creation; it accepts the `uploads/` lifecycle rule, but whether it deletes after a day was not observable in a test (11-fix-before-launch). The database tests use a bucket of their own per run.
 
 ---
 
@@ -1176,7 +1182,7 @@ Rules for every PR:
 | 15 | desk-text | `packages/desk-text` (port of `blocks`, `body_words`, `is_brief`, `clean_text`, the paste parser) · a Python vector generator run in the oracle venv on fictional text · parity test | ~350 | 4 |
 | 16 | content schema | Migrations for `section`, `edition`, `story`, `story_revision` (with the closed-revision trigger), `story_status_change`, `story_photo`, `comment`, `idempotency_key`, `desk_bundle` and `desk_bundle_revision`, with RLS; server-made ids; keys with `org_id` and `publication_id` (§3.3); (b) covers them automatically. Not yet: `search_text`/pg_trgm, the `asset` foreign key (PR 18) | ~350 | 6, 15 |
 | 17 | stories API (built in L2-F; §5.4 says what it decided) | Create, read, list, update with revisions and `baseRevision` · transitions (§5.4) · assignment · paste · idempotency middleware · role-matrix tests · the endpoint tenancy generator (c) | ~400 | 16, 9 |
-| 18 | photos (originals) | @aws-sdk/client-s3, s3-presigned-post and s3-request-presigner 3.1153.0 · presign, complete and sniff · assets · story photo · downloads · storage tests (d) · `dev-buckets.ts` | ~400 | 17 |
+| 18 | photos (originals) | @aws-sdk/client-s3, s3-presigned-post and s3-request-presigner 3.1152.0 (3.1153.0 was younger than the 7-day rule) · presign, complete and sniff · assets · story photo · downloads · storage tests (d) · `dev-buckets.ts` | ~400 | 17 |
 | 19 | comments, notifications, live updates | Comments · notifications with §11 defaults · SSE over LISTEN/NOTIFY with authorised fan-out (test (f)); the streams end in a `preClose` hook, so a stop does not wait the whole grace period · send-back and invitation-accepted emails | ~400 | 17 |
 | 20 | web 4: shell and Team | Navigation from `/me` permissions · Team (members, invite dialog, pending invitations) | ~350 | 14, 10 |
 | 21 | web 5: Stories list | Content desk table and phone list · status chips · words · filters · edition picker · minimal "Create edition" | ~400 | 20, 17 |
@@ -1204,7 +1210,7 @@ Rules for every PR:
 | fastify-type-provider-zod | 7.0.0 | MIT | npm (peers: zod ≥ 4.1.5, fastify ^5.5.0, @fastify/swagger ≥ 9.5.1, openapi-types ^12.1.3) |
 | @fastify/swagger · openapi-types | 9.9.2 · 12.1.3 | MIT · MIT | npm |
 | @fastify/rate-limit · helmet · cookie · cors · under-pressure | 11.2.1 · 13.2.0 · 11.1.3 · 11.3.1 · 9.2.1 | MIT | npm (cookie, cors and under-pressure probably not needed) |
-| @aws-sdk/client-s3 · s3-presigned-post · s3-request-presigner | 3.1153.0 | Apache-2.0 | npm |
+| @aws-sdk/client-s3 · s3-presigned-post · s3-request-presigner | 3.1152.0 (built; 3.1153.0 was planned) | Apache-2.0 | npm. 3.1153.0 (19 Oct) was younger than the 7-day rule when PR 18 was built; 3.1152.0 (14 Oct) brings 28 packages, 26 Apache-2.0, `bowser` MIT and `tslib` 0BSD, as a registry walk predicted exactly |
 | pino | 10.4.0 | MIT | npm |
 | nodemailer | 10.1.1 (built; 10.1.7 was planned) | MIT-0 | npm (MIT-0 is on the allowlist). The newest release at least 7 days old when installed; upgrade to ≥ 10.1.4 is 11-fix-before-launch L2-22 |
 | @node-rs/argon2 | not used | — | argon2id runs on Node's built-in `crypto.argon2` (§4.1), so no native package is needed |
