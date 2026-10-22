@@ -151,8 +151,10 @@ def fit_long_side(img: Image.Image, max_px: int) -> Image.Image:
 
 
 def _jpeg(img: Image.Image) -> bytes:
+    """An RGB JPEG with no metadata: Pillow's JPEG writer copies a picture's comment (a JPEG COM segment, a PNG
+    `comment` text) unless told not to, and a comment can hold a place or a name."""
     buf = io.BytesIO()
-    img.convert("RGB").save(buf, "JPEG", quality=PREVIEW_QUALITY)
+    img.convert("RGB").save(buf, "JPEG", quality=PREVIEW_QUALITY, comment=b"")
     return buf.getvalue()
 
 

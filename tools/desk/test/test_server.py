@@ -564,6 +564,25 @@ class ImagePipeline(unittest.TestCase):
         self.assertEqual(images.to_srgb(plain).getpixel((0, 0)), (200, 60, 40))
         self.assertNotEqual(images.to_srgb(tagged).getpixel((0, 0)), (200, 60, 40))   # P3 is wider than sRGB
 
+    def test_previews_carry_no_comment_or_other_metadata(self):
+        """Pillow's JPEG writer copies a picture's comment unless told not to: a JPEG COM segment or a PNG comment
+        must not reach the preview (it can hold a place or a name)."""
+        from PIL import PngImagePlugin
+        jpeg = io.BytesIO()
+        Image.new("RGB", (50, 40), (200, 30, 30)).save(jpeg, "JPEG", comment=b"fictional place 18.52 73.85")
+        info = PngImagePlugin.PngInfo()
+        info.add_text("comment", "fictional place 18.52 73.85")
+        png = io.BytesIO()
+        Image.new("RGB", (50, 40), (200, 30, 30)).save(png, "PNG", pnginfo=info)
+        for data in (jpeg.getvalue(), png.getvalue()):
+            preview = images.convert_photo(data).preview
+            self.assertNotIn(b"18.52", preview)
+            at, markers = 2, []                                          # the segments before the picture data
+            while preview[at] == 0xFF and preview[at + 1] != 0xDA:
+                markers.append(preview[at + 1])
+                at += 2 + int.from_bytes(preview[at + 2:at + 4], "big")
+            self.assertFalse({0xE1, 0xE2, 0xED, 0xFE} & set(markers), [hex(m) for m in markers])
+
     def test_photo_is_scaled_never_enlarged_and_rotated(self):
         big = images.convert_photo(jpeg_bytes((4400, 3000)))
         self.assertEqual((big.width, big.height), (2000, 1364))

@@ -150,3 +150,20 @@ jobs:
         run: tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py
       - name: browser module tests (page editor view, words, paste)
         run: node --test tools/desk/test/*.mjs
+
+  worker:
+    name: engine worker and Python licences
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: worker environment (its lock, with hashes, as the worker's image installs it)
+        run: |
+          uv venv --python 3.11.14 apps/engine-worker/.venv
+          uv pip install --python apps/engine-worker/.venv --require-hashes -r apps/engine-worker/requirements.lock
+      - name: worker task core tests (fictional pictures; no colour profile, no network)
+        run: apps/engine-worker/.venv/bin/python -B -m unittest discover -s apps/engine-worker/test
+      - name: the Python licence inventory is the locks' manylinux wheels as PyPI serves them
+        run: apps/engine-worker/.venv/bin/python -B tools/licences/python_inventory.py --check

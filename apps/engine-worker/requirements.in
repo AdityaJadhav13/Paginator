@@ -1,0 +1,4 @@
+# The worker's io environment (plan §2.2): the Desk server's packages, pinned in experiments/phase0/pdfx1, unchanged.
+# Later PRs add the S3 client (W3) and the queue driver (W6, after the owner's decision D-8). Locked with hashes:
+#   uv pip compile apps/engine-worker/requirements.in --generate-hashes --python-version 3.11 --output-file apps/engine-worker/requirements.lock
+-r ../../experiments/phase0/pdfx1/requirements.txt
