@@ -43,8 +43,13 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   asset: ["INSERT", "SELECT", "UPDATE"],
   upload: ["INSERT", "SELECT", "UPDATE"],
   upload_quota: ["INSERT", "SELECT", "UPDATE"],
+  // notifications (migration 2026_11_24_0001): never deleted; only read_at and emailed_at change (COLUMN_RIGHTS)
+  notification: ["INSERT", "SELECT"],
   publication_grant: ["DELETE", "INSERT", "SELECT", "UPDATE"],
 };
+
+/** The column-level grants allowed, as `schema.table role RIGHT (columns)`: any other is a problem. */
+export const COLUMN_RIGHTS: readonly string[] = ["app.notification pgn_app UPDATE (emailed_at, read_at)"];
 
 /** pgn_auth's rights on each identity table: Better Auth's own (it reads and writes them as it needs), and ours,
  * with auth_event append-only. A table missing here is a problem. Identity tables have no row-level security: no other
@@ -190,12 +195,19 @@ export async function catalogProblems(su: Client, options: CatalogOptions = {}):
       add(`${row.schema}.${row.name}: ${row.role} has ${has}, not ${want.join(", ") || "none"}`);
     }
   }
-  const columnGrants = await su.query<{ relation: string }>(
-    `select distinct n.nspname || '.' || c.relname as relation
+  // column-level grants: exactly COLUMN_RIGHTS (pgn_app may change only a notification's read_at and emailed_at)
+  const columnGrants = await su.query<{ grant: string }>(
+    `select n.nspname || '.' || c.relname || ' ' || r.rolname::text || ' ' || x.privilege_type
+         || ' (' || string_agg(a.attname, ', ' order by a.attname) || ')' as grant
      from pg_attribute a join pg_class c on c.oid = a.attrelid join pg_namespace n on n.oid = c.relnamespace
-     where ${USER_SCHEMA} and a.attnum > 0 and a.attacl is not null order by 1`,
+     cross join lateral aclexplode(a.attacl) x
+     join (select oid, rolname from pg_roles union all select 0, 'public') r on r.oid = x.grantee
+     where ${USER_SCHEMA} and a.attnum > 0 and a.attacl is not null
+     group by n.nspname, c.relname, r.rolname, x.privilege_type order by 1`,
   );
-  for (const { relation } of columnGrants.rows) add(`${relation} has column-level grants`);
+  const columns = columnGrants.rows.map((row) => row.grant);
+  for (const grant of columns) if (!COLUMN_RIGHTS.includes(grant)) add(`${grant} is a column-level grant not listed`);
+  for (const grant of COLUMN_RIGHTS) if (!columns.includes(grant)) add(`${grant} is missing`);
 
   // Roles: none can bypass anything; pgn_owner cannot sign in; the only membership is the migrator's SET ROLE.
   const roles = await su.query<{ name: string; login: boolean; unsafe: boolean }>(

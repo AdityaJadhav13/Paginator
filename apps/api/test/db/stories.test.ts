@@ -629,9 +629,11 @@ describe("tenancy (c): every stories endpoint with another tenant's ids answers 
                     ? { baseRevision: 1, userId: null }
                     : url.endsWith("/paste")
                       ? { text: "Headline\nBody" }
-                      : route.method === "POST"
-                        ? { headline: "Intruder" }
-                        : undefined;
+                      : url.endsWith("/comments") && route.method === "POST"
+                        ? { body: "intruder" }
+                        : route.method === "POST"
+                          ? { headline: "Intruder" }
+                          : undefined;
         // the Owner of A reaches all of A: only another tenant's ids stand in the way
         const target = route.method === "DELETE" && url.endsWith("/photo") ? `${url}?baseRevision=1` : url;
         const res = await change(route.method as "GET", target, d.a.ownerCookie, payload);

@@ -74,6 +74,13 @@ export type IdentityStore = {
   membership(orgId: string, userId: string): Promise<Membership | null>;
   /** Every organisation the person is a member of. */
   memberships(userId: string): Promise<(Membership & { orgName: string })[]>;
+  /** These people's roles in the organisation (as Better Auth keeps them), for those who are members. */
+  memberRoles(orgId: string, userIds: readonly string[]): Promise<Map<string, string>>;
+  /** Each person's language (the web's, Me.locale): English unless they chose Marathi. */
+  languages(userIds: readonly string[]): Promise<Map<string, "en" | "mr">>;
+  /** The session as it is now, when it still holds (not ended, not past its expiry, younger than the absolute
+   * limit): whether it counts as made with two-step (as session.ts reads it: twoStepAt, and two-step still on). */
+  sessionNow(sessionId: string, absoluteMs: number): Promise<{ twoStep: boolean } | null>;
   /** An organisation's members, with when each was last active (their latest session). */
   members(orgId: string): Promise<Member[]>;
   /** One invitation with its organisation's and inviter's names, or null. */
@@ -233,6 +240,32 @@ export function identityStore(pool: Pool): IdentityStore {
         [userId],
       );
       return rows;
+    },
+    async memberRoles(orgId, userIds) {
+      if (userIds.length === 0) return new Map();
+      const { rows } = await pool.query<{ userId: string; role: string }>(
+        `select "userId", role from identity.member where "organizationId" = $1::uuid and "userId" = any ($2::uuid[])`,
+        [orgId, userIds],
+      );
+      return new Map(rows.map((row) => [row.userId, row.role]));
+    },
+    async languages(userIds) {
+      if (userIds.length === 0) return new Map();
+      const { rows } = await pool.query<{ id: string; locale: string | null }>(
+        `select id, locale from identity."user" where id = any ($1::uuid[])`,
+        [userIds],
+      );
+      return new Map(rows.map((row) => [row.id, row.locale === "mr" ? "mr" : "en"]));
+    },
+    async sessionNow(sessionId, absoluteMs) {
+      const { rows } = await pool.query<{ twoStep: boolean }>(
+        `select (s."twoStepAt" is not null and coalesce(u."twoFactorEnabled", false)) as "twoStep"
+         from identity.session s join identity."user" u on u.id = s."userId"
+         where s.id = $1::uuid and s."expiresAt" > now()
+           and s."createdAt" > now() - make_interval(secs => $2::double precision / 1000)`,
+        [sessionId, absoluteMs],
+      );
+      return rows[0] ?? null;
     },
     async members(orgId) {
       const { rows } = await pool.query<Member>(

@@ -9,8 +9,16 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 // arrives joined by a comma) is refused. Browsers that send no Sec-Fetch-Site still face the two checks before it.
 const SITES = new Set(["same-origin", "same-site", "none"]);
 
-export function originGuard(allowedOrigins: readonly string[]): (request: FastifyRequest) => Promise<void> {
+/** At most one log line per window about refused requests, with how many were refused since the last one. */
+export const LOG_WINDOW_MS = 60_000;
+
+export function originGuard(
+  allowedOrigins: readonly string[],
+  now: () => number = Date.now,
+): (request: FastifyRequest) => Promise<void> {
   const allowed = new Set(allowedOrigins);
+  let windowStart = Number.NEGATIVE_INFINITY;
+  let refused = 0;
   return async (request) => {
     if (SAFE_METHODS.has(request.method)) return;
     const { origin } = request.headers;
@@ -21,7 +29,13 @@ export function originGuard(allowedOrigins: readonly string[]): (request: Fastif
       allowed.has(origin) &&
       (site === undefined || (typeof site === "string" && SITES.has(site.toLowerCase())));
     if (fromApp) return;
-    request.log.warn({ origin, method: request.method }, "refused: not sent by the Pageinator app");
+    // one line a window, so that a flood of refused requests cannot flood the log
+    refused += 1;
+    if (now() - windowStart >= LOG_WINDOW_MS) {
+      request.log.warn({ origin, method: request.method, refused }, "refused: not sent by the Pageinator app");
+      windowStart = now();
+      refused = 0;
+    }
     throw new ApiError("bad_origin");
   };
 }

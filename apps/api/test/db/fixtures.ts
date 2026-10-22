@@ -238,6 +238,18 @@ export const FIXTURES: Fixture[] = [
     row: (org, pub) => ({ ...inPub(org, pub), bundle_id: childId(pub, 6), story_id: childId(pub, 3), rev: 1 }),
   },
   {
+    table: "notification",
+    per: "org",
+    row: (org) => ({
+      org_id: org.id,
+      user_id: org.user,
+      kind: "story_filed",
+      target_type: "story",
+      target_id: childId(org.pubs[0], 3),
+      data: JSON.stringify({ publicationId: org.pubs[0].id, storyId: childId(org.pubs[0], 3), actorId: org.user }),
+    }),
+  },
+  {
     table: "idempotency_key",
     per: "org",
     row: (org) => ({

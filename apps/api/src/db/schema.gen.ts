@@ -125,6 +125,19 @@ export interface AppInvitationGrant {
   roles: string[];
 }
 
+export interface AppNotification {
+  created_at: Generated<Timestamp>;
+  data: Generated<Json>;
+  emailed_at: Timestamp | null;
+  id: Generated<string>;
+  kind: string;
+  org_id: string;
+  read_at: Timestamp | null;
+  target_id: string;
+  target_type: string;
+  user_id: string;
+}
+
 export interface AppOrgSettings {
   created_at: Generated<Timestamp>;
   data_region: Generated<string>;
@@ -270,6 +283,7 @@ export interface DB {
   "app.edition": AppEdition;
   "app.idempotency_key": AppIdempotencyKey;
   "app.invitation_grant": AppInvitationGrant;
+  "app.notification": AppNotification;
   "app.org_settings": AppOrgSettings;
   "app.person": AppPerson;
   "app.publication": AppPublication;

@@ -9,7 +9,7 @@
 //     never in the organisation's directory: one who was removed after accepting is never brought back.
 import type { Database } from "../../db/pools.ts";
 import type { Invitation } from "../../db/identity.ts";
-import type { Tenant } from "../../db/tenant.ts";
+import type { Tenant, Tx } from "../../db/tenant.ts";
 
 export type Person = { id: string; name: string; email: string };
 
@@ -34,8 +34,11 @@ export async function applyInvitation(
   person: Person,
   requestId: string,
   rejoin: boolean,
+  /** More to write in the same transaction (the accept's notice to the inviter): all of it is saved, or none. */
+  also?: (tx: Tx, tenant: Tenant) => Promise<void>,
 ): Promise<string[]> {
-  return database.withTenant(tenantOf(invitation.orgId, person.id, requestId), async (tx) => {
+  const tenant = tenantOf(invitation.orgId, person.id, requestId);
+  return database.withTenant(tenant, async (tx) => {
     const name = displayName(person.name, person.email);
     const row = { org_id: invitation.orgId, user_id: person.id, display_name: name, email: person.email };
     await tx
@@ -85,6 +88,7 @@ export async function applyInvitation(
       .select("publication_id")
       .where("invitation_id", "=", invitation.id)
       .execute();
+    if (also) await also(tx, tenant);
     return all.map((grant) => grant.publication_id);
   });
 }

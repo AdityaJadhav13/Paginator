@@ -759,6 +759,13 @@ betterAuth({
 | Upload presign | 60 per hour per user; 2 GB per day per organisation | database count |
 | Engine jobs | One run per edition (partial unique index); measures merged (queueing lock) | Postgres / Procrastinate |
 
+**As built (PR 19), the API's own limits** (`src/http/rate-limit.ts`; settings `PGN_RATE_LIMIT_*`):
+- **Signed out:** 60 a minute per client address, for every request without a session cookie, before anything else can refuse it.
+- **Signed in:** an `/api/v1` request with a session cookie the API signed (its HMAC checked as Better Auth checks it) counts against its person, 300 a minute, once the session is read. Two people behind one newsroom address do not share a budget (autosave every 1.5 s is 40 a minute). A made-up cookie is a signed-out request, so it never lifts the signed-out limit. A signed cookie that turns out to be no session counts against the address after all.
+- **Ceiling:** before the session is read, requests with a signed session cookie count against a per-address ceiling of 6,000 a minute. Only these count there: a request refused before the session is read (a bad origin, bad JSON), which needs a cookie the API once signed.
+- The origin guard writes one log line a minute about the requests it refuses, with their count, so a flood of them cannot flood the log.
+- Every `/api/v1` and `/api/auth` answer says `Cache-Control: no-store`, so story text never stays in a shared PC's browser cache. This covers answers written without the hooks (Fastify's 503 while closing, its refusals of malformed URLs, Node's raw 400 and 431), every error answer, and the paths spelled without their slash or with doubled slashes.
+
 ### 4.7 Other security baseline
 
 - **Headers:** Helmet on the API. On the web: a strict CSP (`script-src 'self'`, later `'wasm-unsafe-eval'`), `frame-ancestors 'none'`, and `img-src`/`connect-src` limited to self plus the S3 endpoint.
@@ -865,6 +872,22 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 | GET `/events?org={o}` | member | text/event-stream: `notification`, `story` (ids only; the client re-fetches through authorised routes); heartbeat every 25 s; a `resync` event after a reconnect |
 | GET `/orgs/{o}/audit?actor&action&target&from&to` | audit.view | → {items: [{at, actor {id, name}, action, target, publicationId, ip, userAgent, data}]} |
 | POST `/orgs/{o}/pubs/{p}/editions/{e}/desk-bundle` | desk.export | {statuses: ["ready"]} → 201 {bundleId, url (5 minutes), stories, sha256} |
+
+**As built (PR 19), comments, notifications and live updates:**
+- **Comments:** `GET`/`POST …/stories/{s}/comments` and `PATCH /orgs/{o}/pubs/{p}/comments/{c}` as above, without mentions (L2.2). Whoever sees the story reads its comments (`comment.read`; a Reporter: their own stories). Whoever may comment writes one or a reply, one level deep (`comment.write`; never a Viewer). A create needs an `Idempotency-Key`. Its author edits its text. The author, the desk, or the story's reporter or assignee resolves or reopens a thread. Edits, resolves and reopens are audited (ids only), and so are refusals.
+- **Notifications** (`app.notification`, ids only, a person reads and marks only their own) use 06 §11's defaults:
+  - a filed story tells the publication's Editors and Sub-editors;
+  - a send-back tells its reporter, in app and by email;
+  - giving a story to someone tells that person;
+  - a comment tells the story's reporter and assignee and the thread's writers;
+  - an accepted invitation tells its sender, in app and by email.
+  - Nobody is told of their own act, and only people who would see the story are told. The emails are in the reader's language first, then the other. Each notice is written in the transaction of the change it tells of: a story's move, assignment or comment in its request's transaction, and an accepted invitation in the transaction that writes the person's directory row and grants. A notice that fails therefore undoes the accept, and the invitee can try again. The emails are sent once that transaction commits.
+- **Routes:** the notification and event routes are under the organisation, so they get the organisation routes' access check (404 for a non-member, two-step where required). The permission is `publication.view`. The routes are `GET /orgs/{o}/notifications?unread&cursor&limit` → {items, unread, nextCursor} and `POST /orgs/{o}/notifications/read` {ids} | {all: true} → 204. A notification of a publication the person no longer reaches is not shown.
+- **Live updates:** `GET /orgs/{o}/events` streams `story`, `comment` (the plan's `story`, split so the web can refresh only the comments), `notification` and `resync`. All carry ids only.
+  - Postgres sends a hint after each change commits (triggers, channel `app_events`), and the API's one LISTEN connection hands it on. Each stream decides from its own person's access whether to pass the hint on; anything not exactly a hint of ours is dropped. For a Reporter, who sees only their own stories, the hint's list of people only narrows who is asked: the story is then read under the Reporter's own tenant to confirm it is theirs now, so a forged hint naming them carries nothing to them.
+  - A stream re-checks its person's session (two-step status included, as it is now) and membership every 25 s, and ends when either is gone.
+  - Limits: at most 5 streams a person. A stream whose browser reads nothing is ended once 256 KiB wait unsent, and its connection is closed, which frees its buffers and its slot. A stream whose browser left while its access was being checked is never counted.
+  - A lost LISTEN connection is made again and every stream gets `resync`. The streams end in a `preClose` hook, and each closes its connection, so a stop does not wait the grace period for them.
 
 **Main shapes:**
 - **Story:** {id, publicationId, status, revision, headline, kicker, deck, byline, body, bodyFormat: "desk-text/1", words, isBrief, language, sectionId, priority: 1\|2\|3\|4, pagePin, edition {id, date} \| null, reporter, assignee, dueAt, deskNote, photo: StoryPhoto \| null, commentCount, updatedAt, updatedBy, can {edit, transitions[], comment, assign}}

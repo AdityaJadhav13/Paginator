@@ -40,6 +40,7 @@ const UNREADABLE = "This request could not be read.";
 
 /** Headers every error answer carries, including one written before any hook runs. */
 export const BASELINE_HEADERS = {
+  "cache-control": "no-store", // no error answer is kept in a cache
   "content-security-policy": "default-src 'none';frame-ancestors 'none'",
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",

@@ -34,6 +34,8 @@ export async function identityApp(
   env: Record<string, string> = {},
   /** Changes what the run's object store answers (a store that misbehaves) */
   storeOf?: (store: ObjectStore) => ObjectStore,
+  /** How often live-update streams re-check their person (25 s by default) */
+  liveHeartbeatMs?: number,
 ): Promise<IdentityApp> {
   const run = inject("database");
   const storage = inject("storage");
@@ -51,6 +53,9 @@ export async function identityApp(
     PGN_S3_ACCESS_KEY_ID: storage.accessKeyId,
     PGN_S3_SECRET_ACCESS_KEY: storage.secretAccessKey,
     PGN_S3_WORK_BUCKET: storage.bucket,
+    // the tests sign in a few people who make many requests; test/db/rate-limit.test.ts sets its own budgets
+    PGN_RATE_LIMIT_PER_PERSON_PER_MINUTE: "100000",
+    PGN_RATE_LIMIT_SIGNED_IN_PER_ADDRESS_PER_MINUTE: "100000",
     ...env,
   });
   const sent: Sent[] = [];
@@ -60,7 +65,14 @@ export async function identityApp(
   };
   const database = openDatabase(config.database);
   const store = storeOf && config.storage ? storeOf(s3Store(config.storage)) : undefined;
-  const app = await buildApp({ config, database, mailTransport: transport, checks: {}, ...(store ? { store } : {}) });
+  const app = await buildApp({
+    config,
+    database,
+    mailTransport: transport,
+    checks: {},
+    ...(store ? { store } : {}),
+    ...(liveHeartbeatMs ? { liveHeartbeatMs } : {}),
+  });
   const quiet = { warn: () => undefined, error: () => undefined };
   const mailer = openMailer(config.mail, transport, () => undefined);
   const serverDatabase = openDatabase(config.database);

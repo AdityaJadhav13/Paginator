@@ -23,7 +23,8 @@ import { accessOf, actorOf } from "../access/access.ts";
 import { invitationEmail } from "../identity/emails.ts";
 import { authHeaders } from "../identity/headers.ts";
 import { type Mailer, RecipientError } from "../notifications/mailer.ts";
-import { applyInvitation, audit } from "./grants.ts";
+import type { Notifier, Outbox } from "../notifications/notify.ts";
+import { applyInvitation, audit, displayName } from "./grants.ts";
 import type { PeopleOptions } from "./me.ts";
 import { checkPublications } from "./members.ts";
 
@@ -35,7 +36,13 @@ const OrgParams = z.strictObject({ o: z.string() });
 const InvitationParams = z.strictObject({ o: z.string(), id: z.string() });
 const PublicParams = z.strictObject({ id: z.string() });
 
-export type InvitationOptions = PeopleOptions & { config: Config; mailer: Mailer };
+export type InvitationOptions = PeopleOptions & {
+  config: Config;
+  mailer: Mailer;
+  notify: Notifier;
+  /** Sends the emails of a change once it has committed. */
+  mail: (outbox: Outbox) => void;
+};
 
 function stateOf(invitation: StoredInvitation, now = Date.now()): InvitationState {
   if (invitation.status === "pending" && invitation.expiresAt.getTime() <= now) return "expired";
@@ -82,7 +89,7 @@ function code(error: unknown): string | undefined {
 
 export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async (
   app,
-  { auth, database, config, mailer },
+  { auth, database, config, mailer, notify, mail },
 ) => {
   const origin = config.publicOrigin;
 
@@ -297,8 +304,14 @@ export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async 
       if (!invitation) throw new ApiError("not_found");
       const person = { id: actor.userId, name: actor.name, email: actor.email };
       let publications: string[];
+      // the person who sent it is told, in app and by email (06 §11; plan §1 L2.1): the notice is written in the same
+      // transaction as the grants, so an accept that stands has its notice; the email goes once it has committed
+      const outbox: Outbox = [];
+      const joined = { name: displayName(actor.name, actor.email) };
       try {
-        publications = await applyInvitation(database, invitation, person, request.id, true);
+        publications = await applyInvitation(database, invitation, person, request.id, true, (tx, tenant) =>
+          notify.invitationAccepted(tx, tenant, invitation, joined, outbox),
+        );
       } catch (error) {
         // never a member without their directory row and grants: the accept is undone, and can be tried again
         await database.identity.undoAccept(invitation.orgId, actor.userId, invitation.id);
@@ -306,6 +319,7 @@ export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async 
       }
       const tenant = { orgId: invitation.orgId, userId: actor.userId, pubIds: [], requestId: request.id };
       await audit(database, tenant, "invitation.accept", invitation.id, { publications });
+      mail(outbox);
       return { orgId: invitation.orgId, publications };
     },
   );

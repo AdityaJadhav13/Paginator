@@ -107,7 +107,7 @@ describe("(a) the catalog", () => {
       "identity.planted_unlisted: pgn_auth's rights on it are not listed (test/tenancy/checks.ts)",
       "identity.session: pgn_app has SELECT, not none",
       "reporting.people: pgn_app has SELECT, not none",
-      "app.planted_unforced has column-level grants",
+      "app.planted_unforced pgn_engine UPDATE (org_id) is a column-level grant not listed",
       mayCreate("pgn_migrator"),
       "pgn_app may use the schemas app, reporting",
       ...everyone.slice(1).map(mayCreate),
