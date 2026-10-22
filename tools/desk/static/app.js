@@ -3,29 +3,38 @@
 // The binding contract is tools/desk/CONTRACT.md. Plain JavaScript, no build step, no network beyond the local Desk
 // server. Everything that comes from the server or from the keyboard goes into the page through textContent and
 // attributes (the h() helper below), never through innerHTML.
+//
+// Every word this screen shows is in strings.js, in English and Marathi (t() looks it up in the language shown).
+// The paper's own content and the server's messages are shown as they come.
+
+import { LANGS, LANG_STORE_KEY, lang, saveLang, savedLang, setLang, t, tIn, tm, tn } from "./strings.js";
+import { splitPaste } from "./paste.js";
 
 // ===================================================================== constants
 
 const STEPS = ["edition", "articles", "ads", "run"];
-const PRIORITY_LABEL = { 1: "Lead", 2: "Top", 3: "Normal", 4: "Minor" };
-const ROLE_LABEL = { front: "Front", inside: "Inside", back: "Back" };
-const RUN_STATE_LABEL = {
-  queued: "Waiting to start",
-  starting: "Starting",
-  planning: "Planning the pages",
-  layout: "Laying out pages",
-  finishing: "Making the PDFs and previews",
-  done: "Done",
-  failed: "Failed",
-  cancelled: "Cancelled",
+const PRIORITY_KEY = { 1: "prio.lead", 2: "prio.top", 3: "prio.normal", 4: "prio.minor" };
+const ROLE_KEY = { front: "role.front", inside: "role.inside", back: "role.back" };
+const RUN_STATE_KEY = {
+  queued: "state.queued",
+  starting: "state.starting",
+  planning: "state.planning",
+  layout: "state.layout",
+  finishing: "state.finishing",
+  done: "state.done",
+  failed: "state.failed",
+  cancelled: "state.cancelled",
 };
-const PAGE_STATE_LABEL = {
-  waiting: "Waiting",
-  working: "Laying out",
-  done: "Done",
-  failed: "Failed",
-  cancelled: "Cancelled",
+const PAGE_STATE_KEY = {
+  waiting: "pstate.waiting",
+  working: "pstate.working",
+  done: "state.done",
+  failed: "state.failed",
+  cancelled: "state.cancelled",
 };
+// the folio's own words, as the front page prints them (the same in both languages)
+const FOLIO_WORDS = { volume: "वर्ष", issue: "अंक", price: "किंमत" };
+const FOLIO_LABEL_KEY = { volume: "ed.volume", issue: "ed.issue", price: "ed.price" };
 const TERMINAL = new Set(["done", "failed", "cancelled"]);
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const IMAGE_BY_EXTENSION = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
@@ -36,16 +45,24 @@ const POLL_MS = 1500;
 const FINISHED_POLL_MS = 5000; // a finished layout changes when its pages are edited, or its edition is (elsewhere)
 const STATUS_MS = 15000;
 const PREFS_KEY = "pageinator-desk.ui.v1";
-const OFFLINE_MESSAGE = "Can't reach the Desk server. Check that it is still running on this Mac, then try again.";
-const RUN_TIME_NOTE = "Laying out pages in parallel — usually 1 to 4 minutes.";
 const MEASURE_POLL_MS = 3000;
-const HONESTY_NOTE =
-  "Every page PDF is written as PDF/X-1a and then checked by an independent PDF/X-1a checker (the result is on each " +
-  "page above). The press has accepted a text-only test page from this writer; pages with photos or ads have not " +
-  "been press-tested yet — print one test page before a real edition.";
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAY_KEYS = ["date.sun", "date.mon", "date.tue", "date.wed", "date.thu", "date.fri", "date.sat"];
+const MONTH_KEYS = [
+  "date.jan",
+  "date.feb",
+  "date.mar",
+  "date.apr",
+  "date.may",
+  "date.jun",
+  "date.jul",
+  "date.aug",
+  "date.sep",
+  "date.oct",
+  "date.nov",
+  "date.dec",
+];
 const DEVANAGARI = /\p{Script=Devanagari}/u;
+const LATIN_LETTER = /[A-Za-z]/;
 
 const ICON_PATHS = {
   check: "M4.5 10.5l3.5 3.5 7.5-8",
@@ -87,7 +104,7 @@ const state = {
   adLocal: {}, // slot -> what the server said about an upload or removal in this session
   adBust: {}, // slot -> cache-busting token for the preview image
   loadedAt: Date.now(),
-  wordNote: null, // what the last Word import did: {edition, kind, text, lines}
+  wordNote: null, // what the last Word or Pageinator stories import did: {edition, kind, text, lines}
 };
 
 let runUI = null; // the mounted progress panel of state.run (patched in place while polling)
@@ -126,9 +143,8 @@ function fmtInt(n) {
   return v === null ? "—" : Math.round(v).toLocaleString("en-IN");
 }
 
-function plural(n, one, many) {
-  return `${fmtInt(n)} ${n === 1 ? one : many || `${one}s`}`;
-}
+/** A count for t(): a whole number (its plural form and its grouping follow it), or "—" when it is unknown. */
+const count = (n) => (num(n) === null ? "—" : Math.round(num(n)));
 
 function fmtMm(v) {
   const n = num(v);
@@ -138,17 +154,17 @@ function fmtMm(v) {
 
 function fmtBytes(bytes) {
   const b = num(bytes, 0);
-  if (b >= 1024 * 1024) return `${(b / (1024 * 1024)).toFixed(1)} MB`;
-  if (b >= 1024) return `${Math.round(b / 1024)} KB`;
-  return `${b} bytes`;
+  if (b >= 1024 * 1024) return t("fmt.mb", { n: (b / (1024 * 1024)).toFixed(1) });
+  if (b >= 1024) return t("fmt.kb", { n: Math.round(b / 1024) });
+  return t("fmt.bytes", { n: b });
 }
 
 function fmtDuration(seconds) {
   const s = Math.max(0, Math.round(num(seconds, 0)));
-  if (s < 60) return `${s} s`;
+  if (s < 60) return t("fmt.sec", { n: s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min ${pad2(s % 60)} s`;
-  return `${Math.floor(m / 60)} h ${pad2(m % 60)} min`;
+  if (m < 60) return t("fmt.minSec", { m: String(m), s: pad2(s % 60) });
+  return t("fmt.hourMin", { h: String(Math.floor(m / 60)), m: pad2(m % 60) });
 }
 
 function clip(text, max) {
@@ -169,19 +185,27 @@ function parseDay(value) {
 
 function friendlyDate(value, withYear = true) {
   const p = parseDay(value);
-  if (!p) return str(value) || "Undated";
-  return `${WEEKDAYS[p.wd]} ${p.d} ${MONTHS[p.mo - 1]}${withYear ? ` ${p.y}` : ""}`;
+  if (!p) return str(value) || t("date.undated");
+  // the parts as text: a year is never grouped ("2026", not "2,026")
+  const parts = { wd: t(WEEKDAY_KEYS[p.wd]), d: String(p.d), mon: t(MONTH_KEYS[p.mo - 1]), y: String(p.y) };
+  return t(withYear ? "date.full" : "date.short", parts);
 }
 
 function timeOf(value) {
-  const t = Date.parse(str(value));
-  return Number.isFinite(t) ? t : null;
+  const ms = Date.parse(str(value));
+  return Number.isFinite(ms) ? ms : null;
 }
 
-function friendlyTime(t) {
-  if (t === null || t === undefined) return "";
-  const d = new Date(t);
-  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+function friendlyTime(ms) {
+  if (ms === null || ms === undefined) return "";
+  const d = new Date(ms);
+  return t("date.time", {
+    wd: t(WEEKDAY_KEYS[d.getDay()]),
+    d: String(d.getDate()),
+    mon: t(MONTH_KEYS[d.getMonth()]),
+    hh: pad2(d.getHours()),
+    mm: pad2(d.getMinutes()),
+  });
 }
 
 function localDay(offsetDays = 0) {
@@ -202,8 +226,17 @@ function countWords(text) {
   return n;
 }
 
+/** The lang attribute for a text the Desk did not write (the paper's content, a server message): Marathi when it is in
+ * Devanagari; English when it has Latin letters on the Marathi screen; else nothing (it is in the screen's language). */
 function langFor(text) {
-  return DEVANAGARI.test(str(text)) ? "mr" : null;
+  const s = str(text);
+  if (DEVANAGARI.test(s)) return "mr";
+  return lang() === "mr" && LATIN_LETTER.test(s) ? "en" : null;
+}
+
+/** A text the Desk did not write, inside a sentence of its own: in its own language. */
+function foreign(text) {
+  return h("span", { lang: langFor(text) }, str(text));
 }
 
 function fold(text) {
@@ -211,11 +244,22 @@ function fold(text) {
 }
 
 function debounce(fn, ms) {
-  let t = 0;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
+  let timer = 0;
+  const call = (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = 0;
+      fn(...args);
+    }, ms);
   };
+  call.flush = (...args) => {
+    // at once, instead of after the pause (when the screen is about to be drawn again)
+    if (!timer) return;
+    clearTimeout(timer);
+    timer = 0;
+    fn(...args);
+  };
+  return call;
 }
 
 function imageTypeOf(file) {
@@ -330,7 +374,7 @@ function alertBox(message, kind = "error") {
     "div",
     { class: `alert alert-${kind}`, role: kind === "error" ? "alert" : "status" },
     icon(kind === "error" ? "alert" : "check"),
-    h("span", {}, message),
+    h("span", { lang: typeof message === "string" ? langFor(message) : null }, message),
   );
 }
 
@@ -346,7 +390,12 @@ function notice(kind, message, ...extra) {
     "div",
     { class: `notice notice-${kind}` },
     icon(kind === "warn" ? "alert" : kind === "ok" ? "check" : "info"),
-    h("div", { class: "notice-body" }, h("p", {}, message), extra),
+    h(
+      "div",
+      { class: "notice-body" },
+      h("p", { lang: typeof message === "string" ? langFor(message) : null }, message),
+      extra,
+    ),
   );
 }
 
@@ -366,7 +415,7 @@ function toast(message, kind = "ok") {
     "div",
     { class: `toast toast-${kind}` },
     icon(kind === "error" ? "alert" : kind === "info" ? "info" : "check"),
-    h("span", {}, message),
+    h("span", { lang: typeof message === "string" ? langFor(message) : null }, message),
   );
   el.addEventListener("click", () => el.remove());
   box.append(el);
@@ -407,12 +456,35 @@ function restoreFocus(key) {
 // ===================================================================== server API
 
 class ApiError extends Error {
-  constructor(message, status = 0) {
+  constructor(message, status = 0, key = null, params = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.key = key; // the Desk's own message (strings.js), so it can be shown again in another language
+    this.params = params;
   }
 }
+
+/** An error in the Desk's own words. */
+function deskError(key, params = {}, status = 0) {
+  return new ApiError(t(key, params), status, key, params);
+}
+
+/**
+ * What to keep of an error to show it later: the server's message as it came, or (for the Desk's own words) a
+ * function giving it in the language shown then. msg() turns either into text.
+ */
+function errMsg(err) {
+  if (err && err.key) return () => t(err.key, err.params);
+  if (err && err.msgs) return () => tm(err.text, err.msgs).trim(); // the server's own message, by its code
+  return err ? str(err.message) : "";
+}
+
+/** A text the server or the engine sent (a reason, a warning, a status message), in the language shown when its answer
+ * gave its code (msgs: that answer's map), else as it came. */
+const said = (text, msgs) => tm(str(text), msgs);
+
+const msg = (m) => (typeof m === "function" ? m() : str(m));
 
 /**
  * One request to the Desk server. Mutating requests carry X-Desk: 1 and a Content-Type (JSON, or the image's own
@@ -436,7 +508,7 @@ async function api(method, path, options = {}) {
     response = await fetch(path, init);
   } catch {
     noteOffline();
-    throw new ApiError(OFFLINE_MESSAGE, 0);
+    throw deskError("api.offline");
   }
   // any change the server took, even one it then refused part-way, can change a layout's press files: check again
   // here, and tell the other Desk windows of that edition (whatever layout they show)
@@ -461,19 +533,20 @@ async function api(method, path, options = {}) {
     // not JSON (or the connection dropped): handled below as an unreadable answer
   }
   if (!response.ok) {
-    const message =
-      isObj(data) && typeof data.error === "string" && data.error.trim()
-        ? data.error.trim()
-        : `The Desk server could not do that (HTTP ${response.status}).`;
-    throw new ApiError(message, response.status);
+    if (isObj(data) && typeof data.error === "string" && data.error.trim()) {
+      const err = new ApiError(tm(data.error, data.msgs).trim(), response.status);
+      if (isObj(data.msgs) && data.msgs[data.error]) Object.assign(err, { text: data.error, msgs: data.msgs });
+      throw err;
+    }
+    throw deskError("api.http", { status: String(response.status) }, response.status);
   }
-  if (!isObj(data)) throw new ApiError("The Desk server sent an answer this page cannot read.", response.status);
+  if (!isObj(data)) throw deskError("api.unreadable", {}, response.status);
   return data;
 }
 
 function seg(value) {
   const s = str(value);
-  if (!s || s === "." || s === "..") throw new ApiError("This item has a name the Desk cannot use.");
+  if (!s || s === "." || s === "..") throw deskError("api.badName");
   return encodeURIComponent(s);
 }
 
@@ -541,6 +614,7 @@ function normaliseDetail(raw) {
       .sort(newestRunFirst),
     measure: isObj(d.measure) ? d.measure : null, // background measuring of the stories: { state, measured, total }
     planError: str(d.plan_error), // why the plan is missing, when the server says
+    msgs: isObj(d.msgs) ? d.msgs : null, // the codes of the server's messages in it
   };
 }
 
@@ -596,14 +670,22 @@ function planPages() {
 
 function pageRole(n) {
   const p = planPages().find((x) => int(x.page) === n);
-  if (p && ROLE_LABEL[p.role]) return p.role;
+  if (p && ROLE_KEY[p.role]) return p.role;
   if (n === 1) return "front";
   return n === editionPages() && backPageAds() ? "back" : "inside";
 }
 
+function roleLabel(role) {
+  return ROLE_KEY[role] ? t(ROLE_KEY[role]) : "";
+}
+
+function runStateLabel(s) {
+  return RUN_STATE_KEY[s] ? t(RUN_STATE_KEY[s]) : "";
+}
+
 function pageName(n, role) {
-  const r = ROLE_LABEL[role || pageRole(n)];
-  return r ? `Page ${n} · ${r}` : `Page ${n}`;
+  const r = roleLabel(role || pageRole(n));
+  return r ? t("page.named", { n, role: r }) : t("page.n", { n });
 }
 
 function adSlots() {
@@ -761,6 +843,7 @@ function buildResult(summary, status) {
     placed,
     notPlaced,
     warnings: articleWarningsOf(status),
+    msgs: isObj(status.msgs) ? status.msgs : null, // its reasons and warnings are said with these
   };
 }
 
@@ -769,33 +852,36 @@ function articleResult(a) {
   if (!r) return null;
   if (r.notPlaced.has(a.id)) {
     const reason = r.notPlaced.get(a.id);
-    return { kind: "warn", icon: "alert", text: reason ? `Not placed: ${reason}` : "Not placed" };
+    return {
+      kind: "warn",
+      icon: "alert",
+      text: reason ? t("result.notPlacedWhy", { reason: said(reason, r.msgs) }) : t("result.notPlaced"),
+      reason, // the server's words, in a sentence of the Desk's (shown in their own language)
+    };
   }
   const hit = r.placed.get(a.id);
   const edited = r.started !== null && (timeOf(a.updated) ?? 0) > r.started + 1000;
   if (hit) {
-    if (hit.failed) return { kind: "bad", icon: "x", text: `Page ${hit.page} failed in the last layout`, edited };
-    return { kind: "ok", icon: "check", text: `Placed on page ${hit.page}`, edited };
+    if (hit.failed) return { kind: "bad", icon: "x", text: t("result.pageFailed", { n: hit.page }), edited };
+    return { kind: "ok", icon: "check", text: t("result.placed", { n: hit.page }), edited };
   }
   const created = timeOf(a.created);
   if (created !== null && r.started !== null && created > r.started) {
-    return { kind: "muted", icon: "info", text: "Added after the last layout" };
+    return { kind: "muted", icon: "info", text: t("result.addedAfter") };
   }
-  return { kind: "muted", icon: "info", text: "Not in the last layout's report" };
+  return { kind: "muted", icon: "info", text: t("result.notInReport") };
 }
 
+/** What to do about an article the layout did not place, from the server's reason (in English, as it sends it). */
 function notPlacedHint(reason) {
   const r = fold(reason);
-  if (/deleted from the edition/.test(r)) return "Nothing to do: it was deleted on purpose.";
-  if (/taken off the pages in the editor/.test(r))
-    return "Bring it back onto a page in the page editor, if it must go in.";
-  if (/(long|space|fit|room|overflow|big|area|short of)/.test(r)) {
-    return "Too long for the space left — shorten it, pin it to another page, or add pages.";
-  }
-  if (/(pin|pinned)/.test(r)) return "The page it is pinned to is full — pin it to another page, or set it to Auto.";
-  if (/(photo|image|picture)/.test(r)) return "Check its photo — try another one, or remove it.";
-  if (/(priority|minor)/.test(r)) return "Raise its priority if it must go in.";
-  return "Shorten it, raise its priority, pin it to another page, or add pages.";
+  if (/deleted from the edition/.test(r)) return t("hint.deleted");
+  if (/taken off the pages in the editor/.test(r)) return t("hint.takenOff");
+  if (/(long|space|fit|room|overflow|big|area|short of)/.test(r)) return t("hint.tooLong");
+  if (/(pin|pinned)/.test(r)) return t("hint.pinnedFull");
+  if (/(photo|image|picture)/.test(r)) return t("hint.photo");
+  if (/(priority|minor)/.test(r)) return t("hint.priority");
+  return t("hint.general");
 }
 
 function photoUrl(a) {
@@ -816,9 +902,9 @@ function runFileUrl(runId, file) {
 function engineBlocked() {
   const s = state.status;
   if (!s) return "";
-  if (s.offline) return OFFLINE_MESSAGE;
+  if (s.offline) return t("api.offline");
   if (s.engine_ok === false || s.config_ok === false) {
-    return `The layout engine needs setup first: ${str(s.message) || "see the engine status at the top right."}`;
+    return str(s.message) ? t("run.engineSetup", { reason: str(s.message) }) : t("run.engineSetupDefault");
   }
   return "";
 }
@@ -848,50 +934,59 @@ async function refreshStatus() {
 function renderStatus() {
   const s = state.status;
   let kind = "unknown";
-  let label = "Checking the engine…";
-  let message = "";
+  let label = t("engine.checking");
+  let message = ""; // the server's words when it gives them, else the Desk's
   if (s && s.offline) {
     kind = "bad";
-    label = "Offline";
-    message = OFFLINE_MESSAGE;
+    label = t("engine.offline");
+    message = t("api.offline");
   } else if (s) {
     if (s.engine_ok === true && s.config_ok === true && s.icc_ok === false) {
       // layout works, but photos and ads cannot be converted for print yet (the server says why)
       kind = "warn";
-      label = "Partly ready";
-      message = str(s.message) || "Photos and ads cannot be converted for print until the colour profile is set up.";
+      label = t("engine.partly");
+      message = str(s.message) || t("engine.partlyWhy");
     } else if (s.engine_ok === true && s.config_ok === true) {
       kind = "ok";
-      label = "Engine ready";
+      label = t("engine.ready");
       message = str(s.message);
     } else {
       kind = "warn";
-      label = "Setup needed";
-      message = str(s.message) || "The layout engine is not set up yet.";
+      label = t("engine.setup");
+      message = str(s.message) || t("engine.setupWhy");
     }
   }
   const box = $("#engine");
   box.dataset.kind = kind;
   setText($("#engine-label"), label);
-  setText($("#engine-short"), kind === "warn" ? message : "");
+  const short = $("#engine-short");
+  setText(short, kind === "warn" ? message : "");
+  if (langFor(short.textContent)) short.lang = langFor(short.textContent);
+  else short.removeAttribute("lang");
   const iconName = { ok: "check", warn: "alert", bad: "x" }[kind] || "clock";
   $("#engine-icon").replaceChildren(icon(iconName));
   const parts = [];
-  if (message) parts.push(h("p", { class: "status-message" }, message));
+  if (message) parts.push(h("p", { class: "status-message", lang: langFor(message) }, message));
   if (s && !s.offline) {
     const facts = h("dl", { class: "status-facts" });
     const fact = (term, value) => {
       if (value) facts.append(h("dt", {}, term), h("dd", {}, value));
     };
-    fact("Layout engine", s.engine_ok === true ? "found" : s.engine_ok === false ? "not found" : "");
-    fact("Engine setup", s.config_ok === true ? "done" : s.config_ok === false ? "not done yet" : "");
-    fact("Colour profile", s.icc_ok === true ? "found" : s.icc_ok === false ? "missing (photos and ads)" : "");
-    fact("Processor cores", num(s.cores) ? `${s.cores} (pages are laid out in parallel)` : "");
-    fact("Desk home", str(s.home));
-    fact("Version", str(s.version));
+    const found = (ok, missing) => (ok === true ? t("engine.found") : ok === false ? missing : "");
+    fact(t("engine.factEngine"), found(s.engine_ok, t("engine.notFound")));
+    fact(
+      t("engine.factSetup"),
+      s.config_ok === true ? t("engine.setupDone") : s.config_ok === false ? t("engine.setupNotDone") : "",
+    );
+    fact(t("engine.factIcc"), found(s.icc_ok, t("engine.iccMissing")));
+    fact(t("engine.factCores"), num(s.cores) ? t("engine.cores", { n: count(s.cores) }) : "");
+    fact(t("engine.factHome"), str(s.home));
+    fact(t("engine.factVersion"), str(s.version));
     if (facts.children.length) parts.push(facts);
   }
-  parts.push(h("button", { type: "button", class: "btn btn-small", onclick: () => refreshStatus() }, "Check again"));
+  parts.push(
+    h("button", { type: "button", class: "btn btn-small", onclick: () => refreshStatus() }, t("engine.checkAgain")),
+  );
   $("#engine-panel").replaceChildren(...parts);
 }
 
@@ -916,7 +1011,7 @@ async function loadEditionsAndOpen() {
     await reloadEditionsList();
   } catch (err) {
     state.editionsLoaded = true;
-    state.loadError = err.message;
+    state.loadError = errMsg(err);
     renderAll();
     return;
   }
@@ -966,7 +1061,7 @@ async function openEdition(id, options = {}) {
     state.detail = normaliseDetail(raw);
   } catch (err) {
     if (seq !== state.seq) return;
-    state.detailError = err.message;
+    state.detailError = errMsg(err);
     renderAll();
     return;
   }
@@ -990,7 +1085,7 @@ async function refreshDetail(options = {}) {
     await syncRuns();
   } catch (err) {
     if (options.throwErrors) throw err;
-    if (!options.quiet) toast(`Could not reload the edition: ${err.message}`, "error");
+    if (!options.quiet) toast(tn("api.reloadFailed", { error: foreign(err.message) }), "error");
   }
   if (state.editionId !== id) return;
   renderAll();
@@ -1061,9 +1156,7 @@ function measureText() {
   const m = state.detail.measure;
   const done = int(m.measured);
   const total = int(m.total);
-  return done !== null && total
-    ? `Measuring stories for layout: ${fmtInt(done)} of ${fmtInt(total)}`
-    : "Measuring stories for layout…";
+  return done !== null && total ? t("measure.progress", { done, total }) : t("measure.busy");
 }
 
 /** A quiet progress line; renderMeasure() keeps every copy of it current. */
@@ -1118,7 +1211,7 @@ function renderAll() {
 function editionLabel(e) {
   const pages = int(e.pages);
   const m = /^\d{4}-\d{2}-\d{2}-(\d+)$/.exec(str(e.id));
-  return [friendlyDate(str(e.date) || e.id), pages ? `${pages} pages` : null, m ? `#${m[1]}` : null]
+  return [friendlyDate(str(e.date) || e.id), pages ? t("count.page", { n: pages }) : null, m ? `#${m[1]}` : null]
     .filter(Boolean)
     .join(" · ");
 }
@@ -1126,9 +1219,9 @@ function editionLabel(e) {
 function renderPicker() {
   const select = $("#edition-select");
   const options = [];
-  if (!state.editionsLoaded) options.push(h("option", { value: "" }, "Loading…"));
-  else if (state.loadError) options.push(h("option", { value: "" }, "Not available"));
-  else if (!state.editions.length) options.push(h("option", { value: "" }, "No editions yet"));
+  if (!state.editionsLoaded) options.push(h("option", { value: "" }, t("top.loading")));
+  else if (state.loadError) options.push(h("option", { value: "" }, t("top.notAvailable")));
+  else if (!state.editions.length) options.push(h("option", { value: "" }, t("top.noEditions")));
   else {
     for (const e of state.editions) {
       options.push(h("option", { value: e.id, selected: e.id === state.editionId }, editionLabel(e)));
@@ -1143,7 +1236,7 @@ function stepSummaries() {
   const d = state.detail;
   const slots = adSlots();
   const filled = slots.filter((s) => adInfo(s.slot)).length;
-  let run = "Not laid out yet";
+  let run = t("sum.notLaidOut");
   let tone = "";
   const r = state.run;
   if (r && isObj(r.status)) {
@@ -1151,19 +1244,25 @@ function stepSummaries() {
     if (!TERMINAL.has(s)) {
       const pages = arr(r.status.pages).filter(isObj);
       const done = pages.filter((p) => str(p.state) === "done").length;
-      run = pages.length ? `Laying out · ${done} of ${pages.length}` : RUN_STATE_LABEL[s] || "Laying out";
+      run = pages.length
+        ? t("sum.layingOutOf", { done, total: pages.length })
+        : runStateLabel(s) || t("pstate.working");
       tone = "busy";
     } else {
-      run = s === "done" ? `Done · ${friendlyTime(runStartTime(r))}` : RUN_STATE_LABEL[s];
+      run = s === "done" ? t("sum.doneAt", { time: friendlyTime(runStartTime(r)) }) : runStateLabel(s);
       tone = s === "done" ? "ok" : s === "failed" ? "bad" : "";
     }
   } else if (d.runs.length) {
-    run = RUN_STATE_LABEL[str(d.runs[0].state)] || "Laid out before";
+    run = runStateLabel(str(d.runs[0].state)) || t("sum.laidOutBefore");
   }
   return {
-    edition: { text: `${editionPages()} pages · ${friendlyDate(d.edition.date || state.editionId, false)}` },
-    articles: { text: plural(d.articles.length, "article") },
-    ads: { text: slots.length ? `${filled} of ${slots.length} filled` : d.plan ? "No ad spaces" : "" },
+    edition: {
+      text: t("sum.edition", { n: editionPages(), date: friendlyDate(d.edition.date || state.editionId, false) }),
+    },
+    articles: { text: t("count.article", { n: d.articles.length }) },
+    ads: {
+      text: slots.length ? t("sum.adsFilled", { n: filled, total: slots.length }) : d.plan ? t("sum.noAdSpaces") : "",
+    },
     run: { text: run, tone },
   };
 }
@@ -1191,24 +1290,22 @@ function renderNeeds() {
     return;
   }
   section.hidden = false;
-  setText($("#needs-sub"), `For ${editionPages()} pages${backPageAds() ? "" : " · the back page is all news"}`);
+  setText($("#needs-sub"), t(backPageAds() ? "needs.for" : "needs.forNoBackAds", { n: editionPages() }));
   const list = $("#needs-list");
   const needs = computeNeeds();
   const detail = $("#needs-detail");
   if (!needs) {
-    list.replaceChildren(
-      h("li", { class: "needs-missing" }, "Not available yet: the page plan needs the layout engine to be set up."),
-    );
+    list.replaceChildren(h("li", { class: "needs-missing" }, t("needs.missing")));
     detail.hidden = true;
     return;
   }
   detail.hidden = false;
   const have = computeHave(d.articles);
   list.replaceChildren(
-    needRow("Stories", have.stories, needs.total.stories),
-    needRow("Short items", have.briefs, needs.total.briefs),
-    needRow("Photos", have.photos, needs.total.photos),
-    needRow("Words", have.words, needs.total.words),
+    needRow(t("needs.stories"), have.stories, needs.total.stories),
+    needRow(t("needs.briefs"), have.briefs, needs.total.briefs),
+    needRow(t("needs.photos"), have.photos, needs.total.photos),
+    needRow(t("needs.words"), have.words, needs.total.words),
   );
   $("#needs-per-page").replaceChildren(...perPageBreakdown(needs));
 }
@@ -1219,9 +1316,9 @@ function needRow(label, have, need) {
   const stateName = !known ? "unknown" : enough ? "ok" : "short";
   const pct = known && need > 0 ? Math.min(100, (have / need) * 100) : known ? 100 : 0;
   let status;
-  if (!known) status = [icon("info"), h("span", {}, "No figure in the plan")];
-  else if (enough) status = [icon("check"), h("span", {}, "Enough")];
-  else status = [icon("alert"), h("span", {}, `Short by ${fmtInt(need - have)}`)];
+  if (!known) status = [icon("info"), h("span", {}, t("needs.noFigure"))];
+  else if (enough) status = [icon("check"), h("span", {}, t("needs.enough"))];
+  else status = [icon("alert"), h("span", {}, t("needs.shortBy", { n: count(need - have) }))];
   return h(
     "li",
     { class: "need-row", dataset: { state: stateName } },
@@ -1248,19 +1345,19 @@ function needRow(label, have, need) {
 function perPageBreakdown(needs) {
   const rows = [];
   const roles = [
-    ["front", "Front page"],
-    ["inside", "Inside pages"],
-    ["back", "Back page"],
+    ["front", t("needs.front")],
+    ["inside", t("needs.inside")],
+    ["back", t("needs.back")],
   ];
   for (const [role, label] of roles) {
-    const count = needs.mult[role];
+    const times = needs.mult[role];
     const r = isObj(needs.per[role]) ? needs.per[role] : null;
-    if (!count || !r) continue;
+    if (!times || !r) continue;
     const facts = [
-      num(r.stories) !== null ? plural(r.stories, "story", "stories") : null,
-      num(r.briefs) ? plural(r.briefs, "short item") : null,
-      num(r.photos) !== null ? plural(r.photos, "photo") : null,
-      num(r.words) !== null ? plural(r.words, "word") : null,
+      num(r.stories) !== null ? t("count.story", { n: count(r.stories) }) : null,
+      num(r.briefs) ? t("count.brief", { n: count(r.briefs) }) : null,
+      num(r.photos) !== null ? t("count.photo", { n: count(r.photos) }) : null,
+      num(r.words) !== null ? t("count.word", { n: count(r.words) }) : null,
     ].filter(Boolean);
     rows.push(
       h(
@@ -1270,16 +1367,16 @@ function perPageBreakdown(needs) {
           "div",
           { class: "per-role-head" },
           h("strong", {}, label),
-          h("span", { class: "muted" }, `× ${count}${count > 1 ? " · each" : ""}`),
+          h("span", { class: "muted" }, times > 1 ? t("needs.timesEach", { n: times }) : `× ${times}`),
         ),
         h("p", { class: "per-role-facts" }, facts.join(" · ")),
       ),
     );
   }
   if (!backPageAds()) {
-    rows.push(h("p", { class: "muted small" }, "The back page has no ads, so it counts as an inside page."));
+    rows.push(h("p", { class: "muted small" }, t("needs.backAsInside")));
   }
-  if (!rows.length) rows.push(h("p", { class: "muted small" }, "The plan has no per-page figures."));
+  if (!rows.length) rows.push(h("p", { class: "muted small" }, t("needs.noPerPage")));
   return rows;
 }
 
@@ -1287,11 +1384,11 @@ function renderMain() {
   const main = $("#main");
   const key = focusKeyIn(main);
   let view;
-  if (!state.editionsLoaded) view = loadingView("Loading editions…");
+  if (!state.editionsLoaded) view = loadingView(t("view.loadingEditions"));
   else if (state.loadError) view = offlineView();
   else if (!state.editions.length) view = noEditionsView();
   else if (state.detailError) view = detailErrorView();
-  else if (!state.detail) view = loadingView("Opening the edition…");
+  else if (!state.detail) view = loadingView(t("view.openingEdition"));
   else if (state.step === "articles") view = viewArticles();
   else if (state.step === "ads") view = viewAds();
   else if (state.step === "run") view = viewRun();
@@ -1307,14 +1404,15 @@ function renderMain() {
 }
 
 function updateTitle() {
-  let title = "Pageinator Desk";
+  let title = t("app.name");
   if (state.detail) {
-    title = `${friendlyDate(state.detail.edition.date || state.editionId, false)} · ${editionPages()} pages — ${title}`;
+    const date = friendlyDate(state.detail.edition.date || state.editionId, false);
+    title = t("title.edition", { date, n: editionPages(), app: title });
     const r = state.run;
     if (r && isObj(r.status) && !TERMINAL.has(str(r.status.state))) {
       const pages = arr(r.status.pages).filter(isObj);
       const done = pages.filter((p) => str(p.state) === "done").length;
-      title = `Laying out ${done}/${pages.length || editionPages()} · ${title}`;
+      title = t("title.running", { done, total: pages.length || editionPages(), title });
     }
   }
   if (document.title !== title) document.title = title;
@@ -1360,9 +1458,13 @@ function offlineView() {
       "div",
       { class: "card empty" },
       icon("alert", "empty-icon"),
-      h("h1", { id: "step-title", tabindex: "-1" }, "The Desk server is not answering"),
-      h("p", {}, state.loadError || OFFLINE_MESSAGE),
-      h("button", { type: "button", class: "btn btn-primary", onclick: () => loadEditionsAndOpen() }, "Try again"),
+      h("h1", { id: "step-title", tabindex: "-1" }, t("view.offlineTitle")),
+      h("p", { lang: langFor(msg(state.loadError)) }, msg(state.loadError) || t("api.offline")),
+      h(
+        "button",
+        { type: "button", class: "btn btn-primary", onclick: () => loadEditionsAndOpen() },
+        t("view.tryAgain"),
+      ),
     ),
   );
 }
@@ -1375,15 +1477,15 @@ function noEditionsView() {
       "div",
       { class: "card empty" },
       icon("page", "empty-icon"),
-      h("h1", { id: "step-title", tabindex: "-1" }, "No editions yet — create today's edition"),
-      h("p", {}, "An edition is one day's paper. You make it in four steps:"),
+      h("h1", { id: "step-title", tabindex: "-1" }, t("view.noEditionsTitle")),
+      h("p", {}, t("view.noEditionsLede")),
       h(
         "ol",
         { class: "empty-steps" },
-        h("li", {}, "Choose the date and the number of pages."),
-        h("li", {}, "Enter or paste the articles, with their photos."),
-        h("li", {}, "Add the ad images."),
-        h("li", {}, "Lay out the paper and download the PDFs."),
+        h("li", {}, t("view.empty1")),
+        h("li", {}, t("view.empty2")),
+        h("li", {}, t("view.empty3")),
+        h("li", {}, t("view.empty4")),
       ),
       h(
         "div",
@@ -1392,7 +1494,7 @@ function noEditionsView() {
           "button",
           { type: "button", class: "btn btn-primary", dataset: { focusKey: "empty:new" }, onclick: openNewEdition },
           icon("plus"),
-          "Create an edition",
+          t("view.createEdition"),
         ),
       ),
     ),
@@ -1407,12 +1509,12 @@ function detailErrorView() {
       "div",
       { class: "card empty" },
       icon("alert", "empty-icon"),
-      h("h1", { id: "step-title", tabindex: "-1" }, "This edition could not be opened"),
-      h("p", {}, state.detailError),
+      h("h1", { id: "step-title", tabindex: "-1" }, t("view.cannotOpen")),
+      h("p", { lang: langFor(msg(state.detailError)) }, msg(state.detailError)),
       h(
         "button",
         { type: "button", class: "btn btn-primary", onclick: () => openEdition(state.editionId) },
-        "Try again",
+        t("view.tryAgain"),
       ),
     ),
   );
@@ -1421,11 +1523,18 @@ function detailErrorView() {
 function planMissingNotice() {
   // the server's own reason (plan_error) when it gives one, else the engine status message
   const s = state.status;
-  const reason = (state.detail && state.detail.planError) || (s && !s.offline ? str(s.message) : "");
-  return notice("warn", `The page plan is not available yet.${reason ? ` ${reason}` : ""}`);
+  const reason =
+    (state.detail && state.detail.planError && said(state.detail.planError, state.detail.msgs)) ||
+    (s && !s.offline ? str(s.message) : "");
+  return notice("warn", reason ? tn("plan.missingWhy", { reason: foreign(reason) }) : t("plan.missing"));
 }
 
 // ===================================================================== step 1: edition
+
+/** A folio field's label: the folio's own Marathi word (as the page prints it), with what it is in English. */
+function folioLabel(name) {
+  return tn(FOLIO_LABEL_KEY[name], { word: h("span", { class: "deva", lang: "mr" }, FOLIO_WORDS[name]) });
+}
 
 function editionValues(ed) {
   return {
@@ -1442,7 +1551,7 @@ function viewEdition() {
   const ed = state.detail.edition;
   const view = h("section", { class: "step-view", "aria-labelledby": "step-title" });
   view.append(
-    stepHeader("Edition", `${friendlyDate(ed.date || state.editionId)} · ${editionPages()} pages`),
+    stepHeader(t("step.edition"), t("ed.lede", { date: friendlyDate(ed.date || state.editionId), n: editionPages() })),
     editionSettingsCard(ed),
     pagePlanCard(),
     dangerCard(ed),
@@ -1459,9 +1568,9 @@ function editionSettingsCard(ed) {
   const saveBtn = h(
     "button",
     { type: "submit", class: "btn btn-primary", dataset: { focusKey: "edition:save" } },
-    "Save settings",
+    t("ed.save"),
   );
-  const undoBtn = h("button", { type: "button", class: "btn", dataset: { focusKey: "edition:undo" } }, "Undo changes");
+  const undoBtn = h("button", { type: "button", class: "btn", dataset: { focusKey: "edition:undo" } }, t("ed.undo"));
   const pagesSeg = h("div", { class: "segmented" });
   for (const n of [4, 8, 16]) {
     pagesSeg.append(
@@ -1469,11 +1578,11 @@ function editionSettingsCard(ed) {
       h("label", { for: `ed-pages-${n}` }, String(n)),
     );
   }
-  const textField = (name, mr, en) =>
+  const textField = (name) =>
     h(
       "div",
       { class: "field" },
-      h("label", { for: `ed-${name}` }, h("span", { class: "deva", lang: "mr" }, mr), ` / ${en}`),
+      h("label", { for: `ed-${name}` }, folioLabel(name)),
       h("input", {
         type: "text",
         id: `ed-${name}`,
@@ -1487,19 +1596,19 @@ function editionSettingsCard(ed) {
   const form = h(
     "form",
     { class: "card", novalidate: true, "aria-labelledby": "settings-title" },
-    h("h2", { class: "card-title", id: "settings-title" }, "Settings"),
-    h("p", { class: "card-lede" }, "Changing the pages or the back-page ads changes the page plan below."),
+    h("h2", { class: "card-title", id: "settings-title" }, t("ed.settings")),
+    h("p", { class: "card-lede" }, t("ed.settingsLede")),
     h(
       "div",
       { class: "settings-grid" },
       h(
         "div",
         { class: "field" },
-        h("label", { for: "ed-date" }, "Date"),
+        h("label", { for: "ed-date" }, t("ed.date")),
         h("input", { type: "date", id: "ed-date", name: "date", required: true, value: v.date }),
         h("p", { class: "field-error", id: "ed-date-error" }),
       ),
-      h("fieldset", { class: "field" }, h("legend", {}, "Pages"), pagesSeg),
+      h("fieldset", { class: "field" }, h("legend", {}, t("ed.pages")), pagesSeg),
       h(
         "div",
         { class: "field field-check", style: { "margin-top": "30px" } },
@@ -1510,23 +1619,12 @@ function editionSettingsCard(ed) {
           checked: v.back_page_ads,
           "aria-describedby": "ed-back-ads-note",
         }),
-        h("label", { for: "ed-back-ads" }, "Back page has ads"),
-        h("p", { class: "field-note", id: "ed-back-ads-note" }, "Untick it when the last page is all news."),
+        h("label", { for: "ed-back-ads" }, t("ed.backAds")),
+        h("p", { class: "field-note", id: "ed-back-ads-note" }, t("ed.backAdsNote")),
       ),
     ),
-    h(
-      "div",
-      { class: "field-grid three" },
-      textField("volume", "वर्ष", "Volume"),
-      textField("issue", "अंक", "Issue"),
-      textField("price", "किंमत", "Price"),
-    ),
-    h(
-      "p",
-      { class: "field-note", style: { margin: "-6px 0 16px" } },
-      "Volume, issue and price are optional. They are printed in the front-page folio where the template has a place " +
-        "for them; leave a box empty to keep the template's own text.",
-    ),
+    h("div", { class: "field-grid three" }, textField("volume"), textField("issue"), textField("price")),
+    h("p", { class: "field-note", style: { margin: "-6px 0 16px" } }, t("ed.folioNote")),
     pinWarn,
     alertSlot,
     h("div", { class: "card-foot" }, saveBtn, undoBtn),
@@ -1553,16 +1651,7 @@ function editionSettingsCard(ed) {
     undoBtn.hidden = !dirty;
     const pages = read().pages;
     const beyond = state.detail.articles.filter((a) => (pinOf(a) || 0) > pages).length;
-    fill(
-      pinWarn,
-      beyond
-        ? notice(
-            "warn",
-            `${plural(beyond, "article is", "articles are")} pinned to a page above ${pages}. ` +
-              "The Desk will place them itself; change their page in step 2 to choose one.",
-          )
-        : "",
-    );
+    fill(pinWarn, beyond ? notice("warn", t("ed.pinnedBeyond", { n: beyond, pages })) : "");
   };
   form.addEventListener("input", sync);
   form.addEventListener("change", sync);
@@ -1574,19 +1663,19 @@ function editionSettingsCard(ed) {
     e.preventDefault();
     const changes = diff();
     if (!parseDay(read().date)) {
-      setFieldError("ed-date", "Choose the date this edition is for.");
+      setFieldError("ed-date", t("ed.chooseDate"));
       form.elements.date.focus();
       return;
     }
     setFieldError("ed-date", "");
     if (!Object.keys(changes).length) return;
     saveBtn.disabled = true;
-    saveBtn.replaceChildren(spinner(), "Saving…");
+    saveBtn.replaceChildren(spinner(), t("common.saving"));
     showAlert(alertSlot, "");
     try {
       await api("PUT", apiPath(state.editionId), { json: changes });
       state.editionDraft = null;
-      toast("Edition settings saved");
+      toast(t("ed.saved"));
       try {
         await reloadEditionsList();
       } catch {
@@ -1595,7 +1684,7 @@ function editionSettingsCard(ed) {
       await refreshDetail();
     } catch (err) {
       showAlert(alertSlot, err.message);
-      saveBtn.replaceChildren("Save settings");
+      saveBtn.replaceChildren(t("ed.save"));
       saveBtn.disabled = false;
     }
   });
@@ -1607,7 +1696,7 @@ function pagePlanCard() {
   const card = h(
     "section",
     { class: "card", "aria-labelledby": "plan-title" },
-    h("h2", { class: "card-title", id: "plan-title" }, "Page plan"),
+    h("h2", { class: "card-title", id: "plan-title" }, t("plan.title")),
   );
   if (!state.detail.plan) {
     card.append(planMissingNotice());
@@ -1615,16 +1704,10 @@ function pagePlanCard() {
   }
   const pages = planPages();
   if (!pages.length) {
-    card.append(h("p", { class: "muted" }, "The page plan lists no pages."));
+    card.append(h("p", { class: "muted" }, t("plan.none")));
     return card;
   }
-  card.append(
-    h(
-      "p",
-      { class: "card-lede" },
-      "One tile per page. Hatched blocks are ad spaces, drawn at their share of the page where the sizes are known.",
-    ),
-  );
+  card.append(h("p", { class: "card-lede" }, t("plan.lede")));
   const pins = pinCounts();
   const grid = h("ol", { class: "plan-grid" });
   for (const p of pages) grid.append(planTile(p, pins.get(int(p.page)) || 0));
@@ -1642,11 +1725,11 @@ function planTile(p, pinned) {
   const sheet = h("div", { class: "plan-sheet", "aria-hidden": "true" }, h("span", { class: "plan-num" }, String(n)));
   if (share > 0) {
     const pct = Math.min(85, Math.max(6, share * 100));
-    sheet.append(h("span", { class: "plan-ads", style: { height: `${pct.toFixed(1)}%` } }, "AD"));
+    sheet.append(h("span", { class: "plan-ads", style: { height: `${pct.toFixed(1)}%` } }, t("plan.ad")));
   }
-  const meta = [`ads: ${slots.length}`];
-  if (share > 0) meta.push(`about ${Math.round(share * 100)}% of the page`);
-  if (pinned) meta.push(`${pinned} pinned`);
+  const meta = [t("plan.ads", { n: slots.length })];
+  if (share > 0) meta.push(t("plan.share", { n: Math.round(share * 100) }));
+  if (pinned) meta.push(t("plan.pinned", { n: pinned }));
   return h(
     "li",
     { class: "plan-tile", dataset: { role } },
@@ -1654,8 +1737,8 @@ function planTile(p, pinned) {
     h(
       "div",
       { class: "plan-label" },
-      h("strong", {}, `Page ${n}`),
-      ROLE_LABEL[role] ? h("span", { class: "muted" }, ` · ${ROLE_LABEL[role]}`) : null,
+      h("strong", {}, t("page.n", { n })),
+      ROLE_KEY[role] ? h("span", { class: "muted" }, ` · ${roleLabel(role)}`) : null,
     ),
     h("div", { class: "plan-meta" }, meta.join(" · ")),
   );
@@ -1666,21 +1749,19 @@ function dangerCard(ed) {
   const button = h(
     "button",
     { type: "button", class: "btn btn-danger-quiet", dataset: { focusKey: "edition:delete" } },
-    "Delete this edition",
+    t("ed.deleteButton"),
   );
   button.addEventListener("click", async () => {
     const ok = await confirmDialog({
-      title: "Delete this edition?",
-      message:
-        `The edition of ${friendlyDate(ed.date || state.editionId)} — its articles, photos, ads and layouts — moves to ` +
-        "the trash folder in the Desk home and disappears from this list.",
-      confirm: "Delete edition",
+      title: t("ed.deleteConfirmTitle"),
+      message: t("ed.deleteConfirm", { date: friendlyDate(ed.date || state.editionId) }),
+      confirm: t("ed.deleteOk"),
       danger: true,
     });
     if (!ok) return;
     try {
       await api("DELETE", apiPath(state.editionId));
-      toast("Edition moved to the trash");
+      toast(t("ed.deleted"));
       stopRunPolling();
       stopMeasurePoll();
       state.run = null;
@@ -1695,12 +1776,8 @@ function dangerCard(ed) {
   return h(
     "section",
     { class: "card danger", "aria-labelledby": "danger-title" },
-    h("h2", { class: "card-title", id: "danger-title" }, "Delete"),
-    h(
-      "p",
-      { class: "card-lede" },
-      "Moves this edition to the trash folder in the Desk home. Nothing is erased from the disk.",
-    ),
+    h("h2", { class: "card-title", id: "danger-title" }, t("ed.deleteTitle")),
+    h("p", { class: "card-lede" }, t("ed.deleteLede")),
     alertSlot,
     button,
   );
@@ -1710,15 +1787,17 @@ function dangerCard(ed) {
 
 function articlesLede() {
   const articles = state.detail ? state.detail.articles : [];
-  if (!articles.length) return "Type, paste or import the articles for this edition.";
+  if (!articles.length) return t("arts.ledeEmpty");
   const have = computeHave(articles);
   return [
-    plural(have.stories, "story", "stories"),
-    plural(have.briefs, "short item"),
-    plural(have.photos, "photo"),
-    plural(have.words, "word"),
+    t("count.story", { n: have.stories }),
+    t("count.brief", { n: have.briefs }),
+    t("count.photo", { n: have.photos }),
+    t("count.word", { n: have.words }),
   ].join(" · ");
 }
+
+let searchTyped = null; // the search box's pending (debounced) update, run at once before the screen is drawn again
 
 function viewArticles() {
   const articles = state.detail.articles;
@@ -1726,18 +1805,16 @@ function viewArticles() {
   const search = h("input", {
     type: "search",
     id: "article-search",
-    placeholder: "Search headlines and text",
+    placeholder: t("arts.searchPlaceholder"),
     autocomplete: "off",
     value: state.query,
     dataset: { focusKey: "articles:search" },
   });
-  search.addEventListener(
-    "input",
-    debounce(() => {
-      state.query = search.value;
-      renderArticleList();
-    }, 150),
-  );
+  searchTyped = debounce(() => {
+    state.query = search.value;
+    if (search.isConnected) renderArticleList();
+  }, 150);
+  search.addEventListener("input", searchTyped);
   const toolbar = h(
     "div",
     { class: "toolbar" },
@@ -1750,12 +1827,12 @@ function viewArticles() {
         onclick: () => openArticleEditor(null),
       },
       icon("plus"),
-      "Add article",
+      t("arts.add"),
     ),
     h(
       "button",
       { type: "button", class: "btn", dataset: { focusKey: "articles:paste" }, onclick: openPasteDialog },
-      "Paste several",
+      t("arts.paste"),
     ),
     h(
       "button",
@@ -1763,28 +1840,46 @@ function viewArticles() {
         type: "button",
         class: "btn",
         dataset: { focusKey: "articles:word" },
-        title: "Add the stories of one or more Word (.docx) files",
+        title: t("arts.wordTitle"),
         onclick: chooseWordFiles,
       },
-      "Word files…",
+      t("arts.word"),
+    ),
+    h(
+      "button",
+      {
+        type: "button",
+        class: "btn",
+        dataset: { focusKey: "articles:bundle" },
+        title: t("arts.bundleTitle"),
+        onclick: chooseBundle,
+      },
+      t("arts.bundle"),
     ),
     h(
       "button",
       { type: "button", class: "btn", dataset: { focusKey: "articles:import" }, onclick: openImportDialog },
-      "Import a past edition (for testing)",
+      t("arts.import"),
     ),
     h(
       "div",
       { class: "search" },
-      h("label", { for: "article-search", class: "sr-only" }, "Search articles"),
+      h("label", { for: "article-search", class: "sr-only" }, t("arts.searchLabel")),
       icon("search", "search-icon"),
       search,
     ),
   );
   const view = h("section", { class: "step-view", "aria-labelledby": "step-title" });
-  const header = stepHeader("Articles", articlesLede());
+  const header = stepHeader(t("step.articles"), articlesLede());
   $(".step-lede", header).id = "articles-lede";
-  view.append(header, h("div", { class: "alert-slot", id: "articles-alert" }), toolbar, wordNote(), measureLine());
+  // addChildren skips the word note when there is none (Element.append(null) would print "null")
+  addChildren(view, [
+    header,
+    h("div", { class: "alert-slot", id: "articles-alert" }),
+    toolbar,
+    wordNote(),
+    measureLine(),
+  ]);
   if (articles.length) {
     view.append(
       h(
@@ -1800,7 +1895,7 @@ function viewArticles() {
         h(
           "p",
           { class: "run-note" },
-          `Placement shown from the last finished layout${r.started !== null ? `, ${friendlyTime(r.started)}` : ""}.`,
+          r.started !== null ? t("arts.placementAt", { time: friendlyTime(r.started) }) : t("arts.placement"),
         ),
       );
     }
@@ -1823,30 +1918,31 @@ function wordNote() {
         renderMain();
       },
     },
-    "Close",
+    t("common.close"),
   );
   const box = notice(
     n.kind,
-    n.text,
+    msg(n.text),
     n.lines.length
       ? h(
           "ul",
           {},
-          n.lines.map((l) => h("li", {}, l)),
+          n.lines.map((l) => h("li", {}, msg(l))),
         )
       : null,
     close,
   );
   box.setAttribute("role", "status");
+  box.classList.add("import-note"); // file names and headlines with no space in them wrap inside it
   return box;
 }
 
 function filterControl() {
   const options = [
-    ["all", "All"],
-    ["photo", "With photo"],
-    ["short", "Short items"],
-    ["notplaced", "Not placed in last run"],
+    ["all", t("arts.all")],
+    ["photo", t("arts.withPhoto")],
+    ["short", t("needs.briefs")],
+    ["notplaced", t("arts.notPlaced")],
   ];
   const seg = h("div", { class: "segmented segmented-small" });
   for (const [value, label] of options) {
@@ -1865,14 +1961,14 @@ function filterControl() {
           renderArticleList();
         },
       }),
-      h("label", { for: `filter-${value}`, title: disabled ? "Shown after the first finished layout" : null }, label),
+      h("label", { for: `filter-${value}`, title: disabled ? t("arts.notPlacedTitle") : null }, label),
     );
   }
   return h(
     "fieldset",
     { class: "filter" },
-    h("legend", { class: "sr-only" }, "Show"),
-    h("span", { class: "filter-label", "aria-hidden": "true" }, "Show"),
+    h("legend", { class: "sr-only" }, t("arts.show")),
+    h("span", { class: "filter-label", "aria-hidden": "true" }, t("arts.show")),
     seg,
   );
 }
@@ -1884,7 +1980,7 @@ function filteredArticles() {
     if (state.filter === "short" && !isBrief(a)) return false;
     if (state.filter === "notplaced" && !(state.lastResult && state.lastResult.notPlaced.has(a.id))) return false;
     if (!q) return true;
-    return [a.headline, a.kicker, a.deck, a.byline, a.body].some((t) => fold(t).includes(q));
+    return [a.headline, a.kicker, a.deck, a.byline, a.body].some((text) => fold(text).includes(q));
   });
 }
 
@@ -1895,23 +1991,18 @@ function renderArticleList() {
   const key = focusKeyIn(host);
   if (!all.length) {
     host.replaceChildren(
-      h(
-        "div",
-        { class: "card empty empty-small" },
-        h("h2", {}, "No articles yet"),
-        h("p", {}, "Add one with “Add article”, paste several at once, or import a past edition to try the layout."),
-      ),
+      h("div", { class: "card empty empty-small" }, h("h2", {}, t("arts.none")), h("p", {}, t("arts.noneHint"))),
     );
     return;
   }
   const shown = filteredArticles();
-  const count = $("#article-count");
-  if (count) {
+  const countLine = $("#article-count");
+  if (countLine) {
     setText(
-      count,
+      countLine,
       shown.length === all.length
-        ? `${plural(all.length, "article")}, sorted by priority`
-        : `Showing ${fmtInt(shown.length)} of ${plural(all.length, "article")}`,
+        ? t("arts.count", { n: all.length })
+        : t("arts.showing", { n: shown.length, total: all.length }),
     );
   }
   if (!shown.length) {
@@ -1922,7 +2013,7 @@ function renderArticleList() {
         h(
           "p",
           {},
-          state.query.trim() ? `No articles match “${state.query.trim()}”.` : "No articles match this filter.",
+          state.query.trim() ? tn("arts.noMatch", { query: foreign(state.query.trim()) }) : t("arts.noMatchFilter"),
         ),
         h(
           "button",
@@ -1935,30 +2026,32 @@ function renderArticleList() {
               renderMain();
             },
           },
-          "Show all articles",
+          t("arts.showAll"),
         ),
       ),
     );
     return;
   }
-  const list = h("ul", { class: "article-list", id: "article-list", "aria-label": "Articles" });
+  const list = h("ul", { class: "article-list", id: "article-list", "aria-label": t("step.articles") });
   for (const a of shown) list.append(articleRow(a));
   host.replaceChildren(list);
   restoreFocus(key);
 }
 
 function articleThumb(a) {
-  if (!hasPhoto(a)) return h("div", { class: "thumb thumb-none" }, "no photo");
+  if (!hasPhoto(a)) return h("div", { class: "thumb thumb-none" }, t("arts.noPhoto"));
   const url = photoUrl(a);
-  const fallbackText = "photo · no preview";
-  const img = fallbackImage([url, withoutQuery(url)], { alt: "Photo", decoding: "async" }, (el) =>
+  const fallbackText = t("arts.photoNoPreview");
+  const img = fallbackImage([url, withoutQuery(url)], { alt: t("art.photo"), decoding: "async" }, (el) =>
     el.replaceWith(fallbackText),
   );
   return h("div", { class: "thumb" }, img || fallbackText);
 }
 
+/** The last finished layout's warnings for an article, in the language shown. */
 function lastWarningsFor(id) {
-  return state.lastResult ? state.lastResult.warnings.get(id) || [] : [];
+  const r = state.lastResult;
+  return r ? (r.warnings.get(id) || []).map((w) => said(w, r.msgs)) : [];
 }
 
 /** A small badge for an article the last finished layout warned about; the texts are in its title and for readers. */
@@ -1969,8 +2062,8 @@ function warningBadge(a) {
     "span",
     { class: "chip chip-warn", title: warnings.join("\n") },
     icon("alert"),
-    warnings.length === 1 ? "Warning" : `${warnings.length} warnings`,
-    h("span", { class: "sr-only" }, `: ${warnings.join("; ")}`),
+    t("arts.warnings", { n: warnings.length }),
+    h("span", { class: "sr-only", lang: langFor(warnings.join("; ")) }, `: ${warnings.join("; ")}`),
   );
 }
 
@@ -1979,7 +2072,7 @@ function articleRow(a) {
   const prio = priorityOf(a);
   const pin = pinOf(a);
   const pages = editionPages();
-  const headline = clip(a.headline, 400) || "(no headline)";
+  const headline = clip(a.headline, 400) || t("arts.noHeadline");
   const result = articleResult(a);
   const row = h("li", { class: "article-row", dataset: { id: a.id } });
   row.addEventListener("click", (e) => {
@@ -1987,20 +2080,16 @@ function articleRow(a) {
     openArticleEditor(a);
   });
   const chip = brief
-    ? h(
-        "span",
-        { class: "chip chip-short", title: "60 words or fewer and no photo: set in the news-in-brief column" },
-        "Short",
-      )
-    : h("span", { class: `chip chip-p${prio}` }, PRIORITY_LABEL[prio]);
+    ? h("span", { class: "chip chip-short", title: t("arts.shortTitle") }, t("arts.shortChip"))
+    : h("span", { class: `chip chip-p${prio}` }, t(PRIORITY_KEY[prio]));
   const pinLine = pin
     ? h(
         "span",
         { class: pin > pages ? "pin pin-bad" : "pin" },
         icon(pin > pages ? "alert" : "pin"),
-        h("span", {}, pin > pages ? `Page ${pin} — not in this edition` : `Page ${pin}`),
+        h("span", {}, pin > pages ? t("arts.pinMissing", { n: pin }) : t("page.n", { n: pin })),
       )
-    : h("span", { class: "pin" }, icon("auto"), h("span", {}, "Auto"));
+    : h("span", { class: "pin" }, icon("auto"), h("span", {}, t("arts.auto")));
   row.append(
     articleThumb(a),
     h(
@@ -2013,30 +2102,35 @@ function articleRow(a) {
         str(a.kicker).trim()
           ? h("span", { class: "article-kicker deva", lang: langFor(a.kicker) }, clip(a.kicker, 80))
           : null,
-        isSample(a)
-          ? h("span", { class: "chip chip-test", title: "Imported from a past edition for testing" }, "Test import")
-          : null,
+        isSample(a) ? h("span", { class: "chip chip-test", title: t("arts.testTitle") }, t("arts.test")) : null,
         warningBadge(a),
       ),
       h("h2", { class: "article-headline", lang: langFor(headline) }, headline),
       h(
         "p",
         { class: "article-meta" },
-        h("span", {}, plural(wordsOf(a), "word")),
+        h("span", {}, t("count.word", { n: count(wordsOf(a)) })),
         str(a.byline).trim() ? h("span", { class: "deva", lang: langFor(a.byline) }, clip(a.byline, 60)) : null,
       ),
     ),
     h(
       "div",
       { class: "article-place" },
-      h("span", { class: "sr-only" }, "Page: "),
+      h("span", { class: "sr-only" }, `${t("arts.pageSr")} `),
       pinLine,
       result
         ? h(
             "span",
             { class: `result result-${result.kind}`, title: result.text },
             icon(result.icon),
-            h("span", {}, result.text, result.edited ? h("span", { class: "result-edited" }, " (edited since)") : null),
+            h(
+              "span",
+              {},
+              result.reason
+                ? tn("result.notPlacedWhy", { reason: foreign(said(result.reason, state.lastResult.msgs)) })
+                : result.text,
+              result.edited ? h("span", { class: "result-edited" }, ` ${t("arts.editedSince")}`) : null,
+            ),
           )
         : null,
     ),
@@ -2048,41 +2142,45 @@ function articleRow(a) {
         {
           type: "button",
           class: "btn btn-small",
-          "aria-label": `Edit: ${clip(headline, 80)}`,
+          "aria-label": t("arts.editAria", { headline: clip(headline, 80) }),
           dataset: { focusKey: `edit:${a.id}` },
           onclick: () => openArticleEditor(a),
         },
-        "Edit",
+        t("common.edit"),
       ),
       h(
         "button",
         {
           type: "button",
           class: "btn btn-small btn-danger-quiet",
-          "aria-label": `Delete: ${clip(headline, 80)}`,
+          "aria-label": t("arts.deleteAria", { headline: clip(headline, 80) }),
           dataset: { focusKey: `delete:${a.id}` },
           onclick: () => deleteArticle(a),
         },
-        "Delete",
+        t("common.delete"),
       ),
     ),
   );
   return row;
 }
 
-async function deleteArticle(a) {
-  const ok = await confirmDialog({
-    title: "Delete this article?",
-    message: `“${clip(a.headline, 140) || "(no headline)"}” will be removed from this edition, with its photo.`,
-    confirm: "Delete article",
+function confirmDeleteArticle(a) {
+  return confirmDialog({
+    title: t("arts.deleteTitle"),
+    message: t("arts.deleteMessage", { headline: clip(a.headline, 140) || t("arts.noHeadline") }),
+    confirm: t("arts.deleteOk"),
     danger: true,
   });
+}
+
+async function deleteArticle(a) {
+  const ok = await confirmDeleteArticle(a);
   if (!ok) return;
   const order = filteredArticles().map((x) => x.id);
   const index = order.indexOf(a.id);
   try {
     await api("DELETE", apiPath(state.editionId, "articles", a.id));
-    toast("Article deleted");
+    toast(t("arts.deleted"));
     await refreshDetail();
     const next = filteredArticles().map((x) => x.id);
     const target = next[Math.min(Math.max(index, 0), next.length - 1)];
@@ -2128,20 +2226,20 @@ function isEditorDirty() {
 function articleOrigin(a) {
   const source = str(a.source);
   const how = source.startsWith("sample:")
-    ? "test import from a past edition"
-    : { typed: "typed in", pasted: "pasted", word: "from a Word file" }[source] || "";
+    ? t("art.fromSample")
+    : { typed: t("art.typed"), pasted: t("art.pasted"), word: t("art.fromWord") }[source] || "";
   const when = friendlyTime(timeOf(a.created));
-  return [when ? `Added ${when}` : "", how].filter(Boolean).join(" · ");
+  return [when ? t("art.addedAt", { time: when }) : "", how].filter(Boolean).join(" · ");
 }
 
 function fillPageSelect(select, pin) {
   const total = editionPages();
-  const options = [h("option", { value: "" }, "Auto (the Desk chooses)")];
+  const options = [h("option", { value: "" }, t("art.pageAuto"))];
   for (let n = 1; n <= total; n += 1) {
     const role = pageRole(n);
-    options.push(h("option", { value: String(n) }, role === "inside" ? `Page ${n}` : pageName(n, role)));
+    options.push(h("option", { value: String(n) }, role === "inside" ? t("page.n", { n }) : pageName(n, role)));
   }
-  if (pin && pin > total) options.push(h("option", { value: String(pin) }, `Page ${pin} (not in this edition)`));
+  if (pin && pin > total) options.push(h("option", { value: String(pin) }, t("art.pageMissing", { n: pin })));
   select.replaceChildren(...options);
   select.value = pin ? String(pin) : "";
 }
@@ -2154,8 +2252,8 @@ function openArticleEditor(article) {
   editor.article = article || null;
   editor.id = article ? article.id : null;
   editor.removePhoto = false;
-  setText($("#article-title"), article ? "Edit article" : "New article");
-  setText($("#article-sub"), article ? articleOrigin(article) : "Fields marked * are required.");
+  setText($("#article-title"), article ? t("art.edit") : t("art.new"));
+  setText($("#article-sub"), article ? articleOrigin(article) : t("art.required"));
   const f = form.elements;
   f.headline.value = str(article && article.headline);
   f.kicker.value = str(article && article.kicker);
@@ -2182,7 +2280,7 @@ function openArticleEditor(article) {
           h(
             "div",
             {},
-            h("p", {}, "The last layout noted:"),
+            h("p", {}, t("art.notes")),
             h(
               "ul",
               { class: "notice-list" },
@@ -2214,12 +2312,12 @@ function renderEditorPhoto() {
   const parts = [];
   if (mode === "new") {
     parts.push(
-      h("img", { src: editor.fileUrl, alt: "The new photo you chose" }),
+      h("img", { src: editor.fileUrl, alt: t("art.newPhotoAlt") }),
       h(
         "p",
         { class: "photo-note" },
         icon("info"),
-        h("span", {}, `${editor.file.name} (${fmtBytes(editor.file.size)}) — uploaded when you save.`),
+        h("span", {}, tn("art.newPhotoNote", { name: foreign(editor.file.name), size: fmtBytes(editor.file.size) })),
       ),
       h(
         "button",
@@ -2232,23 +2330,19 @@ function renderEditorPhoto() {
             updateEditorWords();
           },
         },
-        existing && !editor.removePhoto ? "Keep the old photo" : "Don't use this photo",
+        existing && !editor.removePhoto ? t("art.keepOld") : t("art.dontUse"),
       ),
     );
   } else if (mode === "existing") {
     const url = photoUrl(editor.article);
-    const missing = () => h("div", { class: "photo-missing" }, "Photo stored — no preview available.");
-    const img = fallbackImage([url, withoutQuery(url)], { alt: "The article's photo" }, (el) =>
-      el.replaceWith(missing()),
-    );
+    const missing = () => h("div", { class: "photo-missing" }, t("art.storedNoPreview"));
+    const img = fallbackImage([url, withoutQuery(url)], { alt: t("art.photoAlt") }, (el) => el.replaceWith(missing()));
     parts.push(img || missing());
     const w = int(existing.width_px);
     const hgt = int(existing.height_px);
-    if (w && hgt) parts.push(h("p", { class: "photo-note" }, `${w} × ${hgt} pixels`));
+    if (w && hgt) parts.push(h("p", { class: "photo-note" }, t("art.pixels", { w: String(w), h: String(hgt) })));
   } else {
-    parts.push(
-      h("div", { class: "photo-empty" }, editor.removePhoto ? "The photo will be removed when you save." : "No photo"),
-    );
+    parts.push(h("div", { class: "photo-empty" }, editor.removePhoto ? t("art.willRemove") : t("art.noPhoto")));
     if (editor.removePhoto) {
       parts.push(
         h(
@@ -2262,7 +2356,7 @@ function renderEditorPhoto() {
               updateEditorWords();
             },
           },
-          "Keep the photo",
+          t("art.keepPhoto"),
         ),
       );
     }
@@ -2270,7 +2364,7 @@ function renderEditorPhoto() {
   box.replaceChildren(...parts);
   // a newly chosen file is undone with the button under its preview; "Remove photo" is for the stored photo
   $("#article-photo-remove").hidden = mode !== "existing";
-  setText($("#article-photo-label"), mode === "none" ? "Add a photo" : "Replace photo");
+  setText($("#article-photo-label"), mode === "none" ? t("art.addPhoto") : t("art.replacePhoto"));
   const f = $("#form-article").elements;
   f.caption.disabled = mode === "none";
   f.credit.disabled = mode === "none";
@@ -2281,7 +2375,7 @@ function updateEditorWords() {
   const words = countWords(f.body.value);
   const willHavePhoto = !!editor.file || (!!editor.article && hasPhoto(editor.article) && !editor.removePhoto);
   const short = words > 0 && words <= BRIEF_MAX_WORDS && !willHavePhoto;
-  setText($("#article-words"), plural(words, "word"));
+  setText($("#article-words"), t("count.word", { n: words }));
   $("#article-short").hidden = !short;
   $("#article-short-note").hidden = !short;
 }
@@ -2294,15 +2388,15 @@ function onPhotoChosen(e) {
   if (!file) return;
   const type = imageTypeOf(file);
   if (!type) {
-    setFieldError("article-photo", "Use a JPEG, PNG or WebP photo.");
+    setFieldError("article-photo", t("art.badType"));
     return;
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    setFieldError("article-photo", `This file is ${fmtBytes(file.size)}. The limit is 40 MB.`);
+    setFieldError("article-photo", t("common.tooBig", { size: fmtBytes(file.size) }));
     return;
   }
   if (file.size === 0) {
-    setFieldError("article-photo", "This file is empty.");
+    setFieldError("article-photo", t("art.emptyFile"));
     return;
   }
   clearEditorFile();
@@ -2333,10 +2427,10 @@ async function cancelEditor() {
   if (editor.busy) return;
   if (isEditorDirty()) {
     const ok = await confirmDialog({
-      title: "Discard your changes?",
-      message: "Your changes to this article have not been saved.",
-      confirm: "Discard changes",
-      cancel: "Keep editing",
+      title: t("art.discardTitle"),
+      message: t("art.discardMessage"),
+      confirm: t("art.discardOk"),
+      cancel: t("art.keepEditing"),
       danger: true,
     });
     if (!ok) return;
@@ -2351,11 +2445,11 @@ async function saveArticle(e) {
   const f = $("#form-article").elements;
   let firstBad = null;
   if (!v.headline.trim()) {
-    setFieldError("article-headline", "Write a headline.");
+    setFieldError("article-headline", t("art.needHeadline"));
     firstBad = f.headline;
   } else setFieldError("article-headline", "");
   if (!v.body.trim()) {
-    setFieldError("article-body", "Write the body text.");
+    setFieldError("article-body", t("art.needBody"));
     firstBad = firstBad || f.body;
   } else setFieldError("article-body", "");
   if (firstBad) {
@@ -2373,16 +2467,16 @@ async function saveArticle(e) {
     page: v.page,
   };
   showAlert($("#article-alert"), "");
-  setEditorBusy(true, "Saving…");
+  setEditorBusy(true, t("common.saving"));
   let stage = "article";
   try {
     if (!editor.id) {
       const created = await api("POST", apiPath(editionId, "articles"), { json: fields });
       const art = isObj(created.article) ? created.article : created;
-      if (!str(art.id)) throw new ApiError("The Desk server did not return the new article.");
+      if (!str(art.id)) throw deskError("api.noArticle");
       editor.id = art.id;
       editor.article = art;
-      setText($("#article-title"), "Edit article");
+      setText($("#article-title"), t("art.edit"));
       $("#article-delete").hidden = false;
     } else {
       const updated = await api("PUT", apiPath(editionId, "articles", editor.id), { json: fields });
@@ -2392,7 +2486,7 @@ async function saveArticle(e) {
     stage = "photo";
     const photo = hasPhoto(editor.article) ? editor.article.photo : null;
     if (editor.file) {
-      setEditorBusy(true, "Uploading the photo…");
+      setEditorBusy(true, t("art.uploading"));
       const query = new URLSearchParams({ caption: v.caption, credit: v.credit });
       await api("PUT", `${apiPath(editionId, "articles", editor.id, "photo")}?${query}`, {
         raw: editor.file,
@@ -2409,12 +2503,11 @@ async function saveArticle(e) {
     const savedId = editor.id;
     setEditorBusy(false);
     closeEditor();
-    toast("Article saved");
+    toast(t("art.saved"));
     await refreshDetail();
     if (state.step === "articles") restoreFocus(`edit:${savedId}`);
   } catch (err) {
-    const message =
-      stage === "photo" ? `The article text is saved, but the photo change is not: ${err.message}` : err.message;
+    const message = stage === "photo" ? tn("art.photoNotSaved", { error: foreign(err.message) }) : err.message;
     showAlert($("#article-alert"), message);
     if (stage === "photo") refreshDetail({ quiet: true });
   } finally {
@@ -2424,20 +2517,14 @@ async function saveArticle(e) {
 
 async function deleteFromEditor() {
   if (!editor.id || editor.busy) return;
-  const a = editor.article || {};
-  const ok = await confirmDialog({
-    title: "Delete this article?",
-    message: `“${clip(a.headline, 140) || "(no headline)"}” will be removed from this edition, with its photo.`,
-    confirm: "Delete article",
-    danger: true,
-  });
+  const ok = await confirmDeleteArticle(editor.article || {});
   if (!ok) return;
-  setEditorBusy(true, "Deleting…");
+  setEditorBusy(true, t("art.deleting"));
   try {
     await api("DELETE", apiPath(state.editionId, "articles", editor.id));
     setEditorBusy(false);
     closeEditor();
-    toast("Article deleted");
+    toast(t("arts.deleted"));
     await refreshDetail();
     restoreFocus("articles:add");
   } catch (err) {
@@ -2449,50 +2536,23 @@ async function deleteFromEditor() {
 
 // ===================================================================== paste several
 
-function splitPaste(text) {
-  const chunks = [];
-  let current = [];
-  for (const line of str(text).replace(/\r\n?/g, "\n").split("\n")) {
-    if (line.trim() === "---") {
-      chunks.push(current);
-      current = [];
-    } else current.push(line);
-  }
-  chunks.push(current);
-  return chunks
-    .map((lines) => lines.join("\n").trim())
-    .filter(Boolean)
-    .map((chunk) => {
-      const lines = chunk.split("\n");
-      const rest = lines.slice(1);
-      if (rest.length && /^byline\s*:/i.test(rest[0].trim())) rest.shift();
-      return { headline: lines[0].trim(), hasBody: rest.join("\n").trim() !== "", text: chunk };
-    });
-}
-
 function updatePasteCount() {
   const items = splitPaste($("#paste-text").value);
   const out = $("#paste-count");
   const preview = $("#paste-preview");
   if (!items.length) {
-    out.replaceChildren(h("span", { class: "muted" }, "Nothing pasted yet."));
+    out.replaceChildren(h("span", { class: "muted" }, t("paste.nothing")));
     preview.replaceChildren();
     return;
   }
   const noBody = items.filter((x) => !x.hasBody).length;
   fill(
     out,
-    h("strong", {}, `Looks like ${plural(items.length, "article")}.`),
-    noBody
-      ? h(
-          "span",
-          { class: "muted" },
-          ` ${plural(noBody, "of them has", "of them have")} a headline but no body text yet.`,
-        )
-      : null,
+    h("strong", {}, t("paste.looksLike", { n: items.length })),
+    noBody ? h("span", { class: "muted" }, ` ${t("paste.noBody", { n: noBody })}`) : null,
   );
   const shown = items.slice(0, 8).map((x) => h("li", { lang: langFor(x.headline) }, clip(x.headline, 90)));
-  if (items.length > 8) shown.push(h("li", {}, `…and ${items.length - 8} more`));
+  if (items.length > 8) shown.push(h("li", {}, t("paste.more", { n: items.length - 8 })));
   preview.replaceChildren(...shown);
 }
 
@@ -2509,13 +2569,13 @@ async function submitPaste(e) {
   const textArea = $("#paste-text");
   const items = splitPaste(textArea.value);
   if (!items.length) {
-    showAlert($("#paste-alert"), "Paste at least one article first.");
+    showAlert($("#paste-alert"), t("paste.empty"));
     textArea.focus();
     return;
   }
   const submit = $("#paste-submit");
   submit.disabled = true;
-  $("#paste-busy").replaceChildren(spinner(), "Adding…");
+  $("#paste-busy").replaceChildren(spinner(), t("paste.adding"));
   showAlert($("#paste-alert"), "");
   try {
     const res = await api("POST", apiPath(state.editionId, "articles", "bulk"), { json: { text: textArea.value } });
@@ -2529,16 +2589,18 @@ async function submitPaste(e) {
         .map((it) => it.text)
         .join("\n---\n");
       updatePasteCount();
-      showAlert(
-        $("#paste-alert"),
-        `Added ${plural(created, "article")}. Not added: ` +
-          skipped.map((s) => `“${clip(str(s.headline), 60)}” (${str(s.reason) || "not accepted"})`).join("; ") +
-          ". They are still in the box: fix them and add again.",
-      );
+      const list = skipped
+        .map((s) => `“${clip(str(s.headline), 60)}” (${said(s.reason, res.msgs) || t("common.notAccepted")})`)
+        .join("; ");
+      showAlert($("#paste-alert"), [
+        t("paste.added", { n: created }),
+        " ",
+        tn("paste.notAdded", { n: skipped.length, list: foreign(list) }),
+      ]);
     } else {
       textArea.value = "";
       $("#dlg-paste").close();
-      toast(`Added ${plural(created, "article")}`);
+      toast(t("count.added", { n: created }));
     }
     await refreshDetail();
   } catch (err) {
@@ -2573,11 +2635,11 @@ async function importWordFiles(files) {
   let fromFiles = 0;
   const problems = [];
   const notes = [];
-  toast(`Reading ${plural(files.length, "Word file")}…`, "info");
+  toast(t("word.reading", { n: files.length }), "info");
   try {
     for (const file of files) {
       if (!/\.docx$/i.test(file.name)) {
-        problems.push(`${file.name}: not a .docx file (save it as .docx in Word)`);
+        problems.push(() => t("word.notDocx", { file: file.name }));
         continue;
       }
       try {
@@ -2589,10 +2651,12 @@ async function importWordFiles(files) {
         added += n;
         if (n) fromFiles += 1;
         for (const s of arr(res.skipped).filter(isObj))
-          problems.push(`${file.name}: “${clip(str(s.headline), 50)}” (${str(s.reason) || "not accepted"})`);
+          problems.push(
+            `${file.name}: “${clip(str(s.headline), 50)}” (${said(s.reason, res.msgs) || t("common.notAccepted")})`,
+          );
         for (const n of arr(res.notes)) notes.push(`${file.name}: ${str(n)}`);
       } catch (err) {
-        problems.push(`${file.name}: ${err.message}`);
+        problems.push(`${file.name}: ${err.message}`); // the server's words (or the Desk's, in the language then)
       }
     }
   } finally {
@@ -2601,15 +2665,90 @@ async function importWordFiles(files) {
   state.wordNote = {
     edition: eid,
     kind: problems.length ? "warn" : "ok",
-    text: added
-      ? `Added ${plural(added, "article")} from ${plural(fromFiles, "Word file")}` +
-        (fromFiles < files.length ? ` (of ${files.length} chosen).` : ".")
-      : `No article was added from ${plural(files.length, "Word file")}.`,
+    // in the language shown when it is drawn (the screen can change language while it is open)
+    text: () => {
+      if (!added) return t("word.noneAdded", { n: files.length });
+      const from = t("word.fromFiles", { n: fromFiles });
+      return fromFiles < files.length
+        ? t("word.addedOf", { n: added, from, chosen: files.length })
+        : t("word.added", { n: added, from });
+    },
     lines: [...new Set([...problems, ...notes])],
   };
-  if (added) toast(`Added ${plural(added, "article")}`);
+  if (added) toast(t("count.added", { n: added }));
   if (state.editionId === eid) await refreshDetail();
   if (state.editionId === eid && state.step === "articles") renderMain();
+}
+
+// ===================================================================== Pageinator stories (a story bundle)
+
+let bundleBusy = false;
+
+/** Opens the file chooser for one Pageinator stories file (pageinator.story-bundle/1: a .zip made by Pageinator). */
+function chooseBundle() {
+  if (!state.detail || bundleBusy) return;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".zip,application/zip";
+  input.addEventListener("change", () => importBundle((input.files || [])[0]));
+  input.click();
+}
+
+async function importBundle(file) {
+  if (!file || bundleBusy) return;
+  bundleBusy = true;
+  const eid = state.editionId;
+  let note;
+  toast(t("bundle.reading"), "info");
+  try {
+    if (!/\.zip$/i.test(file.name)) {
+      note = { kind: "warn", text: () => t("bundle.notZip", { file: file.name }), lines: [] };
+    } else {
+      const res = await api("POST", apiPath(eid, "articles", "import-bundle"), {
+        raw: file,
+        contentType: "application/zip",
+      });
+      note = bundleNote(file.name, res);
+    }
+  } catch (err) {
+    const why = errMsg(err); // the server's refusal, by its code: said again in the language shown
+    note = { kind: "warn", text: () => t("bundle.refused", { file: file.name, reason: msg(why) }), lines: [] };
+  } finally {
+    bundleBusy = false;
+  }
+  state.wordNote = { edition: eid, ...note };
+  if (state.editionId === eid) await refreshDetail();
+  if (state.editionId === eid && state.step === "articles") renderMain();
+}
+
+/** What an import did, in the language shown when it is drawn: the counts, then each story kept or not added, and
+ * why, then the server's notes. */
+function bundleNote(file, res) {
+  const count = (k) => arr(res[k]).filter(isObj).length;
+  const counts = [
+    ["added", "bundle.added"],
+    ["replaced", "bundle.replaced"],
+    ["unchanged", "bundle.unchanged"],
+    ["kept", "bundle.kept"],
+    ["deleted", "bundle.deleted"],
+    ["refused", "bundle.refusedN"],
+  ];
+  const line = (s) => () =>
+    t("bundle.line", {
+      headline: clip(str(s.headline).trim() || str(s.story), 60), // no headline: the story's id in the newsroom
+      reason: said(s.reason, res.msgs) || t("common.notAccepted"),
+    });
+  return {
+    kind: count("kept") || count("deleted") || count("refused") ? "warn" : "ok",
+    text: () => {
+      const list = counts.filter(([k]) => count(k)).map(([k, key]) => t(key, { n: count(k) }));
+      return list.length ? t("bundle.summary", { file, list: list.join("; ") }) : t("bundle.nothing", { file });
+    },
+    lines: [
+      ...[...arr(res.kept), ...arr(res.deleted), ...arr(res.refused)].filter(isObj).map(line),
+      ...arr(res.notes).map((n) => () => said(n, res.msgs)),
+    ],
+  };
 }
 
 // ===================================================================== import a past edition (testing)
@@ -2621,7 +2760,7 @@ async function openImportDialog() {
   const list = $("#import-list");
   showAlert($("#import-alert"), "");
   $("#import-progress").replaceChildren();
-  list.replaceChildren(h("p", { class: "loading" }, spinner(), "Looking for past editions…"));
+  list.replaceChildren(h("p", { class: "loading" }, spinner(), t("imp.looking")));
   $("#import-submit").disabled = true;
   $("#dlg-import").showModal();
   const editionId = state.editionId;
@@ -2630,7 +2769,7 @@ async function openImportDialog() {
     if (state.editionId !== editionId || !$("#dlg-import").open) return;
     const samples = arr(data.samples).filter((s) => isObj(s) && str(s.name));
     if (!samples.length) {
-      list.replaceChildren(h("p", {}, "No past editions were found in the dataset."));
+      list.replaceChildren(h("p", {}, t("imp.none")));
       return;
     }
     const already = new Set(
@@ -2639,14 +2778,14 @@ async function openImportDialog() {
         .filter((s) => s.startsWith("sample:"))
         .map((s) => s.slice(7)),
     );
-    const fieldset = h("fieldset", {}, h("legend", {}, "Past editions"));
+    const fieldset = h("fieldset", {}, h("legend", {}, t("imp.legend")));
     samples.forEach((s, i) => {
       const name = str(s.name);
       const facts = [
-        int(s.pages) ? `${s.pages} pages` : null,
-        num(s.stories) !== null ? plural(s.stories, "story", "stories") : null,
-        num(s.photos) !== null ? plural(s.photos, "photo") : null,
-        num(s.words) !== null ? plural(s.words, "word") : null,
+        int(s.pages) ? t("count.page", { n: int(s.pages) }) : null,
+        num(s.stories) !== null ? t("count.story", { n: count(s.stories) }) : null,
+        num(s.photos) !== null ? t("count.photo", { n: count(s.photos) }) : null,
+        num(s.words) !== null ? t("count.word", { n: count(s.words) }) : null,
       ].filter(Boolean);
       fieldset.append(
         h(
@@ -2656,7 +2795,7 @@ async function openImportDialog() {
           h("span", { class: "sample-title" }, s.date ? friendlyDate(s.date) : name),
           facts.length ? h("span", { class: "sample-facts" }, facts.join(" · ")) : null,
           s.date ? h("span", { class: "sample-name" }, name) : null,
-          already.has(name) ? h("span", { class: "sample-already" }, "Already imported into this edition") : null,
+          already.has(name) ? h("span", { class: "sample-already" }, t("imp.already")) : null,
         ),
       );
     });
@@ -2674,7 +2813,7 @@ async function submitImport(e) {
   if (importBusy) return;
   const names = $$("#import-list input[type='checkbox']:checked").map((input) => input.value);
   if (!names.length) {
-    showAlert($("#import-alert"), "Choose at least one past edition.");
+    showAlert($("#import-alert"), t("imp.choose"));
     return;
   }
   importBusy = true;
@@ -2682,13 +2821,16 @@ async function submitImport(e) {
   $("#import-cancel").disabled = true;
   for (const input of $$("#import-list input")) input.disabled = true;
   showAlert($("#import-alert"), "");
-  $("#import-progress").replaceChildren(spinner(), "Importing — this can take a minute.");
+  $("#import-progress").replaceChildren(spinner(), t("imp.importing"));
   try {
     const res = await api("POST", apiPath(state.editionId, "import-sample"), { json: { samples: names } });
     importBusy = false;
     $("#dlg-import").close();
     toast(
-      `Imported ${plural(int(res.imported) ?? 0, "story", "stories")} and ${plural(int(res.photos) ?? 0, "photo")}`,
+      t("imp.done", {
+        stories: t("count.story", { n: int(res.imported) ?? 0 }),
+        photos: t("count.photo", { n: int(res.photos) ?? 0 }),
+      }),
     );
     await refreshDetail();
   } catch (err) {
@@ -2709,19 +2851,14 @@ function viewAds() {
   const slots = adSlots();
   const filled = slots.filter((s) => adInfo(s.slot)).length;
   view.append(
-    stepHeader(
-      "Ads",
-      slots.length
-        ? `${filled} of ${plural(slots.length, "ad space")} filled. Spaces without an image print as a grey box marked AD.`
-        : "Ad spaces come from the page plan.",
-    ),
+    stepHeader(t("step.ads"), slots.length ? t("ads.lede", { n: filled, total: slots.length }) : t("ads.ledeNone")),
   );
   if (!backPageAds()) {
     view.append(
       notice(
         "info",
-        "The back page is all news (no ad spaces). Change this in step 1.",
-        h("button", { type: "button", class: "btn btn-small", onclick: () => goStep("edition") }, "Go to step 1"),
+        t("ads.backAllNews"),
+        h("button", { type: "button", class: "btn btn-small", onclick: () => goStep("edition") }, t("ads.goStep1")),
       ),
     );
   }
@@ -2730,7 +2867,7 @@ function viewAds() {
     return view;
   }
   if (!slots.length) {
-    view.append(h("div", { class: "card empty empty-small" }, h("p", {}, "This edition has no ad spaces.")));
+    view.append(h("div", { class: "card empty empty-small" }, h("p", {}, t("ads.none"))));
     return view;
   }
   const maxW = Math.max(1, ...slots.map((s) => num(s.w_mm, 0)));
@@ -2745,7 +2882,7 @@ function viewAds() {
         "section",
         { class: "card", "aria-labelledby": headingId },
         h("h2", { class: "card-title", id: headingId }, pageName(page, onPage[0].role)),
-        h("p", { class: "card-lede" }, plural(onPage.length, "ad space")),
+        h("p", { class: "card-lede" }, t("count.adSpace", { n: onPage.length })),
         h(
           "div",
           { class: "ad-list" },
@@ -2771,12 +2908,12 @@ function adCard(slot, scale) {
   });
   if (has) {
     const url = adUrl(slot.slot);
-    const missing = () => h("span", { class: "ad-box-label" }, "Image stored — no preview");
-    const img = fallbackImage([url, withoutQuery(url)], { alt: `Ad image for space ${slot.slot}` }, (el) =>
+    const missing = () => h("span", { class: "ad-box-label" }, t("ads.noPreview"));
+    const img = fallbackImage([url, withoutQuery(url)], { alt: t("ads.imageAlt", { slot: slot.slot }) }, (el) =>
       el.replaceWith(missing()),
     );
     box.append(img || missing());
-  } else box.append(h("span", { class: "ad-box-label", "aria-hidden": "true" }, "AD"));
+  } else box.append(h("span", { class: "ad-box-label", "aria-hidden": "true" }, t("plan.ad")));
   const inputId = `ad-file-${domId(slot.slot)}`;
   const alertSlot = h("div", { class: "alert-slot" });
   const busy = h("p", { class: "busy-note", "aria-live": "polite" });
@@ -2803,23 +2940,20 @@ function adCard(slot, scale) {
     h(
       "div",
       { class: "ad-info" },
-      h("h3", { class: "ad-title" }, `Ad space ${slot.slot}`),
-      h("p", { class: "ad-size" }, `${fmtMm(w)} × ${fmtMm(hgt)} mm`),
+      h("h3", { class: "ad-title" }, t("ads.space", { slot: slot.slot })),
+      h("p", { class: "ad-size" }, t("ads.size", { w: fmtMm(w), h: fmtMm(hgt) })),
       has
         ? h(
             "p",
             { class: "ad-state ad-state-ok" },
             icon("check"),
-            h("span", {}, wPx && hPx ? `Image added (fitted at ${wPx} × ${hPx} pixels)` : "Image added"),
+            h("span", {}, wPx && hPx ? t("ads.addedPx", { w: String(wPx), h: String(hPx) }) : t("ads.added")),
           )
-        : h("p", { class: "ad-state" }, icon("info"), h("span", {}, "Reserved space — prints as a grey box marked AD")),
+        : h("p", { class: "ad-state" }, icon("info"), h("span", {}, t("ads.reserved"))),
       h(
         "p",
         { class: "field-note", id: `${inputId}-note` },
-        minW && minH
-          ? `JPEG, PNG or WebP, up to 40 MB. For a sharp print use at least ${fmtInt(minW)} × ${fmtInt(minH)} pixels. ` +
-              "The image is fitted inside the space, with white around it if the shapes differ."
-          : "JPEG, PNG or WebP, up to 40 MB.",
+        minW && minH ? t("ads.noteMin", { w: minW, h: minH }) : t("ads.note"),
       ),
       h(
         "div",
@@ -2828,7 +2962,12 @@ function adCard(slot, scale) {
           "span",
           { class: "file-pick" },
           input,
-          h("label", { for: inputId, class: "btn btn-small" }, icon("upload"), has ? "Replace image" : "Upload image"),
+          h(
+            "label",
+            { for: inputId, class: "btn btn-small" },
+            icon("upload"),
+            has ? t("ads.replace") : t("ads.upload"),
+          ),
         ),
         has
           ? h(
@@ -2839,7 +2978,7 @@ function adCard(slot, scale) {
                 dataset: { focusKey: `ad:remove:${slot.slot}` },
                 onclick: () => removeAd(slot, alertSlot),
               },
-              "Remove",
+              t("common.remove"),
             )
           : null,
       ),
@@ -2854,20 +2993,20 @@ async function uploadAd(slot, file, ui) {
   showAlert(ui.alertSlot, "");
   const type = imageTypeOf(file);
   if (!type) {
-    showAlert(ui.alertSlot, "Use a JPEG, PNG or WebP image.");
+    showAlert(ui.alertSlot, t("ads.badType"));
     return;
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    showAlert(ui.alertSlot, `This file is ${fmtBytes(file.size)}. The limit is 40 MB.`);
+    showAlert(ui.alertSlot, t("common.tooBig", { size: fmtBytes(file.size) }));
     return;
   }
   ui.card.classList.add("is-busy");
-  ui.busy.replaceChildren(spinner(), "Uploading and converting…");
+  ui.busy.replaceChildren(spinner(), t("ads.uploading"));
   try {
     const res = await api("PUT", apiPath(state.editionId, "ads", slot.slot), { raw: file, contentType: type });
     state.adLocal[slot.slot] = { w_px: int(res.w_px), h_px: int(res.h_px) };
     state.adBust[slot.slot] = String(Date.now());
-    toast(`Ad image added to space ${slot.slot}`);
+    toast(t("ads.toastAdded", { slot: slot.slot }));
     await refreshDetail();
   } catch (err) {
     showAlert(ui.alertSlot, err.message);
@@ -2879,16 +3018,16 @@ async function uploadAd(slot, file, ui) {
 
 async function removeAd(slot, alertSlot) {
   const ok = await confirmDialog({
-    title: "Remove this ad image?",
-    message: `Space ${slot.slot} will print as a grey box marked AD until you upload another image.`,
-    confirm: "Remove image",
+    title: t("ads.removeTitle"),
+    message: t("ads.removeMessage", { slot: slot.slot }),
+    confirm: t("ads.removeOk"),
     danger: true,
   });
   if (!ok) return;
   try {
     await api("DELETE", apiPath(state.editionId, "ads", slot.slot));
     state.adLocal[slot.slot] = null;
-    toast(`Ad image removed from space ${slot.slot}`);
+    toast(t("ads.toastRemoved", { slot: slot.slot }));
     await refreshDetail();
     restoreFocus(`ad:file:${slot.slot}`);
   } catch (err) {
@@ -2901,10 +3040,7 @@ async function removeAd(slot, alertSlot) {
 function viewRun() {
   const view = h("section", { class: "step-view", "aria-labelledby": "step-title" });
   view.append(
-    stepHeader(
-      "Lay out & download",
-      `Lay out the ${editionPages()}-page paper, check the pages, then download the PDFs.`,
-    ),
+    stepHeader(t("step.run"), t("run.lede", { n: editionPages() })),
     h("div", { id: "run-start-host" }),
     h("div", { id: "run-panel" }),
     runHistory(),
@@ -2917,43 +3053,30 @@ function runGate() {
   const warnings = [];
   const active = activeRunSummary() || (isRunActive(state.run) && isObj(state.run.status) ? state.run : null);
   let blocked;
-  if (active) blocked = "A layout is running. Follow it below, or cancel it to start again.";
-  else if (!d.articles.length) blocked = "Add articles first (step 2) — there is nothing to lay out yet.";
+  if (active) blocked = t("run.running");
+  else if (!d.articles.length) blocked = t("run.noArticles");
   else blocked = engineBlocked();
   const needs = computeNeeds();
   const have = computeHave(d.articles);
   if (needs && num(needs.total.stories) !== null && have.stories < needs.total.stories && d.articles.length) {
-    warnings.push(
-      `You have ${fmtInt(have.stories)} of about ${fmtInt(needs.total.stories)} stories — some pages may come out short.`,
-    );
+    warnings.push(t("run.warnStories", { n: have.stories, need: count(needs.total.stories) }));
   }
   if (needs && num(needs.total.photos) !== null && have.photos < needs.total.photos && d.articles.length) {
-    warnings.push(
-      `You have ${fmtInt(have.photos)} of about ${fmtInt(needs.total.photos)} photos the paper usually carries.`,
-    );
+    warnings.push(t("run.warnPhotos", { n: have.photos, need: count(needs.total.photos) }));
   }
   const pages = editionPages();
   const beyond = d.articles.filter((a) => (pinOf(a) || 0) > pages).length;
   if (beyond) {
-    warnings.push(
-      `${plural(beyond, "article is", "articles are")} pinned to a page this ${pages}-page edition does not have — ` +
-        "the Desk will place them itself (change their page in step 2 to choose one).",
-    );
+    warnings.push(t("run.warnPinned", { n: beyond, pages }));
   }
   const slots = adSlots();
   const empty = slots.filter((s) => !adInfo(s.slot)).length;
   if (empty) {
-    warnings.push(
-      `${empty} of ${plural(slots.length, "ad space")} ${empty === 1 ? "has" : "have"} no image — ` +
-        `${empty === 1 ? "it prints" : "they print"} as a grey box marked AD.`,
-    );
+    warnings.push(t("run.warnAds", { n: empty, total: slots.length }));
   }
   const samples = d.articles.filter(isSample).length;
   if (samples) {
-    warnings.push(
-      `${plural(samples, "article is a test import", "articles are test imports")} from a past edition. ` +
-        "Delete them before you lay out a real edition.",
-    );
+    warnings.push(t("run.warnSamples", { n: samples }));
   }
   return { blocked, warnings };
 }
@@ -2966,7 +3089,15 @@ function renderRunStart() {
   const shown = state.run && isObj(state.run.status) ? str(state.run.status.state) : "";
   const collapse = shown !== "";
   const again = TERMINAL.has(shown);
-  const signature = JSON.stringify([gate, state.runStarting, state.runStartError, editionPages(), collapse, again]);
+  const signature = JSON.stringify([
+    gate,
+    state.runStarting,
+    msg(state.runStartError),
+    editionPages(),
+    collapse,
+    again,
+    lang(),
+  ]);
   if (host.dataset.signature === signature) return;
   host.dataset.signature = signature;
   const key = focusKeyIn(host);
@@ -2981,24 +3112,24 @@ function renderRunStart() {
       dataset: { focusKey: "run:start" },
       onclick: startRun,
     },
-    state.runStarting ? [spinner(), "Starting…"] : `Lay out the ${pages}-page paper${again ? " again" : ""}`,
+    state.runStarting ? [spinner(), t("run.starting")] : t(again ? "run.goAgain" : "run.go", { n: pages }),
   );
   const warningList = gate.warnings.length
     ? h(
         "ul",
-        { class: "warn-list", "aria-label": "Before you start" },
+        { class: "warn-list", "aria-label": t("run.beforeStart") },
         gate.warnings.map((w) => h("li", {}, icon("alert"), h("span", {}, w))),
       )
     : null;
   host.replaceChildren(
     h(
       "section",
-      { class: "card run-start", "aria-label": "Start a layout" },
+      { class: "card run-start", "aria-label": t("run.startLabel") },
       warningList && collapse
         ? h(
             "details",
             { class: "warn-details", dataset: { focusKey: "run:checks" } },
-            h("summary", {}, icon("alert"), `${plural(gate.warnings.length, "thing")} to check before the next layout`),
+            h("summary", {}, icon("alert"), t("run.checks", { n: gate.warnings.length })),
             warningList,
           )
         : warningList,
@@ -3008,12 +3139,16 @@ function renderRunStart() {
         button,
         h(
           "p",
-          { class: gate.blocked ? "run-go-note is-blocked" : "run-go-note", id: "run-go-note" },
-          gate.blocked || RUN_TIME_NOTE,
+          {
+            class: gate.blocked ? "run-go-note is-blocked" : "run-go-note",
+            id: "run-go-note",
+            lang: gate.blocked ? langFor(gate.blocked) : null,
+          },
+          gate.blocked || t("run.timeNote"),
         ),
       ),
       measureLine(),
-      state.runStartError ? alertBox(state.runStartError) : null,
+      state.runStartError ? alertBox(msg(state.runStartError)) : null,
     ),
   );
   restoreFocus(key);
@@ -3028,22 +3163,23 @@ async function startRun() {
   try {
     const res = await api("POST", apiPath(editionId, "runs"), { json: {} });
     const runId = str(res.run);
-    if (!runId) throw new ApiError("The Desk server did not say which layout it started.");
+    if (!runId) throw deskError("api.noRun");
     if (state.editionId !== editionId) return;
     state.runStarting = false;
     selectRun(runId, { render: false });
-    toast(`Started laying out the ${editionPages()}-page paper`);
+    toast(t("run.started", { n: editionPages() }));
     await refreshDetail({ quiet: true, changed: false });
   } catch (err) {
     state.runStarting = false;
     if (state.editionId !== editionId) return;
     if (err.status === 409) {
-      state.runStartError = `${err.message} The running layout is shown below.`;
+      const said = errMsg(err);
+      state.runStartError = () => t("run.conflict", { error: msg(said) });
       await refreshDetail({ quiet: true, changed: false });
       const active = activeRunSummary();
       if (active && (!state.run || state.run.id !== active.id)) selectRun(active.id);
     } else {
-      state.runStartError = err.message;
+      state.runStartError = errMsg(err);
     }
   } finally {
     state.runStarting = false;
@@ -3094,8 +3230,11 @@ async function pollRun(run) {
     run.failures += 1;
     if (err.status === 404) {
       run.gone = true;
-      run.error = "This layout could not be found on the Desk server any more.";
-    } else run.error = `${err.message} Trying again…`;
+      run.error = () => t("run.gone");
+    } else {
+      const said = errMsg(err);
+      run.error = () => t("run.retrying", { error: msg(said) });
+    }
   } finally {
     run.inFlight = false;
   }
@@ -3127,7 +3266,8 @@ function applyRunStatus(run, status) {
   if (!TERMINAL.has(now)) run.wasActive = true;
   if (!previous || !run.wasActive) return;
   const messages = [];
-  if (str(previous.state) !== now && RUN_STATE_LABEL[now]) messages.push(`Layout: ${RUN_STATE_LABEL[now]}.`);
+  if (str(previous.state) !== now && RUN_STATE_KEY[now])
+    messages.push(t("run.sayState", { state: runStateLabel(now) }));
   const before = new Map(
     arr(previous.pages)
       .filter(isObj)
@@ -3138,7 +3278,7 @@ function applyRunStatus(run, status) {
     const n = int(p.page);
     const s = str(p.state);
     if (before.get(n) !== s && (s === "done" || s === "failed"))
-      messages.push(`Page ${n} ${s === "done" ? "is done" : "failed"}.`);
+      messages.push(t(s === "done" ? "run.sayDone" : "run.sayFailed", { n }));
   }
   if (messages.length) announce(messages.join(" "));
 }
@@ -3162,9 +3302,9 @@ function onRunFinished(run) {
   if (!run.wasActive) return;
   state.runStartError = ""; // e.g. "a layout is already running": no longer true
   const s = str(run.status.state);
-  if (s === "done") toast(`The ${editionPages()}-page paper is laid out`);
-  else if (s === "failed") toast("The layout failed — the details are in step 4", "error");
-  else toast("Layout cancelled", "info");
+  if (s === "done") toast(t("run.toastDone", { n: editionPages() }));
+  else if (s === "failed") toast(t("run.toastFailed"), "error");
+  else toast(t("run.toastCancelled"), "info");
   refreshDetail({ quiet: true, changed: false });
 }
 
@@ -3175,9 +3315,9 @@ function elapsedText(run) {
   const s = str(status.state);
   if (!TERMINAL.has(s)) {
     if (run.polledAt) seconds += (Date.now() - run.polledAt) / 1000;
-    return `${fmtDuration(seconds)} so far`;
+    return t("run.soFar", { time: fmtDuration(seconds) });
   }
-  return s === "done" ? `Took ${fmtDuration(seconds)}` : `Stopped after ${fmtDuration(seconds)}`;
+  return t(s === "done" ? "run.took" : "run.stoppedAfter", { time: fmtDuration(seconds) });
 }
 
 function runPagesFor(run) {
@@ -3188,7 +3328,7 @@ function runPagesFor(run) {
 }
 
 function buildRunUI(run) {
-  const ui = { runId: run.id, cards: new Map(), resultsSignature: null };
+  const ui = { runId: run.id, lang: lang(), cards: new Map(), resultsSignature: null };
   ui.title = h("h2", { class: "run-title", id: "run-title" });
   ui.state = h("p", { class: "run-state" });
   ui.elapsed = h("p", { class: "run-elapsed" });
@@ -3202,19 +3342,15 @@ function buildRunUI(run) {
       dataset: { focusKey: "run:cancel" },
       onclick: cancelRun,
     },
-    "Cancel layout",
+    t("run.cancel"),
   );
-  ui.hint = h(
-    "p",
-    { class: "run-hint" },
-    `${RUN_TIME_NOTE} You can keep working in the other steps; changes you make now go into the next layout.`,
-  );
+  ui.hint = h("p", { class: "run-hint" }, `${t("run.timeNote")} ${t("run.keepWorking")}`);
   ui.progress = h("progress", { class: "run-progress", max: "1", value: "0", "aria-labelledby": "run-progress-label" });
   ui.progressLabel = h("span", { class: "run-progress-label", id: "run-progress-label" });
   ui.progressRow = h("div", { class: "run-progress-row" }, ui.progress, ui.progressLabel);
   ui.alert = h("div", { class: "alert-slot" });
   ui.stale = h("div", { class: "run-stale" });
-  ui.grid = h("ol", { class: "page-grid", "aria-label": "Pages" });
+  ui.grid = h("ol", { class: "page-grid", "aria-label": t("ed.pages") });
   ui.results = h("div", { class: "run-results" });
   ui.root = h(
     "section",
@@ -3244,7 +3380,7 @@ function patchRun() {
     runUI = null;
     return;
   }
-  if (!runUI || runUI.runId !== run.id || runUI.root.parentNode !== host) {
+  if (!runUI || runUI.runId !== run.id || runUI.lang !== lang() || runUI.root.parentNode !== host) {
     runUI = buildRunUI(run);
     host.replaceChildren(runUI.root);
   }
@@ -3254,7 +3390,7 @@ function patchRun() {
   const s = status ? str(status.state) : "";
   const terminal = TERMINAL.has(s);
   const started = runStartTime(run);
-  setText(ui.title, started !== null ? `Layout of ${friendlyTime(started)}` : "Layout");
+  setText(ui.title, started !== null ? t("run.layoutOf", { time: friendlyTime(started) }) : t("run.layout"));
 
   let tone = "busy";
   let stateIcon = spinner();
@@ -3268,7 +3404,11 @@ function patchRun() {
     tone = "muted";
     stateIcon = icon("x");
   }
-  const stateText = status ? RUN_STATE_LABEL[s] || s || "Unknown state" : run.error ? "Not available" : "Loading…";
+  const stateText = status
+    ? runStateLabel(s) || s || t("run.unknownState")
+    : run.error
+      ? t("top.notAvailable")
+      : t("top.loading");
   if (ui.state.dataset.text !== stateText) {
     ui.state.dataset.text = stateText;
     ui.state.dataset.tone = tone;
@@ -3277,8 +3417,12 @@ function patchRun() {
   setText(ui.elapsed, elapsedText(run));
   // the engine's own progress message, unless it only repeats the state label ("Laying out" / "Laying out pages")
   const engineMessage = status && !terminal ? str(status.message).trim() : "";
-  const repeats = !!engineMessage && fold(stateText).startsWith(fold(engineMessage));
-  setText(ui.message, repeats ? "" : engineMessage);
+  // (the engine speaks English: its message is matched with the English label)
+  const label = RUN_STATE_KEY[s] ? tIn("en", RUN_STATE_KEY[s]) : s;
+  const repeats = !!engineMessage && fold(label).startsWith(fold(engineMessage));
+  setText(ui.message, repeats || !engineMessage ? "" : said(status.message, status.msgs).trim());
+  if (langFor(ui.message.textContent)) ui.message.lang = langFor(ui.message.textContent);
+  else ui.message.removeAttribute("lang");
   ui.cancel.hidden = !(status && !terminal);
   ui.hint.hidden = terminal || !status;
 
@@ -3290,13 +3434,15 @@ function patchRun() {
   ui.progress.value = done + failed;
   setText(
     ui.progressLabel,
-    pages.length ? `${done} of ${pages.length} pages done${failed ? `, ${failed} failed` : ""}` : "Planning the pages…",
+    pages.length
+      ? t(failed ? "run.progressFailed" : "run.progress", { n: done, total: pages.length, failed })
+      : t("run.planning"),
   );
 
   const errors = [];
-  if (run.error) errors.push(run.error);
-  if (status && str(status.error)) errors.push(str(status.error));
-  else if (s === "failed" && str(status.message)) errors.push(str(status.message));
+  if (run.error) errors.push(msg(run.error));
+  if (status && str(status.error)) errors.push(said(status.error, status.msgs));
+  else if (s === "failed" && str(status.message)) errors.push(said(status.message, status.msgs));
   const errorText = errors.join(" ");
   if (ui.alert.dataset.text !== errorText) {
     ui.alert.dataset.text = errorText;
@@ -3305,14 +3451,10 @@ function patchRun() {
 
   const newer = activeRunSummary();
   let staleText = "";
-  if (newer && newer.id !== run.id) staleText = "A newer layout is running. Open it from the list below to follow it.";
+  if (newer && newer.id !== run.id) staleText = t("run.newer");
   else if (terminal && addedAfter(status) > 0) {
     // changes to what the pages print are shown on the pages themselves ("needs saving"); new articles are not
-    const n = addedAfter(status);
-    staleText =
-      `${plural(n, "article was", "articles were")} added after this layout, which does not have ` +
-      `${n === 1 ? "it" : "them"}: lay out again to place ${n === 1 ? "it" : "them"} (that starts every page ` +
-      "afresh; page edits are not kept).";
+    staleText = t("run.addedAfter", { n: addedAfter(status) });
   }
   if (ui.stale.dataset.text !== staleText) {
     ui.stale.dataset.text = staleText;
@@ -3327,6 +3469,7 @@ function patchRun() {
       (state.detail ? state.detail.articles : []).map((a) => [a.id, a.headline]),
       rechecking(), // "checking against your last change" until the server answered after it
       !!run.gone, // a layout no longer on the server is not current
+      lang(),
     ]);
     if (ui.resultsSignature !== signature) {
       ui.resultsSignature = signature;
@@ -3374,6 +3517,7 @@ function patchCards(ui, run, pages) {
       p.needs_save_reason || "",
       arr(p.stale).join("|"),
       runState,
+      lang(),
     ]);
     if (card.signature !== signature) {
       card.signature = signature;
@@ -3389,7 +3533,7 @@ function patchCards(ui, run, pages) {
 }
 
 function fillCard(li, p, run, n) {
-  const s = PAGE_STATE_LABEL[str(p.state)] ? str(p.state) : "waiting";
+  const s = PAGE_STATE_KEY[str(p.state)] ? str(p.state) : "waiting";
   li.dataset.state = s;
   const name = pageName(n, str(p.role) || pageRole(n));
   const thumbUrl = runFileUrl(run.id, p.thumb);
@@ -3398,14 +3542,14 @@ function fillCard(li, p, run, n) {
   let thumb;
   if (picture && s === "done") {
     // the thumbnail, then (after a pause) the full-size preview, then a plain note
-    const noPreview = () => h("span", { class: "small muted" }, "No preview");
+    const noPreview = () => h("span", { class: "small muted" }, t("run.noPreview"));
     const img = fallbackImage([thumbUrl, pngUrl], { alt: "", decoding: "async" }, (el) => el.replaceWith(noPreview()));
     thumb = h(
       "button",
       {
         type: "button",
         class: "page-thumb",
-        "aria-label": `${name}: open a large preview`,
+        "aria-label": t("run.openPreview", { page: name }),
         dataset: { focusKey: `thumb:${n}` },
         onclick: () => openPreview(run, n),
       },
@@ -3420,30 +3564,36 @@ function fillCard(li, p, run, n) {
     s === "working" ? spinner() : icon(s === "done" ? "check" : s === "failed" || s === "cancelled" ? "x" : "clock");
   const check = isObj(p.pdfx_check) ? p.pdfx_check : null;
   const warnings = arr(p.warnings).filter((w) => str(w));
+  const msgs = isObj(run.status) ? run.status.msgs : null; // the codes of the server's and the engine's messages
   fill(
     li,
     thumb,
     h("p", { class: "page-card-label" }, name),
-    h("p", { class: "page-card-state" }, stateIcon, h("span", {}, `${PAGE_STATE_LABEL[s]}${withTime}`)),
-    s === "failed" ? h("p", { class: "page-card-msg" }, str(p.message) || "This page could not be laid out.") : null,
-    s === "done" && !picture ? h("p", { class: "page-card-msg muted" }, "Preview not ready yet.") : null,
-    warnings.length ? h("p", { class: "page-card-warn" }, icon("alert"), plural(warnings.length, "warning")) : null,
+    h("p", { class: "page-card-state" }, stateIcon, h("span", {}, `${t(PAGE_STATE_KEY[s])}${withTime}`)),
+    s === "failed"
+      ? h(
+          "p",
+          { class: "page-card-msg", lang: langFor(said(p.message, msgs)) },
+          said(p.message, msgs) || t("run.pageFailed"),
+        )
+      : null,
+    s === "done" && !picture ? h("p", { class: "page-card-msg muted" }, t("run.previewNotReady")) : null,
+    warnings.length
+      ? h("p", { class: "page-card-warn" }, icon("alert"), t("count.warning", { n: warnings.length }))
+      : null,
     s === "done" && p.needs_save
       ? h(
           "p",
-          { class: "page-card-warn" },
+          { class: "page-card-warn", lang: langFor(said(p.needs_save_reason, msgs)) },
           icon("alert"),
-          str(p.needs_save_reason) || "Changed: open the page and save it.",
+          said(p.needs_save_reason, msgs) || t("run.changedSave"),
         )
       : s === "done" && arr(p.stale).length
-        ? arr(p.stale).map((why) => h("p", { class: "page-card-warn" }, icon("alert"), str(why)))
+        ? arr(p.stale)
+            .map((why) => said(why, msgs))
+            .map((why) => h("p", { class: "page-card-warn", lang: langFor(why) }, icon("alert"), why))
         : s === "done" && p.edited_unsaved
-          ? h(
-              "p",
-              { class: "page-card-warn" },
-              icon("alert"),
-              "Changed in the editor, not saved: its print file is older.",
-            )
+          ? h("p", { class: "page-card-warn" }, icon("alert"), t("run.changedUnsaved"))
           : null,
     s === "done" && (isObj(run.status) ? str(run.status.state) : str(run.state)) === "done"
       ? h(
@@ -3452,19 +3602,17 @@ function fillCard(li, p, run, n) {
             class: "page-card-edit",
             href: `/static/editor.html?edition=${encodeURIComponent(state.editionId)}&run=${encodeURIComponent(run.id)}&page=${n}`,
           },
-          p.edited ? "Edit page (edited)" : "Edit page",
+          p.edited ? t("run.editPageEdited") : t("run.editPage"),
         )
       : null,
     s === "done" && check
       ? check.passed
-        ? h("p", { class: "page-card-check" }, icon("check"), "PDF/X-1a check passed")
+        ? h("p", { class: "page-card-check" }, icon("check"), t("run.checkPassed"))
         : h(
             "p",
             { class: "page-card-warn" },
             icon("alert"),
-            check.fails
-              ? `PDF/X-1a check: ${plural(check.fails, "problem")} — do not send to the press`
-              : "PDF/X-1a check did not run",
+            check.fails ? t("run.checkProblems", { n: count(check.fails) }) : t("run.checkNotRun"),
           )
       : null,
   );
@@ -3509,8 +3657,8 @@ function allChecked(status) {
 function pressNotReady(status) {
   const s = str(status.state);
   if (!TERMINAL.has(s)) return null; // while laying out, pages are unchecked
-  if (s !== "done") return "this layout did not finish: lay the edition out again";
-  if (state.run && state.run.gone) return "this layout could not be found on the Desk server any more";
+  if (s !== "done") return t("press.notFinished");
+  if (state.run && state.run.gone) return t("press.gone");
   if (rechecking()) return CHECKING;
   if (status.press_ready === true) return null;
   const toSave = arr(status.pages_to_save)
@@ -3524,49 +3672,47 @@ function pressNotReady(status) {
   const relayout = arr(status.pages).some(
     (p) => isObj(p) && arr(p.stale).some((why) => /lay the edition out again/i.test(str(why))),
   );
-  if (relayout) parts.push("this layout no longer fits the edition: lay the edition out again");
-  else if (toSave.length)
-    parts.push(
-      `${toSave.length === 1 ? "page" : "pages"} ${toSave.join(", ")} still to save in the page editor (open ` +
-        `${toSave.length === 1 ? "it" : "them"} and press Save page)`,
-    );
-  if (failing.length)
-    parts.push(`${failing.length === 1 ? "page" : "pages"} ${failing.join(", ")} not passing the PDF/X-1a check`);
+  if (relayout) parts.push(t("press.relayout"));
+  else if (toSave.length) parts.push(t("press.toSave", { n: toSave.length, pages: toSave.join(", ") }));
+  if (failing.length) parts.push(t("press.failing", { n: failing.length, pages: failing.join(", ") }));
   const twice = arr(status.pages_with_repeats)
     .map(int)
     .filter((n) => n !== null);
-  if (twice.length)
-    parts.push(`pages ${twice.join(", ")} print the same article: take it off one of them in the page editor`);
+  if (twice.length) parts.push(t("press.repeats", { n: twice.length, pages: twice.join(", ") }));
+  const over = arr(status.pages_with_overlaps)
+    .map(int)
+    .filter((n) => n !== null);
+  if (over.length) parts.push(t("press.overlaps", { n: over.length, pages: over.join(", ") }));
   const failed = arr(status.pages)
     .filter((p) => isObj(p) && str(p.state) === "failed")
     .map((p) => int(p.page));
-  if (failed.length) parts.push(`${failed.length === 1 ? "page" : "pages"} ${failed.join(", ")} could not be laid out`);
-  return parts.length ? parts.join("; ") : "not every page is laid out and checked";
+  if (failed.length) parts.push(t("press.failed", { n: failed.length, pages: failed.join(", ") }));
+  return parts.length ? parts.join("; ") : t("press.notAll");
 }
 
 function headlineFor(id) {
   const a = state.detail ? state.detail.articles.find((x) => x.id === id) : null;
-  return a ? clip(a.headline, 160) || "(no headline)" : null;
+  return a ? clip(a.headline, 160) || t("arts.noHeadline") : null;
 }
 
 function fmtSeconds(value) {
   const s = num(value);
   if (s === null || s < 0) return null;
-  if (s < 10) return `${s.toFixed(1)} s`;
-  if (s < 120) return `${Math.round(s)} s`;
+  if (s < 10) return t("fmt.sec", { n: s.toFixed(1) });
+  if (s < 120) return t("fmt.sec", { n: Math.round(s) });
   return fmtDuration(s);
 }
 
 /** "Measured in 86 s · planned in 0.2 s · laid out in 41 s", from the run's timings (whichever are given). */
 function timingsLine(status) {
-  const t = isObj(status.timings) ? status.timings : null;
-  if (!t) return null;
+  const timings = isObj(status.timings) ? status.timings : null;
+  if (!timings) return null;
   const parts = [
-    ["measured", t.measure_s],
-    ["planned", t.plan_s],
-    ["laid out", t.layout_s],
+    ["res.measured", timings.measure_s],
+    ["res.planned", timings.plan_s],
+    ["res.laidOut", timings.layout_s],
   ]
-    .map(([label, value]) => (fmtSeconds(value) ? `${label} in ${fmtSeconds(value)}` : null))
+    .map(([key, value]) => (fmtSeconds(value) ? t(key, { time: fmtSeconds(value) }) : null))
     .filter(Boolean);
   if (!parts.length) return null;
   parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
@@ -3576,7 +3722,7 @@ function timingsLine(status) {
 function articleWarningList(texts) {
   return h(
     "ul",
-    { class: "article-warnings", "aria-label": "Warnings for this article" },
+    { class: "article-warnings", "aria-label": t("res.articleWarnings") },
     texts.map((w) => h("li", {}, icon("alert"), h("span", { lang: langFor(w) }, w))),
   );
 }
@@ -3589,7 +3735,8 @@ function buildResults(run, status) {
     .sort((a, b) => int(a.page) - int(b.page));
   const editionId = state.editionId;
   const pdfPages = pages.filter((p) => safeFile(p.pdf));
-  const warnMap = articleWarningsOf(status);
+  // the articles' warnings, in the language shown (results are drawn again when it changes)
+  const warnMap = new Map([...articleWarningsOf(status)].map(([id, ws]) => [id, ws.map((w) => said(w, status.msgs))]));
   const shownWarnings = new Set();
   const timings = timingsLine(status);
   if (timings) out.push(timings);
@@ -3597,7 +3744,7 @@ function buildResults(run, status) {
   if (s === "done" || pdfPages.length) {
     const editionPdf = runFileUrl(run.id, status.edition_pdf);
     const zip = runFileUrl(run.id, status.zip);
-    const download = (url, file, title, sub) =>
+    const download = (url, file, title, sub, missing) =>
       url
         ? h(
             "a",
@@ -3606,7 +3753,7 @@ function buildResults(run, status) {
             h("span", { class: "download-title" }, title),
             h("span", { class: "download-sub" }, sub),
           )
-        : h("div", { class: "download-missing" }, icon("clock"), `${title}: not made in this layout.`);
+        : h("div", { class: "download-missing" }, icon("clock"), missing);
     const links = pdfPages.map((p) =>
       h(
         "a",
@@ -3614,7 +3761,7 @@ function buildResults(run, status) {
           class: "btn btn-small",
           href: runFileUrl(run.id, p.pdf),
           download: `${editionId}-${safeFile(p.pdf)}`,
-          "aria-label": `PDF of ${pageName(int(p.page), str(p.role))}`,
+          "aria-label": t("res.pagePdf", { page: pageName(int(p.page), str(p.role)) }),
         },
         String(int(p.page)),
       ),
@@ -3623,7 +3770,7 @@ function buildResults(run, status) {
       h(
         "section",
         { class: "results-block", "aria-labelledby": "downloads-title" },
-        h("h3", { id: "downloads-title" }, "Downloads"),
+        h("h3", { id: "downloads-title" }, t("res.downloads")),
         pressNotReady(status)
           ? h(
               "div",
@@ -3632,10 +3779,10 @@ function buildResults(run, status) {
               h(
                 "p",
                 {},
-                h("strong", {}, "Do not send these press files yet. "),
+                h("strong", {}, `${t("res.doNotSend")} `),
                 pressNotReady(status) === CHECKING
-                  ? "Checking them against your last change…"
-                  : `They do not match the pages: ${pressNotReady(status)}.`,
+                  ? t("res.checking")
+                  : t("res.mismatch", { reasons: pressNotReady(status) }),
               ),
             )
           : null,
@@ -3645,24 +3792,26 @@ function buildResults(run, status) {
           download(
             editionPdf,
             safeFile(status.edition_pdf) || "edition.pdf",
-            "Edition PDF",
-            "All pages, for reading and proofs",
+            t("res.editionPdf"),
+            t("res.editionPdfSub"),
+            t("res.editionPdfMissing"),
           ),
           download(
             zip,
             safeFile(status.zip) || "press-files.zip",
-            "Press files",
+            t("res.press"),
             allChecked(status)
-              ? "One PDF per page, each passed the PDF/X-1a check — ZIP"
+              ? t("res.pressChecked")
               : pressNotReady(status)
-                ? "Not current — see the note above"
-                : "One PDF per page, ZIP — see the page checks",
+                ? t("res.pressNotCurrent")
+                : t("res.pressSeeChecks"),
+            t("res.pressMissing"),
           ),
         ),
         links.length
-          ? h("div", { class: "page-links" }, h("span", { class: "page-links-label" }, "Single page PDFs:"), links)
+          ? h("div", { class: "page-links" }, h("span", { class: "page-links-label" }, t("res.singlePages")), links)
           : null,
-        h("div", { class: "honesty", role: "note" }, icon("alert"), h("p", {}, HONESTY_NOTE)),
+        h("div", { class: "honesty", role: "note" }, icon("alert"), h("p", {}, t("res.honesty"))),
       ),
     );
   }
@@ -3675,7 +3824,7 @@ function buildResults(run, status) {
       const ids = arr(p.articles).filter((id) => typeof id === "string");
       const seconds = num(p.seconds);
       const warnings = arr(p.warnings)
-        .map((w) => str(w))
+        .map((w) => said(w, status.msgs))
         .filter(Boolean);
       report.append(
         h(
@@ -3688,7 +3837,7 @@ function buildResults(run, status) {
             h(
               "span",
               { class: "muted" },
-              [plural(ids.length, "article"), seconds !== null ? fmtDuration(seconds) : null]
+              [t("count.article", { n: ids.length }), seconds !== null ? fmtDuration(seconds) : null]
                 .filter(Boolean)
                 .join(" · "),
             ),
@@ -3698,7 +3847,13 @@ function buildResults(run, status) {
                 "p",
                 { class: "report-failed" },
                 icon("x"),
-                h("span", {}, `Failed: ${str(p.message) || "this page could not be laid out."}`),
+                h(
+                  "span",
+                  {},
+                  str(p.message)
+                    ? tn("res.failedWhy", { reason: foreign(said(p.message, status.msgs)) })
+                    : t("res.failed"),
+                ),
               )
             : null,
           ids.length
@@ -3715,7 +3870,7 @@ function buildResults(run, status) {
                     h(
                       "span",
                       { lang: headline ? langFor(headline) : null, class: headline ? null : "muted" },
-                      headline || "(an article that is no longer in this edition)",
+                      headline || t("res.goneArticle"),
                     ),
                     notes.length ? articleWarningList(notes) : null,
                   );
@@ -3723,12 +3878,12 @@ function buildResults(run, status) {
               )
             : pageState === "failed"
               ? null
-              : h("p", { class: "muted small" }, "No articles on this page."),
+              : h("p", { class: "muted small" }, t("res.noArticles")),
           warnings.length
             ? h(
                 "ul",
-                { class: "report-warnings", "aria-label": "Warnings" },
-                warnings.map((w) => h("li", {}, icon("alert"), h("span", {}, w))),
+                { class: "report-warnings", "aria-label": t("res.warnings") },
+                warnings.map((w) => h("li", {}, icon("alert"), h("span", { lang: langFor(w) }, w))),
               )
             : null,
         ),
@@ -3738,7 +3893,7 @@ function buildResults(run, status) {
       h(
         "section",
         { class: "results-block", "aria-labelledby": "report-title" },
-        h("h3", { id: "report-title" }, "What went where"),
+        h("h3", { id: "report-title" }, t("res.report")),
         report,
       ),
     );
@@ -3749,15 +3904,19 @@ function buildResults(run, status) {
     const block = h(
       "section",
       { class: "results-block", "aria-labelledby": "notplaced-title" },
-      h("h3", { id: "notplaced-title" }, notPlaced.length ? `Not placed (${notPlaced.length})` : "Not placed"),
+      h(
+        "h3",
+        { id: "notplaced-title" },
+        notPlaced.length ? t("res.notPlacedN", { n: notPlaced.length }) : t("res.notPlaced"),
+      ),
     );
     if (!notPlaced.length) {
-      block.append(h("p", { class: "all-placed" }, icon("check"), "Every article was placed."));
+      block.append(h("p", { class: "all-placed" }, icon("check"), t("res.allPlaced")));
     } else {
       const list = h("ul", { class: "not-placed" });
       for (const item of notPlaced) {
         const article = state.detail ? state.detail.articles.find((a) => a.id === item.article) : null;
-        const headline = article ? clip(article.headline, 200) || "(no headline)" : null;
+        const headline = article ? clip(article.headline, 200) || t("arts.noHeadline") : null;
         const reason = str(item.reason);
         const notes = warnMap.get(item.article) || [];
         if (notes.length) shownWarnings.add(item.article);
@@ -3771,9 +3930,14 @@ function buildResults(run, status) {
               h(
                 "p",
                 { class: "not-placed-head", lang: headline ? langFor(headline) : null },
-                headline || "(an article that is no longer in this edition)",
+                headline || t("res.goneArticle"),
               ),
-              h("p", { class: "not-placed-reason" }, icon("alert"), h("span", {}, reason || "No reason given.")),
+              h(
+                "p",
+                { class: "not-placed-reason" },
+                icon("alert"),
+                h("span", { lang: langFor(said(reason, status.msgs)) }, said(reason, status.msgs) || t("res.noReason")),
+              ),
               h("p", { class: "not-placed-hint" }, notPlacedHint(reason)),
               notes.length ? articleWarningList(notes) : null,
             ),
@@ -3783,11 +3947,11 @@ function buildResults(run, status) {
                   {
                     type: "button",
                     class: "btn btn-small",
-                    "aria-label": `Edit: ${clip(headline, 80)}`,
+                    "aria-label": t("arts.editAria", { headline: clip(headline, 80) }),
                     dataset: { focusKey: `np:edit:${article.id}` },
                     onclick: () => openArticleEditor(article),
                   },
-                  "Edit",
+                  t("common.edit"),
                 )
               : null,
           ),
@@ -3805,7 +3969,7 @@ function buildResults(run, status) {
       h(
         "section",
         { class: "results-block", "aria-labelledby": "notes-title" },
-        h("h3", { id: "notes-title" }, "Other warnings"),
+        h("h3", { id: "notes-title" }, t("res.otherWarnings")),
         h(
           "ul",
           { class: "report-articles report-other" },
@@ -3817,7 +3981,7 @@ function buildResults(run, status) {
               h(
                 "span",
                 { lang: headline ? langFor(headline) : null, class: headline ? null : "muted" },
-                headline || "(an article that is no longer in this edition)",
+                headline || t("res.goneArticle"),
               ),
               articleWarningList(notes),
             );
@@ -3834,10 +3998,10 @@ function runHistory() {
   const section = h(
     "section",
     { class: "card", "aria-labelledby": "history-title" },
-    h("h2", { class: "card-title", id: "history-title" }, "Earlier layouts of this edition"),
+    h("h2", { class: "card-title", id: "history-title" }, t("hist.title")),
   );
   if (!runs.length) {
-    section.append(h("p", { class: "muted" }, "None yet. Your layouts are listed here, newest first."));
+    section.append(h("p", { class: "muted" }, t("hist.none")));
     return section;
   }
   const list = h("ol", { class: "history-list" });
@@ -3852,15 +4016,15 @@ function runHistory() {
         "li",
         { class: current ? "history-item is-current" : "history-item", "aria-current": current ? "true" : null },
         h("span", { class: "history-when" }, when),
-        h("span", { class: "history-state", dataset: { tone } }, stateIcon, RUN_STATE_LABEL[s] || s || "Unknown"),
+        h("span", { class: "history-state", dataset: { tone } }, stateIcon, runStateLabel(s) || s || t("hist.unknown")),
         current
-          ? h("span", { class: "history-current" }, "Shown above")
+          ? h("span", { class: "history-current" }, t("hist.shown"))
           : h(
               "button",
               {
                 type: "button",
                 class: "btn btn-small",
-                "aria-label": `Open the layout of ${when}`,
+                "aria-label": t("hist.openAria", { time: when }),
                 dataset: { focusKey: `run:open:${r.id}` },
                 onclick: () => {
                   state.runStartError = "";
@@ -3869,7 +4033,7 @@ function runHistory() {
                   if (title) title.scrollIntoView({ block: "start" });
                 },
               },
-              "Open",
+              t("common.open"),
             ),
       ),
     );
@@ -3882,19 +4046,19 @@ async function cancelRun() {
   const run = state.run;
   if (!run) return;
   const ok = await confirmDialog({
-    title: "Cancel this layout?",
-    message: "The Desk stops laying out this edition. You can start a new layout at any time.",
-    confirm: "Cancel layout",
-    cancel: "Keep going",
+    title: t("run.cancelTitle"),
+    message: t("run.cancelMessage"),
+    confirm: t("run.cancel"),
+    cancel: t("run.keepGoing"),
     danger: true,
   });
   if (!ok || state.run !== run) return;
   try {
     await api("POST", apiPath(state.editionId, "runs", run.id, "cancel"), { json: {} });
-    toast("Cancelling the layout…", "info");
+    toast(t("run.cancelling"), "info");
     pollRun(run);
   } catch (err) {
-    run.error = err.message;
+    run.error = errMsg(err);
     patchRun();
   }
 }
@@ -3924,9 +4088,9 @@ function renderPreview() {
   if (!p) return;
   const n = int(p.page);
   const name = pageName(n, str(p.role));
-  setText($("#preview-title"), `${name} — ${preview.index + 1} of ${preview.pages.length}`);
+  setText($("#preview-title"), t("prev.title", { page: name, i: preview.index + 1, total: preview.pages.length }));
   const img = $("#preview-img");
-  img.alt = `${name}: preview of the laid-out page`;
+  img.alt = t("prev.alt", { page: name });
   img.hidden = false;
   $("#preview-missing").hidden = true;
   img.src = runFileUrl(preview.run.id, p.png) || runFileUrl(preview.run.id, p.thumb) || "";
@@ -3957,7 +4121,7 @@ function movePreview(delta) {
 
 let confirmResolve = null;
 
-function confirmDialog({ title, message, confirm = "OK", cancel = "Cancel", danger = false }) {
+function confirmDialog({ title, message, confirm = t("common.ok"), cancel = t("common.cancel"), danger = false }) {
   const dlg = $("#dlg-confirm");
   if (confirmResolve) settleConfirm(false);
   setText($("#confirm-title"), title);
@@ -4000,7 +4164,7 @@ function openNewEdition() {
     f.volume.value = str(open.volume);
     f.price.value = str(open.price);
   }
-  setText($("#new-issue-note"), open && str(open.issue) ? `Last: ${str(open.issue)}` : "");
+  setText($("#new-issue-note"), open && str(open.issue) ? t("new.lastIssue", { issue: str(open.issue) }) : "");
   setFieldError("new-date", "");
   showAlert($("#new-alert"), "");
   $("#new-submit").disabled = false;
@@ -4015,11 +4179,7 @@ function updateNewEditionNotes() {
   const taken = state.editions.some((e) => str(e.date) === date);
   setText(
     $("#new-date-note"),
-    taken
-      ? `There is already an edition for ${friendlyDate(date)}. Creating another makes a second one for the same day.`
-      : parseDay(date)
-        ? friendlyDate(date)
-        : "",
+    taken ? t("new.dateTaken", { date: friendlyDate(date) }) : parseDay(date) ? friendlyDate(date) : "",
   );
   refreshNeedsPreview();
 }
@@ -4039,14 +4199,13 @@ const refreshNeedsPreview = debounce(async () => {
       return;
     }
     const parts = [
-      plural(n.stories, "story", "stories"),
-      num(n.briefs) ? plural(n.briefs, "short item") : null,
-      num(n.photos) !== null ? plural(n.photos, "photo") : null,
-      num(n.words) !== null ? plural(n.words, "word") : null,
+      t("count.story", { n: count(n.stories) }),
+      num(n.briefs) ? t("count.brief", { n: count(n.briefs) }) : null,
+      num(n.photos) !== null ? t("count.photo", { n: count(n.photos) }) : null,
+      num(n.words) !== null ? t("count.word", { n: count(n.words) }) : null,
     ].filter(Boolean);
     out.replaceChildren(
-      h("strong", {}, `A ${pages}-page paper usually needs about `),
-      `${parts.join(", ")}. Bring about 15–20% extra.`,
+      ...tn("new.needs", { lead: h("strong", {}, t("new.needsLead", { n: pages })), list: parts.join(", ") }),
     );
   } catch {
     if (seq === needsPreviewSeq) out.replaceChildren();
@@ -4058,7 +4217,7 @@ async function submitNewEdition(e) {
   const f = $("#form-new").elements;
   const date = f.date.value;
   if (!parseDay(date)) {
-    setFieldError("new-date", "Choose the date this edition is for.");
+    setFieldError("new-date", t("ed.chooseDate"));
     f.date.focus();
     return;
   }
@@ -4073,14 +4232,14 @@ async function submitNewEdition(e) {
   };
   const submit = $("#new-submit");
   submit.disabled = true;
-  submit.replaceChildren(spinner(), "Creating…");
+  submit.replaceChildren(spinner(), t("new.creating"));
   showAlert($("#new-alert"), "");
   try {
     const res = await api("POST", "/api/editions", { json: body });
     const edition = isObj(res.edition) ? res.edition : res;
     const id = str(edition.id);
     $("#dlg-new").close();
-    toast(`Edition for ${friendlyDate(date)} created`);
+    toast(t("new.created", { date: friendlyDate(date) }));
     try {
       await reloadEditionsList();
     } catch {
@@ -4092,8 +4251,44 @@ async function submitNewEdition(e) {
     showAlert($("#new-alert"), err.message);
   } finally {
     submit.disabled = false;
-    submit.replaceChildren("Create edition");
+    submit.replaceChildren(t("new.create"));
   }
+}
+
+// ===================================================================== the language shown (English or Marathi)
+
+// static elements carry their key: data-t (their text) and data-t-<attribute> (an attribute's value)
+const TRANSLATED_ATTRIBUTES = ["aria-label", "title", "placeholder", "alt"];
+
+/** Puts the language shown into the page's static parts (index.html) and its language switch. */
+function applyLang() {
+  document.documentElement.lang = lang();
+  for (const el of $$("[data-t]")) setText(el, t(el.dataset.t));
+  for (const name of TRANSLATED_ATTRIBUTES) {
+    for (const el of $$(`[data-t-${name}]`)) el.setAttribute(name, t(el.getAttribute(`data-t-${name}`)));
+  }
+  for (const label of $$("[data-folio]")) fill(label, folioLabel(label.dataset.folio));
+  fill($("#paste-help-1"), tn("paste.help1", { code: h("code", {}, "---") }));
+  fill($("#paste-help-3"), tn("paste.help3", { code: h("code", {}, `${t("paste.byline")} …`) }));
+  for (const radio of $$("#lang-switch input[name='lang']")) radio.checked = radio.value === lang();
+}
+
+/**
+ * Shows the screen in another language without a reload. What is being typed stays: the edition's settings live in
+ * state.editionDraft, the search in state.query (its pause is cut short), and the dialogs, where text is typed, are
+ * modal (the switch cannot be reached while one is open) and fill their words in when they open.
+ */
+function changeLang(value, { save = true } = {}) {
+  if (!LANGS.includes(value) || value === lang()) {
+    applyLang();
+    return;
+  }
+  if (searchTyped) searchTyped.flush();
+  setLang(value);
+  if (save) saveLang(value);
+  applyLang();
+  renderStatus();
+  renderAll();
 }
 
 // ===================================================================== wiring
@@ -4112,6 +4307,15 @@ function wireStatic() {
   });
   $("#btn-new-edition").addEventListener("click", openNewEdition);
   for (const button of $$(".step")) button.addEventListener("click", () => goStep(button.dataset.step));
+  for (const radio of $$("#lang-switch input[name='lang']")) {
+    radio.addEventListener("change", () => {
+      if (radio.checked) changeLang(radio.value);
+    });
+  }
+  // another Desk window or tab chose a language: this one follows
+  window.addEventListener("storage", (e) => {
+    if (e.key === LANG_STORE_KEY) changeLang(savedLang(), { save: false });
+  });
 
   const engine = $("#engine");
   engine.addEventListener("toggle", () => {
@@ -4259,8 +4463,11 @@ function wireStatic() {
 }
 
 function init() {
+  setLang(savedLang());
+  applyLang();
   wireStatic();
   renderAll();
+  renderStatus(); // "Checking the engine…" from the first paint, until /api/status answers
   refreshStatus();
   loadEditionsAndOpen();
 }

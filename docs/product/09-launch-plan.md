@@ -98,16 +98,21 @@ Each phase ends with something the newsroom uses on real work.
   - past-edition import;
   - an independent PDF/X-1a check on every page;
   - **the page editor**: select, move, resize, swap, remove and add stories on the grid; undo and redo; every change
-    set by the engine and kept; "Save page" makes and checks the print file.
-- **To add:**
+    set by the engine and kept; "Save page" makes and checks the print file;
   - "Try another layout" for one page;
-  - move a story to another page;
   - edit a story's text from the editor, with the page set again;
-  - lock a story in place;
-  - photo crop and focal point;
-  - rulers and zoom to selection.
-- **Inputs:** the house fonts (the owner provides the files and the licence); Word (.docx) import; Marathi labels on
-  every screen.
+  - rulers and zoom to selection;
+  - lock a story in place; photo crop and focal point; move a story to another page;
+  - Word (.docx) import;
+  - English and Marathi labels on the Desk's screens (the main screen and the page editor), chosen once per
+    browser. The Marathi is a first draft: a native editor checks it (D-5, the `REVIEW` list in
+    `tools/desk/static/strings.js`);
+  - the Desk's tests in CI.
+- **To add:**
+  - the server's and the engine's messages in Marathi (shown in English for now);
+  - the house fonts, once they arrive.
+- **Inputs:** the house fonts (the owner provides the files and the licence); the native editor's review of the
+  Marathi (D-5).
 - **Owner:** one press test (a Desk page with photos and a real ad). This also completes gate G2.
 
 ### L2: The newsroom (several people, one paper, hosted)
@@ -140,8 +145,9 @@ stays the reference.
 
 ## 5. Order of the next work
 1. **Now:**
-   - L1 editor additions (try another layout, move between pages, text edits from the editor);
-   - the licence check (done: `pnpm run check:licences`);
+   - L1 is built: the editor additions (lock, photo crop and focal point, move to another page) and Marathi labels
+     on the Desk's screens are done; the licence check is done (`pnpm run check:licences`);
+   - the native editor's review of the Marathi (D-5), then the server's and the engine's messages in Marathi;
    - the house fonts as soon as they arrive.
 2. **Then:** the L2 backend on the stack chosen in §3.1, starting with accounts and the story desk.
 3. **When the owner is ready:** the press test, using a page the Desk prepares.

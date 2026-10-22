@@ -21,6 +21,7 @@ import pypdfium2 as pdfium
 from PIL import Image
 
 from .engine_client import EngineClient
+from . import messages as M
 from .press import DAMAGED, edition_now, mark_damaged, press_state, recheck_status, refresh_stale
 from .store import Store
 from .util import (EDITION_ID, FILE_MODE, RUN_ID, DeskError, atomic_file, ensure_dir, last_json_object, now_iso,
@@ -35,7 +36,7 @@ RENDER_TRIES = 3
 # engine-status state -> server state while the engine process is still running
 ENGINE_STATE = {"starting": "planning", "planning": "planning", "layout": "layout", "done": "finishing",
                 "failed": "finishing"}
-RESTARTED = "The server was restarted while this run was in progress. Start it again."
+RESTARTED = M.msg("m.run.restarted")
 PDFIUM_LOCK = threading.Lock()          # pypdfium2 is not thread-safe
 
 
@@ -221,7 +222,7 @@ class JobManager:
                     stop_orphan(path.parent / "engine.pid")
                     now = now_iso()
                     status.update(state="failed", error=RESTARTED, message=RESTARTED, finished=now, updated=now)
-                    write_json(path, status)
+                    M.write_status(path, status)
                     n += 1
                 elif isinstance(status, dict) and status.get("state") == "done":
                     ed_dir = path.parent.parent.parent
@@ -282,16 +283,14 @@ class JobManager:
         with self.store.lock(eid):
             snapshot = self.store.snapshot(eid)
             if not snapshot["articles"]:
-                raise DeskError(400, "There are no articles in this edition yet.")
+                raise DeskError(400, M.msg("m.run.noArticlesYet"))
             with self.lock:
                 if any(j.eid == eid and not j.cancel_requested for j in self.jobs.values()):
-                    raise DeskError(409, "Pages for this edition are already being made. "
-                                         "Wait for them, or cancel that run first.")
+                    raise DeskError(409, M.msg("m.run.alreadyRunning"))
                 job = self._new_job(eid)
                 write_json(job.dir / "request.json", snapshot)
                 busy = self.current is not None or bool(self.queue)
-                self._write_status(job, "queued", message="Waiting for another edition's pages to finish."
-                                   if busy else "Starting…")
+                self._write_status(job, "queued", message=M.msg("m.run.waiting") if busy else M.msg("m.run.starting"))
                 self.jobs[(eid, job.rid)] = job
                 self.queue.append(job)
         self._wake.set()
@@ -317,12 +316,12 @@ class JobManager:
                 state = self.store.run_status(eid, rid).get("state")      # 404 when there is no such run
                 if state == "cancelled":
                     return
-                raise DeskError(409, "This run has already finished.")
+                raise DeskError(409, M.msg("m.run.finished"))
             if not job.cancel_requested:
                 job.cancel_requested = True
                 job.cancel_t = time.monotonic()
                 if job in self.queue:
-                    self._finish_job(job, "cancelled", message="Cancelled before it started.")
+                    self._finish_job(job, "cancelled", message=M.msg("m.run.cancelledBefore"))
                 elif job.proc is not None and job.proc.poll() is None:
                     self._signal(job, signal.SIGTERM)
         self._wake.set()
@@ -361,7 +360,7 @@ class JobManager:
     def _launch(self, job: Job) -> None:
         with self.lock:
             if job.cancel_requested:
-                self._finish_job(job, "cancelled", message="Cancelled before it started.")
+                self._finish_job(job, "cancelled", message=M.msg("m.run.cancelledBefore"))
                 return
             try:
                 fd = os.open(job.dir / "engine.log", os.O_WRONLY | os.O_CREAT | os.O_APPEND, FILE_MODE)
@@ -371,7 +370,7 @@ class JobManager:
                                             stderr=subprocess.STDOUT, start_new_session=True)
             except OSError as e:
                 self._close_log(job)
-                self._finish_job(job, "failed", error=f"The layout engine could not be started: {e.strerror or e}.")
+                self._finish_job(job, "failed", error=M.msg("m.run.engineNotStarted", error=M.data(str(e.strerror or e))))
                 return
             job.started = now_iso()
             job.started_t = time.monotonic()
@@ -379,7 +378,7 @@ class JobManager:
                 write_bytes(job.dir / "engine.pid", f"{job.proc.pid}\n".encode())
             except OSError:
                 pass
-            self._write_status(job, "planning", message="The layout engine has started.")
+            self._write_status(job, "planning", message=M.msg("m.run.engineStarted"))
 
     def _poll(self, job: Job) -> None:
         try:
@@ -394,11 +393,11 @@ class JobManager:
                 if not job.killed and time.monotonic() - job.cancel_t >= self.kill_after:
                     self._signal(job, signal.SIGKILL)
                     job.killed = True
-                self._write_status(job, "cancelled", message="Cancelled.")   # the UI stops polling here; the
+                self._write_status(job, "cancelled", message=M.msg("m.run.cancelled"))   # the UI stops polling here; the
                 return                                                         # process ends within kill_after
             self._close_log(job)
             with self.lock:
-                self._finish_job(job, "cancelled", message="Cancelled.")
+                self._finish_job(job, "cancelled", message=M.msg("m.run.cancelled"))
             return
         self._render(job)
         if rc is None:
@@ -430,7 +429,7 @@ class JobManager:
 
     def _complete(self, job: Job) -> None:
         """The engine exited 0: last previews, then edition.pdf and press-files.zip."""
-        self._write_status(job, "finishing", message="Putting the edition PDF and the press files together…")
+        self._write_status(job, "finishing", message=M.msg("m.run.putting"))
         self._render(job)
         pages = [p for p in (job.engine or {}).get("pages") or [] if isinstance(p, dict)]
         pages.sort(key=lambda p: p["page"] if isinstance(p.get("page"), int) else 0)
@@ -440,7 +439,7 @@ class JobManager:
             said = (job.engine or {}).get("message")
             with self.lock:
                 self._finish_job(job, "failed", error=said.strip() if isinstance(said, str) and said.strip()
-                                 else "The layout engine finished but made no pages.")
+                                 else M.msg("m.run.noPages"))
             return
         try:
             merge_pdfs(pdfs, job.dir / "edition.pdf")
@@ -448,25 +447,22 @@ class JobManager:
         except Exception as e:
             traceback.print_exc(file=sys.stderr)
             with self.lock:
-                self._finish_job(job, "failed", error=f"The pages were made, but they could not be put into one "
-                                                      f"file: {e}")
+                self._finish_job(job, "failed", error=M.msg("m.run.notMerged", error=M.data(str(e))))
             return
-        self._write_status(job, "finishing", message="Checking every page with the independent PDF/X-1a checker…")
+        self._write_status(job, "finishing", message=M.msg("m.run.checking"))
         with ThreadPoolExecutor(max_workers=4) as pool:
             for pdf, verdict in zip(pdfs, pool.map(lambda f: check_pdfx(self.engine.repo_root, f), pdfs), strict=True):
                 job.pdfx[pdf.name] = verdict
         failed = sum(1 for p in pages if p.get("state") == "failed")
-        message = f"{len(pdfs)} page{'' if len(pdfs) == 1 else 's'} made."
-        if failed:
-            message += f" {failed} could not be made: see the notes on those pages."
+        made = M.msg("m.run.made1") if len(pdfs) == 1 else M.msg("m.run.madeN", n=len(pdfs))
         bad = [name for name, v in sorted(job.pdfx.items()) if not v.get("passed")]
-        if bad:
-            message += f" The PDF/X-1a check found problems in {', '.join(bad)}: do not send those to the press."
+        message = M.join(made, M.msg("m.run.madeFailed", n=failed) if failed else "",
+                       M.msg("m.run.checkProblems", files=M.data(", ".join(bad))) if bad else "")
         # the edition's lock too: a page's "stale" marks are worked out and written with no article change in between
         # (a change made meanwhile is either seen here, or rechecks this run once its status says "done")
         with self.store.lock(job.eid), self.lock:
             if job.cancel_requested:
-                self._finish_job(job, "cancelled", message="Cancelled.")
+                self._finish_job(job, "cancelled", message=M.msg("m.run.cancelled"))
             else:
                 self._finish_job(job, "done", message=message)
 
@@ -545,7 +541,7 @@ class JobManager:
                     if page.get("state") == "done":
                         page["stale"] = [DAMAGED]
         status.update(press_state(status))
-        write_json(job.dir / "status.json", status)
+        M.write_status(job.dir / "status.json", status)
 
     @staticmethod
     def _signal(job: Job, sig: int) -> None:

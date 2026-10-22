@@ -18,46 +18,56 @@
     <script type="module" src="/static/app.js"></script>
   </head>
   <body>
-    <a class="skip-link" href="#main">Skip to the work area</a>
+    <a class="skip-link" href="#main" data-t="app.skip"></a>
 
     <header class="topbar" id="topbar">
       <div class="brand">
-        <span class="wordmark">Pageinator Desk</span>
-        <span class="tag">internal · own use</span>
+        <span class="wordmark" data-t="app.name"></span>
+        <span class="tag" data-t="app.tag"></span>
       </div>
 
       <div class="picker">
-        <label for="edition-select">Edition</label>
+        <label for="edition-select" data-t="top.edition"></label>
         <select id="edition-select" disabled>
-          <option value="">Loading…</option>
+          <option value="" data-t="top.loading"></option>
         </select>
         <button type="button" class="btn" id="btn-new-edition">
           <span data-icon="plus"></span>
-          New edition
+          <span data-t="top.newEdition"></span>
         </button>
       </div>
 
       <details class="engine" id="engine" data-kind="unknown">
         <summary class="engine-summary">
-          <span class="sr-only">Engine status:</span>
+          <span class="sr-only" data-t="top.engineStatus"></span>
           <span class="engine-dot" aria-hidden="true"></span>
           <span class="engine-icon" id="engine-icon" aria-hidden="true"></span>
-          <span class="engine-label" id="engine-label">Checking the engine…</span>
+          <span class="engine-label" id="engine-label" data-t="engine.checking"></span>
           <span class="engine-short" id="engine-short"></span>
         </summary>
         <div class="engine-panel" id="engine-panel"></div>
       </details>
+
+      <fieldset class="lang-switch" id="lang-switch">
+        <legend class="sr-only" data-t="lang.legend"></legend>
+        <div class="segmented segmented-small">
+          <input type="radio" id="lang-en" name="lang" value="en" checked />
+          <label for="lang-en" lang="en" data-t="lang.en"></label>
+          <input type="radio" id="lang-mr" name="lang" value="mr" />
+          <label for="lang-mr" lang="mr" class="deva" data-t="lang.mr"></label>
+        </div>
+      </fieldset>
     </header>
 
     <div class="layout">
-      <aside class="sidebar" aria-label="Steps and what this paper needs">
-        <nav class="steps-nav" aria-label="Steps">
+      <aside class="sidebar" data-t-aria-label="app.sidebar">
+        <nav class="steps-nav" data-t-aria-label="step.nav">
           <ol class="steps">
             <li>
               <button type="button" class="step" data-step="edition" disabled>
                 <span class="step-num" aria-hidden="true">1</span>
                 <span class="step-text">
-                  <span class="step-name">Edition</span>
+                  <span class="step-name" data-t="step.edition"></span>
                   <span class="step-sub"></span>
                 </span>
               </button>
@@ -66,7 +76,7 @@
               <button type="button" class="step" data-step="articles" disabled>
                 <span class="step-num" aria-hidden="true">2</span>
                 <span class="step-text">
-                  <span class="step-name">Articles</span>
+                  <span class="step-name" data-t="step.articles"></span>
                   <span class="step-sub"></span>
                 </span>
               </button>
@@ -75,7 +85,7 @@
               <button type="button" class="step" data-step="ads" disabled>
                 <span class="step-num" aria-hidden="true">3</span>
                 <span class="step-text">
-                  <span class="step-name">Ads</span>
+                  <span class="step-name" data-t="step.ads"></span>
                   <span class="step-sub"></span>
                 </span>
               </button>
@@ -84,7 +94,7 @@
               <button type="button" class="step" data-step="run" disabled>
                 <span class="step-num" aria-hidden="true">4</span>
                 <span class="step-text">
-                  <span class="step-name">Lay out &amp; download</span>
+                  <span class="step-name" data-t="step.run"></span>
                   <span class="step-sub"></span>
                 </span>
               </button>
@@ -93,21 +103,19 @@
         </nav>
 
         <section class="needs" id="needs" aria-labelledby="needs-title" hidden>
-          <h2 class="needs-title" id="needs-title">What this paper needs</h2>
+          <h2 class="needs-title" id="needs-title" data-t="needs.title"></h2>
           <p class="needs-sub" id="needs-sub"></p>
           <ul class="needs-list" id="needs-list"></ul>
-          <p class="needs-note">
-            Bring about 15–20% extra so the layout has choices. Every ad you sell means fewer stories.
-          </p>
+          <p class="needs-note" data-t="needs.note"></p>
           <details class="needs-detail" id="needs-detail">
-            <summary>Per page</summary>
+            <summary data-t="needs.perPage"></summary>
             <div class="needs-per-page" id="needs-per-page"></div>
           </details>
         </section>
       </aside>
 
       <main class="main" id="main" tabindex="-1">
-        <p class="loading">Loading…</p>
+        <p class="loading" data-t="top.loading"></p>
       </main>
     </div>
 
@@ -118,18 +126,18 @@
     <dialog class="dlg" id="dlg-new" aria-labelledby="new-title">
       <form class="dlg-form" id="form-new" novalidate>
         <div class="dlg-head">
-          <h2 id="new-title">New edition</h2>
-          <p class="dlg-sub">Choose the date and the size. You can change these later in step 1.</p>
+          <h2 id="new-title" data-t="top.newEdition"></h2>
+          <p class="dlg-sub" data-t="new.lede"></p>
         </div>
         <div class="dlg-body">
           <div class="field">
-            <label for="new-date">Date</label>
+            <label for="new-date" data-t="ed.date"></label>
             <input type="date" id="new-date" name="date" required aria-describedby="new-date-note new-date-error" />
             <p class="field-note" id="new-date-note"></p>
             <p class="field-error" id="new-date-error"></p>
           </div>
           <fieldset class="field">
-            <legend>Pages</legend>
+            <legend data-t="ed.pages"></legend>
             <div class="segmented">
               <input type="radio" id="new-pages-4" name="pages" value="4" />
               <label for="new-pages-4">4</label>
@@ -147,16 +155,16 @@
               checked
               aria-describedby="new-back-ads-note"
             />
-            <label for="new-back-ads">Back page has ads</label>
-            <p class="field-note" id="new-back-ads-note">Untick it when the last page is all news.</p>
+            <label for="new-back-ads" data-t="ed.backAds"></label>
+            <p class="field-note" id="new-back-ads-note" data-t="ed.backAdsNote"></p>
           </div>
           <div class="field-grid three">
             <div class="field">
-              <label for="new-volume"><span class="deva" lang="mr">वर्ष</span> / Volume</label>
+              <label for="new-volume" data-folio="volume"></label>
               <input type="text" id="new-volume" name="volume" class="deva" lang="mr" autocomplete="off" />
             </div>
             <div class="field">
-              <label for="new-issue"><span class="deva" lang="mr">अंक</span> / Issue</label>
+              <label for="new-issue" data-folio="issue"></label>
               <input
                 type="text"
                 id="new-issue"
@@ -169,21 +177,18 @@
               <p class="field-note" id="new-issue-note"></p>
             </div>
             <div class="field">
-              <label for="new-price"><span class="deva" lang="mr">किंमत</span> / Price</label>
+              <label for="new-price" data-folio="price"></label>
               <input type="text" id="new-price" name="price" class="deva" lang="mr" autocomplete="off" />
             </div>
           </div>
-          <p class="field-note" id="new-folio-note">
-            Optional. They are printed in the front-page folio where the template has a place for them; leave a box
-            empty to keep the template's own text.
-          </p>
+          <p class="field-note" id="new-folio-note" data-t="new.folioNote"></p>
           <div class="needs-preview" id="new-needs" aria-live="polite"></div>
           <div class="alert-slot" id="new-alert"></div>
         </div>
         <div class="dlg-foot">
           <span class="foot-spacer"></span>
-          <button type="button" class="btn" data-close>Cancel</button>
-          <button type="submit" class="btn btn-primary" id="new-submit">Create edition</button>
+          <button type="button" class="btn" data-close data-t="common.cancel"></button>
+          <button type="submit" class="btn btn-primary" id="new-submit" data-t="new.create"></button>
         </div>
       </form>
     </dialog>
@@ -192,14 +197,16 @@
     <dialog class="dlg dlg-wide" id="dlg-article" aria-labelledby="article-title">
       <form class="dlg-form" id="form-article" novalidate>
         <div class="dlg-head">
-          <h2 id="article-title">New article</h2>
+          <h2 id="article-title"></h2>
           <p class="dlg-sub" id="article-sub"></p>
           <div class="article-notes" id="article-notes"></div>
         </div>
         <div class="dlg-body article-grid">
           <div class="article-text">
             <div class="field">
-              <label for="article-headline">Headline <span class="req" aria-hidden="true">*</span></label>
+              <label for="article-headline"
+                ><span data-t="art.headline"></span> <span class="req" aria-hidden="true">*</span></label
+              >
               <textarea
                 id="article-headline"
                 name="headline"
@@ -213,7 +220,7 @@
             </div>
             <div class="field-grid two">
               <div class="field">
-                <label for="article-kicker">Kicker</label>
+                <label for="article-kicker" data-t="art.kicker"></label>
                 <input
                   type="text"
                   id="article-kicker"
@@ -223,10 +230,10 @@
                   autocomplete="off"
                   aria-describedby="article-kicker-note"
                 />
-                <p class="field-note" id="article-kicker-note">A few words above the headline (optional).</p>
+                <p class="field-note" id="article-kicker-note" data-t="art.kickerNote"></p>
               </div>
               <div class="field">
-                <label for="article-byline">Byline</label>
+                <label for="article-byline" data-t="art.byline"></label>
                 <input
                   type="text"
                   id="article-byline"
@@ -239,14 +246,14 @@
               </div>
             </div>
             <div class="field">
-              <label for="article-deck">Deck (sub-headline)</label>
+              <label for="article-deck" data-t="art.deck"></label>
               <textarea id="article-deck" name="deck" rows="2" class="deva" lang="mr"></textarea>
             </div>
             <div class="field">
-              <label for="article-body">Body <span class="req" aria-hidden="true">*</span></label>
-              <p class="field-note field-note-above" id="article-body-note">
-                Separate paragraphs with an empty line. Start a line with ## for a subheading.
-              </p>
+              <label for="article-body"
+                ><span data-t="art.body"></span> <span class="req" aria-hidden="true">*</span></label
+              >
+              <p class="field-note field-note-above" id="article-body-note" data-t="art.bodyNote"></p>
               <textarea
                 id="article-body"
                 name="body"
@@ -258,36 +265,34 @@
               ></textarea>
               <p class="field-error" id="article-body-error"></p>
               <p class="wordcount">
-                <span class="wordcount-num" id="article-words">0 words</span>
-                <span class="chip chip-short" id="article-short" hidden>Short item</span>
-                <span class="wordcount-note" id="article-short-note" hidden>
-                  60 words or fewer and no photo: it goes in the news-in-brief column.
-                </span>
+                <span class="wordcount-num" id="article-words"></span>
+                <span class="chip chip-short" id="article-short" hidden data-t="art.shortItem"></span>
+                <span class="wordcount-note" id="article-short-note" hidden data-t="art.shortNote"></span>
               </p>
             </div>
           </div>
 
           <div class="article-side">
             <fieldset class="field">
-              <legend>Priority</legend>
+              <legend data-t="prio.legend"></legend>
               <div class="segmented segmented-fill">
                 <input type="radio" id="prio-1" name="priority" value="1" />
-                <label for="prio-1">Lead <span class="seg-num">1</span></label>
+                <label for="prio-1"><span data-t="prio.lead"></span> <span class="seg-num">1</span></label>
                 <input type="radio" id="prio-2" name="priority" value="2" />
-                <label for="prio-2">Top <span class="seg-num">2</span></label>
+                <label for="prio-2"><span data-t="prio.top"></span> <span class="seg-num">2</span></label>
                 <input type="radio" id="prio-3" name="priority" value="3" checked />
-                <label for="prio-3">Normal <span class="seg-num">3</span></label>
+                <label for="prio-3"><span data-t="prio.normal"></span> <span class="seg-num">3</span></label>
                 <input type="radio" id="prio-4" name="priority" value="4" />
-                <label for="prio-4">Minor <span class="seg-num">4</span></label>
+                <label for="prio-4"><span data-t="prio.minor"></span> <span class="seg-num">4</span></label>
               </div>
             </fieldset>
             <div class="field">
-              <label for="article-page">Page</label>
+              <label for="article-page" data-t="art.page"></label>
               <select id="article-page" name="page" aria-describedby="article-page-note"></select>
-              <p class="field-note" id="article-page-note">Auto lets the Desk choose the page.</p>
+              <p class="field-note" id="article-page-note" data-t="art.pageNote"></p>
             </div>
             <fieldset class="field photo-field">
-              <legend>Photo</legend>
+              <legend data-t="art.photo"></legend>
               <div class="photo-preview" id="photo-preview"></div>
               <div class="photo-actions">
                 <span class="file-pick">
@@ -298,22 +303,24 @@
                     accept="image/jpeg,image/png,image/webp"
                     aria-describedby="article-photo-note article-photo-error"
                   />
-                  <label for="article-photo" class="btn btn-small" id="article-photo-label">Add a photo</label>
+                  <label for="article-photo" class="btn btn-small" id="article-photo-label"></label>
                 </span>
-                <button type="button" class="btn btn-small btn-danger-quiet" id="article-photo-remove" hidden>
-                  Remove photo
-                </button>
+                <button
+                  type="button"
+                  class="btn btn-small btn-danger-quiet"
+                  id="article-photo-remove"
+                  hidden
+                  data-t="art.removePhoto"
+                ></button>
               </div>
-              <p class="field-note" id="article-photo-note">
-                JPEG, PNG or WebP, up to 40 MB. It is uploaded when you save.
-              </p>
+              <p class="field-note" id="article-photo-note" data-t="art.photoNote"></p>
               <p class="field-error" id="article-photo-error"></p>
               <div class="field">
-                <label for="article-caption">Caption</label>
+                <label for="article-caption" data-t="art.caption"></label>
                 <textarea id="article-caption" name="caption" rows="2" class="deva" lang="mr"></textarea>
               </div>
               <div class="field">
-                <label for="article-credit">Credit</label>
+                <label for="article-credit" data-t="art.credit"></label>
                 <input type="text" id="article-credit" name="credit" class="deva" lang="mr" autocomplete="off" />
               </div>
             </fieldset>
@@ -321,11 +328,11 @@
         </div>
         <div class="alert-slot dlg-alert" id="article-alert"></div>
         <div class="dlg-foot">
-          <button type="button" class="btn btn-danger-quiet" id="article-delete" hidden>Delete article</button>
+          <button type="button" class="btn btn-danger-quiet" id="article-delete" hidden data-t="arts.deleteOk"></button>
           <span class="foot-spacer"></span>
           <span class="busy-note" id="article-busy" aria-live="polite"></span>
-          <button type="button" class="btn" id="article-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="article-save">Save article</button>
+          <button type="button" class="btn" id="article-cancel" data-t="common.cancel"></button>
+          <button type="submit" class="btn btn-primary" id="article-save" data-t="art.save"></button>
         </div>
       </form>
     </dialog>
@@ -334,14 +341,12 @@
     <dialog class="dlg dlg-wide" id="dlg-paste" aria-labelledby="paste-title">
       <form class="dlg-form" id="form-paste" novalidate>
         <div class="dlg-head">
-          <h2 id="paste-title">Paste several articles</h2>
-          <p class="dlg-sub">
-            Paste many articles at once. Each one becomes its own article that you can edit afterwards.
-          </p>
+          <h2 id="paste-title" data-t="paste.title"></h2>
+          <p class="dlg-sub" data-t="paste.lede"></p>
         </div>
         <div class="dlg-body paste-grid">
           <div class="field paste-field">
-            <label for="paste-text">Articles</label>
+            <label for="paste-text" data-t="step.articles"></label>
             <textarea
               id="paste-text"
               name="text"
@@ -351,35 +356,35 @@
               aria-describedby="paste-help paste-count"
             ></textarea>
             <div class="paste-count" id="paste-count" aria-live="polite"></div>
-            <ol class="paste-preview" id="paste-preview" aria-label="Headlines found"></ol>
+            <ol class="paste-preview" id="paste-preview" data-t-aria-label="paste.found"></ol>
           </div>
-          <aside class="paste-help" id="paste-help" aria-label="How to paste">
-            <h3>How to paste</h3>
+          <aside class="paste-help" id="paste-help" data-t-aria-label="paste.how">
+            <h3 data-t="paste.how"></h3>
             <ul>
-              <li>Put a line with only <code>---</code> between two articles.</li>
-              <li>The first line of each article is its headline.</li>
-              <li>The next line may be <code>Byline: …</code> (optional).</li>
-              <li>The rest is the body. Separate paragraphs with an empty line.</li>
+              <li id="paste-help-1"></li>
+              <li data-t="paste.help2"></li>
+              <li id="paste-help-3"></li>
+              <li data-t="paste.help4"></li>
             </ul>
-            <h3>Example</h3>
+            <h3 data-t="paste.example"></h3>
             <pre class="paste-example deva" lang="mr">
 शहरात नव्या उड्डाणपुलाचे काम सुरू
-Byline: प्रतिनिधी, काल्पनिकनगर
+<span data-t="paste.byline"></span> प्रतिनिधी, काल्पनिकनगर
 शहरातील मुख्य चौकात नव्या उड्डाणपुलाचे काम आज सुरू झाले.
 
 काम पूर्ण होईपर्यंत वाहतूक दुसऱ्या मार्गाने वळवली आहे.
 ---
 ग्रंथालयात वाचन सप्ताह
 शहर ग्रंथालयात या आठवड्यात वाचन सप्ताह साजरा होत आहे.</pre>
-            <p>New articles start with Normal priority and the page set to Auto. Add photos afterwards.</p>
+            <p data-t="paste.helpNote"></p>
           </aside>
         </div>
         <div class="alert-slot dlg-alert" id="paste-alert"></div>
         <div class="dlg-foot">
           <span class="foot-spacer"></span>
           <span class="busy-note" id="paste-busy" aria-live="polite"></span>
-          <button type="button" class="btn" id="paste-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="paste-submit">Add articles</button>
+          <button type="button" class="btn" id="paste-cancel" data-t="common.cancel"></button>
+          <button type="submit" class="btn btn-primary" id="paste-submit" data-t="paste.submit"></button>
         </div>
       </form>
     </dialog>
@@ -388,12 +393,8 @@ Byline: प्रतिनिधी, काल्पनिकनगर
     <dialog class="dlg" id="dlg-import" aria-labelledby="import-title">
       <form class="dlg-form" id="form-import" novalidate>
         <div class="dlg-head">
-          <h2 id="import-title">Import a past edition (for testing)</h2>
-          <p class="dlg-sub">
-            Copies the stories and photos of a past printed edition into this edition, so you can try the layout without
-            typing. Imported stories are marked “Test import” in the list. Delete them before you lay out a real
-            edition.
-          </p>
+          <h2 id="import-title" data-t="arts.import"></h2>
+          <p class="dlg-sub" data-t="imp.lede"></p>
         </div>
         <div class="dlg-body">
           <div class="import-list" id="import-list"></div>
@@ -402,8 +403,8 @@ Byline: प्रतिनिधी, काल्पनिकनगर
         </div>
         <div class="dlg-foot">
           <span class="foot-spacer"></span>
-          <button type="button" class="btn" id="import-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="import-submit" disabled>Import selected</button>
+          <button type="button" class="btn" id="import-cancel" data-t="common.cancel"></button>
+          <button type="submit" class="btn btn-primary" id="import-submit" disabled data-t="imp.submit"></button>
         </div>
       </form>
     </dialog>
@@ -412,15 +413,15 @@ Byline: प्रतिनिधी, काल्पनिकनगर
     <dialog class="dlg dlg-narrow" id="dlg-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-message">
       <form class="dlg-form" id="form-confirm" novalidate>
         <div class="dlg-head">
-          <h2 id="confirm-title">Are you sure?</h2>
+          <h2 id="confirm-title"></h2>
         </div>
         <div class="dlg-body">
           <p class="confirm-message" id="confirm-message"></p>
         </div>
         <div class="dlg-foot">
           <span class="foot-spacer"></span>
-          <button type="button" class="btn" id="confirm-cancel">Cancel</button>
-          <button type="submit" class="btn btn-danger" id="confirm-ok">Delete</button>
+          <button type="button" class="btn" id="confirm-cancel"></button>
+          <button type="submit" class="btn btn-danger" id="confirm-ok"></button>
         </div>
       </form>
     </dialog>
@@ -428,12 +429,12 @@ Byline: प्रतिनिधी, काल्पनिकनगर
     <!-- Page preview -->
     <dialog class="dlg dlg-preview" id="dlg-preview" aria-labelledby="preview-title">
       <div class="preview-bar">
-        <h2 class="preview-title" id="preview-title">Page</h2>
+        <h2 class="preview-title" id="preview-title"></h2>
         <fieldset class="preview-zoom">
-          <legend class="sr-only">Zoom</legend>
+          <legend class="sr-only" data-t="prev.zoom"></legend>
           <div class="segmented segmented-small">
             <input type="radio" id="zoom-fit" name="zoom" value="fit" checked />
-            <label for="zoom-fit">Fit</label>
+            <label for="zoom-fit" data-t="prev.fit"></label>
             <input type="radio" id="zoom-actual" name="zoom" value="actual" />
             <label for="zoom-actual">100%</label>
           </div>
@@ -441,25 +442,31 @@ Byline: प्रतिनिधी, काल्पनिकनगर
         <div class="preview-nav">
           <button type="button" class="btn btn-small" id="preview-prev">
             <span data-icon="left"></span>
-            Previous page
+            <span data-t="prev.prev"></span>
           </button>
           <button type="button" class="btn btn-small" id="preview-next">
-            Next page
+            <span data-t="prev.next"></span>
             <span data-icon="right"></span>
           </button>
         </div>
         <a class="btn btn-small" id="preview-pdf" href="/" hidden>
           <span data-icon="download"></span>
-          Page PDF
+          <span data-t="prev.pdf"></span>
         </a>
-        <button type="button" class="btn btn-small" id="preview-close">Close</button>
+        <button type="button" class="btn btn-small" id="preview-close" data-t="common.close"></button>
       </div>
       <div class="preview-body zoom-fit" id="preview-body">
         <img id="preview-img" alt="" />
-        <p class="preview-missing" id="preview-missing" hidden>The preview of this page could not be loaded.</p>
+        <p class="preview-missing" id="preview-missing" hidden data-t="prev.missing"></p>
       </div>
     </dialog>
 
-    <noscript><p class="noscript">Pageinator Desk needs JavaScript. Turn it on for this page and reload.</p></noscript>
+    <noscript>
+      <!-- the one text not in strings.js: without JavaScript the language chosen cannot be read, so it says both -->
+      <p class="noscript">Pageinator Desk needs JavaScript. Turn it on for this page and reload.</p>
+      <p class="noscript deva" lang="mr">
+        Pageinator Desk साठी JavaScript लागते. ते या पानासाठी चालू करा आणि पान पुन्हा लोड करा.
+      </p>
+    </noscript>
   </body>
 </html>
