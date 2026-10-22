@@ -891,6 +891,22 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 | Any → Spiked; Spiked → restore | Chief Editor, Editor | — |
 | Placed | system | From hosted layout (L2.3) |
 
+**Built in PR 17 as proposed, and still proposed (Q1 is the owner's to settle).** What the build adds:
+- "the author" is the story's reporter or the person it is given to (its assignee); "desk roles" are a full `story.edit_any` (Owner, Admin, Chief Editor, Editor, Sub-editor); Spike and restore are Owner, Admin, Chief Editor and Editor.
+- "Back to where it was" is `to: "restore"`, which returns a held or spiked story to the state it was in before it entered its current run of Held and Spiked (held → spiked → held is one run), never to a state inside the run. Restoring a spiked story is the spikers' (a Sub-editor gets 403), and a restore never lands on Spiked.
+- Every move is recorded in `story_status_change`, with the send-back's comment, and closes the open revision, so the text a story was marked ready with stays as it was.
+- A move from a state that does not allow it answers 409 `invalid_transition`; a move the person's role never makes answers 403; Placed cannot be asked for.
+- Notifications (the desk on Filed, the reporter on a send-back) come with PR 19.
+
+**The stories API as built (PR 17):**
+- **A story has a version** (`revision` in the API): every change of it, its text, its fields, its state or its assignee, makes the next, and every change names the version it was based on as `baseRevision`, or gets 409 `story_changed` with the story as it is now (`error.current`). Two changes on one base never both succeed, moves included. `updatedBy` is whoever made the last change.
+- **Each save of the text is also a revision of the text** (`textRevision`; the database numbers it and closes the one before), listed by `…/revisions`. Folding a person's autosaves into one open revision is a later refinement (11-fix-before-launch).
+- **What a ◐ cell of §12 reaches** (`src/modules/stories/rules.ts`): a Reporter sees, edits (before Ready) and files the stories they report or are given; a Photo Editor sees every story, read only (the photos are PR 18); Advertising sees none; a Page Designer reads but edits box text in the page editor only (L2.4). Placement (priority, page pin, edition) and the desk note are the desk's.
+- **Idempotency-Key** on creates, paste and transitions: the key is claimed, the work done and the answer stored in one transaction, so a request runs at most once and a failed one leaves no key. The same key and request replays the stored answer, after the route's access check and a check that the person still sees the stories it shows; another request under the key answers 422 `idempotency_key_reused` (§5.1); a request still running holds the key, and a second one waits up to 3 seconds, then answers 409 `request_in_progress`.
+- **Paste makes at most 200 stories**, and keeps only their ids for a replay.
+- **A refusal by the story rules is audited** as `authorize()`'s are (`access.denied`, with the reason).
+- **Paste** stores exactly what the Desk's `bulk_create` would, through `@pageinator/desk-text` `pasteArticles`.
+
 ---
 
 ## 6. Files
@@ -1159,7 +1175,7 @@ Rules for every PR:
 | 14 | web 3: Account → Security | TOTP setup with QR (qrcode 1.5.4) · backup codes · devices and sign-out | ~300 | 13 |
 | 15 | desk-text | `packages/desk-text` (port of `blocks`, `body_words`, `is_brief`, `clean_text`, the paste parser) · a Python vector generator run in the oracle venv on fictional text · parity test | ~350 | 4 |
 | 16 | content schema | Migrations for `section`, `edition`, `story`, `story_revision` (with the closed-revision trigger), `story_status_change`, `story_photo`, `comment`, `idempotency_key`, `desk_bundle` and `desk_bundle_revision`, with RLS; server-made ids; keys with `org_id` and `publication_id` (§3.3); (b) covers them automatically. Not yet: `search_text`/pg_trgm, the `asset` foreign key (PR 18) | ~350 | 6, 15 |
-| 17 | stories API | Create, read, list, update with revisions and `baseRevision` · transitions (§5.4) · assignment · paste · idempotency middleware · role-matrix tests · the endpoint tenancy generator (c) | ~400 | 16, 9 |
+| 17 | stories API (built in L2-F; §5.4 says what it decided) | Create, read, list, update with revisions and `baseRevision` · transitions (§5.4) · assignment · paste · idempotency middleware · role-matrix tests · the endpoint tenancy generator (c) | ~400 | 16, 9 |
 | 18 | photos (originals) | @aws-sdk/client-s3, s3-presigned-post and s3-request-presigner 3.1153.0 · presign, complete and sniff · assets · story photo · downloads · storage tests (d) · `dev-buckets.ts` | ~400 | 17 |
 | 19 | comments, notifications, live updates | Comments · notifications with §11 defaults · SSE over LISTEN/NOTIFY with authorised fan-out (test (f)); the streams end in a `preClose` hook, so a stop does not wait the whole grace period · send-back and invitation-accepted emails | ~400 | 17 |
 | 20 | web 4: shell and Team | Navigation from `/me` permissions · Team (members, invite dialog, pending invitations) | ~350 | 14, 10 |

@@ -35,7 +35,7 @@ export async function registerIdentity(
   const auth = createAuth({ config, database, mailer, log: app.log });
   const sessions = sessionResolver(auth.api, authEvents(database.identity, mailer));
   app.decorateRequest("actor", null);
-  app.addHook("preHandler", async (request, reply) => {
+  app.addHook("preValidation", async (request, reply) => {
     if (request.is404 || request.routeOptions.url?.startsWith("/api/v1/") !== true) return; // by the route's pattern
     const found = await sessions.actor(authHeaders(request));
     request.actor = found?.actor ?? null;

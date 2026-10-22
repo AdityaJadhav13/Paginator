@@ -6,5 +6,5 @@
     "outDir": ".tsbuild"
   },
   "include": ["src", "scripts"],
-  "references": [{ "path": "../../packages/contracts" }]
+  "references": [{ "path": "../../packages/contracts" }, { "path": "../../packages/desk-text" }]
 }

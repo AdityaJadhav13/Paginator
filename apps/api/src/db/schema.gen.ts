@@ -170,6 +170,8 @@ export interface AppStory {
   section_id: string | null;
   status: Generated<string>;
   updated_at: Generated<Timestamp>;
+  updated_by: string;
+  version: Generated<number>;
 }
 
 export interface AppStoryPhoto {

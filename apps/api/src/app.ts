@@ -17,6 +17,7 @@ import type { Auth } from "./modules/identity/auth.ts";
 import { registerIdentity } from "./modules/identity/plugin.ts";
 import { type Mailer, type Transport, openMailer, smtpTransport } from "./modules/notifications/mailer.ts";
 import { peopleRoutes } from "./modules/people/plugin.ts";
+import { storyRoutes } from "./modules/stories/routes.ts";
 import { closeWhenStopping } from "./shutdown.ts";
 
 export type AppDeps = {
@@ -83,7 +84,10 @@ export async function buildApp(deps: AppDeps) {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   await app.register(health, { checks: deps.checks });
-  if (people) await app.register(peopleRoutes, { ...people, config });
+  if (people) {
+    await app.register(peopleRoutes, { ...people, config });
+    await app.register(storyRoutes, { database: people.database });
+  }
   return app;
 }
 

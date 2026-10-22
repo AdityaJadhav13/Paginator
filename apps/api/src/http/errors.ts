@@ -19,6 +19,13 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
   },
   bad_origin: { status: 403, message: "This request did not come from Pageinator." },
   not_found: { status: 404, message: "There is nothing here, or you do not have access to it." },
+  story_changed: {
+    status: 409,
+    message: "Someone changed this story after you opened it. Your text is kept; reload to see theirs.",
+  },
+  invalid_transition: { status: 409, message: "This story cannot be moved to that state now." },
+  request_in_progress: { status: 409, message: "This request is still being handled. Wait a moment, then check." },
+  idempotency_key_reused: { status: 422, message: "This request was already sent with different content." },
   request_too_large: { status: 413, message: "This request is too large." },
   not_json: { status: 415, message: "This request must be sent as JSON." },
   slow_down: { status: 429, message: "Too many tries. Wait a minute and try again." },
@@ -61,13 +68,16 @@ export class ApiError extends Error {
   readonly code: ErrorCode;
   readonly statusCode: number;
   readonly details: FieldProblem[] | undefined;
+  /** With story_changed: the story as it is now. */
+  readonly current: unknown;
 
-  constructor(code: ErrorCode, details?: FieldProblem[]) {
+  constructor(code: ErrorCode, details?: FieldProblem[], current?: unknown) {
     super(ERRORS[code].message);
     this.name = "ApiError";
     this.code = code;
     this.statusCode = ERRORS[code].status;
     this.details = details;
+    this.current = current;
   }
 }
 
@@ -76,6 +86,7 @@ type Answer = {
   code: ErrorCode;
   message: string;
   details?: FieldProblem[] | undefined;
+  current?: unknown;
   log?: "info" | "error";
 };
 
@@ -85,7 +96,13 @@ function answer(error: FastifyError, request: FastifyRequest): Answer {
     return { status: 500, code: "server_error", message: ERRORS.server_error.message, log: "error" };
   }
   if (error instanceof ApiError) {
-    return { status: error.statusCode, code: error.code, message: error.message, details: error.details };
+    return {
+      status: error.statusCode,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      current: error.current,
+    };
   }
   if (hasZodFastifySchemaValidationErrors(error)) {
     const part = error.validationContext ?? "request";
@@ -116,7 +133,7 @@ function answer(error: FastifyError, request: FastifyRequest): Answer {
  * its body carries the hook's own message.
  */
 export function errorHandler(error: FastifyError, request: FastifyRequest, reply: FastifyReply): FastifyReply {
-  const { status, code, message, details, log } = answer(error, request);
+  const { status, code, message, details, current, log } = answer(error, request);
   if (log === "error") request.log.error({ err: error }, "request failed");
   if (log === "info") request.log.info({ err: error }, "the request body could not be read");
   const body: ErrorEnvelope = {
@@ -124,6 +141,7 @@ export function errorHandler(error: FastifyError, request: FastifyRequest, reply
       code,
       message: code === "server_error" ? `${message} Reference: ${request.id}` : message,
       ...(details?.length ? { details } : {}),
+      ...(current !== undefined ? { current } : {}),
       requestId: request.id,
     },
   };
