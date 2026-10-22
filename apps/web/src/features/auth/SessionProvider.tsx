@@ -23,9 +23,10 @@ import type {
   SessionService,
   SessionSnapshot,
   SignInInput,
+  TwoStepInput,
   WorkspaceAccessDto,
+  WorkspaceAccessError,
   WorkspaceAccessService,
-  WorkspaceRole,
 } from "../../services/index.ts";
 
 /** Why the session could not be read: the API's problem, or the placeholder workspace's error. */
@@ -52,21 +53,28 @@ interface SessionContextValue {
   retry(): Promise<void>;
   /** Reads the session again quietly (after a confirmation link or a password reset). */
   refresh(): Promise<void>;
+  /** Answers "two-step" when the password was right and a code comes next (TwoStepScreen). */
   signIn(input: SignInInput): Promise<ServiceResult<SessionSnapshot, ApiProblem>>;
+  verifyTwoStep(input: TwoStepInput): Promise<ServiceResult<SessionSnapshot, ApiProblem>>;
   signOut(): Promise<ServiceResult<SessionSnapshot, ApiProblem>>;
   /** The API answered 401 signed_out: the session ended on the server. */
   expire(): void;
-  selectOrganization(organizationId: string): Promise<ServiceResult<WorkspaceAccessDto>>;
-  selectPublication(organizationId: string, publicationId: string): Promise<ServiceResult<WorkspaceAccessDto>>;
+  selectOrganization(organizationId: string): Promise<ServiceResult<WorkspaceAccessDto, WorkspaceAccessError>>;
+  selectPublication(
+    organizationId: string,
+    publicationId: string
+  ): Promise<ServiceResult<WorkspaceAccessDto, WorkspaceAccessError>>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-const NOT_SIGNED_IN: Extract<ServiceError, { code: "denied" }> = {
-  code: "denied",
-  displayMessage: "This demonstration action is not available in the current context.",
-  qualification: "Demonstration only — production authorization is not evaluated here",
-};
+/** An error of the workspace's access: the API's problem (from /me), or the placeholder workspace's own. */
+function workspaceReason(error: WorkspaceAccessError): SessionProblem {
+  return "kind" in error ? { source: "session", problem: error } : { source: "workspace", error };
+}
+
+/** A workspace choice with no signed-in person (or no workspace): the API's own answer for it. */
+const NOT_SIGNED_IN: ApiProblem = { kind: "answer", status: 401, code: "signed_out", message: "" };
 
 export interface SessionProviderProps {
   readonly session: SessionService;
@@ -101,7 +109,8 @@ export function SessionProvider({
   const settle = useCallback(
     async (snapshot: SessionSnapshot, request: number, assertive: boolean) => {
       if (!isCurrent(request)) return;
-      if (snapshot.status === "signed-out") {
+      if (snapshot.status !== "signed-in") {
+        // signed out, or a sign-in still waiting for its two-step code: no session yet
         setState({ status: "signed-out", expired: false });
         return;
       }
@@ -114,7 +123,7 @@ export function SessionProvider({
       setState(
         result.ok
           ? { status: "ready", session: snapshot.session, workspace: result.value }
-          : { status: "unavailable", reason: { source: "workspace", error: result.error }, assertive }
+          : { status: "unavailable", reason: workspaceReason(result.error), assertive }
       );
     },
     [access, isCurrent]
@@ -170,6 +179,17 @@ export function SessionProvider({
     [session, settle]
   );
 
+  const verifyTwoStep = useCallback(
+    async (input: TwoStepInput) => {
+      setIntentionalSignOut(false);
+      const request = ++requestRef.current;
+      const result = await session.verifyTwoStep(input);
+      if (result.ok) await settle(result.value, request, true);
+      return result;
+    },
+    [session, settle]
+  );
+
   const signOut = useCallback(async () => {
     setIntentionalSignOut(true);
     const request = ++requestRef.current;
@@ -185,7 +205,7 @@ export function SessionProvider({
   }, [isCurrent, session]);
 
   const select = useCallback(
-    async (change: (userId: string) => Promise<ServiceResult<WorkspaceAccessDto>>) => {
+    async (change: (userId: string) => Promise<ServiceResult<WorkspaceAccessDto, WorkspaceAccessError>>) => {
       const current = stateRef.current;
       if (current.status !== "ready" || !current.workspace) {
         return { ok: false as const, error: { ...NOT_SIGNED_IN } };
@@ -197,7 +217,7 @@ export function SessionProvider({
       setState(
         result.ok
           ? { status: "ready", session: current.session, workspace: result.value }
-          : { status: "unavailable", reason: { source: "workspace", error: result.error }, assertive: true }
+          : { status: "unavailable", reason: workspaceReason(result.error), assertive: true }
       );
       return result;
     },
@@ -211,6 +231,7 @@ export function SessionProvider({
       retry: () => load({ assertive: true, invalidate: true, showLoading: true }),
       refresh: () => load({ assertive: true, invalidate: false, showLoading: false }),
       signIn,
+      verifyTwoStep,
       signOut,
       expire,
       selectOrganization: (organizationId) =>
@@ -222,7 +243,7 @@ export function SessionProvider({
           ? select((userId) => access.selectPublication({ userId, organizationId, publicationId }))
           : Promise.resolve({ ok: false, error: { ...NOT_SIGNED_IN } }),
     }),
-    [access, expire, intentionalSignOut, load, select, signIn, signOut, state]
+    [access, expire, intentionalSignOut, load, select, signIn, signOut, state, verifyTwoStep]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -234,10 +255,15 @@ export function useSession(): SessionContextValue {
   return value;
 }
 
-/** The person's role in the active organisation of their placeholder workspace. */
-export function activeRole(workspace: WorkspaceAccessDto): WorkspaceRole {
-  return (
-    workspace.access.find((grant) => grant.organizationId === workspace.activeOrganizationId)?.role ??
-    "reviewer"
-  );
+/**
+ * The role to name for the person in the active organisation: Owner or Admin when they are one, otherwise their first
+ * role on the active publication (or "member").
+ */
+export function activeRole(workspace: WorkspaceAccessDto): string {
+  const org = workspace.organizations.find((candidate) => candidate.org.id === workspace.activeOrganizationId);
+  if (!org) return "member";
+  if (org.orgRole !== "member") return org.orgRole;
+  const publication =
+    org.publications.find((candidate) => candidate.id === workspace.activePublicationId) ?? org.publications[0];
+  return publication?.roles[0] ?? "member";
 }

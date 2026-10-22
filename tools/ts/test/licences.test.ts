@@ -208,6 +208,48 @@ describe("reading the workspace", () => {
       ["lockfileVersion: '9.0'", "", "overrides:", "  child-pkg: link:../outside", ""].join("\n"),
     );
     expect(override.unread).toEqual(["overrides: child-pkg: link:../outside"]);
+    // …in any of its spellings, while a package whose name ends in -file or -link is no folder at all
+    const snapshots = lockfile(
+      [
+        "lockfileVersion: '9.0'",
+        "",
+        "snapshots:",
+        "  yargs@15.4.1:",
+        "    dependencies:",
+        "      get-caller-file: 2.0.5",
+        "      some-link: 1.0.0",
+        "      quoted: 'file:../outside'",
+        "      plain:",
+        "        link:../outside",
+        "      named: foo@file:../outside",
+        "      named-link: foo@link:../outside",
+        "      listed: [link:../outside]",
+        "      several: [a,file:../outside]",
+        "",
+      ].join("\n"),
+    );
+    expect(snapshots.unread).toEqual([
+      "snapshots: quoted: 'file:../outside'",
+      "snapshots: link:../outside",
+      "snapshots: named: foo@file:../outside",
+      "snapshots: named-link: foo@link:../outside",
+      "snapshots: listed: [link:../outside]",
+      "snapshots: several: [a,file:../outside]",
+    ]);
+    // the names alone are not folders
+    const names = lockfile(
+      [
+        "lockfileVersion: '9.0'",
+        "",
+        "snapshots:",
+        "  a@1.0.0:",
+        "    dependencies:",
+        "      get-caller-file: 2.0.5",
+        "      some-link: 1.0.0",
+        "",
+      ].join("\n"),
+    );
+    expect(names.unread).toEqual([]);
   });
   it("reads every importer shape pnpm writes", () => {
     const lock = lockfile(
@@ -231,6 +273,15 @@ describe("reading the workspace", () => {
         "",
         "  tools/empty: {}",
         "",
+        "  named:",
+        "    dependencies:",
+        "      foo:",
+        "        specifier: file:../x",
+        "        version: foo@file:../x",
+        "      '@a/b':",
+        "        specifier: link:../y",
+        "        version: '@a/b@link:../y'",
+        "",
         "  मराठी:",
         "    dependenciesMeta:",
         "      '@x/y':",
@@ -239,8 +290,12 @@ describe("reading the workspace", () => {
       ].join("\n"),
     );
     expect(lock.unread).toEqual([]);
-    expect(lock.importers).toEqual([".", "1.0", "it's", "my pkg", "tools/empty", "मराठी"]);
-    expect(lock.links).toEqual([{ from: "1.0", to: "my dir" }]);
+    expect(lock.importers).toEqual([".", "1.0", "it's", "my pkg", "tools/empty", "named", "मराठी"]);
+    expect(lock.links).toEqual([
+      { from: "1.0", to: "my dir" },
+      { from: "named", to: "file:../x" },
+      { from: "named", to: "y" },
+    ]);
   });
   it("checks every installed link against pnpm's own record of the workspace", () => {
     dir = mkdtempSync(join(tmpdir(), "licences-"));

@@ -9,7 +9,7 @@ import { PUBLIC_ROUTES, renderPublic } from "./renderPublic.tsx";
 
 const SIGNED_OUT_LABEL = "Sign in to your newsroom";
 const SIGNED_IN_LABEL = "Open Pageinator";
-const SIGNED_IN_DESTINATION = "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview";
+const SIGNED_IN_DESTINATION = "/org/org-demo-sahyadri";
 
 function ctaLinks(container: HTMLElement): HTMLAnchorElement[] {
   return Array.from(container.querySelectorAll<HTMLAnchorElement>("a.pg-public__cta"));

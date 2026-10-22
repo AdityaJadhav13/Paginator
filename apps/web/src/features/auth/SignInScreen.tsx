@@ -43,7 +43,7 @@ function SignedInLanding() {
       {workspace ? (
         <div>
           <Button
-            onClick={() => navigate(paths.pubOverview(workspace.activeOrganizationId, workspace.activePublicationId))}
+            onClick={() => navigate(paths.orgHome(workspace.activeOrganizationId))}
           >
             {t("signedIn.openWorkspace")}
           </Button>
@@ -97,7 +97,7 @@ export function SignInScreen() {
   useEffect(() => {
     if (!signedInHere || state.status !== "ready") return;
     const { workspace } = state;
-    const fallback = workspace ? paths.pubOverview(workspace.activeOrganizationId, workspace.activePublicationId) : "";
+    const fallback = workspace ? paths.orgHome(workspace.activeOrganizationId) : "";
     const target = safeReturnTo(returnTo, fallback);
     if (target) navigate(target, { replace: true });
   }, [navigate, returnTo, signedInHere, state]);
@@ -119,6 +119,7 @@ export function SignInScreen() {
 function SignInForm({ onSignedIn }: { readonly onSignedIn: () => void }) {
   const { state, signIn, retry } = useSession();
   const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useI18n();
   const keepHintId = useId();
   const [email, setEmail] = useState("");
@@ -145,6 +146,11 @@ function SignInForm({ onSignedIn }: { readonly onSignedIn: () => void }) {
     setPending(true);
     const result = await signIn({ email: email.trim(), password, rememberMe: keepSignedIn });
     setPending(false);
+    if (result.ok && result.value.status === "two-step") {
+      // the password was right; the code comes next, and the place to return to goes along
+      navigate(`${paths.twoStep()}${location.search}`);
+      return;
+    }
     if (result.ok) {
       onSignedIn();
       return;

@@ -38,6 +38,8 @@ export const PATTERNS = {
   resetPassword: "/reset-password",
   verify: "/verify",
   invitation: "/invite/:invitationId",
+  twoStep: "/mfa",
+  accountSecurity: "/account/security",
   onboarding: "/onboarding",
 
   // Workspace root (layout route)
@@ -47,6 +49,7 @@ export const PATTERNS = {
   orgSettings: "settings",
   orgBilling: "billing",
   orgStorage: "storage",
+  orgTeam: "team",
 
   // Workspace — publication scoped (relative to workspaceRoot)
   pubOverview: "pub/:pubId/overview",
@@ -89,8 +92,12 @@ export const paths = {
   resetPassword: () => "/reset-password",
   verify: () => "/verify",
   invitation: (invitationId: string) => `/invite/${encodeURIComponent(invitationId)}`,
+  twoStep: () => "/mfa",
+  accountSecurity: () => "/account/security",
   onboarding: () => "/onboarding",
 
+  orgHome: (orgId: string) => `/org/${orgId}`,
+  orgTeam: (orgId: string) => `/org/${orgId}/team`,
   orgSettings: (orgId: string) => `/org/${orgId}/settings`,
   orgBilling: (orgId: string) => `/org/${orgId}/billing`,
   orgStorage: (orgId: string) => `/org/${orgId}/storage`,

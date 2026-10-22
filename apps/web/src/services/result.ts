@@ -20,12 +20,16 @@ export type ServiceError =
       readonly resource: UnavailableResource;
       readonly displayMessage: string;
     }
+  /*
+   * `displayMessage` and `qualification` are the service's own English note, never shown as they are: the screens show
+   * the catalogue's text for the code. The test double's notes say it is a demonstration; the real services' do not.
+   */
   | {
       readonly code: "denied";
-      readonly displayMessage: "This demonstration action is not available in the current context.";
-      readonly qualification: "Demonstration only — production authorization is not evaluated here";
+      readonly displayMessage: string;
+      readonly qualification: string;
     }
   | {
       readonly code: "temporary-failure";
-      readonly displayMessage: "The demonstration service is temporarily unavailable. Try again.";
+      readonly displayMessage: string;
     };

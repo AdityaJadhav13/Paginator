@@ -59,8 +59,8 @@ describe("Workflow integrity (AC-07, AC-37)", () => {
       expect(container).toHaveTextContent(stage.name);
       expect(container).toHaveTextContent(stage.description);
       expect(container).toHaveTextContent(stage.constraint);
-      expect(container).toHaveTextContent(stage.ownerCaption);
     }
+    expect(container).not.toHaveTextContent(/\bUI\d{3}/);
   });
 
   it("renders all seven stage names and descriptions on / in condensed form", async () => {
@@ -157,18 +157,14 @@ describe("No fabricated measurement appears on any public surface (AC-10)", () =
       const main = within(container).getByRole("main");
 
       // Stage ordinals are aria-hidden presentation, so they are removed
-      // the same way assistive technology ignores them. The only other
-      // legitimate digits are the unit identifiers naming who will build a
-      // reserved surface ("Reserved for UI014."). Everything a reader is
-      // actually told must be prose, never a figure.
+      // the same way assistive technology ignores them. Everything a reader
+      // is actually told must be prose, never a figure.
       const readable = main.cloneNode(true) as HTMLElement;
       for (const hidden of readable.querySelectorAll('[aria-hidden="true"]')) {
         hidden.remove();
       }
       const text = readable.textContent ?? "";
-      const withoutUnits = text.replace(/UI\d{3}(?:[–-]\d{3})?/g, "");
-
-      expect(withoutUnits).not.toMatch(/\d/);
+      expect(text).not.toMatch(/\d/);
       expect(text).not.toMatch(/[$€£₹¥]/);
       expect(text).not.toMatch(/%/);
     });

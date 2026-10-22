@@ -12,6 +12,7 @@ import {
   CATALOGUES,
   LANGUAGES,
   REVIEW,
+  REVIEW_NOTES,
   REVIEWED,
   formatMessage,
   isCatalogueKey,
@@ -42,7 +43,8 @@ const PLAN_ERROR_CODES = [
   "request_in_progress",
 ];
 
-const sourceFiles = import.meta.glob(["/src/**/*.{ts,tsx}", "!/src/i18n/en.ts", "!/src/i18n/mr.ts"], {
+// The test double (src/mocks) renders no text: its operation names ("team.invite") only look like keys.
+const sourceFiles = import.meta.glob(["/src/**/*.{ts,tsx}", "!/src/i18n/en.ts", "!/src/i18n/mr.ts", "!/src/mocks/**"], {
   eager: true,
   query: "?raw",
   import: "default",
@@ -173,6 +175,31 @@ describe("The Marathi review list", () => {
       expect(item.marathi).toBe(CATALOGUES.mr[item.key]);
       expect(item.english).toBe(CATALOGUES.en[item.key]);
     }
+  });
+
+  it("carries the open question on the Marathi term for a release on its three strings", () => {
+    const noted = REVIEW.filter((item) => item.note).map((item) => item.key);
+    expect(noted.sort()).toEqual(["grant.release_approve", "invalid.release", "nav.release"]);
+    expect(Object.keys(REVIEW_NOTES).every((key) => isCatalogueKey(key))).toBe(true);
+  });
+
+  it("keeps the second Marathi pass's fixes (L2-G)", () => {
+    const mr = CATALOGUES.mr;
+    // प्रकाशन is Publication: a release is not one
+    expect(mr["grant.release_approve"]).not.toContain("प्रकाशन");
+    expect(mr["security.devices.signOut"]).toBe("प्रवेश बंद करा: {device}");
+    expect(mr["security.devices.signedOut"]).toBe("{device}: प्रवेश बंद केला आहे.");
+    expect(mr["team.grants.hint"]).toBe("हे अधिकार फक्त संपादकांनाच देता येतात.");
+    expect(mr["team.pending.expires"]).toBe("मुदत संपेल: {date}");
+    // मुखपृष्ठ is a newspaper's front page
+    expect(mr["nav.home"]).toBe("सुरुवात");
+    // one verb for inviting, and मधील for roles on a publication
+    for (const key of ["team.invite", "team.invite.title", "team.invite.submit"] as const) {
+      expect(mr[key]).toContain("निमंत्रण पाठवा");
+      expect(mr[key]).not.toContain("निमंत्रित करा");
+    }
+    expect(mr["team.publication.legend"]).toBe("{publication} मधील भूमिका");
+    expect(mr["orgHome.publicationRoles"]).toBe("{publication} मधील भूमिका: {roles}");
   });
 
   it("keeps an approval only while the approved text is unchanged", () => {

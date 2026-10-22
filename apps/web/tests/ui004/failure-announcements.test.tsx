@@ -18,7 +18,7 @@ describe("UI004 temporary-failure announcements", () => {
     const workspaceEnvironment = createMockApplicationEnvironment();
     workspaceEnvironment.scenarios.setScenario({ mode: "failure", operations: ["organization.list"] });
     renderUi004(PUNE, undefined, workspaceEnvironment);
-    expect(await screen.findByText("The demonstration service is temporarily unavailable. Try again.")).toBeInTheDocument();
+    expect(await screen.findByText("The workspace could not be loaded. Check your connection, then try again.")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -44,7 +44,7 @@ describe("UI004 temporary-failure announcements", () => {
 
     await userEvent.setup().click(retry);
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("The demonstration service is temporarily unavailable. Try again.");
+    expect(alert).toHaveTextContent("The workspace could not be loaded. Check your connection, then try again.");
     expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 });

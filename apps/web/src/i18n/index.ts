@@ -11,6 +11,7 @@ export {
   type CatalogueKey,
   type Language,
   type MessageParams,
+  type PlainKey,
   type Translate,
 } from "./catalogue.ts";
 export {
@@ -23,4 +24,4 @@ export {
   type I18nValue,
 } from "./I18nProvider.tsx";
 export { LanguageSwitch } from "./LanguageSwitch.tsx";
-export { REVIEW, REVIEWED, type MarathiReview, type ReviewItem } from "./review.ts";
+export { REVIEW, REVIEW_NOTES, REVIEWED, type MarathiReview, type ReviewItem } from "./review.ts";

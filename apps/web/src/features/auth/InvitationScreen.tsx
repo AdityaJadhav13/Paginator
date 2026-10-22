@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Button, Checkbox, Field, InlineMessage, ProgressIndicator, Stack, TextInput } from "../../ui/index.ts";
 import { paths } from "../../app/routes.ts";
-import { useI18n, type CatalogueKey, type Language } from "../../i18n/index.ts";
+import { useI18n } from "../../i18n/index.ts";
 import type { ApiProblem, InvitationDto } from "../../services/index.ts";
 import { randomUuid } from "../../api/client.ts";
 import { useAccount } from "./account-context.tsx";
@@ -30,42 +30,14 @@ import {
   type ValidationKey,
 } from "./validation.ts";
 import { verifyReturnPath } from "./VerifyEmailScreen.tsx";
+import { roleList } from "../people/roles.ts";
+import { formatDate } from "../../i18n/dates.ts";
 
-/** Role codes (plan §4.2) and their names; an unknown code is shown as it is. */
-const ROLE_NAMES = {
-  owner: "glossary.owner",
-  admin: "role.admin",
-  member: "role.member",
-  chief_editor: "glossary.chiefEditor",
-  editor: "glossary.editor",
-  sub_editor: "glossary.subEditor",
-  reporter: "glossary.reporter",
-  page_designer: "glossary.pageDesigner",
-  photo_editor: "glossary.photoEditor",
-  advertising: "role.advertising",
-  prepress: "glossary.prepress",
-  viewer: "glossary.viewer",
-} as const satisfies Readonly<Record<string, CatalogueKey>>;
-
-export type RoleNameKey = (typeof ROLE_NAMES)[keyof typeof ROLE_NAMES];
-
-/** "Page designer and Reporter": "member" is everyone's organisation role, so it is named only when alone. */
-export function roleList(roles: readonly string[], language: Language, name: (key: RoleNameKey) => string): string {
-  const shown = roles.length > 1 ? roles.filter((role) => role !== "member") : roles;
-  const names = shown.map((role) => {
-    const key = Object.hasOwn(ROLE_NAMES, role) ? ROLE_NAMES[role as keyof typeof ROLE_NAMES] : undefined;
-    return key ? name(key) : role;
-  });
-  return new Intl.ListFormat(language, { type: "conjunction" }).format(names);
-}
+// The role names live with Team's (features/people/roles.ts); tests read them from here too.
+export { roleList, type RoleNameKey } from "../people/roles.ts";
 
 /** A date as the pilot reads it: India's time zone, Latin digits (02 §3.3). */
-export function invitationDate(iso: string, language: Language): string {
-  return new Intl.DateTimeFormat(language === "mr" ? "mr-IN-u-nu-latn" : "en-IN", {
-    dateStyle: "long",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(iso));
-}
+export const invitationDate = formatDate;
 
 type Loaded =
   | { readonly status: "loading" }
@@ -240,16 +212,23 @@ function JoinPanel({ invitationId, invitation }: { readonly invitationId: string
   const { t } = useI18n();
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<ApiProblem | null>(null);
-  const [joined, setJoined] = useState(false);
+  const [joined, setJoined] = useState<string | null>(null);
   const keyRef = useRef<string | null>(null);
   if (state.status !== "ready") return null;
   const organization = invitation.organizationName;
 
   if (joined) {
     return (
-      <InlineMessage variant="success" heading={t("invite.joined.heading", { organization })} live iconLabel={t("message.success")}>
-        {t("invite.joined.body")}
-      </InlineMessage>
+      <Stack gap="4">
+        <InlineMessage variant="success" heading={t("invite.joined.heading", { organization })} live iconLabel={t("message.success")}>
+          {t("invite.joined.body")}
+        </InlineMessage>
+        <p>
+          <Link className="pg-button pg-button--primary pg-button--md" to={paths.orgHome(joined)}>
+            {t("invite.open", { organization })}
+          </Link>
+        </p>
+      </Stack>
     );
   }
 
@@ -261,18 +240,18 @@ function JoinPanel({ invitationId, invitation }: { readonly invitationId: string
     const result = await account.acceptInvitation({ invitationId, idempotencyKey: keyRef.current });
     setPending(false);
     if (result.ok) {
-      setJoined(true);
+      setJoined(result.value.orgId);
       void refresh();
       return;
     }
     setProblem(result.error);
   };
 
+  // The API answers 404 for an invitation sent to another address, expired or used since this page loaded (it never
+  // says which), 403 for an address not yet confirmed, and 409 for one already accepted.
   const refusal =
     problem?.kind === "answer" && (problem.status === 403 || problem.status === 404 || problem.status === 409)
-      ? problem.status === 403
-        ? ("cannotJoin" as const)
-        : ("invalid" as const)
+      ? ("cannotJoin" as const)
       : undefined;
 
   return (
@@ -281,11 +260,6 @@ function JoinPanel({ invitationId, invitation }: { readonly invitationId: string
       {refusal === "cannotJoin" && (
         <InlineMessage variant="error" heading={t("invite.cannotJoin.heading")} live iconLabel={t("message.error")}>
           {t("invite.cannotJoin.body")}
-        </InlineMessage>
-      )}
-      {refusal === "invalid" && (
-        <InlineMessage variant="error" heading={t("invite.invalid.heading")} live iconLabel={t("message.error")}>
-          {t("invite.invalid.body")}
         </InlineMessage>
       )}
       {problem && !refusal && !(problem.kind === "answer" && problem.code === "signed_out") && (

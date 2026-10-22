@@ -6,8 +6,10 @@ import {
 } from "./create-mock-session-environment.ts";
 import type {
   AccountService,
+  SecurityService,
   ServiceEnvironment,
   SessionService,
+  TeamService,
   UserQueryService,
   WorkspaceAccessService,
   WorkspaceQueryService,
@@ -20,6 +22,8 @@ export interface MockApplicationEnvironment extends ServiceEnvironment {
   readonly workspace: WorkspaceQueryService;
   readonly session: SessionService;
   readonly account: AccountService;
+  readonly security: SecurityService;
+  readonly team: TeamService;
   readonly access: WorkspaceAccessService;
   readonly scenarios: MockScenarioController;
   readonly sessionController: MockSessionController;

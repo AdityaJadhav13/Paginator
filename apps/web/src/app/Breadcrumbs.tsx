@@ -15,16 +15,18 @@ export interface BreadcrumbItem {
 
 export interface BreadcrumbsProps {
   items: BreadcrumbItem[];
+  /** The trail's accessible name, in the page's language. */
+  label?: string;
 }
 
-export function Breadcrumbs({ items }: BreadcrumbsProps) {
+export function Breadcrumbs({ items, label = "Breadcrumb" }: BreadcrumbsProps) {
   if (items.length < 2) {
     // A single crumb (or none) is not a trail worth announcing.
     return null;
   }
 
   return (
-    <nav aria-label="Breadcrumb" className="pg-breadcrumbs">
+    <nav aria-label={label} className="pg-breadcrumbs">
       <ol className="pg-breadcrumbs__list">
         {items.map((item, index) => {
           const isLast = index === items.length - 1;

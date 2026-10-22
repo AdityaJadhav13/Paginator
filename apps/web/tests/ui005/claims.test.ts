@@ -17,7 +17,6 @@ import {
 import {
   WORKFLOW_STAGES,
   availabilityLabels,
-  workflowOwningUnits,
   workflowStageViews,
 } from "../../src/features/public/workflow.ts";
 import { PUBLIC_ROUTES, renderPublic } from "./renderPublic.tsx";
@@ -114,7 +113,7 @@ describe("Content model integrity (AC-13)", () => {
     expect(Object.keys(componentSources).length).toBeGreaterThan(5);
   });
 
-  it("holds the workflow prose, availability labels and owner caption", () => {
+  it("holds the workflow prose and availability labels, and no internal unit names", () => {
     const ids = new Set(ALL_RECORDS.map((record) => record.id));
     for (const stage of WORKFLOW_STAGES) {
       expect(ids, `stage ${stage.key} name`).toContain(`workflow-${stage.key}-name`);
@@ -128,7 +127,9 @@ describe("Content model integrity (AC-13)", () => {
     for (const id of ["availability-demonstrated", "availability-routed", "availability-planned"]) {
       expect(ids).toContain(id);
     }
-    expect(ids).toContain("features-owner-caption");
+    // the internal build units (UI014, UI022–024…) are planning labels, not something a reader is told
+    expect(ids).not.toContain("features-owner-caption");
+    expect(ALL_RECORDS.map((record) => record.text).join(" ")).not.toMatch(/\bUI\d{3}/);
   });
 
   it("does not duplicate any rendered sentence between records", () => {
@@ -177,7 +178,7 @@ describe("Forbidden claim vocabulary (AC-33, AC-30)", () => {
   }
 
   it("scans the strings format() can produce with the same vocabulary", () => {
-    for (const text of expandedContentTexts({ unit: workflowOwningUnits() })) {
+    for (const text of expandedContentTexts({})) {
       for (const term of FORBIDDEN_TERMS) {
         expect(text.toLowerCase(), `"${text}" contains "${term}"`).not.toContain(term);
       }
@@ -342,7 +343,6 @@ describe("No dead copy (AC-15)", () => {
 
   it("renders every content record somewhere on a public surface", async () => {
     const rendered = await renderedEverywhere();
-    const units = workflowOwningUnits();
 
     const dead: string[] = [];
     for (const record of CONTENT_RECORDS) {
@@ -354,7 +354,7 @@ describe("No dead copy (AC-15)", () => {
         continue;
       }
       // A template is reachable when each of its expansions is rendered.
-      const expansions = expandedContentTexts({ unit: units }).filter((text) =>
+      const expansions = expandedContentTexts({}).filter((text) =>
         text.startsWith(record.text.slice(0, record.text.indexOf("{")))
       );
       if (expansions.length === 0 || !expansions.every((text) => rendered.has(text))) {
@@ -425,7 +425,7 @@ describe("Rendered text is governed, including across interpolation (AC-13, AC-1
       // A record carrying a placeholder is never rendered raw.
       if (!/\{\w+\}/.test(record.text)) allowed.add(record.text);
     }
-    for (const text of expandedContentTexts({ unit: workflowOwningUnits() })) {
+    for (const text of expandedContentTexts({})) {
       allowed.add(text);
     }
     for (const label of availabilityLabels()) allowed.add(label);
@@ -469,10 +469,12 @@ describe("Rendered text is governed, including across interpolation (AC-13, AC-1
     // Guards the mechanism itself: the fragment a `Reserved for {unit}`
     // pattern would render is not a governed string, so the check above
     // would report it. If someone widened `governedStrings()` to accept
-    // fragments, this assertion fails.
+    // fragments, this assertion fails. (The owner caption itself is gone:
+    // internal unit names are not told to a reader.)
     const allowed = governedStrings();
     expect(allowed.has("Reserved for")).toBe(false);
-    expect(allowed.has("Reserved for UI009.")).toBe(true);
+    expect(allowed.has("Reserved for UI009.")).toBe(false);
+    expect(allowed.has("Reserved in the current build")).toBe(true);
   });
 });
 
@@ -485,6 +487,12 @@ describe("Statements real sign-in made untrue stay gone (L2 plan PR 12)", () => 
     "lives in memory",
     "simulation's interface",
     "No real accounts",
+    // made untrue by L2-G (Account security, two-step sign-in, Team)
+    "everything else still runs in your browser",
+    "No account can be created from this site",
+    "No newsroom screen is open to a signed-in person",
+    "no signed-in person can open them",
+    "property of the placeholder workspace",
   ];
 
   for (const { path, heading } of PUBLIC_ROUTES) {
@@ -503,6 +511,37 @@ describe("Statements real sign-in made untrue stay gone (L2 plan PR 12)", () => 
   it("keeps them out of every content record too", () => {
     const corpus = ALL_RECORDS.map((record) => record.text).join(" ");
     for (const phrase of NO_LONGER_TRUE) expect(corpus).not.toContain(phrase);
+  });
+});
+
+describe("What L2-G made true is said as it is (Account security, two-step sign-in, Team)", () => {
+  // pinned: a change to any of these is a change of what Pageinator claims in public, and needs the same review
+  const PINNED: Readonly<Record<string, string>> = {
+    "closing-body": "Sign-in, two-step sign-in and the team are real, and accounts open by invitation only. The newsroom screens are still to come. Nothing is charged.",
+    "today-lead": "Signing in, two-step sign-in and the team are real in this build. The newsroom screens are still to come.",
+    "today-item-sign-in": "Sign-in with an email address and a password, in English or Marathi, and two-step sign-in with an authenticator app. An account is opened only from an emailed invitation.",
+    "today-item-no-workspace": "A signed-in person sees their organization, their roles and their account's security. The owner and the admins invite, change and remove members, and chief editors see the team. No newsroom screen is open yet.",
+    "home-provisional-security-body": "Pageinator's server keeps the accounts (a name, an email address and a hashed password), sessions, sign-in events, two-step secrets and backup codes. It also keeps the organizations, memberships and invitations. This build carries no certification of any kind.",
+    "security-true-2": "Two-step sign-in with an authenticator app, its backup codes and the list of signed-in devices are real, and so is the team. The newsroom screens are still placeholders on fictional test data, and the deployed app does not show them.",
+    "security-true-3": "A signed-in browser keeps its session in cookies that page scripts cannot read, and, when you choose to trust the device, a cookie that skips the code for thirty days. This browser's local storage keeps your language, and keeps the organization and publication you last opened until the session ends.",
+    "security-nonleak-body-2": "The server answers an organization you do not belong to exactly as it answers one that does not exist, and the screens show the same page for both. This build's own tests check both.",
+  };
+
+  it("says exactly the reviewed wording", () => {
+    for (const [id, text] of Object.entries(PINNED)) {
+      expect(ALL_RECORDS.find((record) => record.id === id)?.text, id).toBe(text);
+    }
+  });
+
+  it("names what the server now keeps and what the browser keeps", () => {
+    const server = PINNED["home-provisional-security-body"]!;
+    for (const kept of ["hashed password", "sessions", "sign-in events", "two-step secrets", "backup codes", "organizations", "memberships", "invitations"]) {
+      expect(server).toContain(kept);
+    }
+    const browser = PINNED["security-true-3"]!;
+    for (const kept of ["cookies that page scripts cannot read", "thirty days", "your language", "organization and publication you last opened"]) {
+      expect(browser).toContain(kept);
+    }
   });
 });
 

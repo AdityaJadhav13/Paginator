@@ -19,7 +19,7 @@ export type ValidationKey =
 /** Something@something.something with no spaces: the server decides the rest. */
 const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function emailProblem(value: string): ValidationKey | undefined {
+export function emailProblem(value: string): "validation.emailMissing" | "validation.emailInvalid" | undefined {
   const email = value.trim();
   if (email === "") return "validation.emailMissing";
   return LOOKS_LIKE_EMAIL.test(email) ? undefined : "validation.emailInvalid";

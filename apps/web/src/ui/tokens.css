@@ -76,6 +76,9 @@
   --pg-reading-measure: 70ch;
   /* The sign-in card (03 §5.1: 400 px wide) */
   --pg-auth-measure: 25rem;
+  /* Account pages (Account → Security) and the QR code on them */
+  --pg-account-measure: 40rem;
+  --pg-qr-size: 12rem;
 
   /* ── Radius ─────────────────────────────────────────────────────────── */
   --pg-radius-sm: 0.25rem;

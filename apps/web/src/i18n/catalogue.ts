@@ -35,6 +35,9 @@ export type TranslateArgs<Key extends CatalogueKey> = [MessageParams<Key>] exten
   ? []
   : [params: Readonly<Record<MessageParams<Key>, string | number>>];
 
+/** A key whose message has no placeholder: `t(key)` alone. */
+export type PlainKey = { [Key in CatalogueKey]: [MessageParams<Key>] extends [never] ? Key : never }[CatalogueKey];
+
 export type Translate = <Key extends CatalogueKey>(key: Key, ...args: TranslateArgs<Key>) => string;
 
 const PLACEHOLDER = /\{(\w+)\}/g;

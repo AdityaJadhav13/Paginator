@@ -130,8 +130,8 @@ describe("Sign in", () => {
     const workspace = renderAuth("/login?returnTo=%2F%2Fevil.example", { preset: "signed-out" });
     await fill(user, accounts.reviewer.email, accounts.reviewer.password);
     await user.click(screen.getByRole("button", { name: "Sign in" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
-    expect(currentLocation(workspace.container).pathname).toBe("/org/org-demo-konkan/pub/pub-demo-ratnagiri-tide/overview");
+    expect(await screen.findByRole("heading", { level: 1, name: "Konkan Coastal Press" })).toBeInTheDocument();
+    expect(currentLocation(workspace.container).pathname).toBe("/org/org-demo-konkan");
   });
 
   it("shows a person without a workspace that they are signed in, and lets them sign out", async () => {

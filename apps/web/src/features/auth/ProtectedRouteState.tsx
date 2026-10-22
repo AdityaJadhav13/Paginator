@@ -6,6 +6,7 @@ import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { SignOutButton } from "./SignOutButton.tsx";
 import { useSession } from "./SessionProvider.tsx";
 import type { WorkspaceRouteState } from "../../app/contracts/route-context.ts";
+import { useI18n } from "../../i18n/index.ts";
 
 export function ProtectedRouteState({
   state,
@@ -16,7 +17,8 @@ export function ProtectedRouteState({
 }) {
   const navigate = useNavigate();
   const session = useSession();
-  if (state.status === "loading") return <Stack gap="4"><h1 id={ROUTE_HEADING_ID} data-pg-transient-route-heading className="pg-type-page-title" tabIndex={-1}>Loading workspace</h1><ProgressIndicator role="status" aria-live="polite" label="Loading workspace context" /></Stack>;
+  const { t } = useI18n();
+  if (state.status === "loading") return <Stack gap="4"><h1 id={ROUTE_HEADING_ID} data-pg-transient-route-heading className="pg-type-page-title" tabIndex={-1}>{t("shell.loadingWorkspace")}</h1><ProgressIndicator role="status" aria-live="polite" label={t("shell.loadingWorkspaceContext")} /></Stack>;
   if (state.status === "signed-out") {
     return (
       <Navigate
@@ -31,15 +33,16 @@ export function ProtectedRouteState({
   if (state.status === "invalid-context") return <InvalidContextPage invalid={state.invalid} />;
   return (
     <Stack gap="4">
-      <h1 id={ROUTE_HEADING_ID} className="pg-type-page-title" tabIndex={-1}>Workspace temporarily unavailable</h1>
+      <h1 id={ROUTE_HEADING_ID} className="pg-type-page-title" tabIndex={-1}>{t("shell.workspaceUnavailable")}</h1>
       <InlineMessage
         variant="error"
-        heading="Workspace temporarily unavailable"
+        heading={t("shell.workspaceUnavailable")}
         live={state.assertive}
+        iconLabel={t("message.error")}
       >
-        {state.error.displayMessage}
+        {t("shell.workspaceUnavailable.body")}
       </InlineMessage>
-      <div><Button onClick={retry}>Retry</Button></div>
+      <div><Button onClick={retry}>{t("shell.retry")}</Button></div>
       <div><SignOutButton beforeSignOut={() => navigate(paths.login(), { replace: true, flushSync: true })} /></div>
     </Stack>
   );

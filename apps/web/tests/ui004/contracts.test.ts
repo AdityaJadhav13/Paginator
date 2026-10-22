@@ -10,11 +10,13 @@ import type {
   AccountService,
   ApiProblem,
   InvitationDto,
+  SecurityService,
   SessionDto,
   SessionService,
   SessionSnapshot,
   SessionUserDto,
   SignInInput,
+  TeamService,
   WorkspaceAccessDto,
   WorkspaceAccessService,
 } from "../../src/services/index.ts";
@@ -34,10 +36,12 @@ type UserContract = Assert<Equal<SessionUserDto, {
   readonly name: string;
   readonly email: string;
   readonly emailVerified: boolean;
+  readonly twoFactorEnabled: boolean;
 }>>;
 type SessionContract = Assert<Equal<SessionDto, { readonly user: SessionUserDto }>>;
 type SnapshotContract = Assert<Equal<SessionSnapshot,
   | { readonly status: "signed-out" }
+  | { readonly status: "two-step" }
   | { readonly status: "signed-in"; readonly session: SessionDto }
 >>;
 type SignInContract = Assert<Equal<SignInInput, {
@@ -45,7 +49,25 @@ type SignInContract = Assert<Equal<SignInInput, {
   readonly password: string;
   readonly rememberMe: boolean;
 }>>;
-type SessionMethods = Assert<Equal<keyof SessionService, "getSession" | "signIn" | "signOut">>;
+type SessionMethods = Assert<Equal<keyof SessionService, "getSession" | "signIn" | "verifyTwoStep" | "signOut">>;
+type SecurityMethods = Assert<Equal<keyof SecurityService,
+  | "startTwoStep"
+  | "confirmTwoStep"
+  | "turnOffTwoStep"
+  | "newBackupCodes"
+  | "listDevices"
+  | "signOutDevice"
+  | "signOutOtherDevices"
+>>;
+type TeamMethods = Assert<Equal<keyof TeamService,
+  | "listMembers"
+  | "updateMember"
+  | "removeMember"
+  | "listInvitations"
+  | "invite"
+  | "resendInvitation"
+  | "cancelInvitation"
+>>;
 type AccountMethods = Assert<Equal<keyof AccountService,
   | "requestPasswordReset"
   | "resetPassword"
@@ -62,7 +84,7 @@ type InvitationContract = Assert<Equal<InvitationDto, {
   readonly state: "pending" | "accepted" | "expired" | "revoked";
 }>>;
 type AccessMethods = Assert<Equal<keyof WorkspaceAccessService, "getAccess" | "selectOrganization" | "selectPublication">>;
-type AccessContract = Assert<Equal<keyof WorkspaceAccessDto, "access" | "activeOrganizationId" | "activePublicationId">>;
+type AccessContract = Assert<Equal<keyof WorkspaceAccessDto, "access" | "activeOrganizationId" | "activePublicationId" | "organizations">>;
 
 /** Better Auth 1.7's get-session answer, as its OpenAPI describes it (fictional values). */
 const GET_SESSION_ANSWER = {
@@ -91,8 +113,8 @@ describe("The web's session and account contracts", () => {
   it("compile with the exact DTO fields, unions and methods", () => {
     const assertions: [
       UserContract, SessionContract, SnapshotContract, SignInContract, SessionMethods,
-      AccountMethods, InvitationContract, AccessMethods, AccessContract,
-    ] = [true, true, true, true, true, true, true, true, true];
+      AccountMethods, InvitationContract, AccessMethods, AccessContract, SecurityMethods, TeamMethods,
+    ] = [true, true, true, true, true, true, true, true, true, true, true];
     expect(assertions.every(Boolean)).toBe(true);
   });
 
@@ -123,10 +145,16 @@ describe("Better Auth's get-session answer", () => {
           name: "Asha Patil",
           email: "asha@example.test",
           emailVerified: true,
+          twoFactorEnabled: false,
         },
       },
     });
     expect(JSON.stringify(snapshot)).not.toContain("SECRET-SESSION-TOKEN");
+  });
+
+  it("reads whether two-step is on from the twoFactor plugin's user field", () => {
+    const snapshot = sessionFromAnswer({ ...GET_SESSION_ANSWER, user: { ...GET_SESSION_ANSWER.user, twoFactorEnabled: true } });
+    expect(snapshot).toMatchObject({ status: "signed-in", session: { user: { twoFactorEnabled: true } } });
   });
 
   it("refuses an answer that is not a session", () => {

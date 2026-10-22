@@ -263,12 +263,17 @@ describe("No dependency was added (AC-47)", () => {
     devDependencies: Record<string, string>;
   };
 
-  it("keeps the runtime dependency set at react, react-dom and react-router", () => {
+  // L2 (plan §10 PR 14 and PR 20) added two, each approved by the owner: the API's own schemas, and qrcode 1.5.4
+  // (MIT) for the two-step QR code. Any other runtime dependency still needs the same approval.
+  it("keeps the runtime dependency set at react, react-dom, react-router and the two approved for L2", () => {
     expect(Object.keys(packageJson.dependencies).sort()).toEqual([
+      "@pageinator/contracts",
+      "qrcode",
       "react",
       "react-dom",
       "react-router",
     ]);
+    expect(packageJson.dependencies["qrcode"]).toBe("1.5.4");
   });
 
   it("introduces no UI005-specific development dependency", () => {

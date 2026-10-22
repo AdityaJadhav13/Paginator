@@ -9,6 +9,8 @@ export interface SessionUserDto {
   readonly name: string;
   readonly email: string;
   readonly emailVerified: boolean;
+  /** Two-step sign-in is on for this account (Better Auth's twoFactor plugin). */
+  readonly twoFactorEnabled: boolean;
 }
 
 export interface SessionDto {
@@ -17,4 +19,6 @@ export interface SessionDto {
 
 export type SessionSnapshot =
   | { readonly status: "signed-out" }
+  /** The password was right; the sign-in waits for a two-step code (plan §4.4). No session exists yet. */
+  | { readonly status: "two-step" }
   | { readonly status: "signed-in"; readonly session: SessionDto };

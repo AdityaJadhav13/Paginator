@@ -45,6 +45,18 @@ describe("auth.css", () => {
     expect(tokensCss).toContain("--pg-auth-measure: 25rem;");
   });
 
+  it("lets the account's wider card, its QR code and its code lists shrink to 320 px", () => {
+    const wide = /\.pg-auth__card--wide\s*\{([^}]*)\}/.exec(authCss)?.[1] ?? "";
+    expect(wide).toMatch(/max-inline-size:\s*var\(--pg-account-measure\)/);
+    const qr = /\.pg-qr\s*\{([^}]*)\}/.exec(authCss)?.[1] ?? "";
+    expect(qr).toMatch(/inline-size:\s*var\(--pg-qr-size\)/);
+    expect(qr).toMatch(/max-inline-size:\s*100%/);
+    const codes = /\.pg-codes\s*\{([^}]*)\}/.exec(authCss)?.[1] ?? "";
+    expect(codes).toMatch(/flex-wrap:\s*wrap/);
+    expect(tokensCss).toContain("--pg-account-measure: 40rem;");
+    expect(tokensCss).toContain("--pg-qr-size: 12rem;");
+  });
+
   it("gives Marathi text the next line-height step", () => {
     expect(authCss).toMatch(/\.pg-shell--auth:lang\(mr\)/);
     for (const role of ["p", ".pg-field__label", ".pg-field__error", ".pg-inline-message__text"]) {
@@ -71,6 +83,9 @@ describe("Where sign-in sends a person back to", () => {
       "/org/o/pub/p/archive/r",
       "/org/o/pub/p/editions/e",
       "/org/o/pub/p/editions/e/editor",
+      "/org/o",
+      "/org/o/team",
+      "/account/security",
       INVITE,
     ]) {
       expect(safeReturnTo(path, "fallback"), path).toBe(path);

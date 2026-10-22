@@ -11,7 +11,7 @@ type Answer = ServiceResult<SessionSnapshot, ApiProblem>;
 function signedIn(id: string, name: string): Answer {
   return {
     ok: true,
-    value: { status: "signed-in", session: { user: { id, name, email: `${id}@example.test`, emailVerified: true } } },
+    value: { status: "signed-in", session: { user: { id, name, email: `${id}@example.test`, emailVerified: true, twoFactorEnabled: false } } },
   };
 }
 
@@ -36,6 +36,7 @@ describe("SessionProvider stale completion protection", () => {
     const service: SessionService = {
       async getSession() { return { ok: true, value: { status: "signed-out" } }; },
       signIn({ email }) { return new Promise((resolve) => resolvers.set(email, resolve)); },
+      async verifyTwoStep() { return { ok: true, value: { status: "signed-out" } }; },
       async signOut() { return { ok: true, value: { status: "signed-out" } }; },
     };
     render(<SessionProvider session={service}><Probe /></SessionProvider>);
@@ -54,6 +55,7 @@ describe("SessionProvider stale completion protection", () => {
       async signIn() {
         return { ok: false, error: { kind: "answer", status: 401, code: "INVALID_EMAIL_OR_PASSWORD", message: "" } };
       },
+      async verifyTwoStep() { return { ok: true, value: { status: "signed-out" } }; },
       async signOut() { return { ok: true, value: { status: "signed-out" } }; },
     };
     render(<SessionProvider session={service}><Probe /></SessionProvider>);

@@ -15,8 +15,8 @@
  * something other than a placeholder, which `tests/ui005/routes.test.tsx`
  * enforces at runtime.
  */
-import { OWNING_UNIT } from "../../app/routes.ts";
-import { format, t } from "./content.ts";
+import type { ROUTE_LABELS } from "../../app/routes.ts";
+import { t } from "./content.ts";
 
 /** Which of the three availability states a stage is in (§13.2). */
 export type StageAvailability = "demonstrated" | "routed" | "planned";
@@ -38,7 +38,7 @@ export function availabilityLabels(): readonly string[] {
   return Object.values(AVAILABILITY_CONTENT_ID).map((id) => t(id));
 }
 
-type RouteKey = keyof typeof OWNING_UNIT;
+type RouteKey = keyof typeof ROUTE_LABELS;
 
 /** Structural definition of one workflow stage. Carries no prose. */
 export interface WorkflowStage {
@@ -80,8 +80,6 @@ export interface WorkflowStageView {
   readonly description: string;
   readonly constraint: string;
   readonly availabilityLabel: string;
-  /** "Reserved for UI014." — one complete governed sentence. */
-  readonly ownerCaption: string;
 }
 
 export function stageView(stage: WorkflowStage): WorkflowStageView {
@@ -91,18 +89,10 @@ export function stageView(stage: WorkflowStage): WorkflowStageView {
     description: t(`workflow-${stage.key}-description`),
     constraint: t(`workflow-${stage.key}-constraint`),
     availabilityLabel: availabilityLabel(stage.availability),
-    ownerCaption: format("features-owner-caption", {
-      unit: OWNING_UNIT[stage.routeKey],
-    }),
   };
 }
 
 /** The seven stages resolved for rendering, in order. */
 export function workflowStageViews(): readonly WorkflowStageView[] {
   return WORKFLOW_STAGES.map(stageView);
-}
-
-/** Every unit that owns a workflow stage's route, read from the route table. */
-export function workflowOwningUnits(): readonly string[] {
-  return WORKFLOW_STAGES.map((stage) => OWNING_UNIT[stage.routeKey]);
 }
