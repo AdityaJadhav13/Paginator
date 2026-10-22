@@ -15,6 +15,7 @@
     "@fastify/helmet": "catalog:",
     "@fastify/rate-limit": "catalog:",
     "@pageinator/contracts": "workspace:*",
+    "@pageinator/desk-text": "workspace:*",
     "better-auth": "catalog:",
     "fastify": "catalog:",
     "fastify-type-provider-zod": "catalog:",

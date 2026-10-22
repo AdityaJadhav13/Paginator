@@ -150,7 +150,7 @@ async function refuse(
       })
       .execute();
   });
-  throw new ApiError("not_allowed");
+  throw Object.assign(new ApiError("not_allowed"), { audited: true });
 }
 
 export async function decide(database: Database, request: FastifyRequest, permission: Permission): Promise<Access> {
@@ -178,7 +178,8 @@ export async function decide(database: Database, request: FastifyRequest, permis
   return { tenant, orgRole: view.orgRole, publications: view.publications, reach: reached };
 }
 
-/** The check, on every /api/v1 request, after the session is read (identity's preHandler). */
+/** The check, on every /api/v1 request, after the session is read (identity's hook), and before the request's body
+ * and query are validated: whoever may not use a route learns nothing of its schema (401, 404 or 403 come first). */
 export function registerAccess(app: FastifyInstance, database: Database): void {
   app.decorateRequest("access", null);
   const routes: ApiRoute[] = [];
@@ -198,7 +199,7 @@ export function registerAccess(app: FastifyInstance, database: Database): void {
       throw new Error(`${route.method} ${route.url} must declare one access ("public", "signed_in") or permission`);
     }
   });
-  app.addHook("preHandler", async (request) => {
+  app.addHook("preValidation", async (request) => {
     if (request.is404 || !isApiRoute(request.routeOptions.url)) return;
     const config = request.routeOptions.config;
     if (config.access === "public") return;
