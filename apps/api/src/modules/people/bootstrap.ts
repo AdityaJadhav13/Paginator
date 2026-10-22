@@ -19,6 +19,9 @@ export type Bootstrap = {
 
 export class BootstrapError extends Error {}
 
+/** Where the Owner's confirmation link sends them once the address is confirmed. */
+export const CONFIRMED_PATH = "/verify?confirmed=1";
+
 export async function bootstrapOrg(
   auth: Auth,
   database: Database,
@@ -30,7 +33,13 @@ export async function bootstrapOrg(
   let owner = (await context.internalAdapter.findUserByEmail(email))?.user ?? null;
   if (!owner) {
     await auth.api.signUpEmail({
-      body: { name: input.owner.name, email, password: randomBytes(32).toString("base64url") },
+      // the confirmation link lands on the web app's own page (apps/web VerifyEmailScreen: /verify?confirmed=1)
+      body: {
+        name: input.owner.name,
+        email,
+        password: randomBytes(32).toString("base64url"),
+        callbackURL: CONFIRMED_PATH,
+      },
     });
     owner = (await context.internalAdapter.findUserByEmail(email))?.user ?? null;
     if (!owner) throw new BootstrapError("The owner's account was not made.");

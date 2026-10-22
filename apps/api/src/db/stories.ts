@@ -42,6 +42,12 @@ export type StoryRow = {
   updated_by: string;
   updated_by_name: string;
   comment_count: number;
+  photo_asset_id: string | null;
+  photo_caption: string | null;
+  photo_credit: string | null;
+  photo_status: "received" | "ready" | "rejected" | null;
+  photo_width: number | null;
+  photo_height: number | null;
 } & Text & { words: number };
 
 const STORY = sql`
@@ -51,6 +57,8 @@ const STORY = sql`
     to_char(s.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_cursor,
     s.updated_by, ub.display_name as updated_by_name,
     r.headline, r.kicker, r.deck, r.byline, r.body, r.words,
+    sp.asset_id as photo_asset_id, sp.caption as photo_caption, sp.credit as photo_credit, pa.status as photo_status,
+    pa.width_px as photo_width, pa.height_px as photo_height,
     (select count(*)::int from app.comment c
       where c.org_id = s.org_id and c.publication_id = s.publication_id and c.target_id = s.id
         and c.deleted_at is null) as comment_count
@@ -60,7 +68,9 @@ const STORY = sql`
   join app.person rp on rp.org_id = s.org_id and rp.user_id = s.reporter_id
   join app.person ub on ub.org_id = s.org_id and ub.user_id = s.updated_by
   left join app.person ap on ap.org_id = s.org_id and ap.user_id = s.assignee_id
-  left join app.edition e on e.org_id = s.org_id and e.publication_id = s.publication_id and e.id = s.edition_id`;
+  left join app.edition e on e.org_id = s.org_id and e.publication_id = s.publication_id and e.id = s.edition_id
+  left join app.story_photo sp on sp.org_id = s.org_id and sp.publication_id = s.publication_id and sp.story_id = s.id
+  left join app.asset pa on pa.org_id = sp.org_id and pa.publication_id = sp.publication_id and pa.id = sp.asset_id`;
 
 /** One story of the publication that is not deleted, or null. */
 export async function findStory(tx: Tx, publicationId: string, storyId: string): Promise<StoryRow | null> {
@@ -397,4 +407,81 @@ export async function revision(tx: Tx, publicationId: string, storyId: string, r
     from app.story_revision r join app.person p on p.org_id = r.org_id and p.user_id = r.author_id
     where r.publication_id = ${publicationId} and r.story_id = ${storyId} and r.rev = ${rev}`.execute(tx);
   return rows[0] ?? null;
+}
+
+/** Gives the story its one photo (or replaces it), with its caption and credit: a change of the story. */
+export async function setPhoto(
+  tx: Tx,
+  who: Who,
+  publicationId: string,
+  storyId: string,
+  photo: { assetId: string; caption: string; credit: string },
+): Promise<void> {
+  await tx
+    .insertInto("app.story_photo")
+    .values({
+      org_id: who.orgId,
+      publication_id: publicationId,
+      story_id: storyId,
+      asset_id: photo.assetId,
+      caption: photo.caption,
+      credit: photo.credit,
+    })
+    .onConflict((conflict) =>
+      conflict
+        .columns(["org_id", "publication_id", "story_id"])
+        .doUpdateSet({ asset_id: photo.assetId, caption: photo.caption, credit: photo.credit, updated_at: sql`now()` }),
+    )
+    .execute();
+  await touch(tx, who, publicationId, storyId, {});
+}
+
+/** Changes the photo's caption or credit; false when the story has no photo. */
+export async function updatePhoto(
+  tx: Tx,
+  who: Who,
+  publicationId: string,
+  storyId: string,
+  change: { caption?: string; credit?: string },
+): Promise<boolean> {
+  const done = await tx
+    .updateTable("app.story_photo")
+    .set({ ...change, updated_at: sql`now()` })
+    .where("publication_id", "=", publicationId)
+    .where("story_id", "=", storyId)
+    .returning("story_id")
+    .executeTakeFirst();
+  if (done) await touch(tx, who, publicationId, storyId, {});
+  return done !== undefined;
+}
+
+/** Takes the photo off the story (the asset stays); false when it had none. */
+export async function removePhoto(tx: Tx, who: Who, publicationId: string, storyId: string): Promise<boolean> {
+  const done = await tx
+    .deleteFrom("app.story_photo")
+    .where("publication_id", "=", publicationId)
+    .where("story_id", "=", storyId)
+    .returning("story_id")
+    .executeTakeFirst();
+  if (done) await touch(tx, who, publicationId, storyId, {});
+  return done !== undefined;
+}
+
+/** Whether the asset is the photo of a story this person reports or is given (a Reporter's ◐ "own"). */
+export async function isPhotoOfTheirs(tx: Tx, publicationId: string, assetId: string, userId: string) {
+  const row = await tx
+    .selectFrom("app.story_photo as sp")
+    .innerJoin("app.story as s", (join) =>
+      join
+        .onRef("s.org_id", "=", "sp.org_id")
+        .onRef("s.publication_id", "=", "sp.publication_id")
+        .onRef("s.id", "=", "sp.story_id"),
+    )
+    .select("sp.story_id")
+    .where("sp.publication_id", "=", publicationId)
+    .where("sp.asset_id", "=", assetId)
+    .where("s.deleted_at", "is", null)
+    .where((eb) => eb.or([eb("s.reporter_id", "=", userId), eb("s.assignee_id", "=", userId)]))
+    .executeTakeFirst();
+  return row !== undefined;
 }

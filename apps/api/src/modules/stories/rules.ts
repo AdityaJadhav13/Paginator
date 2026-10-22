@@ -122,3 +122,18 @@ export function canDelete(access: Access, publicationId: string, story: StoryFac
   if (isDesk(access, publicationId)) return true;
   return story.reporterId === userId && story.status === "draft" && canEdit(access, publicationId, story, userId);
 }
+
+/** May the person give the story its photo, or change or remove it: whoever edits the story, and a Photo Editor
+ * of the publication on any story they see but a spiked one (plan §5.2: the photos are theirs to attach). */
+export function canAttachPhoto(access: Access, publicationId: string, story: StoryFacts, userId: string): boolean {
+  if (canEdit(access, publicationId, story, userId)) return true;
+  if (story.status === "spiked" || !sees(access, publicationId, story, userId)) return false;
+  return has(on(access, publicationId), "photo_editor");
+}
+
+/** Which of a publication's pictures the person may download: all with a full media.view; a Reporter's ◐ the ones
+ * they uploaded or that are the photo of one of their stories; none without media.view. */
+export function mediaScope(access: Access, publicationId: string): Scope {
+  const seen = reach("media.view", access.orgRole, on(access, publicationId));
+  return seen === "full" ? "all" : seen === "scoped" ? "own" : "none";
+}

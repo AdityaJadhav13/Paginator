@@ -1,12 +1,18 @@
 // Photo uploads (docs/product/10-l2-newsroom-plan.md §5.2, §6.2): the browser uploads straight to the object store
 // with a presigned POST, then asks the API to complete it.
-//   - Presign: JPEG, PNG or WebP, at most 40 MiB; 60 uploads an hour per person and 2 GB a day per organisation;
-//     a POST valid 15 minutes for exactly the upload's key (uploads/orgs/<org>/pubs/<pub>/<upload>, the database's),
-//     1 byte to 40 MiB, its Content-Type and its upload id pinned (SeaweedFS and S3 enforce each: tested).
-//   - Complete (the uploader only): one read of the whole object gives its SHA-256, its type from its bytes and its
-//     size from its header (picture.ts); a file that is not a picture is refused (422 not_a_picture) and deleted.
-//     A picture becomes an asset, copied out of quarantine to orgs/<org>/pubs/<pub>/assets/<asset>/original (versioned,
-//     the SHA-256 in its metadata), or, when the publication has those very bytes already, the asset it has.
+//   - Presign: JPEG, PNG or WebP, at most 40 MiB; 60 uploads an hour per person and 2 GB a day per organisation,
+//     both counted under the organisation's quota row lock, so requests at once cannot pass the limits together. The
+//     quota is charged the declared size, and the POST policy (valid 15 minutes) takes exactly that many bytes, for
+//     exactly the upload's key (uploads/orgs/<org>/pubs/<pub>/<upload>, the database's), its Content-Type and its
+//     upload id. SeaweedFS enforces each condition (test/db/media.test.ts); S3 is checked in staging
+//     (11-fix-before-launch).
+//   - Complete (the uploader only): one read of the version the store names gives the file's SHA-256, its size, its
+//     type from its bytes and its width and height (picture.ts). A file of another size than declared, or that is not
+//     a picture, is refused (422 not_a_picture). A picture becomes an asset, copied out of quarantine to
+//     orgs/<org>/pubs/<pub>/assets/<asset>/original (its version kept, the SHA-256 in its metadata), or, when the
+//     publication has those very bytes already, the asset it has. Then, completed or refused, every version of the
+//     quarantine key is deleted by its version id (a file sent twice under one policy leaves two); the bucket's
+//     lifecycle rule removes whatever is sent after that (scripts/dev-buckets.ts).
 import { createHash } from "node:crypto";
 import { Asset, CompletedUpload, MAX_PICTURE_BYTES, PresignedUpload, UploadRequest } from "@pageinator/contracts";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -29,7 +35,7 @@ import { ApiError } from "../../http/errors.ts";
 import type { ObjectStore } from "../../storage/object-store.ts";
 import { accessOf, actorOf } from "../access/access.ts";
 import { idempotent } from "../requests/idempotency.ts";
-import { HEADER_BYTES, NotAPicture, picture } from "./picture.ts";
+import { HEADER_BYTES, JpegScan, NotAPicture, picture } from "./picture.ts";
 
 export const UPLOADS_PER_HOUR = 60;
 export const ORG_BYTES_PER_DAY = 2 * 1024 ** 3;
@@ -55,9 +61,10 @@ export function assetView(row: AssetRow): Asset {
   };
 }
 
-/** Reads the whole object once: its SHA-256, its length, and its first HEADER_BYTES. */
-async function readAll(store: ObjectStore, key: string, versionId: string | undefined) {
+/** Reads one version of the object once: its SHA-256, its length, its first HEADER_BYTES, and a JPEG's marker scan. */
+async function readAll(store: ObjectStore, key: string, versionId: string) {
   const hash = createHash("sha256");
+  const scan = new JpegScan();
   const head: Uint8Array[] = [];
   let kept = 0;
   let bytes = 0;
@@ -65,13 +72,14 @@ async function readAll(store: ObjectStore, key: string, versionId: string | unde
     bytes += chunk.length;
     if (bytes > MAX_PICTURE_BYTES) throw new ApiError("file_too_large");
     hash.update(chunk);
+    scan.feed(chunk);
     if (kept < HEADER_BYTES) {
       const part = chunk.subarray(0, HEADER_BYTES - kept);
       head.push(part);
       kept += part.length;
     }
   }
-  return { sha256: hash.digest("hex"), bytes, head: Buffer.concat(head) };
+  return { sha256: hash.digest("hex"), bytes, head: Buffer.concat(head), scan };
 }
 
 export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { database, store }) => {
@@ -91,10 +99,12 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
         request,
         access.tenant,
         async (tx) => {
-          if ((await uploadsLastHour(tx, access.tenant.userId)) >= UPLOADS_PER_HOUR) throw new ApiError("slow_down");
+          // the quota row's lock first: the hour's count then sees every upload committed before it (a refusal rolls
+          // the quota back with the rest)
           if ((await addToQuota(tx, access.tenant.orgId, input.bytes)) > ORG_BYTES_PER_DAY) {
             throw new ApiError("slow_down");
           }
+          if ((await uploadsLastHour(tx, access.tenant.userId)) >= UPLOADS_PER_HOUR) throw new ApiError("slow_down");
           const upload = await createUpload(tx, access.tenant, pub, {
             type: input.contentType,
             bytes: input.bytes,
@@ -103,7 +113,7 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
           const post = await store.presignPost({
             key: upload.key,
             contentType: input.contentType,
-            maxBytes: MAX_PICTURE_BYTES,
+            bytes: input.bytes,
             expiresSeconds: POST_SECONDS,
             metadata: { "upload-id": upload.id },
           });
@@ -146,45 +156,67 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
       if (!arrived) {
         throw new ApiError("invalid_request", [{ field: "params.u", message: "The file has not arrived yet." }]);
       }
+      // every asset is pinned to its version (plan §6.2): a store that names none is misconfigured (/readyz says so)
+      const version = arrived.versionId;
+      if (!version) throw new Error("The work bucket gave the upload no version: its versioning must be Enabled.");
+      const refuse = async (message: string): Promise<never> => {
+        await database.withTenant(access.tenant, (tx) => rejectUpload(tx, pub, u));
+        await store.removeAll(upload.key).catch(() => undefined); // the lifecycle rule would, within two days
+        throw new ApiError("not_a_picture", [{ field: "file", message }]);
+      };
+      const wrongSize = (bytes: number) =>
+        `The file is ${bytes} bytes, not the ${upload.declared_bytes} the upload said.`;
+      if (arrived.bytes !== upload.declared_bytes) await refuse(wrongSize(arrived.bytes));
       // the version read is the version copied: a second upload under the same policy changes neither
-      const read = await readAll(store, upload.key, arrived.versionId);
+      const read = await readAll(store, upload.key, version);
+      if (read.bytes !== upload.declared_bytes) await refuse(wrongSize(read.bytes));
       let found;
       try {
-        found = picture(read.head);
+        found = picture(read.head, read.scan);
       } catch (error) {
         if (!(error instanceof NotAPicture)) throw error;
-        await database.withTenant(access.tenant, (tx) => rejectUpload(tx, pub, u));
-        await store.remove(upload.key).catch(() => undefined);
-        throw new ApiError("not_a_picture", [{ field: "file", message: `The file was refused: ${error.message}.` }]);
+        return refuse(`The file was refused: ${error.message}.`);
       }
-      const asset = await database.withTenant(access.tenant, async (tx) => {
-        const locked = await findUpload(tx, pub, u, true);
-        if (locked?.status === "completed" && locked.asset_id) return findAsset(tx, pub, locked.asset_id);
-        const same = await assetWithBytes(tx, pub, read.sha256);
-        if (same) {
-          await completeUpload(tx, pub, u, same.id);
-          return same;
-        }
-        const made = await createAsset(tx, access.tenant, pub, {
-          sha256: read.sha256,
-          bytes: read.bytes,
-          mime: found.mime,
-          width: found.width,
-          height: found.height,
+      const picked = found;
+      const settle = () =>
+        database.withTenant(access.tenant, async (tx) => {
+          const locked = await findUpload(tx, pub, u, true);
+          if (locked?.status === "completed" && locked.asset_id) return findAsset(tx, pub, locked.asset_id);
+          if (locked?.status !== "presigned") throw new ApiError("not_a_picture");
+          const same = await assetWithBytes(tx, pub, read.sha256);
+          if (same) {
+            await completeUpload(tx, pub, u, same.id);
+            return same;
+          }
+          const made = await createAsset(tx, access.tenant, pub, {
+            sha256: read.sha256,
+            bytes: read.bytes, // the bytes stored: the quota was charged the same (the declared size, checked above)
+            mime: picked.mime,
+            width: picked.width,
+            height: picked.height,
+          });
+          const copied = await store.copy({
+            from: upload.key,
+            fromVersion: version,
+            to: made.original_key,
+            contentType: picked.mime,
+            metadata: { sha256: read.sha256 },
+          });
+          await setAssetVersion(tx, pub, made.id, copied.versionId);
+          await completeUpload(tx, pub, u, made.id);
+          return { ...made, version_id: copied.versionId };
         });
-        const copied = await store.copy({
-          from: upload.key,
-          fromVersion: arrived.versionId,
-          to: made.original_key,
-          contentType: found.mime,
-          metadata: { sha256: read.sha256 },
-        });
-        await setAssetVersion(tx, pub, made.id, copied.versionId);
-        await completeUpload(tx, pub, u, made.id);
-        return { ...made, version_id: copied.versionId ?? null };
-      });
+      let asset;
+      try {
+        asset = await settle();
+      } catch (error) {
+        // two completes of the same new bytes at once: the other made the asset first (asset_one_per_bytes), and
+        // this one, run again, finds it
+        if ((error as { code?: unknown }).code !== "23505") throw error;
+        asset = await settle();
+      }
       if (!asset) throw new ApiError("not_found");
-      await store.remove(upload.key).catch(() => undefined); // the lifecycle rule would, within a day
+      await store.removeAll(upload.key).catch(() => undefined); // the lifecycle rule would, within two days
       return { asset: assetView(asset) };
     },
   );

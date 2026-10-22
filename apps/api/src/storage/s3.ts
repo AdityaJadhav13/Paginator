@@ -3,11 +3,13 @@
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
+  GetBucketVersioningCommand,
   GetObjectCommand,
-  HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectVersionsCommand,
   NotFound,
   S3Client,
+  type LifecycleRule,
   S3ServiceException,
 } from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
@@ -16,6 +18,25 @@ import type { Config } from "../config.ts";
 import type { ObjectStore } from "./object-store.ts";
 
 export type StorageConfig = NonNullable<Config["storage"]>;
+
+/** The work bucket's rules for uploads/ (quarantine; scripts/dev-buckets.ts): a file expires a day after it arrives,
+ * its old version is removed a day later, and a delete marker left alone is removed (S3 takes that only in a rule of
+ * its own, without Days). */
+export const UPLOADS_LIFECYCLE: LifecycleRule[] = [
+  {
+    ID: "uploads-one-day",
+    Status: "Enabled",
+    Filter: { Prefix: "uploads/" },
+    Expiration: { Days: 1 },
+    NoncurrentVersionExpiration: { NoncurrentDays: 1 },
+  },
+  {
+    ID: "uploads-delete-markers",
+    Status: "Enabled",
+    Filter: { Prefix: "uploads/" },
+    Expiration: { ExpiredObjectDeleteMarker: true },
+  },
+];
 
 export function s3Client(config: StorageConfig): S3Client {
   return new S3Client({
@@ -32,7 +53,7 @@ const missing = (error: unknown) =>
 export function s3Store(config: StorageConfig, client: S3Client = s3Client(config)): ObjectStore {
   const Bucket = config.workBucket;
   return {
-    async presignPost({ key, contentType, maxBytes, expiresSeconds, metadata }) {
+    async presignPost({ key, contentType, bytes, expiresSeconds, metadata }) {
       const meta = Object.fromEntries(Object.entries(metadata).map(([k, v]) => [`x-amz-meta-${k}`, v]));
       return createPresignedPost(client, {
         Bucket,
@@ -40,7 +61,7 @@ export function s3Store(config: StorageConfig, client: S3Client = s3Client(confi
         Expires: expiresSeconds,
         Fields: { "Content-Type": contentType, ...meta },
         Conditions: [
-          ["content-length-range", 1, maxBytes],
+          ["content-length-range", bytes, bytes], // exactly the size the upload declared (and the quota counted)
           ["eq", "$Content-Type", contentType],
           ...Object.entries(meta).map(([k, v]) => ["eq", `$${k}`, v] as ["eq", string, string]),
         ],
@@ -56,9 +77,7 @@ export function s3Store(config: StorageConfig, client: S3Client = s3Client(confi
       }
     },
     async read(key, versionId) {
-      const object = await client.send(
-        new GetObjectCommand({ Bucket, Key: key, ...(versionId ? { VersionId: versionId } : {}) }),
-      );
+      const object = await client.send(new GetObjectCommand({ Bucket, Key: key, VersionId: versionId }));
       if (!object.Body) throw new Error(`The object ${key} has no body.`);
       return object.Body as AsyncIterable<Uint8Array>;
     },
@@ -67,16 +86,30 @@ export function s3Store(config: StorageConfig, client: S3Client = s3Client(confi
         new CopyObjectCommand({
           Bucket,
           Key: to,
-          CopySource: `${Bucket}/${from}${fromVersion ? `?versionId=${encodeURIComponent(fromVersion)}` : ""}`,
+          CopySource: `${Bucket}/${from}?versionId=${encodeURIComponent(fromVersion)}`,
           MetadataDirective: "REPLACE",
           ContentType: contentType,
           Metadata: metadata,
         }),
       );
+      if (!copied.VersionId) throw new Error(`The store gave no version for ${to}: is the bucket versioned?`);
       return { versionId: copied.VersionId };
     },
-    async remove(key) {
-      await client.send(new DeleteObjectCommand({ Bucket, Key: key }));
+    async removeAll(key) {
+      let removed = 0;
+      // one key's versions are few (one upload, or a few sent again under the same policy); list again until none
+      for (let round = 0; round < 10; round += 1) {
+        const listed = await client.send(new ListObjectVersionsCommand({ Bucket, Prefix: key }));
+        const versions = [...(listed.Versions ?? []), ...(listed.DeleteMarkers ?? [])].filter(
+          (version) => version.Key === key && version.VersionId,
+        );
+        if (versions.length === 0) return removed;
+        for (const version of versions) {
+          await client.send(new DeleteObjectCommand({ Bucket, Key: key, VersionId: version.VersionId }));
+          removed += 1;
+        }
+      }
+      throw new Error(`The versions of ${key} were not all deleted.`);
     },
     async presignGet({ key, versionId, contentType, disposition, expiresSeconds }) {
       return getSignedUrl(
@@ -84,7 +117,7 @@ export function s3Store(config: StorageConfig, client: S3Client = s3Client(confi
         new GetObjectCommand({
           Bucket,
           Key: key,
-          ...(versionId ? { VersionId: versionId } : {}),
+          VersionId: versionId,
           ResponseContentType: contentType,
           ResponseContentDisposition: disposition,
         }),
@@ -93,8 +126,9 @@ export function s3Store(config: StorageConfig, client: S3Client = s3Client(confi
     },
     async ready() {
       try {
-        await client.send(new HeadBucketCommand({ Bucket }));
-        return true;
+        // a bucket without versioning would lose the version every asset is pinned to (plan §6.2)
+        const versioning = await client.send(new GetBucketVersioningCommand({ Bucket }));
+        return versioning.Status === "Enabled";
       } catch {
         return false;
       }

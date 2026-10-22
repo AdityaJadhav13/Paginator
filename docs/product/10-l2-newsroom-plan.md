@@ -924,21 +924,21 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 - Encryption is SSE-S3. SSE-KMS is optional; it costs per request, so it is the owner's choice.
 
 **As built (PR 18):**
-- **Uploads wait under `uploads/orgs/<org>/pubs/<pub>/<upload>`**, not under the organisation's prefix: a lifecycle rule can match a key's start only, so quarantine needs a prefix of its own (`uploads/`, deleted after a day). Completed uploads are copied out to `orgs/<org>/pubs/<pub>/assets/<asset>/original`. Both keys are computed by the database from ids.
+- **Uploads wait under `uploads/orgs/<org>/pubs/<pub>/<upload>`**, not under the organisation's prefix: a lifecycle rule can match a key's start only, so quarantine needs a prefix of its own (`uploads/`). The API deletes every version of a completed or refused upload by its VersionId; the bucket's rules expire what is left a day after it arrives, remove the old version a day later, and remove a delete marker left alone (`UPLOADS_LIFECYCLE` in `src/storage/s3.ts`). Completed uploads are copied out to `orgs/<org>/pubs/<pub>/assets/<asset>/original`. Both keys are computed by the database from ids.
 - **One asset per picture and publication** (`(org_id, publication_id, sha256)`), not per organisation: a photo found in another publication would tell a reporter it is there.
-- **The daily 2 GB** is counted in `app.upload_quota`, under the organisation wall only, under a row lock.
+- **The daily 2 GB** is counted in `app.upload_quota`, under the organisation wall only, under a row lock. The 60 uploads an hour are counted after taking that lock, so requests at once cannot pass the limit together. The quota is charged the declared size, and the policy takes exactly that size (below).
 
 ### 6.2 Presigned uploads
 
 1. **Presign.** `POST /uploads` checks the type (JPEG, PNG, WebP) and size, writes an `upload` row, and returns a presigned **POST** (@aws-sdk/s3-presigned-post 3.1152.0) valid for 15 minutes:
    - exact key;
-   - `content-length-range` from 1 byte to 40 MB;
+   - `content-length-range` of exactly the declared size (at most 40 MB; as built, PR 18: the size the quota counts), and complete refuses an object of another size;
    - Content-Type pinned;
    - `x-amz-meta-upload-id`.
    POST is used rather than PUT so that S3 itself enforces the size limit.
 2. **Upload.** The browser or phone uploads straight to S3, with a progress bar and retry. On phones: `accept="image/jpeg,image/png,image/webp"` with `capture="environment"`. Whether iOS converts HEIC to JPEG for this input is to verify on the newsroom's phones.
 3. **Complete.** `POST /uploads/{u}/complete`:
-   - L2.1: the API reads the whole object once (at most 40 MB): its SHA-256 (for deduplication and the object's metadata), its type from its magic bytes, and its width and height from the format's own header in its first 2 MB (our own small reader, no image library). A ranged GET of 32 bytes, as first planned, gives neither the hash nor the size. It reads and copies the same object version, so a second upload under the still-valid policy changes nothing. HEIC and AVIF are refused (422 `not_a_picture`) for now. The asset is created as `received`.
+   - L2.1: the API reads the whole object once (at most 40 MB): its SHA-256 (for deduplication and the object's metadata), its type from its magic bytes, and its width and height from the format's own header (our own small reader, no image library; a JPEG's markers are walked through the whole file, since its EXIF can fill several MB before the frame). A ranged GET of 32 bytes, as first planned, gives neither the hash nor the size. It reads and copies the version HeadObject named, and refuses to complete when the store names none (an unversioned bucket; `/readyz` reports the bucket failing unless its versioning is Enabled). Then it deletes every version of the quarantine key, so a file sent again under the still-valid policy is not kept either. A side over 100000 pixels is refused. HEIC and AVIF are refused (422 `not_a_picture`) for now. The asset is created as `received`.
    - L2.2 onward: the API also defers `media.ingest`, and the worker decides `ready` or `rejected`.
 4. **The original is never altered.** EXIF (including GPS) stays only in the original; renditions drop all metadata, as the Desk's do.
 
@@ -955,15 +955,17 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 ### 6.4 Downloads
 
 - 5-minute presigned GET, tied to the object's VersionId, with `response-content-type` set from the sniffed type and `response-content-disposition`.
+- **As built (PR 18):** `GET …/assets/{a}/file` answers 302 (`Cache-Control: no-store`) with a file name from the picture's Desk id, never the uploader's. A full `media.view` downloads every picture of the publication; a Reporter's ◐ only the ones they uploaded or that are the photo of one of their stories (404 otherwise); Advertising has no `media.view` (403). `variant=preview` answers 404 until renditions (L2.2).
+- **A story's photo** (`PUT/PATCH/DELETE …/stories/{s}/photo`, permission `media.upload`): whoever edits the story, or a Photo Editor of the publication on any story they see but a spiked one; a picture of the same publication only; each is a change of the story on its version (`baseRevision`), its caption and credit cleaned as the Desk cleans text. `DELETE` takes the base as `?baseRevision=`.
 - Page PDFs and previews of unpublished pages are linked only through authorised API redirects (doc 15 §10, item 10).
 
 ### 6.5 Local development
 
 - **SeaweedFS 4.48** (Apache-2.0; the same software as the VPS option) runs `weed server -s3` on 127.0.0.1:58333.
 - `apps/api/scripts/dev-buckets.ts` creates the buckets: versioning on, and Object Lock enabled at creation on the archive bucket, because SeaweedFS needs it at creation.
-- **Unit tests** use an in-memory object-store fake. **Integration tests** use SeaweedFS.
+- **As built (PR 18): there is no in-memory fake.** `src/storage/s3.ts` is the only object store; the unit tests need none (they test `picture.ts` on bytes), and the database tests use SeaweedFS. Keys are built by the database from ids (`app.upload.key`, `app.asset.original_key`), not by a `keys.ts`.
 - **One staging check on real S3** in L2.1 covers POST policy conditions and checksums.
-- **SeaweedFS 4.48, as tested (PR 18):** it enforces every POST policy condition (size, exact key, Content-Type, metadata, expiry); it versions objects and serves a version by its VersionId through a presigned GET with the response headers set; Object Lock is enabled at bucket creation; it accepts the `uploads/` lifecycle rule, but whether it deletes after a day was not observable in a test (11-fix-before-launch). The database tests use a bucket of their own per run.
+- **SeaweedFS 4.48, as tested (PR 18):** it enforces every POST policy condition (an exact size, one byte more or less refused; exact key; Content-Type; the upload id's metadata, changed or left out; expiry, with a 1-second policy); it versions objects and serves a version by its VersionId through a presigned GET with the response headers set; Object Lock is enabled at bucket creation; it accepts the `uploads/` lifecycle rules and gives them back, but whether it deletes after a day was not observable in a test (11-fix-before-launch); it deletes a version by its VersionId, leaving no delete marker. The database tests use a bucket of their own per run.
 
 ---
 

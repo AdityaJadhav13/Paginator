@@ -121,13 +121,15 @@ export async function findAsset(tx: Tx, publicationId: string, assetId: string):
     .executeTakeFirst()) as AssetRow | undefined;
 }
 
-/** The publication's asset with these bytes, if any (one asset per picture and publication). */
+/** The publication's asset with these bytes, if any (one asset per picture and publication; a rejected one is not
+ * found, and the same bytes sent again make a new asset). */
 export async function assetWithBytes(tx: Tx, publicationId: string, sha256: string): Promise<AssetRow | undefined> {
   return (await tx
     .selectFrom("app.asset")
     .select(ASSET)
     .where("publication_id", "=", publicationId)
     .where("sha256", "=", sha256)
+    .where("status", "!=", "rejected")
     .where("deleted_at", "is", null)
     .executeTakeFirst()) as AssetRow | undefined;
 }
@@ -156,11 +158,26 @@ export async function createAsset(
     .executeTakeFirstOrThrow()) as AssetRow;
 }
 
-export async function setAssetVersion(tx: Tx, publicationId: string, assetId: string, versionId: string | undefined) {
+export async function setAssetVersion(tx: Tx, publicationId: string, assetId: string, versionId: string) {
   await tx
     .updateTable("app.asset")
-    .set({ version_id: versionId ?? null, updated_at: sql`now()` })
+    .set({ version_id: versionId, updated_at: sql`now()` })
     .where("publication_id", "=", publicationId)
     .where("id", "=", assetId)
     .execute();
+}
+
+/** Whether the person completed an upload that became this asset (theirs, though the bytes were someone else's
+ * first: one asset per picture and publication). */
+export async function uploadedBy(tx: Tx, publicationId: string, assetId: string, userId: string): Promise<boolean> {
+  const row = await tx
+    .selectFrom("app.upload")
+    .select("id")
+    .where("publication_id", "=", publicationId)
+    .where("asset_id", "=", assetId)
+    .where("user_id", "=", userId)
+    .where("status", "=", "completed")
+    .limit(1)
+    .executeTakeFirst();
+  return row !== undefined;
 }

@@ -1,7 +1,10 @@
-// Makes the development buckets on SeaweedFS (docs/product/10-l2-newsroom-plan.md §6.1, §6.5), and leaves them as
-// they are when they exist:
-//   - the work bucket, with versioning, and a lifecycle rule that deletes uploads/ after a day (uploads never
-//     completed; completed ones are copied out to their asset key);
+// Makes the development buckets on SeaweedFS (docs/product/10-l2-newsroom-plan.md §6.1, §6.5) when they are missing,
+// and sets the work bucket's versioning and rules each time:
+//   - the work bucket, with versioning, and a lifecycle rule for uploads/ (quarantine): a day after a file arrives it
+//     expires (a delete marker over it), a day later that old version is removed, and so is a delete marker left
+//     alone. The API deletes every version of a completed or refused upload itself (src/modules/media/uploads.ts);
+//     the rule takes what is left: uploads never completed, and files sent again under a policy after that.
+//     SeaweedFS 4.48 accepts the rule; whether it deletes was not observed (11-fix-before-launch);
 //   - the archive bucket, with Object Lock enabled at creation (SeaweedFS needs it then; releases use it from L2.5).
 // It prints what it did and what the store refused (SeaweedFS may not support every setting: see its output).
 import {
@@ -12,7 +15,7 @@ import {
   PutBucketVersioningCommand,
 } from "@aws-sdk/client-s3";
 import { ConfigError, loadStorageConfig } from "../src/config.ts";
-import { s3Client } from "../src/storage/s3.ts";
+import { UPLOADS_LIFECYCLE, s3Client } from "../src/storage/s3.ts";
 
 let storage;
 try {
@@ -58,19 +61,12 @@ await make(workBucket, false);
 await setting("versioning", () =>
   client.send(new PutBucketVersioningCommand({ Bucket: workBucket, VersioningConfiguration: { Status: "Enabled" } })),
 );
-await setting("uploads/ deleted after a day", () =>
+await setting("uploads/ expired after a day, old versions and lone delete markers removed", () =>
   client.send(
     new PutBucketLifecycleConfigurationCommand({
       Bucket: workBucket,
       LifecycleConfiguration: {
-        Rules: [
-          {
-            ID: "uploads-one-day",
-            Status: "Enabled",
-            Filter: { Prefix: "uploads/" },
-            Expiration: { Days: 1 },
-          },
-        ],
+        Rules: UPLOADS_LIFECYCLE,
       },
     }),
   ),

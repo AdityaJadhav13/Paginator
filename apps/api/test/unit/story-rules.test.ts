@@ -3,7 +3,14 @@
 import type { PublicationRole, StoryStatus } from "@pageinator/contracts";
 import { describe, expect, it } from "vitest";
 import type { Access } from "../../src/modules/access/access.ts";
-import { canDelete, canEdit, storyScope, transitionsFor } from "../../src/modules/stories/rules.ts";
+import {
+  canAttachPhoto,
+  canDelete,
+  canEdit,
+  mediaScope,
+  storyScope,
+  transitionsFor,
+} from "../../src/modules/stories/rules.ts";
 
 const PUB = "01900000-0000-7000-8000-000000000a11";
 const ME = "01900000-0000-7000-8000-000000000001";
@@ -70,5 +77,21 @@ describe("story rules", () => {
     expect(canDelete(reporter, PUB, story("filed"), ME)).toBe(false);
     expect(canEdit(as("member", ["editor"]), PUB, story("spiked", OTHER), ME)).toBe(false);
     expect(canEdit(as("member", ["page_designer"]), PUB, story("draft", OTHER), ME)).toBe(false);
+  });
+
+  it("lets a Photo Editor give any story they see its photo, but a spiked one; others as they edit", () => {
+    const photo = as("member", ["photo_editor"]);
+    expect(canAttachPhoto(photo, PUB, story("ready", OTHER), ME)).toBe(true);
+    expect(canAttachPhoto(photo, PUB, story("spiked", OTHER), ME)).toBe(false);
+    expect(canAttachPhoto(as("member", ["reporter"]), PUB, story("draft"), ME)).toBe(true);
+    expect(canAttachPhoto(as("member", ["reporter"]), PUB, story("ready"), ME)).toBe(false);
+    expect(canAttachPhoto(as("member", ["viewer"]), PUB, story("draft", OTHER), ME)).toBe(false);
+  });
+
+  it("scopes downloads: all with a full media.view, a Reporter's own, none for Advertising", () => {
+    expect(mediaScope(as("member", ["viewer"]), PUB)).toBe("all");
+    expect(mediaScope(as("member", ["reporter"]), PUB)).toBe("own");
+    expect(mediaScope(as("member", ["advertising"]), PUB)).toBe("none");
+    expect(mediaScope(as("admin"), PUB)).toBe("all");
   });
 });

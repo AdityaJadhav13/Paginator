@@ -18,6 +18,7 @@ import { registerIdentity } from "./modules/identity/plugin.ts";
 import { type Mailer, type Transport, openMailer, smtpTransport } from "./modules/notifications/mailer.ts";
 import { peopleRoutes } from "./modules/people/plugin.ts";
 import { storyRoutes } from "./modules/stories/routes.ts";
+import { photoRoutes } from "./modules/media/photos.ts";
 import { uploadRoutes } from "./modules/media/uploads.ts";
 import { closeWhenStopping } from "./shutdown.ts";
 import type { ObjectStore } from "./storage/object-store.ts";
@@ -96,7 +97,10 @@ export async function buildApp(deps: AppDeps) {
     await app.register(peopleRoutes, { ...people, config });
     await app.register(storyRoutes, { database: people.database });
     // photos need the object store as well: without its settings their routes are not there
-    if (store) await app.register(uploadRoutes, { database: people.database, store });
+    if (store) {
+      await app.register(uploadRoutes, { database: people.database, store });
+      await app.register(photoRoutes, { database: people.database, store });
+    }
   }
   return app;
 }

@@ -617,19 +617,24 @@ describe("tenancy (c): every stories endpoint with another tenant's ids answers 
           return params[name] ?? "";
         });
         const payload =
-          route.method === "PATCH"
-            ? { baseRevision: 1, body: "intruder" }
-            : url.endsWith("/transitions")
-              ? { to: "held", baseRevision: 1 }
-              : url.endsWith("/assignee")
-                ? { baseRevision: 1, userId: null }
-                : url.endsWith("/paste")
-                  ? { text: "Headline\nBody" }
-                  : route.method === "POST"
-                    ? { headline: "Intruder" }
-                    : undefined;
+          route.method === "PUT"
+            ? { baseRevision: 1, assetId: randomUUID() }
+            : route.method === "PATCH" && url.endsWith("/photo")
+              ? { baseRevision: 1, caption: "intruder" }
+              : route.method === "PATCH"
+                ? { baseRevision: 1, body: "intruder" }
+                : url.endsWith("/transitions")
+                  ? { to: "held", baseRevision: 1 }
+                  : url.endsWith("/assignee")
+                    ? { baseRevision: 1, userId: null }
+                    : url.endsWith("/paste")
+                      ? { text: "Headline\nBody" }
+                      : route.method === "POST"
+                        ? { headline: "Intruder" }
+                        : undefined;
         // the Owner of A reaches all of A: only another tenant's ids stand in the way
-        const res = await change(route.method as "GET", url, d.a.ownerCookie, payload);
+        const target = route.method === "DELETE" && url.endsWith("/photo") ? `${url}?baseRevision=1` : url;
+        const res = await change(route.method as "GET", target, d.a.ownerCookie, payload);
         const isCollection = !route.url.includes(":s");
         const sameTenant = c.o === d.a.orgId && c.p === d.a.pubId;
         if (isCollection && sameTenant) continue; // A's own collection: the story id plays no part

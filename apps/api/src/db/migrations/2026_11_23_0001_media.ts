@@ -63,10 +63,13 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       foreign key (org_id, publication_id) references app.publication (org_id, id),
       foreign key (org_id, uploaded_by) references app.person (org_id, user_id)
     );
-    create unique index asset_one_per_bytes on app.asset (org_id, publication_id, sha256) where deleted_at is null;
+    create unique index asset_one_per_bytes on app.asset (org_id, publication_id, sha256)
+      where deleted_at is null and status <> 'rejected';
 
     alter table app.upload add constraint upload_asset_fkey
       foreign key (org_id, publication_id, asset_id) references app.asset (org_id, publication_id, id);
+    -- who completed an upload into an asset (a download of "their" picture), and the foreign key's lookups
+    create index upload_asset on app.upload (org_id, publication_id, asset_id) where asset_id is not null;
     alter table app.story_photo add constraint story_photo_asset_fkey
       foreign key (org_id, publication_id, asset_id) references app.asset (org_id, publication_id, id);
 
