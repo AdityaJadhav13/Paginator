@@ -7,6 +7,31 @@ export type Generated<T> =
 export type Json = ColumnType<JsonValue, string, string>;
 export type JsonValue = JsonValue[] | { [key: string]: JsonValue } | boolean | number | string | null;
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
+/** A column the database computes (generated always): read only. */
+export type GeneratedAlways<T> = ColumnType<T, never, never>;
+
+export interface AppAsset {
+  bytes: number;
+  caption: Generated<string>;
+  created_at: Generated<Timestamp>;
+  credit: Generated<string>;
+  deleted_at: Timestamp | null;
+  desk_key: string;
+  height_px: number;
+  id: Generated<string>;
+  kind: Generated<string>;
+  mime: string;
+  org_id: string;
+  original_key: GeneratedAlways<string>;
+  photographer: Generated<string>;
+  publication_id: string;
+  sha256: string;
+  status: Generated<string>;
+  updated_at: Generated<Timestamp>;
+  uploaded_by: string;
+  version_id: string | null;
+  width_px: number;
+}
 
 export interface AppAuditEvent {
   action: string;
@@ -214,7 +239,30 @@ export interface AppStoryStatusChange {
   to_status: string;
 }
 
+export interface AppUpload {
+  asset_id: string | null;
+  completed_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  declared_bytes: number;
+  declared_type: string;
+  expires_at: Timestamp;
+  id: Generated<string>;
+  key: GeneratedAlways<string>;
+  org_id: string;
+  publication_id: string;
+  purpose: string;
+  status: Generated<string>;
+  user_id: string;
+}
+
+export interface AppUploadQuota {
+  bytes: Generated<string>;
+  day: string;
+  org_id: string;
+}
+
 export interface DB {
+  "app.asset": AppAsset;
   "app.audit_event": AppAuditEvent;
   "app.comment": AppComment;
   "app.desk_bundle": AppDeskBundle;
@@ -231,4 +279,6 @@ export interface DB {
   "app.story_photo": AppStoryPhoto;
   "app.story_revision": AppStoryRevision;
   "app.story_status_change": AppStoryStatusChange;
+  "app.upload": AppUpload;
+  "app.upload_quota": AppUploadQuota;
 }

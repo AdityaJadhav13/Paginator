@@ -58,6 +58,8 @@ export type Generated<T> =
 export type Json = ColumnType<JsonValue, string, string>;
 export type JsonValue = JsonValue[] | { [key: string]: JsonValue } | boolean | number | string | null;
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
+/** A column the database computes (generated always): read only. */
+export type GeneratedAlways<T> = ColumnType<T, never, never>;
 `;
 
 function byName(a: string, b: string): number {
@@ -66,12 +68,12 @@ function byName(a: string, b: string): number {
 
 function typeOf(column: Column): string {
   const where = `app.${column.table}.${column.column}`;
-  if (column.generated) throw new Error(`${where}: generated columns have no mapping yet (src/db/codegen.ts)`);
   const mapped = column.element === null ? TYPES[column.type] : TYPES[column.element];
   const name = column.element === null ? column.type : `${column.element}[]`;
   if (mapped === undefined) throw new Error(`${where}: the type ${name} has no mapping yet (src/db/codegen.ts)`);
   const type = column.element === null ? mapped : `${mapped}[]`;
   const nullable = column.notNull ? type : `${type} | null`;
+  if (column.generated) return `GeneratedAlways<${nullable}>`;
   return column.hasDefault ? `Generated<${nullable}>` : nullable;
 }
 

@@ -79,17 +79,17 @@ const BASE = "/api/v1/orgs/:o/pubs/:p/stories";
 export type StoryOptions = { database: Database };
 
 /** A refusal by the story rules, with why (audited by the plugin's onError hook). */
-function refused(reason: string): ApiError {
+export function refused(reason: string): ApiError {
   return Object.assign(new ApiError("not_allowed"), { reason });
 }
 
-const factsOf = (row: { status: string; reporter_id: string; assignee_id: string | null }): StoryFacts => ({
+export const factsOf = (row: { status: string; reporter_id: string; assignee_id: string | null }): StoryFacts => ({
   status: row.status as StoryStatus,
   reporterId: row.reporter_id,
   assigneeId: row.assignee_id,
 });
 
-function view(row: StoryRow, access: Access, userId: string): Story {
+export function view(row: StoryRow, access: Access, userId: string): Story {
   const facts = factsOf(row);
   const pub = row.publication_id;
   return {
@@ -105,7 +105,7 @@ function view(row: StoryRow, access: Access, userId: string): Story {
     body: row.body,
     bodyFormat: BODY_FORMAT,
     words: row.words,
-    isBrief: isBrief({ body: row.body, photo: null }),
+    isBrief: isBrief({ body: row.body, photo: row.photo_asset_id }),
     language: row.language,
     sectionId: row.section_id,
     priority: row.priority,
@@ -115,7 +115,18 @@ function view(row: StoryRow, access: Access, userId: string): Story {
     assignee: row.assignee_id ? { id: row.assignee_id, name: row.assignee_name ?? "" } : null,
     dueAt: row.due_at ? row.due_at.toISOString() : null,
     deskNote: row.desk_note,
-    photo: null,
+    photo:
+      row.photo_asset_id && row.photo_status && row.photo_width && row.photo_height
+        ? {
+            assetId: row.photo_asset_id,
+            caption: row.photo_caption ?? "",
+            credit: row.photo_credit ?? "",
+            status: row.photo_status,
+            widthPx: row.photo_width,
+            heightPx: row.photo_height,
+            previewUrl: null, // previews come with renditions (L2.2)
+          }
+        : null,
     commentCount: row.comment_count,
     updatedAt: row.updated_at.toISOString(),
     updatedBy: { id: row.updated_by, name: row.updated_by_name },
@@ -157,7 +168,7 @@ async function visible(tx: Tx, access: Access, pub: string, id: string, userId: 
 }
 
 /** The story locked for a change on the given base; 404 when unseen, 409 story_changed when it moved on. */
-async function forChange(tx: Tx, access: Access, pub: string, id: string, userId: string, base: number) {
+export async function forChange(tx: Tx, access: Access, pub: string, id: string, userId: string, base: number) {
   const locked = UUID.test(id) ? await lockStory(tx, pub, id) : undefined;
   if (!locked || !sees(access, pub, factsOf(locked), userId)) throw new ApiError("not_found");
   if (base !== locked.version) {

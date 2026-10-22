@@ -2,6 +2,7 @@
 // is cleaned as the Desk cleans it (@pageinator/desk-text cleanText) by the API; these schemas bound the shapes only.
 // Objects are strict, and responses are sent through these schemas.
 import { z } from "zod";
+import { StoryPhoto } from "./media.ts";
 
 const Id = z.uuid();
 const Moment = z.iso.datetime({ offset: true });
@@ -53,7 +54,7 @@ export const Story = z.strictObject({
   assignee: Person.nullable(),
   dueAt: Moment.nullable(),
   deskNote: z.string(),
-  photo: z.null(), // the photo arrives with PR 18
+  photo: StoryPhoto.nullable(),
   commentCount: z.number().int().min(0),
   updatedAt: Moment,
   updatedBy: Person,

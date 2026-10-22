@@ -206,9 +206,12 @@ describe("the first Owner (scripts/bootstrap-org.ts)", () => {
     const verifyLink = it_.sent
       .find((m) => m.to === email && m.subject.includes("Confirm"))
       ?.text.match(/https:\S+/)?.[0];
-    await it_.app.inject({
+    // the link carries the web app's confirmation page, and lands there (F8)
+    expect(new URL(verifyLink ?? "", ORIGIN).searchParams.get("callbackURL")).toBe("/verify?confirmed=1");
+    const confirmed = await it_.app.inject({
       url: new URL(verifyLink ?? "", ORIGIN).pathname + new URL(verifyLink ?? "", ORIGIN).search,
     });
+    expect([confirmed.statusCode, confirmed.headers.location]).toEqual([302, "/verify?confirmed=1"]);
     const cookie = await session(email);
     const me = await call("GET", "/api/v1/me", cookie);
     expect(me.json().memberships).toEqual([

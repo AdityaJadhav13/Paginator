@@ -40,6 +40,10 @@ catalog:
   # session-revocation fixes (#11626, #11646); later 1.7.x releases fix nothing our configuration uses but #11521,
   # which src/db/pools.ts works around.
   better-auth: "1.7.8"
+  # S3 (plan §6, PR 18): 3.1152.0, the newest release at least 7 days old on 2026-10-22 (3.1153.0 is younger)
+  "@aws-sdk/client-s3": "3.1152.0"
+  "@aws-sdk/s3-presigned-post": "3.1152.0"
+  "@aws-sdk/s3-request-presigner": "3.1152.0"
 
 overrides:
   typescript: "npm:@typescript/typescript6@6.0.2"

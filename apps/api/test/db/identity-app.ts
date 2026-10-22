@@ -8,6 +8,8 @@ import { type Config, loadConfig } from "../../src/config.ts";
 import { type Database, openDatabase } from "../../src/db/pools.ts";
 import { type Auth, createAuth } from "../../src/modules/identity/auth.ts";
 import { type Transport, openMailer } from "../../src/modules/notifications/mailer.ts";
+import type { ObjectStore } from "../../src/storage/object-store.ts";
+import { s3Store } from "../../src/storage/s3.ts";
 import type { TestDatabase } from "./helpers.ts";
 
 export const ORIGIN = "https://app.example.test";
@@ -27,8 +29,14 @@ export type IdentityApp = {
   close(): Promise<void>;
 };
 
-export async function identityApp(db: TestDatabase, env: Record<string, string> = {}): Promise<IdentityApp> {
+export async function identityApp(
+  db: TestDatabase,
+  env: Record<string, string> = {},
+  /** Changes what the run's object store answers (a store that misbehaves) */
+  storeOf?: (store: ObjectStore) => ObjectStore,
+): Promise<IdentityApp> {
   const run = inject("database");
+  const storage = inject("storage");
   const config = loadConfig({
     PGN_LOG_LEVEL: "silent",
     PGN_ALLOWED_ORIGINS: ORIGIN,
@@ -39,6 +47,10 @@ export async function identityApp(db: TestDatabase, env: Record<string, string> 
     PGN_AUTH_PASSWORD: run.passwords.auth,
     PGN_LISTEN_PASSWORD: run.passwords.listen,
     PGN_AUTH_SECRET: SECRET,
+    PGN_S3_ENDPOINT: storage.endpoint,
+    PGN_S3_ACCESS_KEY_ID: storage.accessKeyId,
+    PGN_S3_SECRET_ACCESS_KEY: storage.secretAccessKey,
+    PGN_S3_WORK_BUCKET: storage.bucket,
     ...env,
   });
   const sent: Sent[] = [];
@@ -47,7 +59,8 @@ export async function identityApp(db: TestDatabase, env: Record<string, string> 
     close: () => undefined,
   };
   const database = openDatabase(config.database);
-  const app = await buildApp({ config, database, mailTransport: transport, checks: {} });
+  const store = storeOf && config.storage ? storeOf(s3Store(config.storage)) : undefined;
+  const app = await buildApp({ config, database, mailTransport: transport, checks: {}, ...(store ? { store } : {}) });
   const quiet = { warn: () => undefined, error: () => undefined };
   const mailer = openMailer(config.mail, transport, () => undefined);
   const serverDatabase = openDatabase(config.database);

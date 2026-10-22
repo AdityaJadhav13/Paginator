@@ -54,3 +54,16 @@ export {
   StoryTransition,
   TransitionTarget,
 } from "./stories.ts";
+export {
+  Asset,
+  CompletedUpload,
+  FileQuery,
+  MAX_PICTURE_BYTES,
+  PICTURE_TYPES,
+  PictureType,
+  PresignedUpload,
+  StoryPhoto,
+  StoryPhotoInput,
+  StoryPhotoPatch,
+  UploadRequest,
+} from "./media.ts";

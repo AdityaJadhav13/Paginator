@@ -11,7 +11,7 @@ export const PASSWORD = "काल्पनिकनगर correct horse";
 
 export type Org = { orgId: string; pubId: string; owner: string; ownerCookie: string };
 export type Person = { email: string; id: string; cookie: string };
-export type Method = "GET" | "POST" | "PATCH" | "DELETE";
+export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 /** An answer of the app's inject(). */
 export type Reply = Awaited<ReturnType<IdentityApp["app"]["inject"]>>;
@@ -64,7 +64,7 @@ export function newsroom(it_: () => IdentityApp, su: () => Client): Newsroom {
     headers: Record<string, string> = {},
   ): Promise<Reply> {
     const { "content-type": json, ...rest } = FROM_APP;
-    const body = payload !== undefined || method === "POST" || method === "PATCH";
+    const body = payload !== undefined || method === "POST" || method === "PUT" || method === "PATCH";
     return it_().app.inject({
       method,
       url,

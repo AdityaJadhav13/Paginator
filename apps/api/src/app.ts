@@ -18,13 +18,19 @@ import { registerIdentity } from "./modules/identity/plugin.ts";
 import { type Mailer, type Transport, openMailer, smtpTransport } from "./modules/notifications/mailer.ts";
 import { peopleRoutes } from "./modules/people/plugin.ts";
 import { storyRoutes } from "./modules/stories/routes.ts";
+import { photoRoutes } from "./modules/media/photos.ts";
+import { uploadRoutes } from "./modules/media/uploads.ts";
 import { closeWhenStopping } from "./shutdown.ts";
+import type { ObjectStore } from "./storage/object-store.ts";
+import { s3Store } from "./storage/s3.ts";
 
 export type AppDeps = {
   config: Config;
   /** The database, opened by main.ts (src/db/pools.ts): the app logs its connections' errors and closes it when the
    * app closes. With it, sign-in is on (/api/auth/*). Tests that need no database leave it out. */
   database?: Database;
+  /** The object store: by default the one of the settings (PGN_S3_*), when they name a key pair. */
+  store?: ObjectStore;
   /** Where email goes: by default the SMTP server of the settings (Mailpit in development); tests catch it. */
   mailTransport?: Transport;
   /** Dependency checks for /readyz; a dependency without one is reported as not configured. */
@@ -83,10 +89,18 @@ export async function buildApp(deps: AppDeps) {
   const app = fastify.withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
-  await app.register(health, { checks: deps.checks });
+  const store = deps.store ?? (config.storage ? s3Store(config.storage) : undefined);
+  await app.register(health, {
+    checks: { ...(store ? { storage: () => store.ready() } : {}), ...deps.checks },
+  });
   if (people) {
     await app.register(peopleRoutes, { ...people, config });
     await app.register(storyRoutes, { database: people.database });
+    // photos need the object store as well: without its settings their routes are not there
+    if (store) {
+      await app.register(uploadRoutes, { database: people.database, store });
+      await app.register(photoRoutes, { database: people.database, store });
+    }
   }
   return app;
 }

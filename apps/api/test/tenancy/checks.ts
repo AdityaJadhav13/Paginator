@@ -39,6 +39,10 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   story_photo: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   story_revision: ["INSERT", "SELECT", "UPDATE"],
   story_status_change: ["INSERT", "SELECT"],
+  // photo originals (migration 2026_11_23_0001): an asset is soft-deleted, an upload only changes state
+  asset: ["INSERT", "SELECT", "UPDATE"],
+  upload: ["INSERT", "SELECT", "UPDATE"],
+  upload_quota: ["INSERT", "SELECT", "UPDATE"],
   publication_grant: ["DELETE", "INSERT", "SELECT", "UPDATE"],
 };
 
