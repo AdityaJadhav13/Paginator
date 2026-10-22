@@ -10,7 +10,16 @@ export type Pub = {
   primary_language: string;
   digit_style: string;
 };
-export type Org = { id: string; name: string; user: string; person: string; email: string; pubs: [Pub, ...Pub[]] };
+export type Org = {
+  id: string;
+  name: string;
+  user: string;
+  person: string;
+  email: string;
+  /** An invitation's id (Better Auth's, in identity; app keeps only the id). */
+  invitation: string;
+  pubs: [Pub, ...Pub[]];
+};
 
 const id = (tail: string) => `01900000-0000-7000-8000-${tail.padStart(12, "0")}`;
 
@@ -20,6 +29,7 @@ export const ORG_A: Org = {
   user: id("a01"),
   person: "Reporter A (fictional)",
   email: "reporter.a@example.test",
+  invitation: id("a21"),
   pubs: [
     {
       id: id("a11"),
@@ -46,6 +56,7 @@ export const ORG_B: Org = {
   user: id("b01"),
   person: "Reporter B (fictional)",
   email: "reporter.b@example.test",
+  invitation: id("b21"),
   pubs: [
     {
       id: id("b11"),
@@ -76,6 +87,22 @@ export const FIXTURES: Fixture[] = [
     table: "person",
     per: "org",
     row: (org) => ({ org_id: org.id, user_id: org.user, display_name: org.person, email: org.email }),
+  },
+  {
+    table: "publication_grant",
+    per: "publication",
+    row: (org, pub) => ({ org_id: org.id, publication_id: pub.id, user_id: org.user, roles: ["reporter"] }),
+  },
+  {
+    table: "invitation_grant",
+    per: "publication",
+    row: (org, pub) => ({
+      org_id: org.id,
+      invitation_id: org.invitation,
+      publication_id: pub.id,
+      roles: ["editor"],
+      grants: ["page_approve"],
+    }),
   },
   {
     table: "audit_event",

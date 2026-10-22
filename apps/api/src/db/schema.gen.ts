@@ -90,6 +90,16 @@ export interface AppIdempotencyKey {
   user_id: string;
 }
 
+export interface AppInvitationGrant {
+  applied_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  grants: Generated<string[]>;
+  invitation_id: string;
+  org_id: string;
+  publication_id: string;
+  roles: string[];
+}
+
 export interface AppOrgSettings {
   created_at: Generated<Timestamp>;
   data_region: Generated<string>;
@@ -118,6 +128,15 @@ export interface AppPublication {
   primary_language: string;
   slug: string;
   timezone: Generated<string>;
+}
+
+export interface AppPublicationGrant {
+  grants: Generated<string[]>;
+  org_id: string;
+  publication_id: string;
+  roles: string[];
+  updated_at: Generated<Timestamp>;
+  user_id: string;
 }
 
 export interface AppSection {
@@ -200,9 +219,11 @@ export interface DB {
   "app.desk_bundle_revision": AppDeskBundleRevision;
   "app.edition": AppEdition;
   "app.idempotency_key": AppIdempotencyKey;
+  "app.invitation_grant": AppInvitationGrant;
   "app.org_settings": AppOrgSettings;
   "app.person": AppPerson;
   "app.publication": AppPublication;
+  "app.publication_grant": AppPublicationGrant;
   "app.section": AppSection;
   "app.story": AppStory;
   "app.story_photo": AppStoryPhoto;

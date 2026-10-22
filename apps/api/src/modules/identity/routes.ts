@@ -9,10 +9,14 @@ import type { Auth } from "./auth.ts";
 import { authHeaders } from "./headers.ts";
 import type { SessionResolver } from "./session.ts";
 
-/** Whether a request is for social sign-in's callback (/callback/:id), which Better Auth's disabledPaths cannot name
- * because of its path parameter. The path is read loosely (decoded, repeated and trailing slashes dropped), so that no
- * spelling of it reaches Better Auth's router. */
-function isSocialCallback(url: string, origin: string): boolean {
+/** Path prefixes under /api/auth that we do not offer, on top of Better Auth's disabledPaths (auth.ts): social
+ * sign-in's callback (/callback/:id, whose path parameter disabledPaths cannot name), and every organization route
+ * (our /api/v1 endpoints check our permissions, then call Better Auth from the server). */
+const NOT_OFFERED = ["/api/auth/callback", "/api/auth/organization"];
+
+/** The path is read loosely (decoded, repeated and trailing slashes dropped), so that no spelling of it reaches
+ * Better Auth's router. */
+function notOffered(url: string, origin: string): boolean {
   let path = new URL(url, origin).pathname;
   try {
     path = decodeURIComponent(path);
@@ -20,7 +24,7 @@ function isSocialCallback(url: string, origin: string): boolean {
     // a malformed escape: read as it is
   }
   path = path.replace(/\/{2,}/g, "/").replace(/\/+$/, "");
-  return path === "/api/auth/callback" || path.startsWith("/api/auth/callback/");
+  return NOT_OFFERED.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
 export const identityRoutes: FastifyPluginAsync<{ auth: Auth; origin: string; sessions: SessionResolver }> = async (
@@ -31,7 +35,7 @@ export const identityRoutes: FastifyPluginAsync<{ auth: Auth; origin: string; se
     method: ["GET", "POST"],
     url: "/api/auth/*",
     handler: async (request, reply) => {
-      if (isSocialCallback(request.url, origin)) throw new ApiError("not_found");
+      if (notOffered(request.url, origin)) throw new ApiError("not_found");
       const headers = authHeaders(request);
       // the 30-day absolute limit holds for Better Auth's own endpoints too: an older session is ended first
       await sessions.endIfTooOld(headers);

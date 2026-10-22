@@ -12,6 +12,11 @@ import { REQUEST_ID_HEADER, requestId } from "./context.ts";
 const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
   invalid_request: { status: 400, message: "Some fields are not right." },
   signed_out: { status: 401, message: "You are signed out. Sign in again; what you typed is kept on this device." },
+  not_allowed: { status: 403, message: "Your role cannot do this. Ask an editor or the owner." },
+  two_step_required: {
+    status: 403,
+    message: "Your role needs two-step sign-in. Set it up in Account → Security.",
+  },
   bad_origin: { status: 403, message: "This request did not come from Pageinator." },
   not_found: { status: 404, message: "There is nothing here, or you do not have access to it." },
   request_too_large: { status: 413, message: "This request is too large." },

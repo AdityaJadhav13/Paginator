@@ -126,3 +126,54 @@ export function newSignInEmail(input: { name: string; at: Date; device: string }
     },
   ]);
 }
+
+/** How a role is named in an invitation (first drafts for the catalogue, PR 12). */
+const ROLE_NAMES: Record<string, { mr: string; en: string }> = {
+  admin: { mr: "प्रशासक", en: "Admin" },
+  member: { mr: "सदस्य", en: "Member" },
+  chief_editor: { mr: "मुख्य संपादक", en: "Chief Editor" },
+  editor: { mr: "संपादक", en: "Editor" },
+  sub_editor: { mr: "उपसंपादक", en: "Sub-editor" },
+  reporter: { mr: "वार्ताहर", en: "Reporter" },
+  page_designer: { mr: "पान रचनाकार", en: "Page Designer" },
+  photo_editor: { mr: "छायाचित्र संपादक", en: "Photo Editor" },
+  advertising: { mr: "जाहिरात", en: "Advertising" },
+  prepress: { mr: "प्रीप्रेस", en: "Prepress" },
+  viewer: { mr: "वाचक", en: "Viewer" },
+};
+
+export function invitationEmail(input: {
+  inviter: string;
+  organization: string;
+  roles: readonly string[];
+  url: string;
+  origin: string;
+}): Rendered {
+  const inviter = clean(input.inviter, 80);
+  const organization = clean(input.organization, 120);
+  const link = onOrigin(input.url, input.origin);
+  const named = (lang: "mr" | "en") => input.roles.map((role) => ROLE_NAMES[role]?.[lang] ?? role).join(", ");
+  return render("invitation", `Pageinator: ${organization} · आमंत्रण · Invitation`, [
+    {
+      lang: "mr",
+      paragraphs: [
+        `${inviter} यांनी तुम्हाला Pageinator वर ${organization} मध्ये (${named("mr")}) आमंत्रित केले आहे.`,
+        "आमंत्रण पाहण्यासाठी आणि खाते उघडण्यासाठी हा दुवा उघडा:",
+      ],
+      link,
+    },
+    {
+      lang: "mr",
+      paragraphs: ["हे आमंत्रण सात दिवसांत कालबाह्य होईल. तुम्हाला ते अपेक्षित नसेल, तर हा ईमेल दुर्लक्षित करा."],
+    },
+    {
+      lang: "en",
+      paragraphs: [
+        `${inviter} invited you to ${organization} on Pageinator, as ${named("en")}.`,
+        "Open this link to see the invitation and open your account:",
+      ],
+      link,
+    },
+    { lang: "en", paragraphs: ["The invitation expires in seven days. If you did not expect it, ignore this email."] },
+  ]);
+}

@@ -18,7 +18,7 @@ function fakeApi(createdAt: Date) {
       headers: new Headers([["set-cookie", "__Secure-pgn.session_token=refreshed; Path=/"]]),
       response: {
         session: { id: "s1", token: "t0k3n", createdAt, userId: "u1" },
-        user: { id: "u1", email: "reporter.a@example.test", emailVerified: true },
+        user: { id: "u1", name: "Reporter A (fictional)", email: "reporter.a@example.test", emailVerified: true },
       },
     }),
     revokeSession: async ({ body }) => void revoked.push(body.token),
@@ -40,8 +40,13 @@ describe("sessionResolver", () => {
       actor: {
         userId: "u1",
         sessionId: "s1",
+        name: "Reporter A (fictional)",
         email: "reporter.a@example.test",
         emailVerified: true,
+        twoFactorEnabled: false,
+        twoStep: false,
+        locale: "en",
+        uiDigits: "latin",
         signedInAt: new Date(NOW - ABSOLUTE_MS + 60_000),
       },
       setCookie: ["__Secure-pgn.session_token=refreshed; Path=/"],
@@ -74,6 +79,8 @@ describe("sessionResolver", () => {
   });
 });
 
+const unused = () => Promise.reject(new Error("not used by the guard"));
+
 function fakeStore() {
   const calls: unknown[][] = [];
   const store: IdentityStore = {
@@ -85,6 +92,21 @@ function fakeStore() {
     clearAttempts: async (...args) => void calls.push(["clearAttempts", ...args]),
     consumeRateLimit: async () => ({ allowed: true, retryAfter: null }),
     pruneRateLimits: async () => undefined,
+    invitationIsFor: unused,
+    membership: unused,
+    memberships: unused,
+    members: unused,
+    invitation: unused,
+    pendingInvitations: unused,
+    acceptedInvitations: unused,
+    addMember: unused,
+    setMemberRole: unused,
+    removeMember: unused,
+    undoAccept: unused,
+    markTwoStep: unused,
+    endOtherSessions: unused,
+    useTotpCode: unused,
+    releaseTotpCode: unused,
   };
   return { store, calls };
 }

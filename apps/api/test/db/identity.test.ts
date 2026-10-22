@@ -22,7 +22,9 @@ afterAll(async () => {
 beforeAll(async () => {
   it_ = await identityApp(db);
   su = await db.connect("postgres");
-  it_.app.get("/api/v1/test/whoami", { preHandler: signedIn }, async (request) => ({ userId: request.actor?.userId }));
+  it_.app.get("/api/v1/test/whoami", { config: { access: "signed_in" }, preHandler: signedIn }, async (request) => ({
+    userId: request.actor?.userId,
+  }));
 });
 
 const PASSWORD = "काल्पनिकनगर correct horse";

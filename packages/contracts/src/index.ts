@@ -1,2 +1,35 @@
 // @pageinator/contracts — the request and response schemas shared by the API and the web app (Zod 4).
 export { ERROR_CODES, ErrorCode, ErrorEnvelope, FieldProblem } from "./errors.ts";
+export {
+  GRANTS,
+  GRANT_HOLDERS,
+  grantsFit,
+  Grant,
+  ORG_ROLES,
+  OrgRole,
+  PERMISSIONS,
+  PERMISSION_NAMES,
+  PUBLICATION_ROLES,
+  type Permission,
+  PermissionName,
+  type PublicationAccess,
+  PublicationRole,
+  type Reach,
+  reach,
+} from "./permissions.ts";
+export {
+  AcceptedInvitation,
+  INVITATION_HEADER,
+  Invitation,
+  InvitationCreate,
+  InvitationState,
+  InvitedRole,
+  Locale,
+  Me,
+  MePatch,
+  Member,
+  MemberPatch,
+  PublicInvitation,
+  PublicationGrant,
+  UiDigits,
+} from "./people.ts";

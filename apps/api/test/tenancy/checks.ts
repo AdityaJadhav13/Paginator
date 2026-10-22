@@ -23,6 +23,7 @@ const isContent = (table: { name: string; pub: boolean }) => table.pub && !Objec
 /** pgn_app's rights on each app table. A table missing here is a problem: its rights must be decided. */
 export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   audit_event: ["INSERT", "SELECT"],
+  invitation_grant: ["INSERT", "SELECT", "UPDATE"],
   org_settings: ["INSERT", "SELECT", "UPDATE"],
   person: ["INSERT", "SELECT", "UPDATE"],
   publication: ["INSERT", "SELECT", "UPDATE"],
@@ -38,6 +39,7 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   story_photo: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   story_revision: ["INSERT", "SELECT", "UPDATE"],
   story_status_change: ["INSERT", "SELECT"],
+  publication_grant: ["DELETE", "INSERT", "SELECT", "UPDATE"],
 };
 
 /** pgn_auth's rights on each identity table: Better Auth's own (it reads and writes them as it needs), and ours,
@@ -49,6 +51,11 @@ export const IDENTITY_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   account: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   verification: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   rateLimit: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  organization: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  member: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  invitation: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  twoFactor: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  totp_used: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   auth_event: ["INSERT", "SELECT"],
   sign_in_failure: ["DELETE", "INSERT", "SELECT", "UPDATE"],
 };

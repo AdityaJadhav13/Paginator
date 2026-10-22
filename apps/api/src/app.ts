@@ -12,8 +12,11 @@ import { ApiError, clientErrorHandler, errorHandler, frameworkErrorHandler } fro
 import { health, type Checks } from "./http/health.ts";
 import { requestSerializer } from "./http/log.ts";
 import { registerSecurity } from "./http/security.ts";
+import { registerAccess } from "./modules/access/access.ts";
+import type { Auth } from "./modules/identity/auth.ts";
 import { registerIdentity } from "./modules/identity/plugin.ts";
-import { type Transport, openMailer, smtpTransport } from "./modules/notifications/mailer.ts";
+import { type Mailer, type Transport, openMailer, smtpTransport } from "./modules/notifications/mailer.ts";
+import { peopleRoutes } from "./modules/people/plugin.ts";
 import { closeWhenStopping } from "./shutdown.ts";
 
 export type AppDeps = {
@@ -64,19 +67,23 @@ export async function buildApp(deps: AppDeps) {
     throw new ApiError("not_found");
   });
 
+  let people: { auth: Auth; mailer: Mailer; database: Database } | undefined;
   if (database) {
     // a mail server's message may name the recipient, so only its codes are logged
     const mailer = openMailer(config.mail, deps.mailTransport ?? smtpTransport(config.mail), (kind, error) => {
       const { code, responseCode } = error as { code?: string; responseCode?: number };
       fastify.log.warn({ kind, code, responseCode }, "an email was not sent");
     });
-    await registerIdentity(fastify, { config, database, mailer });
+    const auth = await registerIdentity(fastify, { config, database, mailer });
+    registerAccess(fastify, database); // after identity's hook, which reads the session
+    people = { auth, mailer, database };
   }
 
   const app = fastify.withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   await app.register(health, { checks: deps.checks });
+  if (people) await app.register(peopleRoutes, { ...people, config });
   return app;
 }
 

@@ -6,15 +6,37 @@ import { CLIENT_IP_HEADER } from "./headers.ts";
 
 export const ABSOLUTE_MS = 30 * 24 * 3600 * 1000;
 
-export type Actor = { userId: string; sessionId: string; email: string; emailVerified: boolean; signedInAt: Date };
+export type Actor = {
+  userId: string;
+  sessionId: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  /** The person has two-step sign-in set up (plan §4.4). It says nothing about this session: see twoStep. */
+  twoFactorEnabled: boolean;
+  /** This session was made with two-step (a code, a backup code, a trusted device, or the code that turned it on;
+   * session.twoStepAt, set by auth.ts sessionEvents), and the person still has it set up. */
+  twoStep: boolean;
+  locale: "en" | "mr";
+  uiDigits: "latin" | "devanagari";
+  signedInAt: Date;
+};
 
 /** Better Auth's session lookup and revocation, as session.ts uses them. */
 export type SessionApi = {
   getSession(input: { headers: Headers; returnHeaders: true; query?: { disableRefresh?: boolean } }): Promise<{
     headers: Headers;
     response: {
-      session: { id: string; token: string; createdAt: Date; userId: string };
-      user: { id: string; email: string; emailVerified: boolean };
+      session: { id: string; token: string; createdAt: Date; userId: string; twoStepAt?: Date | null | undefined };
+      user: {
+        id: string;
+        name: string;
+        email: string;
+        emailVerified: boolean;
+        twoFactorEnabled?: boolean | null | undefined;
+        locale?: string | null | undefined;
+        uiDigits?: string | null | undefined;
+      };
     } | null;
   }>;
   revokeSession(input: { headers: Headers; body: { token: string } }): Promise<unknown>;
@@ -56,8 +78,13 @@ export function sessionResolver(api: SessionApi, events: AuthEvents, now = () =>
         actor: {
           userId: user.id,
           sessionId: session.id,
+          name: user.name,
           email: user.email,
           emailVerified: user.emailVerified,
+          twoFactorEnabled: user.twoFactorEnabled === true,
+          twoStep: user.twoFactorEnabled === true && session.twoStepAt !== null && session.twoStepAt !== undefined,
+          locale: user.locale === "mr" ? "mr" : "en",
+          uiDigits: user.uiDigits === "devanagari" ? "devanagari" : "latin",
           signedInAt: session.createdAt,
         },
         setCookie: found.setCookie,

@@ -2,6 +2,8 @@
 // Auth instance on the same database for calls from the server itself (sign-up is closed over HTTP).
 import { inject } from "vitest";
 import { type App, buildApp } from "../../src/app.ts";
+// the route config (access, permission) and request.access that src/modules/access/access.ts declares
+import type {} from "../../src/modules/access/access.ts";
 import { type Config, loadConfig } from "../../src/config.ts";
 import { type Database, openDatabase } from "../../src/db/pools.ts";
 import { type Auth, createAuth } from "../../src/modules/identity/auth.ts";

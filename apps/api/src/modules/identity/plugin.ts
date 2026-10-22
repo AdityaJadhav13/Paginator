@@ -7,7 +7,7 @@ import type { Config } from "../../config.ts";
 import type { Database } from "../../db/pools.ts";
 import { ApiError } from "../../http/errors.ts";
 import type { Mailer } from "../notifications/mailer.ts";
-import { createAuth } from "./auth.ts";
+import { type Auth, createAuth } from "./auth.ts";
 import { authEvents } from "./events.ts";
 import { authHeaders } from "./headers.ts";
 import { identityRoutes } from "./routes.ts";
@@ -27,16 +27,21 @@ export async function signedIn(request: FastifyRequest): Promise<void> {
   if (request.actor === null) throw new ApiError("signed_out");
 }
 
-export async function registerIdentity(app: FastifyInstance, { config, database, mailer }: IdentityOptions) {
+/** Registers sign-in, and returns Better Auth for the modules that call it from the server (src/modules/people). */
+export async function registerIdentity(
+  app: FastifyInstance,
+  { config, database, mailer }: IdentityOptions,
+): Promise<Auth> {
   const auth = createAuth({ config, database, mailer, log: app.log });
   const sessions = sessionResolver(auth.api, authEvents(database.identity, mailer));
   app.decorateRequest("actor", null);
   app.addHook("preHandler", async (request, reply) => {
-    if (!request.url.startsWith("/api/v1/")) return;
+    if (request.is404 || request.routeOptions.url?.startsWith("/api/v1/") !== true) return; // by the route's pattern
     const found = await sessions.actor(authHeaders(request));
     request.actor = found?.actor ?? null;
     if (found && found.setCookie.length > 0) reply.header("set-cookie", found.setCookie); // the sliding 12 h
   });
   await app.register(identityRoutes, { auth, origin: config.publicOrigin, sessions });
   app.addHook("onClose", () => mailer.close());
+  return auth;
 }
