@@ -7,13 +7,10 @@
  * the link is bad). Paths are relative, which Better Auth accepts as its own origin's.
  */
 import type { AccountService, ApiProblem, InvitationDto } from "../services/index.ts";
+import { AcceptedInvitation, INVITATION_HEADER } from "@pageinator/contracts";
 import { isObject, type ApiClient, type RequestOptions } from "./client.ts";
 
-/**
- * The header that carries the invitation id on sign-up (plan §4.3 step 4: "with the invitation id in a header"). Its
- * name is this app's proposal: the invite-only sign-up hook (PR 10) must read the same one.
- */
-export const INVITATION_HEADER = "X-Pageinator-Invitation";
+export { INVITATION_HEADER };
 
 /** Where a reset link brings the browser back. */
 export const RESET_PASSWORD_PATH = "/reset-password";
@@ -83,7 +80,11 @@ export function createApiAccountService(client: ApiClient): AccountService {
         { headers: { [INVITATION_HEADER]: invitationId } },
       ),
 
-    acceptInvitation: ({ invitationId, idempotencyKey }) =>
-      send(`${invitationPath(invitationId)}/accept`, {}, { idempotencyKey }),
+    async acceptInvitation({ invitationId, idempotencyKey }) {
+      const answer = await client.post(`${invitationPath(invitationId)}/accept`, {}, { idempotencyKey });
+      if (!answer.ok) return { ok: false, error: answer.problem };
+      const accepted = AcceptedInvitation.safeParse(answer.value);
+      return accepted.success ? { ok: true, value: { orgId: accepted.data.orgId } } : { ok: false, error: UNEXPECTED };
+    },
   };
 }

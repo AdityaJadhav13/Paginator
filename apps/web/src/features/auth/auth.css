@@ -19,6 +19,10 @@
   overflow-wrap: anywhere;
 }
 
+.pg-auth__card--wide {
+  max-inline-size: var(--pg-account-measure);
+}
+
 .pg-auth__card form {
   margin: 0;
 }
@@ -62,4 +66,55 @@
 .pg-shell--auth:lang(mr) .pg-progress__label,
 .pg-shell--auth:lang(mr) .pg-button--sm {
   line-height: var(--pg-line-height-300);
+}
+
+/* ── Account security ─────────────────────────────────────────────── */
+
+.pg-qr {
+  display: block;
+  inline-size: var(--pg-qr-size);
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+.pg-qr__light {
+  fill: var(--pg-color-surface);
+}
+
+.pg-qr__dark {
+  fill: var(--pg-color-text);
+}
+
+.pg-codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pg-space-3) var(--pg-space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-list__item {
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  padding-block-start: var(--pg-space-4);
+}
+
+.pg-list__item > * + * {
+  margin-block-start: var(--pg-space-2);
+}
+
+.pg-badge {
+  display: inline-block;
+  padding-inline: var(--pg-space-3);
+  border: var(--pg-border-width) solid var(--pg-color-border);
+  border-radius: var(--pg-radius-pill);
 }

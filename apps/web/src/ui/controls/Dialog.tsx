@@ -18,6 +18,8 @@ export interface DialogProps {
    * an explicit action rather than accidental dismissal.
    */
   dismissible?: boolean;
+  /** The close button's accessible name, in the page's language. Defaults to "Close dialog". */
+  closeLabel?: string;
   children?: ReactNode;
   className?: string;
 }
@@ -35,6 +37,7 @@ export function Dialog({
   title,
   description,
   dismissible = true,
+  closeLabel = "Close dialog",
   children,
   className,
 }: DialogProps) {
@@ -147,7 +150,7 @@ export function Dialog({
             type="button"
             onClick={onClose}
             className="pg-dialog__close"
-            aria-label="Close dialog"
+            aria-label={closeLabel}
           >
             <span aria-hidden="true">×</span>
           </button>

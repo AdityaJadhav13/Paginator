@@ -5,6 +5,7 @@ import { useI18n } from "../../i18n/index.ts";
 import { ProblemMessage } from "./ProblemMessage.tsx";
 import { activeRole, useSession } from "./SessionProvider.tsx";
 import { SignOutButton } from "./SignOutButton.tsx";
+import { roleName } from "../people/roles.ts";
 
 /** The session could not be read: why, and the ways on. */
 export function SessionFailure() {
@@ -28,10 +29,11 @@ export function SessionProblemMessage() {
   const { t } = useI18n();
   if (state.status !== "unavailable") return null;
   if (state.reason.source === "session") return <ProblemMessage problem={state.reason.problem} live={state.assertive} />;
-  // the placeholder workspace's own (English, test-double) message
+  // the workspace service's own note is never shown: the catalogue's text for its code is
+  const { error } = state.reason;
   return (
-    <InlineMessage variant="error" heading={t("problem.other.heading")} live={state.assertive} iconLabel={t("message.error")}>
-      <span lang="en">{state.reason.error.displayMessage}</span>
+    <InlineMessage variant="error" heading={t("shell.workspaceUnavailable")} live={state.assertive} iconLabel={t("message.error")}>
+      {error.code === "temporary-failure" ? t("shell.workspaceUnavailable.body") : t("access.body")}
     </InlineMessage>
   );
 }
@@ -49,13 +51,13 @@ export function SignedInSessionControls({ compact = false }: { readonly compact?
     <div className={compact ? "pg-session-controls pg-session-controls--compact" : "pg-session-controls"}>
       <span>
         <bdi>{state.session.user.name}</bdi>
-        {workspace && <> · {activeRole(workspace)}</>}
+        {workspace && <> · {roleName(activeRole(workspace), t)}</>}
       </span>
       {workspace && !inWorkspace && (
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => navigate(paths.pubOverview(workspace.activeOrganizationId, workspace.activePublicationId))}
+          onClick={() => navigate(paths.orgHome(workspace.activeOrganizationId))}
         >
           {t("signedIn.openWorkspace")}
         </Button>
@@ -74,17 +76,18 @@ export function SignedInSessionControls({ compact = false }: { readonly compact?
 /** A workspace route this session may not open; identical for an unknown and an inaccessible one. */
 export function AccessUnavailable() {
   const { state } = useSession();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const workspace = state.status === "ready" ? state.workspace : null;
-  const activePath = workspace
-    ? paths.pubOverview(workspace.activeOrganizationId, workspace.activePublicationId)
-    : paths.home();
+  const activePath = workspace ? paths.orgHome(workspace.activeOrganizationId) : paths.home();
   return (
     <Stack gap="4">
-      <h1 id={ROUTE_HEADING_ID} className="pg-type-page-title" tabIndex={-1}>Access unavailable</h1>
-      <p>This workspace context is not available for this session.</p>
-      <p>Demonstration only — production authorization is not evaluated here</p>
-      <p><Link to={activePath}>Open active workspace</Link> · <Link to={paths.home()}>Return to public home</Link></p>
+      <h1 id={ROUTE_HEADING_ID} className="pg-type-page-title" tabIndex={-1}>{t("access.title")}</h1>
+      <p>{t("access.body")}</p>
+      <p>
+        {workspace && <><Link to={activePath}>{t("access.openActive")}</Link> · </>}
+        <Link to={paths.home()}>{t("access.publicHome")}</Link>
+      </p>
       <div><SignOutButton beforeSignOut={() => navigate(paths.login(), { replace: true, flushSync: true })} /></div>
     </Stack>
   );

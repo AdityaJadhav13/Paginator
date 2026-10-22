@@ -25,9 +25,20 @@ export function sessionFromAnswer(value: unknown): SessionSnapshot | undefined {
   return {
     status: "signed-in",
     session: {
-      user: { id: user["id"], name: user["name"], email: user["email"], emailVerified: user["emailVerified"] },
+      user: {
+        id: user["id"],
+        name: user["name"],
+        email: user["email"],
+        emailVerified: user["emailVerified"],
+        twoFactorEnabled: user["twoFactorEnabled"] === true,
+      },
     },
   };
+}
+
+/** Better Auth's answer to a right password on an account with two-step: no session yet, a code next. */
+function needsTwoStep(value: unknown): boolean {
+  return isObject(value) && value["twoFactorRedirect"] === true;
 }
 
 export function createApiSessionService(client: ApiClient): SessionService {
@@ -38,18 +49,30 @@ export function createApiSessionService(client: ApiClient): SessionService {
     return snapshot ? { ok: true, value: snapshot } : { ok: false, error: UNEXPECTED };
   }
 
+  /** The session is whatever the browser now sends back: a browser that refused the cookie is still signed out. */
+  async function sessionAfterSignIn(): Promise<ServiceResult<SessionSnapshot, ApiProblem>> {
+    const current = await getSession();
+    if (current.ok && current.value.status === "signed-out") {
+      return { ok: false, error: { kind: "answer", status: 200, code: "cookie_refused", message: "" } };
+    }
+    return current;
+  }
+
   return {
     getSession,
 
     async signIn({ email, password, rememberMe }) {
       const answer = await client.post("/api/auth/sign-in/email", { email, password, rememberMe });
       if (!answer.ok) return { ok: false, error: answer.problem };
-      // The session is whatever the browser now sends back. A browser that refused the cookie is still signed out.
-      const current = await getSession();
-      if (current.ok && current.value.status === "signed-out") {
-        return { ok: false, error: { kind: "answer", status: 200, code: "cookie_refused", message: "" } };
-      }
-      return current;
+      if (needsTwoStep(answer.value)) return { ok: true, value: { status: "two-step" } };
+      return sessionAfterSignIn();
+    },
+
+    async verifyTwoStep({ code, kind, trustDevice }) {
+      const path = kind === "totp" ? "/api/auth/two-factor/verify-totp" : "/api/auth/two-factor/verify-backup-code";
+      const answer = await client.post(path, { code: code.trim(), trustDevice });
+      if (!answer.ok) return { ok: false, error: answer.problem };
+      return sessionAfterSignIn();
     },
 
     async signOut() {

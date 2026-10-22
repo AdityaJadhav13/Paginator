@@ -1,5 +1,7 @@
 import type { AccountService } from "./account-service.ts";
+import type { SecurityService } from "./security-service.ts";
 import type { SessionService } from "./session-service.ts";
+import type { TeamService } from "./team-service.ts";
 import type { WorkspaceAccessService } from "./workspace-access.ts";
 import type { WorkspaceQueryService } from "./workspace-query-service.ts";
 
@@ -10,6 +12,8 @@ import type { WorkspaceQueryService } from "./workspace-query-service.ts";
 export interface ServiceEnvironment {
   readonly session: SessionService;
   readonly account: AccountService;
+  readonly security: SecurityService;
+  readonly team: TeamService;
   /** The placeholder workspace's access; absent where nothing provides one (the deployed app, until `/me`). */
   readonly access?: WorkspaceAccessService;
   readonly workspace: WorkspaceQueryService;

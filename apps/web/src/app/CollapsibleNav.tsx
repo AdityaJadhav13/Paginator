@@ -12,16 +12,19 @@ import { IconButton } from "../ui/index.ts";
 
 export interface CollapsibleNavProps {
   ariaLabel: string;
+  /** The toggle's names, in the page's language; English by default. */
+  showLabel?: string;
+  hideLabel?: string;
   children: ReactNode;
 }
 
-export function CollapsibleNav({ ariaLabel, children }: CollapsibleNavProps) {
+export function CollapsibleNav({ ariaLabel, showLabel, hideLabel, children }: CollapsibleNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <IconButton
-        label={open ? `Hide ${ariaLabel} navigation` : `Show ${ariaLabel} navigation`}
+        label={open ? (hideLabel ?? `Hide ${ariaLabel} navigation`) : (showLabel ?? `Show ${ariaLabel} navigation`)}
         className="pg-shell__nav-toggle"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}

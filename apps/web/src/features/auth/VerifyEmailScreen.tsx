@@ -105,7 +105,7 @@ export function VerifyEmailScreen() {
     const next = invitationId
       ? paths.invitation(invitationId)
       : workspace
-        ? paths.pubOverview(workspace.activeOrganizationId, workspace.activePublicationId)
+        ? paths.orgHome(workspace.activeOrganizationId)
         : paths.login();
     const signInPath = invitationId
       ? `${paths.login()}?returnTo=${encodeURIComponent(paths.invitation(invitationId))}`

@@ -92,9 +92,9 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "closing-body",
-    text: "Sign-in is real and by invitation; everything else still runs in your browser. Nothing is charged.",
+    text: "Sign-in, two-step sign-in and the team are real, and accounts open by invitation only. The newsroom screens are still to come. Nothing is charged.",
     source: "L2_PLAN",
-    sourceRef: "§4.1 Better Auth sign-in, invitation only; §2.6 placeholders stay dev-only",
+    sourceRef: "§4.1 sign-in, §4.3 invitation only, §4.4 two-step (PR 14), Team (PR 20); §2.6 placeholders stay dev-only",
   },
 
   // ── Shared: the standing simulation qualification ────────────────────
@@ -120,15 +120,15 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "today-lead",
-    text: "Signing in is real in this build. The newsroom screens are still to come.",
+    text: "Signing in, two-step sign-in and the team are real in this build. The newsroom screens are still to come.",
     source: "L2_PLAN",
-    sourceRef: "§10 PRs 12–13 sign-in; PR 20 onward the newsroom screens",
+    sourceRef: "§10 PRs 12–14 sign-in and two-step, PR 20 Team; the newsroom screens follow",
   },
   {
     id: "today-item-sign-in",
-    text: "Sign-in with an email address and a password, in English or Marathi. No account can be created from this site yet.",
+    text: "Sign-in with an email address and a password, in English or Marathi, and two-step sign-in with an authenticator app. An account is opened only from an emailed invitation.",
     source: "L2_PLAN",
-    sourceRef: "§4.1 sign-in; §4.3 sign-up only by invitation (PR 10)",
+    sourceRef: "§4.1 sign-in; §4.4 two-step (PR 14); §4.3 sign-up only by invitation (PR 10)",
   },
   {
     id: "today-item-email-links",
@@ -138,9 +138,9 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "today-item-no-workspace",
-    text: "No newsroom screen is open to a signed-in person yet.",
+    text: "A signed-in person sees their organization, their roles and their account's security. The owner and the admins invite, change and remove members, and chief editors see the team. No newsroom screen is open yet.",
     source: "L2_PLAN",
-    sourceRef: "§2.6 placeholder routes stay dev-only; §5.2 /me (PR 9)",
+    sourceRef: "§5.2 /me (PR 9), Team endpoints (PR 10), Team screen (PR 20); §2.6 placeholder routes stay dev-only",
   },
   {
     id: "today-closing",
@@ -334,9 +334,9 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "home-provisional-security-body",
-    text: "Sign-in accounts (a name, an email address and a hashed password), their sessions and their sign-in events are kept on Pageinator's server. This build carries no certification of any kind.",
+    text: "Pageinator's server keeps the accounts (a name, an email address and a hashed password), sessions, sign-in events, two-step secrets and backup codes. It also keeps the organizations, memberships and invitations. This build carries no certification of any kind.",
     source: "L2_PLAN",
-    sourceRef: "§4.1 identity schema, argon2id passwords, sessions; §3.4 auth events; route map: no invented certifications",
+    sourceRef: "§4.1 identity schema, argon2id passwords, sessions; §3.4 auth events; §4.4 twoFactor plugin; §3 organizations, members, invitations; route map: no invented certifications",
   },
 
   // ── Features page ────────────────────────────────────────────────────
@@ -598,15 +598,15 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "security-true-2",
-    text: "The workspace screens are still placeholders on fictional test data, and no signed-in person can open them yet.",
+    text: "Two-step sign-in with an authenticator app, its backup codes and the list of signed-in devices are real, and so is the team. The newsroom screens are still placeholders on fictional test data, and the deployed app does not show them.",
     source: "L2_PLAN",
-    sourceRef: "§2.6 placeholder routes stay dev-only; §5.2 /me (PR 9)",
+    sourceRef: "§4.4–4.5 two-step and devices (PR 14); Team (PR 20); §2.6 placeholder routes stay dev-only",
   },
   {
     id: "security-true-3",
-    text: "A signed-in browser keeps its session in cookies that page scripts cannot read. Your language choice is kept in this browser's local storage.",
+    text: "A signed-in browser keeps its session in cookies that page scripts cannot read, and, when you choose to trust the device, a cookie that skips the code for thirty days. This browser's local storage keeps your language, and keeps the organization and publication you last opened until the session ends.",
     source: "L2_PLAN",
-    sourceRef: "§4.5 HttpOnly, Secure, SameSite=Lax session cookie",
+    sourceRef: "§4.5 HttpOnly, Secure, SameSite=Lax session cookie; §4.4 trusted device (30 days); the web app's language and workspace keys",
   },
   {
     id: "security-true-4",
@@ -676,9 +676,9 @@ const RECORDS: readonly ContentRecord[] = [
   },
   {
     id: "security-nonleak-body-2",
-    text: "That is a property of the placeholder workspace, checked by its own tests. It is not a production authorization control.",
-    source: "UI005_SPEC",
-    sourceRef: "§17.2 block 4",
+    text: "The server answers an organization you do not belong to exactly as it answers one that does not exist, and the screens show the same page for both. This build's own tests check both.",
+    source: "L2_PLAN",
+    sourceRef: "§17.2 block 4; plan §5.1 404 for a non-member; UI002 §8.1 rule 2",
   },
   {
     id: "security-limits-standing",
@@ -984,18 +984,6 @@ const RECORDS: readonly ContentRecord[] = [
     text: "Not built",
     source: "UI005_SPEC",
     sourceRef: "§13.2 availability vocabulary",
-  },
-
-  /*
-   * Rendered through `format()` so the whole sentence is governed here
-   * rather than assembled from a fragment plus a JSX interpolation. The
-   * unit itself still comes from the durable route table, never a copy.
-   */
-  {
-    id: "features-owner-caption",
-    text: "Reserved for {unit}.",
-    source: "UI005_SPEC",
-    sourceRef: "§15 stage composition; unit read from OWNING_UNIT",
   },
 
   // ── Page geometry figure (§14) ───────────────────────────────────────

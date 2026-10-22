@@ -45,7 +45,6 @@ function Stage({ stage, lead }: { readonly stage: WorkflowStageView; readonly le
         <p className="pg-public__body">{stage.constraint}</p>
       </div>
       <CapabilityNote label={stage.availabilityLabel} />
-      <p className="pg-public__note">{stage.ownerCaption}</p>
     </article>
   );
 }

@@ -14,6 +14,15 @@ const SESSION = {
   user: { id: "u-1", name: "Asha Patil", email: "asha@example.test", emailVerified: true },
 };
 const INVITATION_ID = "6f1c2e3a-4b5d-4e6f-8a7b-9c0d1e2f3a4b";
+const ME_USER = {
+  id: "1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+  name: "Asha Patil",
+  email: "asha@example.test",
+  emailVerified: true,
+  twoFactorEnabled: false,
+  locale: "en",
+  uiDigits: "latin",
+};
 
 function services(route: (call: RecordedCall) => Response) {
   const { fetch, calls } = fakeFetch(route);
@@ -27,7 +36,10 @@ describe("The real session service", () => {
     const { session, calls } = services(() => answers.shift()!);
     expect(await session.getSession()).toEqual({
       ok: true,
-      value: { status: "signed-in", session: { user: { id: "u-1", name: "Asha Patil", email: "asha@example.test", emailVerified: true } } },
+      value: {
+        status: "signed-in",
+        session: { user: { id: "u-1", name: "Asha Patil", email: "asha@example.test", emailVerified: true, twoFactorEnabled: false } },
+      },
     });
     expect(await session.getSession()).toEqual({ ok: true, value: { status: "signed-out" } });
     expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
@@ -163,8 +175,12 @@ describe("The real account service", () => {
   });
 
   it("joins with an Idempotency-Key", async () => {
-    const { account, calls } = services(() => json(200, { orgId: "o-1", publications: [] }));
-    expect(await account.acceptInvitation({ invitationId: INVITATION_ID, idempotencyKey: "key-1" })).toEqual({ ok: true, value: undefined });
+    const ORG_ID = "0b6c1d2e-3f40-4a51-8b62-7c83d94ea5f6";
+    const { account, calls } = services(() => json(200, { orgId: ORG_ID, publications: [] }));
+    expect(await account.acceptInvitation({ invitationId: INVITATION_ID, idempotencyKey: "key-1" })).toEqual({
+      ok: true,
+      value: { orgId: ORG_ID },
+    });
     expect(calls[0]).toMatchObject({ method: "POST", url: `/api/v1/invitations/${INVITATION_ID}/accept` });
     expect(calls[0]!.headers.get("Idempotency-Key")).toBe("key-1");
     expect(calls[0]!.headers.get("X-Pageinator")).toBe("1");
@@ -184,11 +200,12 @@ describe("The app's real environment", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it("has no workspace access source yet, and counts session changes", async () => {
-    const { fetch } = fakeFetch(() => json(200, null));
+  it("reads the workspace from /me, and counts session changes", async () => {
+    const { fetch, calls } = fakeFetch(() => json(200, { user: ME_USER, memberships: [] }));
     const environment = createApiEnvironment({ fetch });
-    expect(environment.access).toBeUndefined();
+    expect(await environment.access!.getAccess({ userId: "u-1" })).toEqual({ ok: true, value: null });
     expect(await environment.workspace.listOrganizations()).toEqual({ ok: true, value: [] });
+    expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual(["GET /api/v1/me"]);
     const before = environment.getSessionMutationGeneration();
     await environment.session.signOut();
     environment.invalidatePendingSessionMutations();

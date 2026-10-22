@@ -9,8 +9,26 @@ const PUNE = { organizationId: "org-demo-sahyadri", publicationId: "pub-demo-pun
 
 describe("The session double's contract", () => {
   it("exposes exactly the real services' methods, each returning a promise", async () => {
-    const { session, account, access } = createMockApplicationEnvironment();
-    expect(Object.keys(session).sort()).toEqual(["getSession", "signIn", "signOut"]);
+    const { session, account, access, security, team } = createMockApplicationEnvironment();
+    expect(Object.keys(session).sort()).toEqual(["getSession", "signIn", "signOut", "verifyTwoStep"]);
+    expect(Object.keys(security).sort()).toEqual([
+      "confirmTwoStep",
+      "listDevices",
+      "newBackupCodes",
+      "signOutDevice",
+      "signOutOtherDevices",
+      "startTwoStep",
+      "turnOffTwoStep",
+    ]);
+    expect(Object.keys(team).sort()).toEqual([
+      "cancelInvitation",
+      "invite",
+      "listInvitations",
+      "listMembers",
+      "removeMember",
+      "resendInvitation",
+      "updateMember",
+    ]);
     expect(Object.keys(account).sort()).toEqual([
       "acceptInvitation",
       "getInvitation",
@@ -35,21 +53,28 @@ describe("The session double's contract", () => {
             name: "Sahyadri Demo Editor",
             email: "editor@sahyadri.example",
             emailVerified: true,
+            twoFactorEnabled: false,
           },
         },
       },
     });
-    expect(await environment.access.getAccess({ userId: "user-demo-sahyadri-editor" })).toEqual({
+    const access = await environment.access.getAccess({ userId: "user-demo-sahyadri-editor" });
+    expect(access).toMatchObject({
       ok: true,
       value: {
         access: [
-          { organizationId: "org-demo-sahyadri", role: "editor", publicationIds: ["pub-demo-pune-daily", "pub-demo-urdu-evening"] },
-          { organizationId: "org-demo-konkan", role: "reviewer", publicationIds: ["pub-demo-ratnagiri-tide"] },
+          { organizationId: "org-demo-sahyadri", publicationIds: ["pub-demo-pune-daily", "pub-demo-urdu-evening"] },
+          { organizationId: "org-demo-konkan", publicationIds: ["pub-demo-ratnagiri-tide"] },
         ],
         activeOrganizationId: "org-demo-sahyadri",
         activePublicationId: "pub-demo-pune-daily",
       },
     });
+    // the organisations as the API's /me gives them: names, organisation role, roles and grants per publication
+    expect(access.ok && access.value?.organizations.map((org) => [org.org.name, org.orgRole, org.publications.map((p) => [p.name, p.roles, p.grants])])).toEqual([
+      ["Sahyadri Media Cooperative", "admin", [["Pune Daily Ledger", ["editor"], ["page_approve"]], ["Deccan Evening Record", ["editor"], []]]],
+      ["Konkan Coastal Press", "member", [["Ratnagiri Tide", ["viewer"], []]]],
+    ]);
   });
 });
 
@@ -138,7 +163,6 @@ describe("The placeholder workspace's access on the double", () => {
     const again = await environment.access.getAccess({ userId });
     expect(again.ok && again.value?.access[0]).toEqual({
       organizationId: "org-demo-sahyadri",
-      role: "editor",
       publicationIds: ["pub-demo-pune-daily", "pub-demo-urdu-evening"],
     });
   });
@@ -214,13 +238,14 @@ describe("The account double", () => {
     expect(signedOut).toHaveBeenCalledTimes(1);
     environment.sessionController.setPreset("sahyadri-editor");
     expect(await environment.account.acceptInvitation({ invitationId: pending.id, idempotencyKey: "key-2" }))
-      .toMatchObject({ ok: false, error: { status: 403, code: "not_allowed" } });
+      .toMatchObject({ ok: false, error: { status: 404, code: "not_found" } }); // another address: the API says nothing more
 
     await environment.account.signUp({ invitationId: pending.id, name: "New Designer", email: pending.email, password: "a long enough password", returnPath: "/verify" });
     environment.sessionController.confirmEmail(pending.email);
     await environment.session.signIn({ email: pending.email, password: "a long enough password", rememberMe: false });
-    expect(await environment.account.acceptInvitation({ invitationId: pending.id, idempotencyKey: "key-3" })).toEqual({ ok: true, value: undefined });
-    expect(await environment.account.acceptInvitation({ invitationId: pending.id, idempotencyKey: "key-3" })).toEqual({ ok: true, value: undefined });
+    const joined = { ok: true, value: { orgId: "org-demo-daily" } };
+    expect(await environment.account.acceptInvitation({ invitationId: pending.id, idempotencyKey: "key-3" })).toEqual(joined);
+    expect(await environment.account.acceptInvitation({ invitationId: pending.id, idempotencyKey: "key-3" })).toEqual(joined);
     expect(await environment.account.acceptInvitation({ invitationId: pending.id, idempotencyKey: "key-4" }))
       .toMatchObject({ ok: false, error: { status: 404 } });
     expect(await environment.account.getInvitation({ invitationId: pending.id })).toMatchObject({ value: { state: "accepted" } });

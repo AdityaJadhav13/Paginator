@@ -21,12 +21,27 @@ export interface MarathiReview {
 /** Approved Marathi strings. None has been reviewed yet. */
 export const REVIEWED: Readonly<Partial<Record<CatalogueKey, MarathiReview>>> = {};
 
+/**
+ * Questions for the reviewer on particular strings: a term the draft could not settle. Each stays with its string
+ * while the string waits for review.
+ */
+export const REVIEW_NOTES: Readonly<Partial<Record<CatalogueKey, string>>> = {
+  "grant.release_approve":
+    "Open question for the owner's reviewer: the Marathi term for \"release\" (an edition sent to press and kept in the archive). The draft avoids प्रकाशन, which is Publication.",
+  "nav.release":
+    "Open question for the owner's reviewer: the Marathi term for \"release\". The draft says प्रकाशित आवृत्ती; keep it consistent with grant.release_approve and invalid.release.",
+  "invalid.release":
+    "Open question for the owner's reviewer: the Marathi term for \"release\". The draft says प्रकाशित आवृत्ती; keep it consistent with grant.release_approve and nav.release.",
+};
+
 export interface ReviewItem {
   readonly key: CatalogueKey;
   readonly english: string;
   readonly marathi: string;
   /** "glossary": a seed from 02 §3.9; "draft": written for this catalogue. */
   readonly source: "glossary" | "draft";
+  /** A question for the reviewer about this string, when there is one. */
+  readonly note?: string;
 }
 
 /** The Marathi strings still waiting for a native editor, in catalogue order. */
@@ -37,4 +52,5 @@ export const REVIEW: readonly ReviewItem[] = CATALOGUE_KEYS.filter(
   english: CATALOGUES.en[key],
   marathi: CATALOGUES.mr[key],
   source: key.startsWith("glossary.") ? "glossary" : "draft",
+  ...(REVIEW_NOTES[key] ? { note: REVIEW_NOTES[key] } : {}),
 }));

@@ -197,7 +197,9 @@ export function lockfile(raw: string): Lockfile {
     const field = from !== null ? IMPORTER.field.exec(line) : null;
     if (field && from !== null) {
       // a folder link is relative to its importer; an absolute one is kept as it is (it is never a workspace package)
-      const folder = field[1] === "version" ? /^(link|file):(.*)$/.exec(unquote(field[2] ?? "")) : null;
+      // pnpm may write the folder with the package's name before it: version: foo@file:../x, @a/b@link:../y
+      const folder =
+        field[1] === "version" ? /^(?:(?:@[^@/\s]+\/)?[^@\s]+@)?(link|file):(.*)$/.exec(unquote(field[2] ?? "")) : null;
       if (folder) {
         const t = (folder[2] ?? "").trim();
         links.push({
@@ -209,10 +211,11 @@ export function lockfile(raw: string): Lockfile {
     }
     unread.push(line.trim());
   }
-  // a folder dependency anywhere else (an override, a snapshot) would be installed without this check seeing it
+  // a folder dependency anywhere else (an override, a snapshot) would be installed without this check seeing it: link:
+  // or file: not inside a name (get-caller-file: 2.0.5, some-link: 1.0.0), so foo@file:…, [link:… and ,file:… count
   for (const [name, lines] of sections)
     if (name !== "importers")
-      for (const line of lines) if (/\b(link|file):/.test(line)) unread.push(`${name}: ${line.trim()}`);
+      for (const line of lines) if (/(?<![\w.~-])(link|file):/.test(line)) unread.push(`${name}: ${line.trim()}`);
   const settings: Record<string, string> = {};
   for (const line of sections.get("settings") ?? []) {
     const m = /^ {2}([A-Za-z]+): (\S+)$/.exec(line);

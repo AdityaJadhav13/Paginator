@@ -42,9 +42,10 @@ export interface AccountService {
    * `returnPath`. The answer is the same whether or not the address could sign up.
    */
   signUp(input: SignUpInput & { readonly returnPath: string }): Promise<ServiceResult<void, ApiProblem>>;
-  /** Joins the invitation's organisation (signed in, email confirmed). The key makes a retry safe (plan §5.1). */
+  /** Joins the invitation's organisation (signed in, email confirmed): the organisation's id. The key makes a retry
+   * safe (plan §5.1). */
   acceptInvitation(input: {
     readonly invitationId: string;
     readonly idempotencyKey: string;
-  }): Promise<ServiceResult<void, ApiProblem>>;
+  }): Promise<ServiceResult<{ readonly orgId: string }, ApiProblem>>;
 }

@@ -1,54 +1,52 @@
 /**
- * The app's real services: one API client, the session and account services over it, and the app's hearing of a
- * 401 `signed_out`. There is no workspace access source yet (the API's `/me`, plan PR 9), so a signed-in person has
- * no workspace here, and the placeholder workspace screens stay unreachable outside the tests (plan §2.6: they stay
- * dev-only; the deployed app shows only screens that work).
+ * The app's real services: one API client, the session, account, security and team services over it, the person's
+ * workspace from the API's /me, and the app's hearing of a 401 `signed_out`.
  */
-import type { ServiceEnvironment, ServiceResult, WorkspaceQueryService } from "../services/index.ts";
+import type { ServiceEnvironment } from "../services/index.ts";
 import { createApiAccountService } from "./account-service.ts";
 import { createApiClient, type ApiClientOptions } from "./client.ts";
+import { createApiSecurityService } from "./security-service.ts";
 import { createApiSessionService } from "./session-service.ts";
-
-function nothing<T>(): Promise<ServiceResult<T>> {
-  return Promise.resolve({
-    ok: false,
-    error: { code: "unavailable", resource: "organization", displayMessage: "This organization is not available." },
-  });
-}
-
-/** No organisation, publication or edition exists here yet. */
-const NO_WORKSPACE: WorkspaceQueryService = {
-  listOrganizations: () => Promise.resolve({ ok: true, value: [] }),
-  getOrganization: () => nothing(),
-  listPublications: () => nothing(),
-  getPublication: () => nothing(),
-  getEdition: () => nothing(),
-};
+import { createApiTeamService } from "./team-service.ts";
+import { createApiWorkspace } from "./workspace.ts";
 
 export function createApiEnvironment(options: Omit<ApiClientOptions, "onSignedOut"> = {}): ServiceEnvironment {
   const listeners = new Set<() => void>();
   const client = createApiClient({
     ...options,
     onSignedOut: () => {
+      forget(); // the session ended on the server: the next person must not inherit this one's workspace
       for (const listener of [...listeners]) listener();
     },
   });
   const inner = createApiSessionService(client);
+  const { access, workspace, forget } = createApiWorkspace(client);
   let generation = 0;
+  const changes = <T,>(run: () => T): T => {
+    generation += 1;
+    return run();
+  };
   return {
     session: {
       getSession: () => inner.getSession(),
-      signIn: (input) => {
-        generation += 1;
-        return inner.signIn(input);
-      },
-      signOut: () => {
-        generation += 1;
-        return inner.signOut();
-      },
+      signIn: (input) => changes(() => inner.signIn(input)),
+      verifyTwoStep: (input) => changes(() => inner.verifyTwoStep(input)),
+      signOut: () =>
+        changes(async () => {
+          // whatever the answer, this browser forgets the person's workspace (a shared computer)
+          forget();
+          return inner.signOut();
+        }),
     },
     account: createApiAccountService(client),
-    workspace: NO_WORKSPACE,
+    security: createApiSecurityService(client),
+    team: createApiTeamService(client),
+    access: {
+      getAccess: (input) => access.getAccess(input),
+      selectOrganization: (input) => changes(() => access.selectOrganization(input)),
+      selectPublication: (input) => changes(() => access.selectPublication(input)),
+    },
+    workspace,
     invalidatePendingSessionMutations: () => {
       generation += 1;
     },

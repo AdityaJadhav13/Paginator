@@ -5,7 +5,7 @@
 import { paths } from "../../app/routes.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ORG_LEAF = /^(settings|billing|storage)$/;
+const ORG_LEAF = /^(settings|billing|storage|team)$/;
 const PUB_LEAF = /^(overview|editions|stories|media|ads|templates|newsroom|sources|archive|brand|print-profiles|team)$/;
 const EDITION_LEAF = /^(content|generate|preflight|export|editor)$/;
 
@@ -14,12 +14,18 @@ export function isInvitationId(value: string): boolean {
   return UUID.test(value);
 }
 
-/** The sign-in screens: the public shell shows them on their own (03 §5.1). */
+/** The screens in the interface language with the sign-in chrome (03 §5.1): sign-in, two-step, account security. */
 export function isAuthPath(pathname: string): boolean {
   return (
-    [paths.login(), paths.signup(), paths.forgotPassword(), paths.resetPassword(), paths.verify()].includes(
-      pathname,
-    ) || /^\/invite\/[^/]+$/.test(pathname)
+    [
+      paths.login(),
+      paths.signup(),
+      paths.forgotPassword(),
+      paths.resetPassword(),
+      paths.verify(),
+      paths.twoStep(),
+      paths.accountSecurity(),
+    ].includes(pathname) || /^\/invite\/[^/]+$/.test(pathname)
   );
 }
 
@@ -28,7 +34,9 @@ export function safeReturnTo(value: string | null, fallback: string): string {
   if (value.includes("?") || value.includes("#")) return fallback;
   const parts = value.split("/").filter(Boolean);
   if (parts[0] === "invite" && parts.length === 2 && isInvitationId(parts[1] ?? "")) return value;
+  if (value === paths.accountSecurity()) return value;
   if (parts[0] !== "org" || !parts[1]) return fallback;
+  if (parts.length === 2) return value;
   if (parts.length === 3 && ORG_LEAF.test(parts[2] ?? "")) return value;
   if (parts[2] !== "pub" || !parts[3]) return fallback;
   if (parts.length === 5 && PUB_LEAF.test(parts[4] ?? "")) return value;

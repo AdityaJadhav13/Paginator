@@ -19,6 +19,11 @@ import { SignedOutRedirect } from "../features/auth/SignedOutRedirect.tsx";
 import { SignInScreen } from "../features/auth/SignInScreen.tsx";
 import { SignUpScreen } from "../features/auth/SignUpScreen.tsx";
 import { VerifyEmailScreen } from "../features/auth/VerifyEmailScreen.tsx";
+import { TwoStepScreen } from "../features/auth/TwoStepScreen.tsx";
+import { OrgHome } from "../features/people/OrgHome.tsx";
+import { SecurityScreen } from "../features/people/SecurityScreen.tsx";
+import { PeopleProvider } from "../features/people/services-context.tsx";
+import { TeamScreen } from "../features/people/TeamScreen.tsx";
 import { I18nProvider } from "../i18n/index.ts";
 import type { ServiceEnvironment } from "../services/index.ts";
 import { PlaceholderScreen } from "../demo/ui002/PlaceholderScreen.tsx";
@@ -29,9 +34,16 @@ import { RELEASE_FIXTURES } from "../demo/ui002/release-fixtures.ts";
 import "../app/shell.css";
 
 type LabeledRouteKey = keyof typeof ROUTE_LABELS & keyof typeof OWNING_UNIT;
+/** A screen still to be built: English, and in a development build only (plan §2.6). */
 function placeholder(key: LabeledRouteKey) {
-  return <PlaceholderScreen title={ROUTE_LABELS[key]} owningUnit={OWNING_UNIT[key]} />;
+  return (
+    <div lang="en">
+      <PlaceholderScreen title={ROUTE_LABELS[key]} owningUnit={OWNING_UNIT[key]} />
+    </div>
+  );
 }
+
+const DEVELOPMENT = import.meta.env.DEV;
 
 /**
  * UI005 §20.4 moved the content measure out of PublicShell's <main> so the
@@ -50,7 +62,7 @@ function WorkspaceBoundary({ editor = false }: { readonly editor?: boolean }) {
       releases={RELEASE_FIXTURES}
       getSessionMutationGeneration={environment.getSessionMutationGeneration}
     >
-      {editor ? <EditorShell /> : <WorkspaceShell />}
+      {editor && DEVELOPMENT ? <EditorShell /> : <WorkspaceShell />}
     </WorkspaceRouteProvider>
   );
 }
@@ -73,6 +85,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
     <I18nProvider>
       <EnvironmentContext.Provider value={activeEnvironment}>
         <AccountProvider account={activeEnvironment.account}>
+          <PeopleProvider security={activeEnvironment.security} team={activeEnvironment.team}>
           <SessionProvider
             session={activeEnvironment.session}
             access={activeEnvironment.access}
@@ -94,43 +107,56 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                 <Route path={PATTERNS.resetPassword} element={<ResetPasswordScreen />} />
                 <Route path={PATTERNS.verify} element={<VerifyEmailScreen />} />
                 <Route path={PATTERNS.invitation} element={<InvitationScreen />} />
-                <Route path={PATTERNS.onboarding} element={measured(placeholder("onboarding"))} />
+                <Route path={PATTERNS.twoStep} element={<TwoStepScreen />} />
+                <Route path={PATTERNS.accountSecurity} element={<SecurityScreen />} />
+                {DEVELOPMENT && <Route path={PATTERNS.onboarding} element={measured(placeholder("onboarding"))} />}
                 <Route path="*" element={measured(<NotFoundPage />)} />
               </Route>
 
               <Route path={PATTERNS.workspaceRoot} element={<WorkspaceBoundary />}>
-                <Route path={PATTERNS.orgSettings} element={placeholder("orgSettings")} />
-                <Route path={PATTERNS.orgBilling} element={placeholder("orgBilling")} />
-                <Route path={PATTERNS.orgStorage} element={placeholder("orgStorage")} />
-                <Route path={PATTERNS.pubOverview} element={placeholder("pubOverview")} />
-                <Route path={PATTERNS.pubEditions} element={placeholder("pubEditions")} />
-                <Route path={PATTERNS.pubStories} element={placeholder("pubStories")} />
-                <Route path={PATTERNS.pubMedia} element={placeholder("pubMedia")} />
-                <Route path={PATTERNS.pubAds} element={placeholder("pubAds")} />
-                <Route path={PATTERNS.pubTemplates} element={placeholder("pubTemplates")} />
-                <Route path={PATTERNS.pubNewsroom} element={placeholder("pubNewsroom")} />
-                <Route path={PATTERNS.pubSources} element={placeholder("pubSources")} />
-                <Route path={PATTERNS.pubArchive} element={placeholder("pubArchive")} />
-                <Route path={PATTERNS.pubArchiveRelease} element={placeholder("pubArchiveRelease")} />
-                <Route path={PATTERNS.pubBrand} element={placeholder("pubBrand")} />
-                <Route path={PATTERNS.pubPrintProfiles} element={placeholder("pubPrintProfiles")} />
-                <Route path={PATTERNS.pubTeam} element={placeholder("pubTeam")} />
-                <Route path={PATTERNS.editionLayout} element={<EditionWorkspaceLayout />}>
-                  <Route index element={<Navigate to={PATTERNS.editionContent} replace />} />
-                  <Route path={PATTERNS.editionContent} element={placeholder("editionContent")} />
-                  <Route path={PATTERNS.editionGenerate} element={placeholder("editionGenerate")} />
-                  <Route path={PATTERNS.editionPreflight} element={placeholder("editionPreflight")} />
-                  <Route path={PATTERNS.editionExport} element={placeholder("editionExport")} />
-                </Route>
+                <Route index element={<OrgHome />} />
+                <Route path={PATTERNS.orgTeam} element={<TeamScreen />} />
+                {DEVELOPMENT && (
+                  <>
+                    <Route path={PATTERNS.orgSettings} element={placeholder("orgSettings")} />
+                    <Route path={PATTERNS.orgBilling} element={placeholder("orgBilling")} />
+                    <Route path={PATTERNS.orgStorage} element={placeholder("orgStorage")} />
+                    <Route path={PATTERNS.pubOverview} element={placeholder("pubOverview")} />
+                    <Route path={PATTERNS.pubEditions} element={placeholder("pubEditions")} />
+                    <Route path={PATTERNS.pubStories} element={placeholder("pubStories")} />
+                    <Route path={PATTERNS.pubMedia} element={placeholder("pubMedia")} />
+                    <Route path={PATTERNS.pubAds} element={placeholder("pubAds")} />
+                    <Route path={PATTERNS.pubTemplates} element={placeholder("pubTemplates")} />
+                    <Route path={PATTERNS.pubNewsroom} element={placeholder("pubNewsroom")} />
+                    <Route path={PATTERNS.pubSources} element={placeholder("pubSources")} />
+                    <Route path={PATTERNS.pubArchive} element={placeholder("pubArchive")} />
+                    <Route path={PATTERNS.pubArchiveRelease} element={placeholder("pubArchiveRelease")} />
+                    <Route path={PATTERNS.pubBrand} element={placeholder("pubBrand")} />
+                    <Route path={PATTERNS.pubPrintProfiles} element={placeholder("pubPrintProfiles")} />
+                    <Route path={PATTERNS.pubTeam} element={placeholder("pubTeam")} />
+                    <Route path={PATTERNS.editionLayout} element={<EditionWorkspaceLayout />}>
+                      <Route index element={<Navigate to={PATTERNS.editionContent} replace />} />
+                      <Route path={PATTERNS.editionContent} element={placeholder("editionContent")} />
+                      <Route path={PATTERNS.editionGenerate} element={placeholder("editionGenerate")} />
+                      <Route path={PATTERNS.editionPreflight} element={placeholder("editionPreflight")} />
+                      <Route path={PATTERNS.editionExport} element={placeholder("editionExport")} />
+                    </Route>
+                  </>
+                )}
               </Route>
 
-              <Route path={PATTERNS.editionEditor} element={<WorkspaceBoundary editor />}>
-                <Route index element={<EditorRouteContent />} />
-              </Route>
-              <Route path={`${PATTERNS.editionEditor}/*`} element={<ScopedNotFoundShell editor />} />
+              {DEVELOPMENT && (
+                <>
+                  <Route path={PATTERNS.editionEditor} element={<WorkspaceBoundary editor />}>
+                    <Route index element={<EditorRouteContent />} />
+                  </Route>
+                  <Route path={`${PATTERNS.editionEditor}/*`} element={<ScopedNotFoundShell editor />} />
+                </>
+              )}
               <Route path="/org/:orgId/*" element={<ScopedNotFoundShell />} />
             </Routes>
           </SessionProvider>
+          </PeopleProvider>
         </AccountProvider>
       </EnvironmentContext.Provider>
     </I18nProvider>

@@ -22,10 +22,9 @@ describe("UI004 auth and public routes", () => {
     const view = renderUi004("/login", "signed-out");
     const user = userEvent.setup();
     await signInWithForm(user, accounts.reviewer);
-    expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/org/org-demo-konkan/pub/pub-demo-ratnagiri-tide/overview");
-    expect(view.container).toHaveTextContent("Konkan Demo Reviewer");
-    expect(view.container).toHaveTextContent("reviewer");
+    expect(await screen.findByRole("heading", { level: 1, name: "Konkan Coastal Press" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/org/org-demo-konkan");
+    expect(view.container).toHaveTextContent("Konkan Demo Reviewer · Viewer");
     expect(screen.getByRole("combobox", { name: "Organization" })).toHaveTextContent("Konkan Coastal Press");
     expect(screen.queryByText("Sahyadri Media Cooperative")).not.toBeInTheDocument();
   });
@@ -93,8 +92,8 @@ describe("UI004 protected access", () => {
 
     renderUi004("/login?returnTo=https%3A%2F%2Fevil.example", "signed-out");
     await signInWithForm(user, accounts.editor);
-    await screen.findByRole("heading", { level: 1, name: "Overview" });
-    expect(window.location.pathname).toBe(PUNE);
+    await screen.findByRole("heading", { level: 1, name: "Sahyadri Media Cooperative" });
+    expect(window.location.pathname).toBe("/org/org-demo-sahyadri");
   });
 
   it("renders byte-equivalent access surfaces for unknown and known inaccessible organizations", async () => {
@@ -106,7 +105,8 @@ describe("UI004 protected access", () => {
     await screen.findByRole("heading", { level: 1, name: "Access unavailable" });
     expect(known.container.querySelector("main")?.innerHTML).toBe(unknownMarkup);
     expect(known.container).not.toHaveTextContent("Sahyadri Media Cooperative");
-    expect(screen.getByText("Demonstration only — production authorization is not evaluated here")).toBeInTheDocument();
+    expect(screen.getByText("This organization or publication does not exist, or you cannot open it.")).toBeInTheDocument();
+    expect(known.container).not.toHaveTextContent(/demonstration/i);
   });
 
   it("renders identical access surfaces for unknown, wrong-scope, and known-ungranted publications", async () => {
@@ -160,9 +160,9 @@ describe("UI004 protected access", () => {
     const { environment, container } = renderUi004(PUNE);
     const organization = await screen.findByRole("combobox", { name: "Organization" });
     await userEvent.setup().selectOptions(organization, "org-demo-konkan");
-    await waitFor(() => expect(container).toHaveTextContent("reviewer"));
-    expect(screen.getByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/org/org-demo-konkan/pub/pub-demo-ratnagiri-tide/overview");
+    await waitFor(() => expect(container).toHaveTextContent("Sahyadri Demo Editor · Viewer"));
+    expect(screen.getByRole("heading", { level: 1, name: "Konkan Coastal Press" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/org/org-demo-konkan");
     expect(await environment.access.getAccess({ userId: "user-demo-sahyadri-editor" })).toMatchObject({ ok: true, value: { activeOrganizationId: "org-demo-konkan", activePublicationId: "pub-demo-ratnagiri-tide" } });
   });
 
@@ -171,9 +171,8 @@ describe("UI004 protected access", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Sign out" }));
     await signInWithForm(user, accounts.reviewer);
-    await waitFor(() => expect(window.location.pathname).toBe("/org/org-demo-konkan/pub/pub-demo-ratnagiri-tide/overview"));
-    await waitFor(() => expect(container).toHaveTextContent("Konkan Demo Reviewer"));
-    expect(container).toHaveTextContent("reviewer");
+    await waitFor(() => expect(window.location.pathname).toBe("/org/org-demo-konkan"));
+    await waitFor(() => expect(container).toHaveTextContent("Konkan Demo Reviewer · Viewer"));
     expect(screen.getByRole("combobox", { name: "Organization" }).querySelectorAll("option")).toHaveLength(1);
     expect(container).not.toHaveTextContent("Sahyadri Media Cooperative");
   });
@@ -199,7 +198,7 @@ describe("UI004 UI003 scenario integration", () => {
     const environment = createMockApplicationEnvironment();
     environment.scenarios.setScenario({ mode: "failure", operations: ["organization.list"] });
     renderUi004(PUNE, undefined, environment);
-    expect(await screen.findByText("The demonstration service is temporarily unavailable. Try again.")).toBeInTheDocument();
+    expect(await screen.findByText("The workspace could not be loaded. Check your connection, then try again.")).toBeInTheDocument();
     expect(window.location.pathname).toBe(PUNE);
     environment.scenarios.setScenario({ mode: "normal" });
     await userEvent.setup().click(screen.getByRole("button", { name: "Retry" }));

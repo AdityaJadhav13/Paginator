@@ -35,7 +35,7 @@ describe("UI004 accessibility and responsive contract", () => {
     await user.tab();
     expect(screen.getByLabelText("Password")).toHaveFocus();
     await user.keyboard(`${editor.password}{Enter}`);
-    expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toHaveFocus();
+    expect(await screen.findByRole("heading", { level: 1, name: "Sahyadri Media Cooperative" })).toHaveFocus();
   });
 
   it("retains phone editor-review behavior", async () => {

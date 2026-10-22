@@ -28,7 +28,7 @@ export function PrimaryCta({ className }: PrimaryCtaProps) {
   // A signed-in person with no workspace yet lands on the signed-in page, which says what is open to them.
   const workspace = signedIn ? state.workspace : null;
   const destination = workspace
-    ? paths.pubOverview(workspace.activeOrganizationId, workspace.activePublicationId)
+    ? paths.orgHome(workspace.activeOrganizationId)
     : paths.login();
 
   return (

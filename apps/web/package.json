@@ -14,12 +14,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@pageinator/contracts": "workspace:*",
+    "qrcode": "1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-router": "8.4.0"
   },
   "devDependencies": {
-    "@pageinator/contracts": "workspace:*",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.7",

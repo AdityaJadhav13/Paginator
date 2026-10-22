@@ -248,13 +248,13 @@ describe("No record leakage between the two invalid-publication causes", () => {
     expect(screen.queryByText(/Ratnagiri/)).not.toBeInTheDocument();
     expect(container.innerHTML).not.toContain("org-demo-konkan");
     expect(container.innerHTML).not.toContain("pub-demo-ratnagiri-tide");
-    expect(container.innerHTML).toContain("pub-demo-pune-daily");
+    expect(container.innerHTML).toContain('href="/org/org-demo-sahyadri"');
   });
 
   it("an inaccessible publication offers only the active safe workspace", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-ratnagiri-tide/overview");
     const link = await screen.findByRole("link", { name: "Open active workspace" });
-    expect(link).toHaveAttribute("href", "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
+    expect(link).toHaveAttribute("href", "/org/org-demo-sahyadri");
   });
 
   it("nonexistent and cross-publication editions render identical safe output", async () => {
