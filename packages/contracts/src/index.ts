@@ -67,3 +67,16 @@ export {
   StoryPhotoPatch,
   UploadRequest,
 } from "./media.ts";
+export {
+  Comment,
+  CommentInput,
+  CommentList,
+  CommentPatch,
+  LIVE_EVENTS,
+  NOTIFICATION_KINDS,
+  Notification,
+  NotificationKind,
+  NotificationList,
+  NotificationQuery,
+  NotificationsRead,
+} from "./notifications.ts";

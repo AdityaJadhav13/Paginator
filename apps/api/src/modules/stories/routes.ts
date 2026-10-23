@@ -23,6 +23,7 @@ import {
   type TransitionTarget,
 } from "@pageinator/contracts";
 import { BODY_FORMAT, DeskTextError, isBrief, pasteArticles } from "@pageinator/desk-text";
+import type { FastifyInstance } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { Database } from "../../db/pools.ts";
@@ -47,6 +48,7 @@ import {
 import type { Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 import { type Access, accessOf, actorOf, orgRoleOf } from "../access/access.ts";
+import { type Notifier, type Outbox } from "../notifications/notify.ts";
 import { idempotent } from "../requests/idempotency.ts";
 import {
   type StoryFacts,
@@ -76,7 +78,12 @@ const CURSOR_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
 const BASE = "/api/v1/orgs/:o/pubs/:p/stories";
 
-export type StoryOptions = { database: Database };
+export type StoryOptions = {
+  database: Database;
+  notify: Notifier;
+  /** Sends the emails of a change once it has committed. */
+  mail: (outbox: Outbox) => void;
+};
 
 /** A refusal by the story rules, with why (audited by the plugin's onError hook). */
 export function refused(reason: string): ApiError {
@@ -214,8 +221,9 @@ function everAllowed(access: Access, pub: string, from: StoryStatus, to: Transit
   return isDesk(access, pub);
 }
 
-export const storyRoutes: FastifyPluginAsyncZod<StoryOptions> = async (app, { database }) => {
-  // a refusal by the story rules is recorded as authorize() records its own (plan §4.2)
+/** Records the rules' refusals (403 not_allowed, from refused()) in the audit log, as authorize() records its own
+ * (plan §4.2). Each plugin that throws refused() adds it: hooks do not cross plugins. */
+export function auditRefusals(app: FastifyInstance, database: Database): void {
   app.addHook("onError", async (request, _reply, error) => {
     if (!(error instanceof ApiError) || error.code !== "not_allowed" || !request.access) return;
     if ((error as { audited?: boolean }).audited) return;
@@ -242,6 +250,10 @@ export const storyRoutes: FastifyPluginAsyncZod<StoryOptions> = async (app, { da
         .execute(),
     );
   });
+}
+
+export const storyRoutes: FastifyPluginAsyncZod<StoryOptions> = async (app, { database, notify, mail }) => {
+  auditRefusals(app, database);
 
   /** A stored story shown again, if the person still sees it. */
   const again = (access: Access, pub: string, userId: string) => async (stored: unknown, tx: Tx) => {
@@ -467,6 +479,7 @@ export const storyRoutes: FastifyPluginAsyncZod<StoryOptions> = async (app, { da
       const userId = actorOf(request).userId;
       const { p, s } = request.params;
       const { to, baseRevision, comment } = request.body;
+      const outbox: Outbox = [];
       const answer = await idempotent(
         database,
         request,
@@ -487,11 +500,33 @@ export const storyRoutes: FastifyPluginAsyncZod<StoryOptions> = async (app, { da
             ]);
           }
           if (target === story.facts.status) throw new ApiError("invalid_transition");
-          await changeStatus(tx, access.tenant, p, s, story.facts.status, target, note === "" ? null : note);
-          return { status: 200, body: view((await findStory(tx, p, s)) as StoryRow, access, userId) };
+          const { commentId } = await changeStatus(
+            tx,
+            access.tenant,
+            p,
+            s,
+            story.facts.status,
+            target,
+            note === "" ? null : note,
+          );
+          const after = (await findStory(tx, p, s)) as StoryRow;
+          // the desk is told of a filed story, and the reporter of one sent back (06 §11)
+          if (to === "filed") await notify.storyFiled(tx, access.tenant, p, s, factsOf(after));
+          if (to === "draft" && commentId) {
+            await notify.storySentBack(
+              tx,
+              access.tenant,
+              p,
+              { ...factsOf(after), id: s, headline: after.headline },
+              { id: commentId, body: note },
+              outbox,
+            );
+          }
+          return { status: 200, body: view(after, access, userId) };
         },
         again(access, p, userId),
       );
+      mail(outbox); // only once the move has committed (a replay sends nothing again)
       return reply.status(200).send(answer.body as Story);
     },
   );
@@ -525,7 +560,12 @@ export const storyRoutes: FastifyPluginAsyncZod<StoryOptions> = async (app, { da
           assignee_id: assignee,
           ...(dueAt !== undefined ? { due_at: dueAt === null ? null : new Date(dueAt) } : {}),
         });
-        return view((await findStory(tx, p, s)) as StoryRow, access, userId);
+        const after = (await findStory(tx, p, s)) as StoryRow;
+        // the person given the story is told (not again when only its due time changes)
+        if (assignee && assignee !== story.facts.assigneeId) {
+          await notify.storyAssigned(tx, access.tenant, p, s, factsOf(after));
+        }
+        return view(after, access, userId);
       });
     },
   );

@@ -139,7 +139,12 @@ const Env = z
     PGN_ALLOWED_ORIGINS: list(isOrigin, "must be origins such as https://app.example.test (no path)")
       .refine((origins) => origins.length > 0, { error: "must name at least one origin" })
       .default(["http://127.0.0.1:5180"]),
+    // Request limits (src/http/rate-limit.ts): per client address for signed-out requests; per person for signed-in
+    // /api/v1 requests (autosave every 1.5 s is 40 a minute, plus the lists and live-update fetches); and a ceiling
+    // per address on requests that carry a session cookie (a newsroom of twenty behind one address fits under it).
     PGN_RATE_LIMIT_PER_MINUTE: wholeNumber(1, 100_000).default(60),
+    PGN_RATE_LIMIT_PER_PERSON_PER_MINUTE: wholeNumber(1, 100_000).default(300),
+    PGN_RATE_LIMIT_SIGNED_IN_PER_ADDRESS_PER_MINUTE: wholeNumber(1, 100_000).default(6000),
     // The database (plan §3.1): one login role per connection pool, each with its own password (.env.dev in
     // development).
     ...DATABASE,
@@ -214,6 +219,8 @@ const Env = z
     logLevel: env.PGN_LOG_LEVEL,
     allowedOrigins: env.PGN_ALLOWED_ORIGINS,
     rateLimitPerMinute: env.PGN_RATE_LIMIT_PER_MINUTE,
+    rateLimitPerPersonPerMinute: env.PGN_RATE_LIMIT_PER_PERSON_PER_MINUTE,
+    rateLimitSignedInPerAddressPerMinute: env.PGN_RATE_LIMIT_SIGNED_IN_PER_ADDRESS_PER_MINUTE,
     database: {
       host: env.PGN_DB_HOST,
       port: env.PGN_DB_PORT,

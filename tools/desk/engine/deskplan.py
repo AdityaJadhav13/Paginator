@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 
 from deskgen import BRIEF_WIDTHS, G, rank_class
+from deskmsg import msg
 
 MAX_MODULES = 10                 # modules per page the planner gives the search (gen1's limit is 11; fewer is faster)
 MIN_MODULES = 3                  # a page with fewer stories looks like a poster, not a newspaper page
@@ -164,12 +165,12 @@ class Planner:
                 if self.placeable(it["key"]):
                     fixed.append(it["key"])
                 else:
-                    dropped[it["key"]] = "Its headline is too long to set (at most four lines) — shorten the headline"
+                    dropped[it["key"]] = msg("m.plan.headlineTooLong")
             if len(fixed) > MAX_MODULES:                   # the layout search takes at most MAX_MODULES per page
                 keep = self.page_order(fixed)[:MAX_MODULES]
                 for k in fixed:
                     if k not in keep:
-                        dropped[k] = f"More than {MAX_MODULES} stories are pinned to page {p} — pin it to another page"
+                        dropped[k] = msg("m.plan.pinnedFull", max=MAX_MODULES, page=p)
                 fixed = [k for k in fixed if k in keep]
             # this page's share of what is left: as many as usual, fewer when the edition is short of stories
             later = self.pages[idx:]

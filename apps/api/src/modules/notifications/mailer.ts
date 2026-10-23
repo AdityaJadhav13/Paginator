@@ -20,7 +20,8 @@ export type MailSettings = {
 };
 
 /** What a message is, for logs: never its text, which carries links with tokens. */
-export type MailKind = "verify-email" | "reset-password" | "new-sign-in" | "invitation";
+export type MailKind =
+  "verify-email" | "reset-password" | "new-sign-in" | "invitation" | "story-sent-back" | "invitation-accepted";
 export type Mail = { kind: MailKind; to: string; subject: string; text: string; html: string };
 
 /** The part of a nodemailer transport the mailer uses (tests give their own). */

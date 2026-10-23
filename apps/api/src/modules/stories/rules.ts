@@ -109,11 +109,48 @@ export function canAssign(access: Access, publicationId: string): boolean {
   return reach("story.assign", access.orgRole, on(access, publicationId)) !== null;
 }
 
-/** May the person comment (PR 19 writes comments; a send-back's comment is the desk's)? */
+/** May the person read the story's comments: whoever sees the story with comment.read (a Reporter's ◐: their own
+ * stories, which are the ones they see). */
+export function canReadComments(access: Access, publicationId: string, story: StoryFacts, userId: string): boolean {
+  if (!sees(access, publicationId, story, userId)) return false;
+  const here = reach("comment.read", access.orgRole, on(access, publicationId));
+  return here === "full" || (here === "scoped" && theirs(story, userId));
+}
+
+/** May the person comment on the story: whoever sees it with comment.write (a Reporter's ◐: their own stories; a
+ * Viewer never). A send-back's comment is the desk's, with the move. */
 export function canComment(access: Access, publicationId: string, story: StoryFacts, userId: string): boolean {
+  if (!sees(access, publicationId, story, userId)) return false;
   const here = reach("comment.write", access.orgRole, on(access, publicationId));
   if (here === "full") return true;
   return here === "scoped" && theirs(story, userId);
+}
+
+/** A comment as the rules see it. */
+export type CommentFacts = { authorId: string; parentId: string | null };
+
+/** May the person change the comment's text: its author, while they may comment on the story. */
+export function canEditComment(
+  access: Access,
+  publicationId: string,
+  story: StoryFacts,
+  comment: CommentFacts,
+  userId: string,
+): boolean {
+  return comment.authorId === userId && canComment(access, publicationId, story, userId);
+}
+
+/** May the person resolve (or reopen) the thread a comment starts: whoever may comment and wrote it, the desk, or the
+ * story's own reporter or assignee. A reply starts no thread. */
+export function canResolve(
+  access: Access,
+  publicationId: string,
+  story: StoryFacts,
+  comment: CommentFacts,
+  userId: string,
+): boolean {
+  if (comment.parentId !== null || !canComment(access, publicationId, story, userId)) return false;
+  return comment.authorId === userId || isDesk(access, publicationId) || theirs(story, userId);
 }
 
 /** May the person delete the story: the desk, or its author while it is a Draft. */

@@ -570,6 +570,15 @@ fieldset.preview-zoom {
 }
 
 .alert-ok,
+/* the last import's summary (Word files, Pageinator stories): a long unbroken file name or headline wraps */
+.import-note {
+  overflow-wrap: anywhere;
+}
+
+.import-note .notice-body {
+  min-width: 0;
+}
+
 .notice-ok {
   border-color: #b9dcc5;
   background: var(--pg-ok-soft);
@@ -2843,4 +2852,72 @@ fieldset.preview-zoom {
 .page-card-edit:hover,
 .page-card-edit:focus-visible {
   text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------ language (English / मराठी) */
+
+fieldset.lang-switch {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.lang-switch .segmented label {
+  min-width: 72px;
+  justify-content: center;
+}
+
+/* The Marathi interface (02-design-system §3.3): Devanagari UI text in the system's Devanagari face (Kohinoor
+   Devanagari on macOS, Nirmala UI on Windows; no web fonts), never below 13 px, with a generous line height, and no
+   letter-spacing (spacing breaks the headline bar that joins the letters). Latin digits and words stay in system-ui. */
+:root[lang="mr"] {
+  --pg-font-ui:
+    system-ui, -apple-system, "Segoe UI", "Nirmala UI", "Kohinoor Devanagari", "Noto Sans Devanagari", Mangal,
+    sans-serif;
+}
+
+:root[lang="mr"] body {
+  line-height: 1.6;
+}
+
+:root[lang="mr"] :is(h1, h2, h3, h4) {
+  line-height: 1.5;
+}
+
+:root[lang="mr"] :is(.btn, .segmented label, .chip, .thumb, .article-warnings) {
+  line-height: 1.6;
+}
+
+:root[lang="mr"]
+  :is(
+    .tag,
+    .chip,
+    .step-sub,
+    .need-state,
+    .thumb,
+    .plan-ads,
+    .page-card-msg,
+    .page-card-warn,
+    .page-card-check,
+    .report-page h4 .muted,
+    .article-warnings
+  ) {
+  font-size: 13px;
+}
+
+:root[lang="mr"] code {
+  font-size: max(13px, 0.92em);
+}
+
+:root[lang="mr"] :is(.chip, .plan-ads, .ad-box-label, .step-head h1) {
+  letter-spacing: 0;
+}
+
+:root[lang="mr"] .plan-ads {
+  min-height: 21px;
+}
+
+:root[lang="mr"] .ad-box-label {
+  padding: 2px 6px;
 }

@@ -4,8 +4,8 @@
 // wording is a first draft, for the desk to review with the catalogue.
 import type { Mail, MailKind } from "../notifications/mailer.ts";
 
-type Rendered = Omit<Mail, "to">;
-type Part = { lang: "mr" | "en"; paragraphs: string[]; link?: string };
+export type Rendered = Omit<Mail, "to">;
+export type Part = { lang: "mr" | "en"; paragraphs: string[]; link?: string };
 
 const escape = (text: string) =>
   text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
@@ -25,7 +25,7 @@ function unsafe(code: number): boolean {
 
 /** Text a person typed or a browser sent, made safe to show: each unsafe character becomes a space, at most `max`
  * characters. */
-function clean(text: string, max: number): string {
+export function clean(text: string, max: number): string {
   const flat = [...text]
     .map((c) => (unsafe(c.codePointAt(0) ?? 0) ? " " : c))
     .join("")
@@ -40,7 +40,7 @@ function onOrigin(url: string, origin: string): string {
   return url;
 }
 
-function render(kind: MailKind, subject: string, parts: Part[]): Rendered {
+export function render(kind: MailKind, subject: string, parts: Part[]): Rendered {
   const text = parts
     .map((part) => [...part.paragraphs, ...(part.link ? [part.link] : [])].join("\n\n"))
     .join("\n\n—\n\n");
@@ -98,7 +98,7 @@ export function resetEmail(input: { name: string; url: string; origin: string })
 }
 
 /** A moment as people in the pilot read it: Asia/Kolkata (UTC+05:30, no summer time), digits as written. */
-function istTime(at: Date): string {
+export function istTime(at: Date): string {
   const ist = new Date(at.getTime() + 330 * 60_000).toISOString();
   return `${ist.slice(0, 10)} ${ist.slice(11, 16)} IST`;
 }
@@ -128,7 +128,7 @@ export function newSignInEmail(input: { name: string; at: Date; device: string }
 }
 
 /** How a role is named in an invitation (first drafts for the catalogue, PR 12). */
-const ROLE_NAMES: Record<string, { mr: string; en: string }> = {
+export const ROLE_NAMES: Record<string, { mr: string; en: string }> = {
   admin: { mr: "प्रशासक", en: "Admin" },
   member: { mr: "सदस्य", en: "Member" },
   chief_editor: { mr: "मुख्य संपादक", en: "Chief Editor" },

@@ -33,17 +33,25 @@
    ```
    This also points git at the tracked hooks (`git config core.hooksPath .githooks`), so the privacy guard runs
    before every push. It leaves an existing `core.hooksPath` alone, with a warning.
+4. For the Desk and `pnpm run test:desk` only: its two Python 3.11.14 environments, built with uv as CI builds them.
+   `tools/desk/requirements.lock` holds the exact versions of `experiments/phase0/pdfx1/requirements.txt`, with hashes.
+   ```sh
+   uv venv --python 3.11.14 experiments/phase0/pdfx1/.venv
+   uv pip install --python experiments/phase0/pdfx1/.venv --require-hashes -r tools/desk/requirements.lock
+   uv venv --python 3.11.14 tools/oracle/v0/.venv
+   uv pip install --python tools/oracle/v0/.venv --require-hashes -r tools/oracle/v0/requirements.lock
+   ```
 
 ## Everyday commands
 | Command | Does |
 |---|---|
-| `pnpm run ci` | Everything CI runs: guards, dependency graph, lint, format check, typecheck, tests, web build |
-| `pnpm test` | All tests but the database's: web (jsdom), kernel (node), api with the shared contracts (node) |
+| `pnpm run ci` | Everything CI runs except the oracle's tests and the Desk's (`pnpm run test:desk`): guards, dependency graph, lint, format check, typecheck, tests, web build |
+| `pnpm test` | All tests but the database's and the Desk's: web (jsdom), kernel (node), api with the shared contracts (node) |
 | `pnpm run test:db` | The API's database and tenancy tests (`apps/api/test/db`, `apps/api/test/tenancy`) on the local Postgres, one email through Mailpit, and photo uploads on SeaweedFS in a bucket of the run's own (`pnpm dev:up` first). Each file works in a clone of a freshly migrated template database; the run drops them all. It reads `.env.dev`, and fails, never skips, without them |
 | `pnpm run typecheck` | `tsc -b` (TypeScript 7) for packages, plus the web app's own typecheck |
 | `pnpm run lint` / `pnpm run format` | ESLint (with the kernel determinism rules) and Prettier |
 | `pnpm --filter @pageinator/web dev` | Run the web app on `http://127.0.0.1:5180`, with `/api` passed on to the API (`http://127.0.0.1:8780`, or the address in `PGN_DEV_API`), so the browser sees one origin as in production. It signs in against the real API; component tests use the test double in `apps/web/src/mocks` |
-| `pnpm --filter @pageinator/api dev` | Run the API on `http://127.0.0.1:8780` (`/healthz`, `/readyz`), restarting on changes, with the settings of `.env.dev`. Its settings (`PGN_*`) are read and checked by `apps/api/src/config.ts`: the database's place (`PGN_DB_HOST`, `PGN_DB_PORT`, `PGN_DB_NAME`, by default the local Postgres) and the passwords of `pgn_app`, `pgn_auth` and `pgn_listen`, which have no default; the sign-in secret `PGN_AUTH_SECRET` (no default) and the public origin `PGN_PUBLIC_ORIGIN` (by default the first of `PGN_ALLOWED_ORIGINS`); email through `PGN_SMTP_HOST`, `PGN_SMTP_PORT`, `PGN_SMTP_TLS` and `PGN_MAIL_FROM` (by default Mailpit on 127.0.0.1:51025). Behind any proxy, `PGN_TRUST_PROXY` must name it |
+| `pnpm --filter @pageinator/api dev` | Run the API on `http://127.0.0.1:8780` (`/healthz`, `/readyz`), restarting on changes, with the settings of `.env.dev`. Its settings (`PGN_*`) are read and checked by `apps/api/src/config.ts`: the database's place (`PGN_DB_HOST`, `PGN_DB_PORT`, `PGN_DB_NAME`, by default the local Postgres) and the passwords of `pgn_app`, `pgn_auth` and `pgn_listen`, which have no default; the sign-in secret `PGN_AUTH_SECRET` (no default) and the public origin `PGN_PUBLIC_ORIGIN` (by default the first of `PGN_ALLOWED_ORIGINS`); email through `PGN_SMTP_HOST`, `PGN_SMTP_PORT`, `PGN_SMTP_TLS` and `PGN_MAIL_FROM` (by default Mailpit on 127.0.0.1:51025). Behind any proxy, `PGN_TRUST_PROXY` must name it. Request limits: `PGN_RATE_LIMIT_PER_MINUTE` (signed out, per address, 60), `PGN_RATE_LIMIT_PER_PERSON_PER_MINUTE` (signed in, 300) and `PGN_RATE_LIMIT_SIGNED_IN_PER_ADDRESS_PER_MINUTE` (6,000) |
 | `pnpm --filter @pageinator/api db:migrate` | Applies the pending migrations (`apps/api/src/db/migrations`, forward only) as `pgn_migrator` acting as `pgn_owner`; needs `PGN_MIGRATOR_PASSWORD` (from `.env.dev` when it exists; the environment wins) |
 | `pnpm --filter @pageinator/api db:identity-schema` | Prints the SQL Better Auth needs to bring schema `identity` up to date for our configuration (`src/modules/identity/auth.ts`): after a Better Auth upgrade or a new plugin, keep it in `apps/api/src/db/identity/` and run it from a new migration. `pnpm run test:db` fails while Better Auth expects something no migration made |
 | `pnpm --filter @pageinator/api bootstrap-org -- --owner-name … --owner-email … --org-name … --org-slug … --pub-name … --pub-slug … --languages mr,en --primary mr --digits devanagari` | Makes an organisation, its first publication and its Owner (`src/modules/people/bootstrap.ts`). The Owner gets two emails (in development, Mailpit): confirm the address, and choose a password. Two-step sign-in is required of Owners and Admins before any organisation route answers (`app.org_settings.mfa_required_roles`) |
@@ -52,6 +60,7 @@
 | `pnpm run guard` | Privacy guard, frozen-evidence guard and oracle check. Locally, on a branch stacked on another, set `GUARD_BASE=origin/<base>` |
 | `pnpm run check:oracle` | The frozen oracle: its manifest's SHA-256s, and every tracked file against `tools/ts/oracle-files.json` |
 | `pnpm run test:private` | Private parity tests against pilot goldens (needs `PAGEINATOR_PRIVATE_GOLDENS`; fails, never skips, when missing) |
+| `pnpm run test:desk` | The Desk's tests (fictional data only): server and Word import in `experiments/phase0/pdfx1/.venv`, engine in `tools/oracle/v0/.venv`, the page editor's view arithmetic in Node. CI's `desk` job runs the same three commands |
 
 ## Local services
 The database, the S3 store and the mail catcher run in Docker as the compose project `pageinator`

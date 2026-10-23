@@ -258,7 +258,7 @@ export async function changeStatus(
   comment: string | null,
   /** false when the caller's own change of the story follows in the same request (one change, one version) */
   bump = true,
-): Promise<void> {
+): Promise<{ commentId: string | null }> {
   let commentId: string | null = null;
   if (comment !== null) {
     const made = await tx
@@ -295,6 +295,7 @@ export async function changeStatus(
       .where("publication_id", "=", publicationId)
       .where("id", "=", storyId)
       .execute();
+  return { commentId };
 }
 
 const ASIDE = new Set<string>(["held", "spiked"]);
@@ -482,6 +483,19 @@ export async function isPhotoOfTheirs(tx: Tx, publicationId: string, assetId: st
     .where("sp.asset_id", "=", assetId)
     .where("s.deleted_at", "is", null)
     .where((eb) => eb.or([eb("s.reporter_id", "=", userId), eb("s.assignee_id", "=", userId)]))
+    .executeTakeFirst();
+  return row !== undefined;
+}
+
+/** Whether the story (not deleted) is this person's own now: they report it, or it is given to them. */
+export async function isStoryOfTheirs(tx: Tx, publicationId: string, storyId: string, userId: string) {
+  const row = await tx
+    .selectFrom("app.story")
+    .select("id")
+    .where("publication_id", "=", publicationId)
+    .where("id", "=", storyId)
+    .where("deleted_at", "is", null)
+    .where((eb) => eb.or([eb("reporter_id", "=", userId), eb("assignee_id", "=", userId)]))
     .executeTakeFirst();
   return row !== undefined;
 }

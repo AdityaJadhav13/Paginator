@@ -15,7 +15,7 @@ import { findStory, isPhotoOfTheirs, removePhoto, setPhoto, updatePhoto } from "
 import type { Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 import { type Access, accessOf, actorOf } from "../access/access.ts";
-import { forChange, refused, view } from "../stories/routes.ts";
+import { auditRefusals, forChange, refused, view } from "../stories/routes.ts";
 import { canAttachPhoto, mediaScope } from "../stories/rules.ts";
 import { cleaned } from "../stories/store.ts";
 import { EXTENSION } from "./picture.ts";
@@ -44,6 +44,8 @@ export async function maySee(tx: Tx, access: Access, publicationId: string, asse
 }
 
 export const photoRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { database, store }) => {
+  auditRefusals(app, database); // the photo rules' 403s are audited as the stories' are
+
   app.put(
     PHOTO,
     {
