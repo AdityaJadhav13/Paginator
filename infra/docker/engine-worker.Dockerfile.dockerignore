@@ -1,0 +1,12 @@
+# The engine worker image's build context (BuildKit reads <Dockerfile>.dockerignore): only what the image takes.
+*
+!apps/engine-worker/requirements.lock
+!apps/engine-worker/pgn_worker
+!apps/engine-worker/test
+!tools/desk/deskserver
+!tools/desk/engine
+!experiments/phase0/compose2/fonts
+!tools/oracle/v0/assets/fonts
+**/__pycache__
+**/*.pyc
+**/.DS_Store

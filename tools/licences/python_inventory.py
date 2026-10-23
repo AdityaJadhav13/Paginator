@@ -22,6 +22,7 @@ import os
 import re
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -35,6 +36,11 @@ HASH = re.compile(r"^\s+--hash=sha256:([0-9a-f]{64})\s*\\?$")
 WHEEL = re.compile(r"^(?P<name>[^-]+)-(?P<ver>[^-]+)(?:-(?P<build>\d[^-]*))?-(?P<py>[^-]+)-(?P<abi>[^-]+)-(?P<plat>[^-]+)\.whl$")
 EXTENSION = re.compile(r"\.(cpython-\d+[a-z]*-[^.]+|abi3)\.so$")       # a Python extension module: the package's own
 SHARED = re.compile(r"\.so(\.\d+)*$")
+DATA = re.compile(r"[^/]+/cacert\.pem")                            # a CA bundle (Mozilla's data, MPL-2.0) in a package
+
+
+class InventoryError(RuntimeError):
+    """A pin the inventory cannot be made for (not on PyPI, or not the bytes the lock names): a clean ✗, never a trace."""
 
 
 def norm(name: str) -> str:
@@ -81,11 +87,16 @@ def fetch(url: str, cache: Path, sha256: str | None = None) -> bytes:
         data = path.read_bytes()
         if hashlib.sha256(data).hexdigest() == sha256:
             return data
-    with urllib.request.urlopen(url, timeout=120) as r:  # noqa: S310 — pypi.org and its file host only
-        data = r.read()
+    try:
+        with urllib.request.urlopen(url, timeout=120) as r:  # noqa: S310 — pypi.org and its file host only
+            data = r.read()
+    except urllib.error.HTTPError as e:
+        raise InventoryError(f"{url}: PyPI answered {e.code}") from None
+    except (urllib.error.URLError, OSError) as e:
+        raise InventoryError(f"{url}: PyPI could not be reached ({type(e).__name__})") from None
     if sha256 is not None:
         if hashlib.sha256(data).hexdigest() != sha256:
-            sys.exit(f"{url}: not the bytes the lock names")
+            raise InventoryError(f"{url}: not the bytes the lock names")
         path.write_bytes(data)
     return data
 
@@ -103,6 +114,8 @@ def inspect(data: bytes) -> dict:
         in_libs = re.fullmatch(r"[^/]+\.libs/[^/]+", n) is not None
         if in_libs or (SHARED.search(base) and not EXTENSION.search(base)):
             bundled.append({"file": n, "library": re.sub(r"(-[0-9a-f]{8})?\.so(\.\d+)*$", "", base)})
+        elif DATA.fullmatch(n):                                         # third-party data the package carries
+            bundled.append({"file": n, "library": base})
     return {"metadata": {"license_expression": (meta.get("License-Expression") or "").strip() or None,
                          "license": licence.splitlines()[0][:200] if licence else None,
                          "classifiers": sorted(c for c in meta.get_all("Classifier") or [] if c.startswith("License ::"))},
@@ -118,7 +131,10 @@ def build(cache: Path) -> dict:
     packages = {}
     for pin in sorted(pins):
         name, version = pin.split("==")
-        info = json.loads(fetch(f"https://pypi.org/pypi/{name}/{version}/json", cache))
+        try:
+            info = json.loads(fetch(f"https://pypi.org/pypi/{name}/{version}/json", cache))
+        except InventoryError as e:
+            raise InventoryError(f"{pin}: {e}") from None
         wheels = []
         for f in sorted(info.get("urls") or [], key=lambda f: f["filename"]):
             sha = f.get("digests", {}).get("sha256")
@@ -136,7 +152,11 @@ def main() -> int:
     args = ap.parse_args()
     cache = Path(args.cache)
     cache.mkdir(parents=True, exist_ok=True)
-    inventory = build(cache)
+    try:
+        inventory = build(cache)
+    except InventoryError as e:
+        print(f"✗ python licences: {e}", file=sys.stderr)
+        return 1
     text = json.dumps(inventory, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
     if args.check:                                  # compared as data: the committed file is formatted by Prettier
         try:

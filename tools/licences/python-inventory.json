@@ -2,11 +2,14 @@
   "format": "pageinator.python-licences/1",
   "locks": {
     "apps/engine-worker/requirements.lock": [
+      "boto3==1.43.114",
+      "botocore==1.43.114",
       "cffi==2.1.1",
       "charset-normalizer==3.5.2",
       "cryptography==50.0.2",
       "deprecated==1.3.1",
       "fonttools==4.63.0",
+      "jmespath==1.1.0",
       "lxml==6.1.3",
       "packaging==26.3",
       "pdfminer-six==20250506",
@@ -14,7 +17,11 @@
       "pillow==12.3.0",
       "pycparser==3.11",
       "pypdfium2==4.30.1",
+      "python-dateutil==2.9.0.post0",
+      "s3transfer==0.19.2",
+      "six==1.17.0",
       "uharfbuzz==0.56.0",
+      "urllib3==2.8.0",
       "wrapt==2.5.0"
     ],
     "tools/desk/requirements.lock": [
@@ -133,10 +140,48 @@
         }
       ]
     },
-    "certifi==2026.7.22": {
+    "boto3==1.43.114": {
       "wheels": [
         {
           "bundled": [],
+          "file": "boto3-1.43.114-py3-none-any.whl",
+          "metadata": {
+            "classifiers": [],
+            "license": "Apache-2.0",
+            "license_expression": null
+          },
+          "sha256": "d9cac2eb921ce674970cef1c9ad750f85ee3a846aedcf188d18368fb9eb6da23"
+        }
+      ]
+    },
+    "botocore==1.43.114": {
+      "wheels": [
+        {
+          "bundled": [
+            {
+              "file": "botocore/cacert.pem",
+              "library": "cacert.pem"
+            }
+          ],
+          "file": "botocore-1.43.114-py3-none-any.whl",
+          "metadata": {
+            "classifiers": [],
+            "license": "Apache-2.0",
+            "license_expression": null
+          },
+          "sha256": "d1c441a22e93e158de5b1e026205f5d6d67a4545d10540c5090c62dccb3a9eca"
+        }
+      ]
+    },
+    "certifi==2026.7.22": {
+      "wheels": [
+        {
+          "bundled": [
+            {
+              "file": "certifi/cacert.pem",
+              "library": "cacert.pem"
+            }
+          ],
           "file": "certifi-2026.7.22-py3-none-any.whl",
           "metadata": {
             "classifiers": ["License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)"],
@@ -473,6 +518,20 @@
             "license_expression": "MIT"
           },
           "sha256": "f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12"
+        }
+      ]
+    },
+    "jmespath==1.1.0": {
+      "wheels": [
+        {
+          "bundled": [],
+          "file": "jmespath-1.1.0-py3-none-any.whl",
+          "metadata": {
+            "classifiers": ["License :: OSI Approved :: MIT License"],
+            "license": "MIT",
+            "license_expression": null
+          },
+          "sha256": "a5663118de4908c91729bea0acadca56526eb2698e83de10cd116ae0f4e97c64"
         }
       ]
     },
@@ -821,6 +880,23 @@
         }
       ]
     },
+    "python-dateutil==2.9.0.post0": {
+      "wheels": [
+        {
+          "bundled": [],
+          "file": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+          "metadata": {
+            "classifiers": [
+              "License :: OSI Approved :: Apache Software License",
+              "License :: OSI Approved :: BSD License"
+            ],
+            "license": "Dual License",
+            "license_expression": null
+          },
+          "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427"
+        }
+      ]
+    },
     "python-dotenv==1.2.2": {
       "wheels": [
         {
@@ -860,6 +936,34 @@
             "license_expression": "MIT"
           },
           "sha256": "ab3d62dde0b19facdd632008cc4827fc28ada7736c6bd35ab6f1050f0bfed53f"
+        }
+      ]
+    },
+    "s3transfer==0.19.2": {
+      "wheels": [
+        {
+          "bundled": [],
+          "file": "s3transfer-0.19.2-py3-none-any.whl",
+          "metadata": {
+            "classifiers": ["License :: OSI Approved :: Apache Software License"],
+            "license": "Apache License 2.0",
+            "license_expression": null
+          },
+          "sha256": "d8168eccca828cbb2cd573675333f3bddd254313a9c42494b84c76b539e8ba25"
+        }
+      ]
+    },
+    "six==1.17.0": {
+      "wheels": [
+        {
+          "bundled": [],
+          "file": "six-1.17.0-py2.py3-none-any.whl",
+          "metadata": {
+            "classifiers": ["License :: OSI Approved :: MIT License"],
+            "license": "MIT",
+            "license_expression": null
+          },
+          "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"
         }
       ]
     },
@@ -930,6 +1034,20 @@
             "license_expression": null
           },
           "sha256": "3b4bb4398270bbb8e1005a7a3d56acd5258c5b00484a06633cb30776da9cc3ab"
+        }
+      ]
+    },
+    "urllib3==2.8.0": {
+      "wheels": [
+        {
+          "bundled": [],
+          "file": "urllib3-2.8.0-py3-none-any.whl",
+          "metadata": {
+            "classifiers": [],
+            "license": null,
+            "license_expression": "MIT"
+          },
+          "sha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3"
         }
       ]
     },

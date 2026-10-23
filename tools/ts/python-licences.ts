@@ -44,6 +44,11 @@ export const PY_REVIEWED: Record<string, { licence: string; why: string; decisio
 
 /** How a package states its licence when its METADATA has no SPDX expression, as a person read it (per version). */
 export const PY_DECLARED: Record<string, { licence: string; from: string }> = {
+  "python-dateutil==2.9.0.post0": {
+    licence: "Apache-2.0 AND BSD-3-Clause",
+    from: "License: Dual License; LICENSE: Apache-2.0 for contributions since 2017-12-01, BSD-3-Clause before",
+  },
+  "s3transfer==0.19.2": { licence: "Apache-2.0", from: "License: Apache License 2.0; LICENSE.txt: Apache 2.0" },
   "freetype-py==2.5.1": { licence: "BSD-3-Clause", from: "classifier 'BSD License'; LICENSE.txt: new (revised) BSD" },
   "sortedcontainers==2.4.0": { licence: "Apache-2.0", from: "License: Apache 2.0" },
   "uharfbuzz==0.56.0": { licence: "Apache-2.0", from: "License: Apache License 2.0" },
@@ -58,6 +63,10 @@ export const PY_DECLARED: Record<string, { licence: string; from: string }> = {
 /** Native libraries the manylinux wheels bundle (auditwheel's `<pkg>.libs/`, PDFium), by library name. One without
  * `why` must pass the allowlist; one with `why` was reviewed. */
 export const BUNDLED: Record<string, { licence: string; why?: string }> = {
+  "cacert.pem": {
+    licence: "MPL-2.0",
+    why: "Mozilla's CA certificate data, unmodified (botocore's and certifi's copies), as certifi (PY_REVIEWED)",
+  },
   libavif: { licence: "BSD-2-Clause" },
   libbrotlicommon: { licence: "MIT" },
   libbrotlidec: { licence: "MIT" },

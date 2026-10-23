@@ -32,10 +32,10 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def profile_sha256(expected: str | None = None) -> str:
-    """The SHA-256 of the profile file `images.icc_path()` names; with `expected`, it must be that one."""
+def profile_sha256(expected: str | None = None, path: Path | None = None) -> str:
+    """The SHA-256 of the profile file `images.icc_path()` names (or `path`); with `expected`, it must be that one."""
     try:
-        got = file_sha256(images.icc_path())
+        got = file_sha256(images.icc_path() if path is None else path)
     except OSError:
         raise ProfileError("the colour profile cannot be read") from None
     if expected is not None and got != expected:

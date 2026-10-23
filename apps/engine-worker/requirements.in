@@ -1,4 +1,7 @@
 # The worker's io environment (plan §2.2): the Desk server's packages, pinned in experiments/phase0/pdfx1, unchanged.
-# Later PRs add the S3 client (W3) and the queue driver (W6, after the owner's decision D-8). Locked with hashes:
-#   uv pip compile apps/engine-worker/requirements.in --generate-hashes --python-version 3.11 --output-file apps/engine-worker/requirements.lock
+# W3 adds the S3 client; the queue driver comes with W6, after the owner's decision D-8. Every version at least 7 days
+# old when locked (--exclude-newer), with hashes:
+#   uv pip compile apps/engine-worker/requirements.in --generate-hashes --python-version 3.11 \
+#     --exclude-newer 2026-10-16T00:00:00Z --output-file apps/engine-worker/requirements.lock
 -r ../../experiments/phase0/pdfx1/requirements.txt
+boto3==1.43.114        # Apache-2.0; 2026-10-14
