@@ -357,7 +357,7 @@ file is the bridge. The hosted side writes exactly this format; the Desk refuses
    "headline": "…", "kicker": "", "deck": "", "byline": "…",
    "body": "First paragraph.\n\n## A subheading\n\nSecond paragraph.", "body_format": "desk-text/1",
    "section": "शहर", "priority": 3, "page": null, "language": "mr",
-   "photo": {"file": "photos/<sha256>.jpg", "sha256": "<sha256>", "filename": "IMG_0001.jpg",
+   "photo": {"file": "photos/<sha256>.jpg", "sha256": "<sha256>", "filename": "p-0123456789.jpg",
              "caption": "…", "credit": "…"}}]}
 ```
 - **Every key is required** (`null` where allowed); an unknown key anywhere refuses the file, naming it. `format` is
@@ -375,7 +375,8 @@ file is the bridge. The hosted side writes exactly this format; the Desk refuses
 - `section`: text (at most 200 characters) or `null`. `language`: a BCP 47 tag (`mr`, `en`, `mr-IN`).
 - `priority`: 1–4 (§1). `page`: `null` or a page number (1–16) to pin the story to.
 - `photo`: `null`, or one photo: `file` (its file in the ZIP), `sha256` (the same as the name's), `filename` (the
-  original's name as uploaded, at most 255 characters), `caption`, `credit` (text). Two stories may name one file.
+  hosted picture's Desk id and its type, `p-0123456789.jpg`: the hosted product does not keep the name a picture was
+  uploaded with; at most 255 characters), `caption`, `credit` (text). Two stories may name one file.
 
 ### desk-text/1 (the body)
 Exactly what the engine prints, one block for one printed paragraph or subheading (`deskarticles.blocks`):

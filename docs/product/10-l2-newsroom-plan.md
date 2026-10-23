@@ -889,6 +889,19 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
   - Limits: at most 5 streams a person. A stream whose browser reads nothing is ended once 256 KiB wait unsent, and its connection is closed, which frees its buffers and its slot. A stream whose browser left while its access was being checked is never counted.
   - A lost LISTEN connection is made again and every stream gets `resync`. The streams end in a `preClose` hook, and each closes its connection, so a stop does not wait the grace period for them.
 
+**As built (PR 24), the story bundle:** `POST /orgs/{o}/pubs/{p}/editions/{e}/desk-bundle` (`desk.export`, {statuses?: [...], Ready by default}) answers the Pageinator stories file itself, `application/zip`, streamed as it is made (fflate 0.8.3; `reply.send(stream)`), rather than {bundleId, url, stories, sha256}. Its id and story count are in the `X-Pageinator-Bundle` and `X-Pageinator-Stories` headers.
+- **Format:** exactly `tools/desk/CONTRACT.md` §6: `bundle.json` (every key, none other) and `photos/<sha256>.<ext>` per distinct photo, every file stored (a deflated `bundle.json` of a repetitive story could pass the Desk's 100:1 packing limit); no ZIP64.
+  - `revision` is the story's version, which every change of the story makes the next, its photo and the photo's caption and credit included.
+  - The body is desk-text/1: the engine's own blocks joined by `\n\n`, `## ` for a subheading.
+  - A photo's `filename` is its Desk id and type, since the API does not keep uploaders' file names.
+- **Limits:** at most 200 stories, `bundle.json` at most 32 MiB, and 200 MB in all, checked before anything is recorded or sent. Spiked stories are never sent (400); Held and Draft only when asked for (an owner decision to confirm).
+- **Refusals (409 `bundle_refused`, naming each story):** a story whose photo was rejected or deleted (sending it without the photo at the same revision would leave the Desk printing the old one; any future reject or delete path must bump the story's version: 11-fix-before-launch), and a subheading that starts with `#`, which desk-text/1 cannot write. Nothing is dropped silently.
+- **desk-text/1:** written and checked with Python's whitespace (`@pageinator/desk-text`), and checked against the Desk's own `desk_text` in the tests.
+- **Photos:** each is read from the version its asset is pinned to, and its SHA-256 is checked as it streams. A mismatch cuts the ZIP off, and the Desk then refuses it as damaged.
+- **Records:** the bundle is recorded with each story's text revision and the revision it was sent at (`desk_bundle`, `desk_bundle_revision`; the bundle has no stored object, so no key and no ZIP SHA-256: migration 2026_11_25_0001) and audited (`desk.export`).
+- **Retries:** no Idempotency-Key. A retry makes another bundle of the same revisions, and the Desk replaces an article only for a higher revision.
+- **Tested:** the round trip into a throwaway Desk home with `deskserver/bundle.py` (test/db/desk-bundle.test.ts). Every story and photo arrives, and a re-export after an edit replaces exactly the edited stories.
+
 **Main shapes:**
 - **Story:** {id, publicationId, status, revision, headline, kicker, deck, byline, body, bodyFormat: "desk-text/1", words, isBrief, language, sectionId, priority: 1\|2\|3\|4, pagePin, edition {id, date} \| null, reporter, assignee, dueAt, deskNote, photo: StoryPhoto \| null, commentCount, updatedAt, updatedBy, can {edit, transitions[], comment, assign}}
 - **StoryPhoto:** {assetId, caption, credit, status, widthPx, heightPx, previewUrl}

@@ -1,4 +1,5 @@
 // Fictional pictures made byte by byte for the tests: just the headers picture.ts reads (no real photo, no decoder).
+import { deflateSync } from "node:zlib";
 const be16 = (n: number) => [(n >> 8) & 0xff, n & 0xff];
 const be32 = (n: number) => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
 const le16 = (n: number) => [n & 0xff, (n >> 8) & 0xff];
@@ -105,4 +106,35 @@ export function webp(kind: "VP8 " | "VP8L" | "VP8X", width: number, height: numb
 
 export function heic(): Uint8Array {
   return Uint8Array.from([0, 0, 0, 24, ...text("ftypheic"), 0, 0, 0, 0, ...text("mif1heic"), 0, 0, 0, 0]);
+}
+
+/** A real PNG (8-bit RGB, one flat colour), which an image library can decode: for the Desk's photo pipeline. */
+export function realPng(width: number, height: number, rgb: [number, number, number] = [200, 40, 40]): Uint8Array {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (bytes: number[]) => {
+    let c = 0xffffffff;
+    for (const b of bytes) c = (crcTable[(c ^ b) & 0xff] ?? 0) ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: number[]) => {
+    const body = [...text(type), ...data];
+    return [...be32(data.length), ...body, ...be32(crc(body))];
+  };
+  const rows: number[] = [];
+  for (let y = 0; y < height; y += 1) {
+    rows.push(0);
+    for (let x = 0; x < width; x += 1) rows.push(...rgb);
+  }
+  const idat = [...deflateSync(Uint8Array.from(rows))];
+  return Uint8Array.from([
+    0x89,
+    ...text("PNG\r\n\x1a\n"),
+    ...chunk("IHDR", [...be32(width), ...be32(height), 8, 2, 0, 0, 0]),
+    ...chunk("IDAT", idat),
+    ...chunk("IEND", []),
+  ]);
 }

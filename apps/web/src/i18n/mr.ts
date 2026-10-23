@@ -144,6 +144,7 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   "error.request_too_large": "ही विनंती खूप मोठी आहे.",
   "error.not_json": "ही विनंती JSON स्वरूपात पाठवायला हवी.",
   "error.not_a_picture": "ही फाइल Pageinator वाचू शकेल असे छायाचित्र नाही. JPEG, PNG किंवा WebP फाइल वापरा.",
+  "error.bundle_refused": "काही बातम्या जशा आहेत तशा Desk कडे पाठवता येत नाहीत. त्या बदला आणि पुन्हा पाठवा.",
   "error.slow_down": "खूप वेळा प्रयत्न झाले. एक मिनिट थांबा आणि पुन्हा प्रयत्न करा.",
   "error.server_error": "आमच्याकडून काहीतरी चूक झाली. पुन्हा प्रयत्न करा.",
   "error.idempotency_key_reused": "हे आधीच वेगळ्या मजकुरासह पाठवले गेले आहे. स्क्रीन रीलोड करा आणि पुन्हा प्रयत्न करा.",

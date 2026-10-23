@@ -235,7 +235,13 @@ export const FIXTURES: Fixture[] = [
   {
     table: "desk_bundle_revision",
     per: "publication",
-    row: (org, pub) => ({ ...inPub(org, pub), bundle_id: childId(pub, 6), story_id: childId(pub, 3), rev: 1 }),
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      bundle_id: childId(pub, 6),
+      story_id: childId(pub, 3),
+      rev: 1,
+      version: 1,
+    }),
   },
   {
     table: "notification",

@@ -147,6 +147,7 @@ export const EN = {
   "error.request_too_large": "This request is too large.",
   "error.not_json": "This request must be sent as JSON.",
   "error.not_a_picture": "This file is not a picture Pageinator can read. Use a JPEG, PNG or WebP file.",
+  "error.bundle_refused": "Some stories cannot be sent to the Desk as they are. Change them, then send again.",
   "error.slow_down": "Too many tries. Wait a minute and try again.",
   "error.server_error": "Something went wrong on our side. Try again.",
   "error.idempotency_key_reused": "This was already sent with different content. Reload the page and try again.",

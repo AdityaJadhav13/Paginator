@@ -71,10 +71,10 @@ export interface AppDeskBundle {
   created_by: string;
   edition_id: string;
   id: Generated<string>;
-  key: string;
+  key: string | null;
   org_id: string;
   publication_id: string;
-  sha256: string;
+  sha256: string | null;
 }
 
 export interface AppDeskBundleRevision {
@@ -83,6 +83,7 @@ export interface AppDeskBundleRevision {
   publication_id: string;
   rev: number;
   story_id: string;
+  version: number;
 }
 
 export interface AppEdition {

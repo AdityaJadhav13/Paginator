@@ -31,6 +31,10 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     status: 422,
     message: "This file is not a picture Pageinator can read. Use a JPEG, PNG or WebP file.",
   },
+  bundle_refused: {
+    status: 409,
+    message: "Some stories cannot be sent to the Desk as they are. Change them, then send again.",
+  },
   request_too_large: { status: 413, message: "This request is too large." },
   not_json: { status: 415, message: "This request must be sent as JSON." },
   slow_down: { status: 429, message: "Too many tries. Wait a minute and try again." },

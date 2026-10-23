@@ -80,3 +80,4 @@ export {
   NotificationQuery,
   NotificationsRead,
 } from "./notifications.ts";
+export { BUNDLE_FORMAT, DeskBundleRequest } from "./desk-bundle.ts";

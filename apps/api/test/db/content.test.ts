@@ -275,7 +275,7 @@ describe("rows name only their own organisation's and publication's rows", () =>
   });
 
   it("a bundle holds only revisions of its own publication", async () => {
-    const held = { ...inVarta, bundle_id: childId(VARTA, 6), rev: 1 };
+    const held = { ...inVarta, bundle_id: childId(VARTA, 6), rev: 1, version: 1 };
     const revisionKey = "desk_bundle_revision_org_id_publication_id_story_id_rev_fkey";
     await undone(async () => {
       await su.query("delete from app.desk_bundle_revision"); // the fixture's own row

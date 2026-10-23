@@ -23,6 +23,7 @@
     "better-auth": "catalog:",
     "fastify": "catalog:",
     "fastify-type-provider-zod": "catalog:",
+    "fflate": "catalog:",
     "kysely": "catalog:",
     "nodemailer": "catalog:",
     "pg": "catalog:",

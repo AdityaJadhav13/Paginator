@@ -54,6 +54,9 @@ catalogs:
     fastify-type-provider-zod:
       specifier: 7.0.0
       version: 7.0.0
+    fflate:
+      specifier: 0.8.3
+      version: 0.8.3
     globals:
       specifier: 17.13.0
       version: 17.13.0
@@ -155,6 +158,9 @@ importers:
       fastify-type-provider-zod:
         specifier: 'catalog:'
         version: 7.0.0(@fastify/swagger@9.9.2)(fastify@5.12.7)(openapi-types@12.1.3)(zod@4.6.7)
+      fflate:
+        specifier: 'catalog:'
+        version: 0.8.3
       kysely:
         specifier: 'catalog:'
         version: 0.29.7
@@ -1411,6 +1417,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   file-entry-cache@11.1.5:
     resolution: {integrity: sha512-+PFTHITI08JIGhnNpGNI8T8inUpgZfk3GNEqfT9R2zZV2iFXg3CvqzSl/uEhs7TSGujYRELEANyDvS8Fj7+S7Q==}
@@ -3291,6 +3300,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.3: {}
 
   file-entry-cache@11.1.5:
     dependencies:

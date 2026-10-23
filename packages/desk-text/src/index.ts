@@ -4,6 +4,8 @@
 export { BRIEF_WORDS, type Block, blocks, bodyWords, isBrief } from "./body.ts";
 export { BODY_LIMIT, DeskTextError, LINE_LIMIT, TEXT_FIELDS, cleanText } from "./clean.ts";
 export { type Pasted, type PastedArticle, type SkippedArticle, parseBulk, pasteArticles } from "./paste.ts";
+/** Python 3.11's whitespace and strip, for code that must agree with the Desk character by character. */
+export { isSpace, skipSpace, strip } from "./python.ts";
 
 /** The name of the body format stored with each story revision. */
 export const BODY_FORMAT = "desk-text/1";

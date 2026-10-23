@@ -22,6 +22,7 @@ import { type Mailer, type Transport, openMailer, smtpTransport } from "./module
 import { notifier, type Outbox, sendAll } from "./modules/notifications/notify.ts";
 import { notificationRoutes, startLive } from "./modules/notifications/routes.ts";
 import { commentRoutes } from "./modules/stories/comments.ts";
+import { deskBundleRoutes } from "./modules/stories/desk-bundle.ts";
 import { peopleRoutes } from "./modules/people/plugin.ts";
 import { storyRoutes } from "./modules/stories/routes.ts";
 import { photoRoutes } from "./modules/media/photos.ts";
@@ -155,6 +156,7 @@ export async function buildApp(deps: AppDeps) {
     if (store) {
       await app.register(uploadRoutes, { database: people.database, store });
       await app.register(photoRoutes, { database: people.database, store });
+      await app.register(deskBundleRoutes, { database: people.database, store });
     }
   }
   return app;
