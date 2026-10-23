@@ -95,3 +95,17 @@
   border-radius: var(--pg-radius-md);
   white-space: pre-wrap;
 }
+
+.pg-photo__img {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+  border-radius: var(--pg-radius-md);
+}
+
+.pg-photo__placeholder {
+  padding: var(--pg-space-4);
+  border: var(--pg-border-width) dashed var(--pg-color-border);
+  border-radius: var(--pg-radius-md);
+  background: var(--pg-color-surface-subtle);
+}

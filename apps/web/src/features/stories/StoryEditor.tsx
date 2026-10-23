@@ -21,7 +21,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Button, Cluster, Dialog, Field, InlineMessage, ProgressIndicator, Select, Stack, TextArea, TextInput } from "../../ui/index.ts";
+import { Button, Checkbox, Cluster, Dialog, Field, InlineMessage, ProgressIndicator, Select, Stack, TextArea, TextInput } from "../../ui/index.ts";
 import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { randomUuid } from "../../api/client.ts";
 import { formatDateTime } from "../../i18n/dates.ts";
@@ -31,7 +31,8 @@ import { OfflineNotice, useOnline } from "../auth/connection.tsx";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useSession } from "../auth/SessionProvider.tsx";
 import { useTeam } from "../people/services-context.tsx";
-import { isDesk, mayCreate, storyScope } from "./access.ts";
+import { isDesk, mayCreate, mayUpload, mayViewMedia, storyScope } from "./access.ts";
+import { PhotoPanel, type PhotoOutcome } from "./PhotoPanel.tsx";
 import { currentStory } from "./conflict.ts";
 import { draftKey, dropDraft, readDraft, writeDraft, type PendingCreate, type StoryDraft, type StoryFields } from "./drafts.ts";
 import { moveKey, StatusChip, statusKey } from "./StatusChip.tsx";
@@ -41,7 +42,9 @@ import "./stories.css";
 const AUTOSAVE_MS = 1500;
 const TEXT_KEYS = ["headline", "kicker", "deck", "byline", "body"] as const;
 const DESK_KEYS = ["priority", "pagePin", "deskNote"] as const;
-const ALL_KEYS = [...TEXT_KEYS, ...DESK_KEYS] as const;
+/** The photo's own fields: sent with PATCH …/photo, not with the story's PATCH. */
+const PHOTO_KEYS = ["caption", "credit"] as const;
+const ALL_KEYS = [...TEXT_KEYS, ...DESK_KEYS, ...PHOTO_KEYS] as const;
 type FieldKey = keyof StoryFields;
 
 const PRIORITIES = [
@@ -60,9 +63,22 @@ const FIELD_LABELS: Readonly<Record<FieldKey, PlainKey>> = {
   priority: "editor.priority",
   pagePin: "editor.pagePin",
   deskNote: "editor.deskNote",
+  caption: "glossary.caption",
+  credit: "glossary.photoCredit",
 };
 
-const EMPTY: StoryFields = { headline: "", kicker: "", deck: "", byline: "", body: "", priority: 3, pagePin: null, deskNote: "" };
+const EMPTY: StoryFields = {
+  headline: "",
+  kicker: "",
+  deck: "",
+  byline: "",
+  body: "",
+  priority: 3,
+  pagePin: null,
+  deskNote: "",
+  caption: "",
+  credit: "",
+};
 
 function fieldsOf(story: StoryDto): StoryFields {
   return {
@@ -74,13 +90,20 @@ function fieldsOf(story: StoryDto): StoryFields {
     priority: story.priority,
     pagePin: story.pagePin,
     deskNote: story.deskNote,
+    caption: story.photo?.caption ?? "",
+    credit: story.photo?.credit ?? "",
   };
 }
 
-/** The fields that differ, among those the person may send. */
-function changes(from: StoryFields, to: StoryFields, desk: boolean): Partial<StoryFields> {
-  const keys: readonly FieldKey[] = desk ? ALL_KEYS : TEXT_KEYS;
+/** The story's fields that differ (for its PATCH), among those the person may send; `all` adds the photo's. */
+function changes(from: StoryFields, to: StoryFields, desk: boolean | "all"): Partial<StoryFields> {
+  const keys: readonly FieldKey[] = desk === "all" ? ALL_KEYS : desk ? [...TEXT_KEYS, ...DESK_KEYS] : TEXT_KEYS;
   return Object.fromEntries(keys.filter((key) => from[key] !== to[key]).map((key) => [key, to[key]])) as Partial<StoryFields>;
+}
+
+/** The photo's caption and credit that differ (for PATCH …/photo). */
+function photoChanges(from: StoryFields, to: StoryFields): { caption?: string; credit?: string } {
+  return Object.fromEntries(PHOTO_KEYS.filter((key) => from[key] !== to[key]).map((key) => [key, to[key]]));
 }
 
 const same = (a: StoryFields, b: StoryFields) => ALL_KEYS.every((key) => a[key] === b[key]);
@@ -109,7 +132,10 @@ function sameAsMine(theirs: StoryDto, mine: StoryFields): boolean {
  * closed while it was on its way): one version on, by this person, with exactly what was being sent.
  */
 function ownSend(draft: StoryDraft, story: StoryDto, userId: string): boolean {
-  if (!draft.sending || draft.baseRevision === null || story.revision !== draft.baseRevision + 1) return false;
+  // the versions this device's own change makes: one per request it sent (the photo's, then the story's)
+  if (!draft.sending || draft.baseRevision === null || story.revision !== draft.baseRevision + (draft.sendingSteps ?? 1)) {
+    return false;
+  }
   if (story.updatedBy.id !== userId) return false;
   const theirs = fieldsOf(story);
   const sending = draft.sending;
@@ -138,6 +164,8 @@ type Loaded =
 interface Conflict {
   readonly theirs: StoryDto;
   readonly base: StoryFields;
+  /** The photo the person's caption and credit were written for (null: none). */
+  readonly baseAssetId: string | null;
 }
 
 export function StoryEditor() {
@@ -171,6 +199,9 @@ export function StoryEditor() {
       storyId={fresh}
       userId={state.session.user.id}
       desk={isDesk(org, pubId)}
+      photoEditor={(org.publications.find((publication) => publication.id === pubId)?.roles ?? []).includes("photo_editor")}
+      mayUpload={mayUpload(org, pubId)}
+      mayView={mayViewMedia(org, pubId)}
       onCreated={(id) => {
         created.current = id;
       }}
@@ -184,6 +215,9 @@ function EditorContent({
   storyId,
   userId,
   desk,
+  photoEditor,
+  mayUpload: uploads,
+  mayView,
   onCreated,
 }: {
   readonly orgId: string;
@@ -191,6 +225,12 @@ function EditorContent({
   readonly storyId: string | undefined;
   readonly userId: string;
   readonly desk: boolean;
+  /** A Photo Editor of the publication: sets the photo of any story they see but a spiked one. */
+  readonly photoEditor: boolean;
+  /** media.upload on the publication. */
+  readonly mayUpload: boolean;
+  /** media.view on the publication: showing and downloading the original. */
+  readonly mayView: boolean;
   readonly onCreated: (storyId: string) => void;
 }) {
   const stories = useStories();
@@ -207,6 +247,8 @@ function EditorContent({
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [offered, setOffered] = useState<StoryDraft | null>(null);
   const [moving, setMoving] = useState(false);
+  /** Who took the photo off while the person was writing its caption (said with the caption kept). */
+  const [photoGoneBy, setPhotoGoneBy] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [moveProblem, setMoveProblem] = useState<ApiProblem | null>(null);
@@ -215,9 +257,10 @@ function EditorContent({
   const pendingCreate = useRef<PendingCreate | null>(null);
   /** The fields the pending create carries. */
   const createFields = useRef<StoryFields | null>(null);
-  const inflight = useRef<Promise<StoryDto | null> | null>(null);
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const busy = useRef(0);
   /** The change on its way to the API, and the version it was made on: every draft written meanwhile names it. */
-  const sending = useRef<{ readonly fields: StoryFields; readonly baseRevision: number } | null>(null);
+  const sending = useRef<{ readonly fields: StoryFields; readonly baseRevision: number; readonly steps: number } | null>(null);
   const moveKeys = useRef(new Map<string, string>());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
@@ -230,13 +273,36 @@ function EditorContent({
     setStory(next);
     setSaved(base);
   };
+  /** The conflict screen, with the photo the person's caption and credit were written for. */
+  const openConflict = (theirs: StoryDto, base: StoryFields, baseAssetId?: string | null) => {
+    if (!mounted.current) return;
+    setConflict({ theirs, base, baseAssetId: baseAssetId === undefined ? (latest.current.story?.photo?.assetId ?? null) : baseAssetId });
+  };
   const key = draftKey(story?.id ?? storyId, pubId);
   const keyRef = useRef(key);
   keyRef.current = key;
   const editable = story ? story.can.edit : true;
+  /** The API's canAttachPhoto: whoever edits the story, or a Photo Editor on any story they see but a spiked one. */
+  const photoFor = useCallback(
+    (of: StoryDto | null) => Boolean(of) && uploads && (of!.can.edit || (photoEditor && of!.status !== "spiked")),
+    [photoEditor, uploads],
+  );
+  const mayPhoto = photoFor(story);
   const dirty = !same(fields, saved);
   /** The boxes take no typing while a question is open or a move is being made (nothing typed can then be lost). */
   const locked = !editable || conflict !== null || offered !== null || moving;
+  const photoLocked = !mayPhoto || conflict !== null || offered !== null || moving;
+  /** A caption or credit typed that cannot be saved now: why, said with it (it is kept, read only, and drafted). */
+  const photoKeysDirty = fields.caption !== saved.caption || fields.credit !== saved.credit;
+  const keptBecause = !photoKeysDirty
+    ? null
+    : !story?.photo
+      ? photoGoneBy
+        ? t("photo.kept.removed", { name: photoGoneBy })
+        : t("photo.kept.gone")
+      : !mayPhoto
+        ? t("photo.kept.notTheirs")
+        : null;
 
   // open: the story, then any text this device kept for it
   const open = useCallback(
@@ -272,7 +338,8 @@ function EditorContent({
       fields,
       base: conflict?.base ?? saved,
       baseRevision: onItsWay?.baseRevision ?? story?.revision ?? null,
-      ...(onItsWay ? { sending: onItsWay.fields } : {}),
+      ...(onItsWay ? { sending: onItsWay.fields, sendingSteps: onItsWay.steps } : {}),
+      photoAssetId: story?.photo?.assetId ?? null,
       ...(pendingCreate.current ? { create: pendingCreate.current } : {}),
       savedAt: new Date().toISOString(),
     });
@@ -335,33 +402,63 @@ function EditorContent({
       navigate(paths.pubStory(orgId, pubId, made.id), { replace: true, state: { keepFocus: true } });
       return made;
     }
-    const sent = now;
-    const patch = changes(base, sent, desk);
-    if (Object.keys(patch).length === 0) {
+    const patch = changes(base, now, desk);
+    // a caption or credit the person may not save now (no photo, or not theirs to change) is not sent, and not
+    // counted as saved: it stays in the boxes' state and in the draft, shown to them as kept
+    const photoOpen = Boolean(current.photo) && photoFor(current);
+    const photoPatch = photoOpen ? photoChanges(base, now) : {};
+    const sent = photoOpen ? now : { ...now, caption: base.caption, credit: base.credit };
+    if (Object.keys(patch).length === 0 && Object.keys(photoPatch).length === 0) {
       if (mounted.current) setSaved(sent);
       return current;
     }
     if (mounted.current) setSave({ state: "saving" });
     // on this device first: if the page is closed before the answer, reopening can tell this change was its own
-    sending.current = { fields: sent, baseRevision: current.revision };
+    const steps = (Object.keys(photoPatch).length > 0 ? 1 : 0) + (Object.keys(patch).length > 0 ? 1 : 0);
+    sending.current = { fields: sent, baseRevision: current.revision, steps };
     writeDraft(userId, keyRef.current, {
       fields: latest.current.fields,
       base,
       baseRevision: current.revision,
       sending: sent,
+      sendingSteps: steps,
+      photoAssetId: current.photo?.assetId ?? null,
       savedAt: new Date().toISOString(),
     });
-    const result = await stories.update({
-      orgId,
-      pubId,
-      storyId: current.id,
-      patch: { baseRevision: current.revision, ...patch },
-      ...(keepalive ? { keepalive } : {}),
-    });
+    // the photo's caption and credit first (their own PATCH), then the story's fields, each on the version before it
+    let reached = current;
+    let reachedBase = base;
+    let result: Awaited<ReturnType<typeof stories.update>> = { ok: true, value: current };
+    if (Object.keys(photoPatch).length > 0) {
+      result = await stories.updatePhoto({
+        orgId,
+        pubId,
+        storyId: current.id,
+        baseRevision: current.revision,
+        ...photoPatch,
+        ...(keepalive ? { keepalive } : {}),
+      });
+      if (result.ok) {
+        reached = result.value;
+        reachedBase = { ...base, ...photoPatch };
+      }
+    }
+    if (result.ok && Object.keys(patch).length > 0) {
+      result = await stories.update({
+        orgId,
+        pubId,
+        storyId: reached.id,
+        patch: { baseRevision: reached.revision, ...patch },
+        ...(keepalive ? { keepalive } : {}),
+      });
+    }
     sending.current = null;
     if (result.ok) latest.current = { ...latest.current, story: result.value, saved: sent };
+    else if (reached !== current) latest.current = { ...latest.current, story: reached, saved: reachedBase };
     if (!mounted.current) return result.ok ? result.value : null;
     if (!result.ok) {
+      if (reached !== current) settle(reached, reachedBase); // the photo's part arrived
+      const base = reachedBase;
       const theirs = currentStory(result.error);
       if (theirs && sameAsMine(theirs, sent)) {
         // the newer version already says exactly this (this device's own change, sent as the page was left)
@@ -371,7 +468,7 @@ function EditorContent({
         return theirs;
       }
       if (theirs) {
-        setConflict({ theirs, base });
+        openConflict(theirs, base);
         setSave({ state: "pending" });
       } else setSave({ state: "failed", problem: result.error });
       return null;
@@ -382,32 +479,38 @@ function EditorContent({
     if (!typedSince) dropDraft(userId, keyRef.current);
     setSave({ state: typedSince ? "pending" : "saved" });
     return answer;
-  }, [desk, navigate, onCreated, orgId, pubId, stories, userId]);
+  }, [desk, navigate, onCreated, orgId, pubId, photoFor, stories, userId]);
+
+  /**
+   * One change of the story at a time, in the order asked: saves, the photo's changes and moves all name the version
+   * the one before them left, so none of them conflicts with another of this screen's.
+   */
+  const enqueue = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    busy.current += 1;
+    if (mounted.current) setSaving(true);
+    const run = chain.current.then(task, task).finally(() => {
+      busy.current -= 1;
+      if (busy.current === 0 && mounted.current) setSaving(false);
+    });
+    chain.current = run.catch(() => undefined);
+    return run;
+  }, []);
 
   /** Save now; a save asked for during another runs right after it. Resolves to the story once all have settled. */
-  const flush = useCallback((): Promise<StoryDto | null> => {
-    if (inflight.current) return inflight.current.then(() => flushRef.current());
-    if (mounted.current) setSaving(true);
-    const run = saveOnce().finally(() => {
-      inflight.current = null;
-      if (mounted.current) setSaving(false);
-    });
-    inflight.current = run;
-    return run;
-  }, [saveOnce]);
+  const flush = useCallback((): Promise<StoryDto | null> => enqueue(saveOnce), [enqueue, saveOnce]);
   const flushRef = useRef(flush);
   flushRef.current = flush;
 
   // autosave after a pause in typing; again after each save while something still waits
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    if (!dirty || conflict || offered || !editable || loaded.status !== "ready") return;
+    if (!dirty || conflict || offered || !(editable || mayPhoto) || loaded.status !== "ready") return;
     setSave((previous) => (previous.state === "failed" || previous.state === "saving" ? previous : { state: "pending" }));
     timer.current = setTimeout(() => void flush(), AUTOSAVE_MS);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [conflict, dirty, editable, fields, flush, loaded.status, offered, saved]);
+  }, [conflict, dirty, editable, fields, flush, loaded.status, mayPhoto, offered, saved]);
 
   // back online: send what waited
   const wasOnline = useRef(online);
@@ -420,7 +523,7 @@ function EditorContent({
   // the browser ask before closing while something is unsaved
   useEffect(() => {
     mounted.current = true;
-    const waiting = () => !same(latest.current.fields, latest.current.saved) || inflight.current !== null || pendingCreate.current !== null;
+    const waiting = () => !same(latest.current.fields, latest.current.saved) || busy.current > 0 || pendingCreate.current !== null;
     const sendNow = () => {
       if (!waiting()) return;
       leaving.current = true;
@@ -463,25 +566,29 @@ function EditorContent({
     setMoveProblem(null);
     setMoving(true);
     try {
-      const current = await flush();
-      if (!current || !mounted.current) return false;
-      // one key per intent: the same move from the same version with the same comment is the same request
-      const intent = `${to}@${current.revision}#${comment ?? ""}`;
-      const idempotencyKey = moveKeys.current.get(intent) ?? randomUuid();
-      moveKeys.current.set(intent, idempotencyKey);
-      const result = await stories.transition({
-        orgId,
-        pubId,
-        storyId: current.id,
-        to,
-        baseRevision: current.revision,
-        ...(comment ? { comment } : {}),
-        idempotencyKey,
+      const saved = await flush();
+      if (!saved || !mounted.current) return false;
+      const result = await enqueue(async () => {
+        // the version as the queue leaves it (a photo change may have come between)
+        const current = latest.current.story ?? saved;
+        // one key per intent: the same move from the same version with the same comment is the same request
+        const intent = `${to}@${current.revision}#${comment ?? ""}`;
+        const idempotencyKey = moveKeys.current.get(intent) ?? randomUuid();
+        moveKeys.current.set(intent, idempotencyKey);
+        return stories.transition({
+          orgId,
+          pubId,
+          storyId: current.id,
+          to,
+          baseRevision: current.revision,
+          ...(comment ? { comment } : {}),
+          idempotencyKey,
+        });
       });
       if (!mounted.current) return result.ok;
       if (!result.ok) {
         const theirs = currentStory(result.error);
-        if (theirs) setConflict({ theirs, base: latest.current.saved });
+        if (theirs) openConflict(theirs, latest.current.saved);
         else setMoveProblem(result.error);
         return false;
       }
@@ -495,18 +602,92 @@ function EditorContent({
     }
   };
 
+  /**
+   * The story's photo, set, replaced or taken off on the version the queue leaves (plan §5.2). On 409 story_changed:
+   * when nothing the person sees changed (a move or an assignment came between), it is done again on the new
+   * version; otherwise the conflict screen opens, and the photo waits to be attached again.
+   */
+  const photoChange = (
+    run: (current: StoryDto, now: StoryFields) => ReturnType<typeof stories.removePhoto>,
+    /** The base once the API has the change (from the base and the fields sent with it), and the boxes then. */
+    after: { readonly base: (base: StoryFields, sent: StoryFields) => StoryFields; readonly boxes: (typed: StoryFields) => StoryFields },
+    options: {
+      /** The person left, or cancelled: nothing is sent any more. */
+      readonly signal?: AbortSignal;
+      /** The story as it is now already shows this change (its answer was lost, and a retry met it). */
+      readonly done: (theirs: StoryDto) => boolean;
+    },
+  ) =>
+    enqueue(async (): Promise<PhotoOutcome> => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (options.signal?.aborted || !mounted.current) return { ok: false, cancelled: true };
+        const { story: current, fields: now, saved: base } = latest.current;
+        if (!current) return { ok: false };
+        const result = await run(current, now);
+        if (result.ok) {
+          settle(result.value, after.base(base, now));
+          if (mounted.current) setFields((typed) => after.boxes(typed));
+          if (mounted.current) setPhotoGoneBy(null);
+          return { ok: true };
+        }
+        const theirs = currentStory(result.error);
+        if (!theirs) return { ok: false, problem: result.error };
+        if (options.done(theirs)) {
+          // this very change is already there: done, not a conflict
+          settle(theirs, after.base(base, now));
+          if (mounted.current) setFields((typed) => after.boxes(typed));
+          return { ok: true };
+        }
+        const photoChanged = (theirs.photo?.assetId ?? null) !== (current.photo?.assetId ?? null);
+        const nothingSeenChanged = same(fieldsOf(theirs), fieldsOf(current)) && !photoChanged;
+        if (nothingSeenChanged && attempt === 0) {
+          settle(theirs, base);
+          continue;
+        }
+        openConflict(theirs, base);
+        return { ok: false, conflict: true, photoChanged };
+      }
+      return { ok: false };
+    });
+  const attachPhoto = (assetId: string, signal?: AbortSignal) =>
+    photoChange(
+      (current, now) =>
+        stories.attachPhoto({ orgId, pubId, storyId: current.id, baseRevision: current.revision, assetId, caption: now.caption, credit: now.credit }),
+      { base: (base, sent) => ({ ...base, caption: sent.caption, credit: sent.credit }), boxes: (typed) => typed },
+      { ...(signal ? { signal } : {}), done: (theirs) => theirs.photo?.assetId === assetId },
+    );
+  const removePhoto = () =>
+    photoChange(
+      (current) => stories.removePhoto({ orgId, pubId, storyId: current.id, baseRevision: current.revision }),
+      {
+        base: (base) => ({ ...base, caption: "", credit: "" }),
+        boxes: (typed) => ({ ...typed, caption: "", credit: "" }),
+      },
+      { done: (theirs) => theirs.photo === null },
+    );
+
   /** Three-way: only what the person changed since `base`, on top of theirs; autosave then sends it. */
-  const keepMine = () => {
+  const keepMine = (putCaption: boolean) => {
     if (!conflict) return;
-    const theirs = fieldsOf(conflict.theirs);
-    const mine = changes(conflict.base, fields, true);
-    setStory(conflict.theirs);
+    const theirStory = conflict.theirs;
+    const theirs = fieldsOf(theirStory);
+    const photoChanged = (theirStory.photo?.assetId ?? null) !== conflict.baseAssetId;
+    const all = changes(conflict.base, fields, "all");
+    // a caption written for another photo goes on theirs only when the person says so
+    const mine: Partial<StoryFields> =
+      photoChanged && theirStory.photo && !putCaption
+        ? Object.fromEntries(Object.entries(all).filter(([key]) => key !== "caption" && key !== "credit"))
+        : all;
+    // with their photo gone, the person's caption and credit stay (kept, read only, not sent) until a photo returns
+    setPhotoGoneBy(photoChanged && !theirStory.photo ? theirStory.updatedBy.name : null);
+    setStory(theirStory);
     setSaved(theirs);
     setFields({ ...theirs, ...mine });
     setConflict(null);
   };
   const takeTheirs = () => {
     if (!conflict) return;
+    setPhotoGoneBy(null);
     setStory(conflict.theirs);
     setSaved(fieldsOf(conflict.theirs));
     setFields(fieldsOf(conflict.theirs));
@@ -526,17 +707,17 @@ function EditorContent({
       return;
     }
     if (draft.baseRevision === story.revision) {
-      setFields({ ...fieldsOf(story), ...changes(draft.base, draft.fields, true) });
+      setFields({ ...fieldsOf(story), ...changes(draft.base, draft.fields, "all") });
       return;
     }
     if (ownSend(draft, story, userId) && draft.sending) {
       // the newer version is the change this device was sending: the rest goes on top of it
-      setFields({ ...fieldsOf(story), ...changes(draft.sending, draft.fields, true) });
+      setFields({ ...fieldsOf(story), ...changes(draft.sending, draft.fields, "all") });
       return;
     }
     // the story moved on since: the person chooses, field by field
     setFields(draft.fields);
-    setConflict({ theirs: story, base: draft.base });
+    openConflict(story, draft.base, draft.photoAssetId === undefined ? (story.photo?.assetId ?? null) : draft.photoAssetId);
   };
 
   if (loaded.status === "loading") return <ProgressIndicator role="status" label={t("editor.loading")} />;
@@ -574,9 +755,9 @@ function EditorContent({
             {t("editor.words", { count: dirty ? countWords(fields.body) : story.words })}
           </p>
         )}
-        <SaveState save={save} dirty={dirty} editable={editable} onSave={() => void flush()} />
+        <SaveState save={save} dirty={dirty} editable={editable || mayPhoto} onSave={() => void flush()} />
         <div aria-live="polite">{notice && <p>{notice}</p>}</div>
-        {!editable && <p>{t("editor.readOnly")}</p>}
+        {!editable && <p>{mayPhoto ? t("editor.photoOnly") : t("editor.readOnly")}</p>}
 
         {offered && (
           <InlineMessage variant="warning" heading={t("editor.draft.heading")} iconLabel={t("message.warning")}>
@@ -631,6 +812,32 @@ function EditorContent({
                 onBlur={leaveBox}
               />
             </Field>
+            {!story && uploads && <p className="pg-type-body-small">{t("photo.afterHeadline")}</p>}
+            {story && (
+              <PhotoPanel
+                orgId={orgId}
+                pubId={pubId}
+                story={story}
+                may={mayPhoto}
+                mayView={mayView}
+                locked={photoLocked}
+                keptBecause={keptBecause}
+                onDiscardKept={() => {
+                  setFields((typed) => ({ ...typed, caption: latest.current.saved.caption, credit: latest.current.saved.credit }));
+                  setPhotoGoneBy(null);
+                }}
+                caption={fields.caption}
+                credit={fields.credit}
+                lang={textLang}
+                onCaption={(value) => change("caption")(value)}
+                onCredit={(value) => change("credit")(value)}
+                onLeave={() => {
+                  if (!photoLocked && dirty) void flush();
+                }}
+                onAttach={attachPhoto}
+                onRemove={removePhoto}
+              />
+            )}
             <Field label={t("glossary.byline")}>
               <TextInput lang={textLang} value={fields.byline} readOnly={locked} onChange={(event) => change("byline")(event.target.value)} onBlur={leaveBox} />
             </Field>
@@ -708,7 +915,7 @@ function EditorContent({
         )}
 
         {story && story.can.assign && (
-          <Assignment orgId={orgId} pubId={pubId} story={story} onChanged={(next, text) => (setStory(next), setNotice(text))} onConflict={(theirs) => setConflict({ theirs, base: latest.current.saved })} />
+          <Assignment orgId={orgId} pubId={pubId} story={story} onChanged={(next, text) => (setStory(next), setNotice(text))} onConflict={(theirs) => openConflict(theirs, latest.current.saved)} />
         )}
 
         {sendingBack && (
@@ -747,21 +954,66 @@ function ConflictPanel({
   readonly conflict: Conflict;
   readonly mine: StoryFields;
   readonly lang: string | undefined;
-  readonly onKeepMine: () => void;
+  readonly onKeepMine: (putCaption: boolean) => void;
   readonly onTakeTheirs: () => void;
 }) {
   const { t } = useI18n();
-  const theirs = fieldsOf(conflict.theirs);
-  const differing = ALL_KEYS.filter((key) => theirs[key] !== mine[key]);
-  const textual = (key: FieldKey) => (TEXT_KEYS as readonly FieldKey[]).includes(key);
+  const [putCaption, setPutCaption] = useState(false);
+  const theirStory = conflict.theirs;
+  const theirs = fieldsOf(theirStory);
+  const name = theirStory.updatedBy.name;
+  const theirAsset = theirStory.photo?.assetId ?? null;
+  const photoChanged = theirAsset !== conflict.baseAssetId;
+  const photoKeys = PHOTO_KEYS as readonly FieldKey[];
+  // with the photo changed, its caption and credit are shown with it, not as ordinary fields
+  const differing = ALL_KEYS.filter((key) => theirs[key] !== mine[key] && !(photoChanged && photoKeys.includes(key)));
+  const textual = (key: FieldKey) => (TEXT_KEYS as readonly FieldKey[]).includes(key) || photoKeys.includes(key);
+  const typedCaption = mine.caption !== conflict.base.caption || mine.credit !== conflict.base.credit;
+  const statement = !photoChanged
+    ? null
+    : !theirAsset
+      ? t("editor.conflict.photoRemoved", { name })
+      : conflict.baseAssetId
+        ? t("editor.conflict.photoReplaced", { name })
+        : t("editor.conflict.photoAdded", { name });
   return (
     <section aria-labelledby="pg-editor-conflict" className="pg-editor__conflict">
       <Stack gap="4">
         <h2 id="pg-editor-conflict" className="pg-type-section-title">
           {t("editor.conflict.heading")}
         </h2>
-        <p role="alert">{t("editor.conflict.body", { name: conflict.theirs.updatedBy.name })}</p>
+        <p role="alert">{t("editor.conflict.body", { name })}</p>
         <p>{t("editor.conflict.keepHint")}</p>
+        {statement && (
+          <div>
+            <h3 className="pg-type-body">
+              <strong>{t("editor.conflict.photo")}</strong>
+            </h3>
+            <p>{statement}</p>
+            {(typedCaption || mine.caption || mine.credit) && (
+              <Stack gap="2">
+                <p>{t("editor.conflict.captionFor")}</p>
+                <div className="pg-editor__versions">
+                  <div className="pg-editor__version">
+                    <p className="pg-type-body-small">{t("editor.conflict.theirs")}</p>
+                    <p lang={lang}>{theirs.caption}</p>
+                    <p>{theirs.credit}</p>
+                  </div>
+                  <div className="pg-editor__version">
+                    <p className="pg-type-body-small">{t("editor.conflict.mine")}</p>
+                    <p lang={lang}>{mine.caption}</p>
+                    <p>{mine.credit}</p>
+                  </div>
+                </div>
+                {theirAsset ? (
+                  <Checkbox label={t("editor.conflict.putCaption")} checked={putCaption} onChange={(event) => setPutCaption(event.target.checked)} />
+                ) : (
+                  <p>{t("editor.conflict.keptCaption")}</p>
+                )}
+              </Stack>
+            )}
+          </div>
+        )}
         {differing.map((key) => (
           <div key={key}>
             <h3 className="pg-type-body">
@@ -780,7 +1032,7 @@ function ConflictPanel({
           </div>
         ))}
         <Cluster gap="3">
-          <Button onClick={onKeepMine}>{t("editor.conflict.keepMine")}</Button>
+          <Button onClick={() => onKeepMine(putCaption)}>{t("editor.conflict.keepMine")}</Button>
           <Button variant="secondary" onClick={onTakeTheirs}>
             {t("editor.conflict.takeTheirs")}
           </Button>

@@ -22,6 +22,9 @@ export interface StoryFields {
   readonly priority: number;
   readonly pagePin: number | null;
   readonly deskNote: string;
+  /** The photo's caption and credit (empty while the story has no photo). */
+  readonly caption: string;
+  readonly credit: string;
 }
 
 export interface PendingCreate {
@@ -37,8 +40,12 @@ export interface StoryDraft {
   readonly baseRevision: number | null;
   /** A create sent without a known answer: retried exactly, with the same key. */
   readonly create?: PendingCreate;
-  /** A change on its way to the API when this was written: if it arrived, the story's next version is it. */
+  /** A change on its way to the API when this was written: if it arrived, the story's version is it. */
   readonly sending?: StoryFields;
+  /** How many versions that change makes (the photo's caption and credit, then the story's fields: 1 or 2). */
+  readonly sendingSteps?: number;
+  /** The story's photo the text was written for (its caption and credit belong to it). */
+  readonly photoAssetId?: string | null;
   /** When it was last written, ISO 8601. */
   readonly savedAt: string;
 }
@@ -53,16 +60,20 @@ const disabled = new Set<string>();
 
 const FIELD_KEYS = ["headline", "kicker", "deck", "byline", "body", "priority", "pagePin", "deskNote"] as const;
 
+/** A draft's fields; caption and credit came with photos (L2-J), so a draft written before has them empty. */
 function isFields(value: unknown): value is StoryFields {
   if (typeof value !== "object" || value === null) return false;
   const fields = value as Record<string, unknown>;
   return (
     FIELD_KEYS.every((key) => key in fields) &&
     ["headline", "kicker", "deck", "byline", "body", "deskNote"].every((key) => typeof fields[key] === "string") &&
+    ["caption", "credit"].every((key) => fields[key] === undefined || typeof fields[key] === "string") &&
     typeof fields["priority"] === "number" &&
     (fields["pagePin"] === null || typeof fields["pagePin"] === "number")
   );
 }
+
+const withPhotoFields = (fields: StoryFields): StoryFields => ({ ...fields, caption: fields.caption ?? "", credit: fields.credit ?? "" });
 
 function isDraft(value: unknown): value is StoryDraft {
   if (typeof value !== "object" || value === null) return false;
@@ -99,7 +110,13 @@ export const draftKey = (storyId: string | undefined, publicationId: string) => 
 
 export function readDraft(userId: string, key: string): StoryDraft | undefined {
   const draft = readAll(userId)[key];
-  return isDraft(draft) ? draft : undefined;
+  if (!isDraft(draft)) return undefined;
+  return {
+    ...draft,
+    fields: withPhotoFields(draft.fields),
+    base: withPhotoFields(draft.base),
+    ...(draft.sending ? { sending: withPhotoFields(draft.sending) } : {}),
+  };
 }
 
 export function writeDraft(userId: string, key: string, draft: StoryDraft): void {

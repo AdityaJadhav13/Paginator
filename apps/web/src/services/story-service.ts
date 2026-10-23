@@ -61,4 +61,26 @@ export interface StoryService {
   paste(
     input: Where & { readonly text: string; readonly editionId?: string; readonly idempotencyKey: string },
   ): Promise<ServiceResult<PasteResultDto, ApiProblem>>;
+  /** The story's photo (plan §5.2): set or replace it, change its caption or credit, take it off; each on the story's
+   * version, as a change of the story (409 story_changed with `current`). */
+  attachPhoto(
+    input: Where & {
+      readonly storyId: string;
+      readonly baseRevision: number;
+      readonly assetId: string;
+      readonly caption: string;
+      readonly credit: string;
+    },
+  ): Promise<ServiceResult<StoryDto, ApiProblem>>;
+  /** `keepalive`: sent as the page is left, so it outlives it (as the story's own PATCH does). */
+  updatePhoto(
+    input: Where & {
+      readonly storyId: string;
+      readonly baseRevision: number;
+      readonly caption?: string;
+      readonly credit?: string;
+      readonly keepalive?: boolean;
+    },
+  ): Promise<ServiceResult<StoryDto, ApiProblem>>;
+  removePhoto(input: Where & { readonly storyId: string; readonly baseRevision: number }): Promise<ServiceResult<StoryDto, ApiProblem>>;
 }

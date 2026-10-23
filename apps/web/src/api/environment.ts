@@ -8,18 +8,17 @@ import { createApiClient, type ApiClientOptions } from "./client.ts";
 import { createApiSecurityService } from "./security-service.ts";
 import { createApiSessionService } from "./session-service.ts";
 import { createApiStoryService } from "./story-service.ts";
+import { createApiMediaService } from "./media-service.ts";
 import { createApiTeamService } from "./team-service.ts";
 import { createApiWorkspace } from "./workspace.ts";
 
 export function createApiEnvironment(options: Omit<ApiClientOptions, "onSignedOut"> = {}): ServiceEnvironment {
   const listeners = new Set<() => void>();
-  const client = createApiClient({
-    ...options,
-    onSignedOut: () => {
-      forget(); // the session ended on the server: the next person must not inherit this one's workspace
-      for (const listener of [...listeners]) listener();
-    },
-  });
+  const signedOut = () => {
+    forget(); // the session ended on the server: the next person must not inherit this one's workspace
+    for (const listener of [...listeners]) listener();
+  };
+  const client = createApiClient({ ...options, onSignedOut: signedOut });
   const inner = createApiSessionService(client);
   const { access, workspace, forget } = createApiWorkspace(client);
   let generation = 0;
@@ -43,6 +42,7 @@ export function createApiEnvironment(options: Omit<ApiClientOptions, "onSignedOu
     security: createApiSecurityService(client),
     team: createApiTeamService(client),
     stories: createApiStoryService(client),
+    media: createApiMediaService(client, { ...(options.fetch ? { fetch: options.fetch } : {}), onSignedOut: signedOut }),
     access: {
       getAccess: (input) => access.getAccess(input),
       selectOrganization: (input) => changes(() => access.selectOrganization(input)),

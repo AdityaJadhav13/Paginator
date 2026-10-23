@@ -25,6 +25,7 @@ import { SecurityScreen } from "../features/people/SecurityScreen.tsx";
 import { PeopleProvider } from "../features/people/services-context.tsx";
 import { TeamScreen } from "../features/people/TeamScreen.tsx";
 import { StoriesProvider } from "../features/stories/stories-context.tsx";
+import { MediaProvider } from "../features/stories/media-context.tsx";
 import { StoriesScreen } from "../features/stories/StoriesScreen.tsx";
 import { StoryEditor } from "../features/stories/StoryEditor.tsx";
 import { I18nProvider } from "../i18n/index.ts";
@@ -90,6 +91,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
         <AccountProvider account={activeEnvironment.account}>
           <PeopleProvider security={activeEnvironment.security} team={activeEnvironment.team}>
           <StoriesProvider stories={activeEnvironment.stories}>
+          <MediaProvider media={activeEnvironment.media}>
           <SessionProvider
             session={activeEnvironment.session}
             access={activeEnvironment.access}
@@ -161,6 +163,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
               <Route path="/org/:orgId/*" element={<ScopedNotFoundShell />} />
             </Routes>
           </SessionProvider>
+          </MediaProvider>
           </StoriesProvider>
           </PeopleProvider>
         </AccountProvider>

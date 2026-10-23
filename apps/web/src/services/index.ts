@@ -40,4 +40,5 @@ export type {
   WorkspaceGrantDto,
 } from "./workspace-access.ts";
 export { grantsOf } from "./workspace-access.ts";
+export type { AssetDto, MediaService, PictureTypeDto, PresignedUploadDto } from "./media-service.ts";
 export type { ServiceEnvironment } from "./environment.ts";

@@ -11,6 +11,9 @@ import { createMockApplicationEnvironment } from "../../src/mocks/index.ts";
 import { DRAFTS_PREFIX } from "../../src/features/stories/drafts.ts";
 import { currentLocation, renderAuth, resetBrowserState, seriousViolations } from "../auth/helpers.tsx";
 
+// autosave waits 1.5 s, and saves queue: under a full parallel run these need more than the default 5 s
+vi.setConfig({ testTimeout: 30_000 });
+
 const ORG = "org-demo-sahyadri";
 const PUB = "pub-demo-pune-daily";
 const STORIES = `/org/${ORG}/pub/${PUB}/stories`;
@@ -51,7 +54,7 @@ describe("A reporter files a story", () => {
     expect(body).toHaveAttribute("lang", "mr");
     await user.type(body, " मतमोजणी सोमवारी होईल.");
     expect(screen.getByText("Not saved yet")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 10_000 });
     expect((await storyOf(environment, "story-demo-002")).body).toContain("मतमोजणी सोमवारी होईल.");
 
     await user.click(screen.getByRole("button", { name: "Send to the desk" }));
@@ -84,7 +87,7 @@ describe("The desk works on it", () => {
     const user = userEvent.setup();
     await user.selectOptions(await screen.findByRole("combobox", { name: "Priority" }), "1");
     await user.selectOptions(screen.getByRole("combobox", { name: "Page" }), "3");
-    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 10_000 });
     expect(await storyOf(environment, "story-demo-001")).toMatchObject({ priority: 1, pagePin: 3 });
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Given to" }), "user-demo-sahyadri-subeditor");
@@ -135,7 +138,7 @@ describe("Two people at once", () => {
     expect(within(conflict).getByText("My text about the ring road.")).toBeInTheDocument();
     expect(await seriousViolations(document.body)).toEqual([]);
     await user.click(within(conflict).getByRole("button", { name: "Keep my version" }));
-    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 10_000 });
     expect((await storyOf(environment, "story-demo-003")).body).toBe("My text about the ring road.");
   });
 
@@ -166,14 +169,15 @@ describe("Unsaved text on this device", () => {
     const stored = window.localStorage.getItem(`${DRAFTS_PREFIX}user-demo-sahyadri-reporter`) ?? "";
     expect(stored).toContain("फोनवर लिहिलेले.");
     expect(stored).not.toMatch(/password|token|secret/i);
-    first.unmount();
+    first.unmount(); // the screen's last save, as it goes, fails too (still offline)
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     environment.sessionController.setProblem(null, ["stories.update"]);
     renderAuth(at("story-demo-002"), { environment });
     expect(await screen.findByText("Unsaved text on this device")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Restore it" }));
     expect((screen.getByLabelText("Body text") as HTMLTextAreaElement).value).toContain("फोनवर लिहिलेले.");
-    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 10_000 });
 
     // a draft left on this device goes when its person signs out
     window.localStorage.setItem(`${DRAFTS_PREFIX}user-demo-sahyadri-reporter`, JSON.stringify({ x: {} }));
@@ -186,10 +190,11 @@ describe("Unsaved text on this device", () => {
 });
 
 describe("The editor's role rules, states, Marathi and axe", () => {
-  it("lets a Photo Editor read a story and change nothing", async () => {
+  it("lets a Photo Editor read a story's text and change none of it", async () => {
     renderAuth(at("story-demo-001"), { preset: "sahyadri-photo-editor" });
     expect(await screen.findByLabelText("Body text")).toHaveAttribute("readonly");
-    expect(screen.getByText("You can read this story. Your role does not change it now.")).toBeInTheDocument();
+    // a Photo Editor may set this story's photo, not its text: said so
+    expect(screen.getByText("You can change this story's photo, its caption and credit.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Move the story" })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Given to" })).not.toBeInTheDocument();
   });

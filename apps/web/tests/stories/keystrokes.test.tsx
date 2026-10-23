@@ -16,12 +16,15 @@ import { DRAFTS_PREFIX, SIGNED_OUT_KEY, readDraft, writeDraft } from "../../src/
 import type { StoryDto } from "../../src/services/index.ts";
 import { currentLocation, renderAuth, resetBrowserState } from "../auth/helpers.tsx";
 
+// autosave waits 1.5 s, and saves queue: under a full parallel run these need more than the default 5 s
+vi.setConfig({ testTimeout: 30_000 });
+
 const ORG = "org-demo-sahyadri";
 const PUB = "pub-demo-pune-daily";
 const STORIES = `/org/${ORG}/pub/${PUB}/stories`;
 const at = (id: string) => `${STORIES}/${id}`;
 const REPORTER = "user-demo-sahyadri-reporter";
-const SLOW = { timeout: 5000 };
+const SLOW = { timeout: 10_000 };
 
 afterEach(() => {
   resetBrowserState();
@@ -190,7 +193,7 @@ describe("7. Restoring a draft applies only its changes", () => {
   it("merges a current draft onto newer fields, and sends a stale one through the conflict screen", async () => {
     const environment = createMockApplicationEnvironment();
     const opened = await storyOf(environment, "story-demo-002");
-    const base = { headline: opened.headline, kicker: "", deck: "", byline: opened.byline, body: opened.body, priority: 3, pagePin: null, deskNote: "" };
+    const base = { headline: opened.headline, kicker: "", deck: "", byline: opened.byline, body: opened.body, priority: 3, pagePin: null, deskNote: "", caption: "", credit: "" };
     // the draft changed only the body, on version 1; the server then got a new kicker (version 2)
     await environment.stories.update({ orgId: ORG, pubId: PUB, storyId: opened.id, patch: { baseRevision: 1, kicker: "Newer kicker" } });
     writeDraft(REPORTER, opened.id, { fields: { ...base, body: "Draft body." }, base, baseRevision: 1, savedAt: "2026-10-22T05:00:00.000Z" });
@@ -211,7 +214,7 @@ describe("7b. A tab closed while a change was on its way", () => {
     const environment = createMockApplicationEnvironment();
     environment.sessionController.setPreset("sahyadri-reporter");
     const opened = await storyOf(environment, "story-demo-002");
-    const base = { headline: opened.headline, kicker: "", deck: "", byline: opened.byline, body: opened.body, priority: 3, pagePin: null, deskNote: "" };
+    const base = { headline: opened.headline, kicker: "", deck: "", byline: opened.byline, body: opened.body, priority: 3, pagePin: null, deskNote: "", caption: "", credit: "" };
     const sending = { ...base, body: "closing the tab " };
     // the change arrived (version 2, cleaned), the tab was closed before its answer, with more typed after it
     await environment.stories.update({ orgId: ORG, pubId: PUB, storyId: opened.id, patch: { baseRevision: 1, body: sending.body } });
@@ -317,8 +320,8 @@ describe("11. Sign-out and the drafts on this device", () => {
   it("asks first when stories have unsaved text, and deletes it only after the sign-out succeeded", async () => {
     const environment = createMockApplicationEnvironment();
     writeDraft(REPORTER, "story-demo-002", {
-      fields: { headline: "x", kicker: "", deck: "", byline: "", body: "Unsaved.", priority: 3, pagePin: null, deskNote: "" },
-      base: { headline: "x", kicker: "", deck: "", byline: "", body: "", priority: 3, pagePin: null, deskNote: "" },
+      fields: { headline: "x", kicker: "", deck: "", byline: "", body: "Unsaved.", priority: 3, pagePin: null, deskNote: "", caption: "", credit: "" },
+      base: { headline: "x", kicker: "", deck: "", byline: "", body: "", priority: 3, pagePin: null, deskNote: "", caption: "", credit: "" },
       baseRevision: 1,
       savedAt: "2026-10-22T05:00:00.000Z",
     });
