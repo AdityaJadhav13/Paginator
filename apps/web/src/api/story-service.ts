@@ -55,6 +55,16 @@ export function createApiStoryService(client: ApiClient): StoryService {
     async assign({ orgId, pubId, storyId, baseRevision, userId }) {
       return read(Story, await client.post(`${one(orgId, pubId, storyId)}/assignee`, { baseRevision, userId }));
     },
+    async attachPhoto({ orgId, pubId, storyId, baseRevision, assetId, caption, credit }) {
+      return read(Story, await client.put(`${one(orgId, pubId, storyId)}/photo`, { baseRevision, assetId, caption, credit }));
+    },
+    async updatePhoto({ orgId, pubId, storyId, baseRevision, caption, credit, keepalive }) {
+      const body = { baseRevision, ...(caption !== undefined ? { caption } : {}), ...(credit !== undefined ? { credit } : {}) };
+      return read(Story, await client.patch(`${one(orgId, pubId, storyId)}/photo`, body, keepalive ? { keepalive } : {}));
+    },
+    async removePhoto({ orgId, pubId, storyId, baseRevision }) {
+      return read(Story, await client.delete(`${one(orgId, pubId, storyId)}/photo?baseRevision=${baseRevision}`));
+    },
     async paste({ orgId, pubId, text, editionId, idempotencyKey }) {
       const body = { text, ...(editionId ? { editionId } : {}) };
       return read(PasteResult, await client.post(`${base(orgId, pubId)}/paste`, body, { idempotencyKey }));

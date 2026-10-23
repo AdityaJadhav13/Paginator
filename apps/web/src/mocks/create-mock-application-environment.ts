@@ -10,6 +10,7 @@ import type {
   ServiceEnvironment,
   SessionService,
   StoryService,
+  MediaService,
   TeamService,
   UserQueryService,
   WorkspaceAccessService,
@@ -26,6 +27,7 @@ export interface MockApplicationEnvironment extends ServiceEnvironment {
   readonly security: SecurityService;
   readonly team: TeamService;
   readonly stories: StoryService;
+  readonly media: MediaService;
   readonly access: WorkspaceAccessService;
   readonly scenarios: MockScenarioController;
   readonly sessionController: MockSessionController;

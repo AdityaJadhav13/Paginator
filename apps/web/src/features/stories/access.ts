@@ -30,3 +30,13 @@ export function isDesk(org: OrgAccessDto, publicationId: string): boolean {
 export function mayCreate(org: OrgAccessDto, publicationId: string): boolean {
   return reach("story.create", org.orgRole, pubAccess(org, publicationId)) !== null;
 }
+
+/** media.upload: the desk, a Photo Editor, and a Reporter (their own). */
+export function mayUpload(org: OrgAccessDto, publicationId: string): boolean {
+  return reach("media.upload", org.orgRole, pubAccess(org, publicationId)) !== null;
+}
+
+/** media.view: whoever may see (and download) the publication's pictures; a Reporter's ◐ their own. */
+export function mayViewMedia(org: OrgAccessDto, publicationId: string): boolean {
+  return reach("media.view", org.orgRole, pubAccess(org, publicationId)) !== null;
+}

@@ -7,10 +7,18 @@
  * space trimmed and the whole stripped; so an answer can differ from what was sent, as the real one does. An
  * Idempotency-Key replays its first answer only for the same body, and answers 422 idempotency_key_reused for another.
  * Its paste splits the text at lines of only `---` as the Desk does.
+ *
+ * Photos (plan §5.2, §6.2) as the API's src/modules/media: presign (JPEG, PNG or WebP up to 40 MiB; 60 an hour per
+ * person and 2 GB a day per organisation, answered 429 slow_down; an Idempotency-Key replaying its first answer), the
+ * file to the "store" (its size must be the declared one), complete (its type from its first bytes, else 422
+ * not_a_picture), the story's photo set, changed or taken off on the story's version by whoever edits the story or a
+ * Photo Editor, and the original only for whoever may see it.
  * Fictional data only; deterministic (no clock, no randomness).
  */
 import type {
   ApiProblem,
+  AssetDto,
+  MediaService,
   PasteResultDto,
   ServiceResult,
   StoryDto,
@@ -28,7 +36,12 @@ export type MockStoryOperation =
   | "stories.update"
   | "stories.transition"
   | "stories.assign"
-  | "stories.paste";
+  | "stories.paste"
+  | "stories.photo"
+  | "media.presign"
+  | "media.send"
+  | "media.complete"
+  | "media.load";
 
 /** The person's standing on a publication, as the API's access check finds it. */
 export interface MockStanding {
@@ -47,7 +60,7 @@ export interface MockStoryDeps {
   nameOf(userId: string): string | undefined;
 }
 
-type Row = Omit<StoryDto, "can" | "commentCount" | "photo"> & { readonly orgId: string; readonly order: number };
+type Row = Omit<StoryDto, "can" | "commentCount"> & { readonly orgId: string; readonly order: number };
 
 type Answer = Extract<ApiProblem, { kind: "answer" }>;
 const answer = (status: number, code: string, message: string): Answer => ({
@@ -117,6 +130,7 @@ function row(order: number, fields: Partial<Row> & Pick<Row, "id" | "headline" |
     deskNote: "",
     updatedAt: `2026-10-22T0${order}:00:00.000Z`,
     updatedBy: fields.reporter,
+    photo: null,
     ...fields,
     order,
   };
@@ -157,6 +171,16 @@ function fixtures(): Row[] {
       status: "ready",
       reporter: SUBEDITOR,
       edition: EDITION_B,
+      photo: {
+        assetId: "asset-demo-001",
+        caption: "जलवाहिनीच्या दुरुस्तीचे काम",
+        credit: "Fictional Photo Desk",
+        status: "received",
+        widthPx: 1600,
+        heightPx: 1088,
+        previewUrl: null,
+      },
+      isBrief: false,
     }),
     row(5, {
       id: "story-demo-005",
@@ -168,13 +192,99 @@ function fixtures(): Row[] {
   ];
 }
 
-export function createMockStories(deps: MockStoryDeps): { stories: StoryService; reset(): void; all(): readonly Row[] } {
+interface MockAsset {
+  readonly id: string;
+  readonly orgId: string;
+  readonly pubId: string;
+  readonly uploadedBy: string;
+  readonly mime: AssetDto["mime"];
+  readonly bytes: number;
+  readonly widthPx: number;
+  readonly heightPx: number;
+  readonly data: Blob;
+  readonly status: AssetDto["status"];
+}
+
+interface MockUpload {
+  readonly id: string;
+  readonly orgId: string;
+  readonly pubId: string;
+  readonly userId: string;
+  readonly contentType: AssetDto["mime"];
+  readonly bytes: number;
+  file?: Blob;
+  status: "presigned" | "completed" | "rejected";
+  assetId?: string;
+}
+
+/** A one-pixel-ish PNG's first bytes, enough for the double to tell its type (a fictional picture). */
+const FIXTURE_PICTURE = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 6, 64, 0, 0, 4, 176])], {
+  type: "image/png",
+});
+
+const MAX_BYTES = 41_943_040;
+const UPLOADS_PER_HOUR = 60;
+const ORG_BYTES_PER_DAY = 2 * 1024 ** 3;
+const TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
+async function headOf(blob: Blob): Promise<Uint8Array> {
+  const part = blob.slice(0, 32);
+  if (typeof part.arrayBuffer === "function") return new Uint8Array(await part.arrayBuffer());
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.readAsArrayBuffer(part);
+  });
+}
+
+/** The type from the first bytes, and a PNG's own width and height (a JPEG's or WebP's are fictional here). */
+function sniff(head: Uint8Array): { mime: AssetDto["mime"]; widthPx: number; heightPx: number } | undefined {
+  const at = (i: number) => head[i] ?? -1;
+  if (at(0) === 0xff && at(1) === 0xd8 && at(2) === 0xff) return { mime: "image/jpeg", widthPx: 1600, heightPx: 1200 };
+  if (at(0) === 0x89 && at(1) === 0x50 && at(2) === 0x4e && at(3) === 0x47) {
+    const word = (i: number) => ((at(i) << 24) | (at(i + 1) << 16) | (at(i + 2) << 8) | at(i + 3)) >>> 0;
+    return { mime: "image/png", widthPx: Math.max(1, word(16)), heightPx: Math.max(1, word(20)) };
+  }
+  const text = (from: number, to: number) => String.fromCharCode(...Array.from(head.slice(from, to)));
+  if (text(0, 4) === "RIFF" && text(8, 12) === "WEBP") return { mime: "image/webp", widthPx: 1600, heightPx: 1200 };
+  return undefined;
+}
+
+export function createMockStories(deps: MockStoryDeps): {
+  stories: StoryService;
+  media: MediaService;
+  reset(): void;
+  all(): readonly Row[];
+} {
   let rows = fixtures();
   let counter = 0;
   let clock = 0;
   /** Where a held or spiked story came from. */
   let before = new Map<string, StoryStatusDto>([["story-demo-005", "editing"]]);
   let keys = new Map<string, unknown>();
+  const fixtureAssets = (): Map<string, MockAsset> =>
+    new Map([
+      [
+        "asset-demo-001",
+        {
+          id: "asset-demo-001",
+          orgId: SAHYADRI,
+          pubId: PUNE,
+          uploadedBy: SUBEDITOR.id,
+          mime: "image/png",
+          bytes: FIXTURE_PICTURE.size,
+          widthPx: 1600,
+          heightPx: 1088,
+          data: FIXTURE_PICTURE,
+          status: "received",
+        },
+      ],
+    ]);
+  let assets = fixtureAssets();
+  let uploads = new Map<string, MockUpload>();
+  let uploadCount = new Map<string, number>();
+  let orgBytes = new Map<string, number>();
+  let assetCounter = 0;
 
   const has = (standing: MockStanding, ...roles: string[]) =>
     roles.some((role) => (standing.access.roles as readonly string[]).includes(role));
@@ -245,7 +355,7 @@ export function createMockStories(deps: MockStoryDeps): { stories: StoryService;
       assignee: story.assignee ? { ...story.assignee } : null,
       edition: story.edition ? { ...story.edition } : null,
       updatedBy: { ...story.updatedBy },
-      photo: null,
+      photo: story.photo ? { ...story.photo } : null,
       commentCount: 0,
       can: {
         edit: canEdit(s, story, userId),
@@ -280,7 +390,7 @@ export function createMockStories(deps: MockStoryDeps): { stories: StoryService;
     operation: MockStoryOperation,
     orgId: string,
     pubId: string,
-    permission: "story.view" | "story.create" | "story.edit_own" | "story.assign",
+    permission: "story.view" | "story.create" | "story.edit_own" | "story.assign" | "media.upload" | "media.view",
   ): Promise<ServiceResult<T, ApiProblem> | { person: { userId: string; name: string }; s: MockStanding }> {
     const problem = await deps.gate(operation);
     if (problem) return failure(problem);
@@ -307,7 +417,8 @@ export function createMockStories(deps: MockStoryDeps): { stories: StoryService;
       updatedAt: `2026-10-22T10:${String(clock).padStart(2, "0")}:00.000Z`,
       updatedBy: { id: by.userId, name: by.name },
     };
-    const withCounts = changes.body !== undefined ? { ...next, words: words(next.body), isBrief: words(next.body) > 0 && words(next.body) <= 60 } : next;
+    const brief = (row: Row) => !row.photo && words(row.body) > 0 && words(row.body) <= 60;
+    const withCounts = changes.body !== undefined || "photo" in changes ? { ...next, words: words(next.body), isBrief: brief(next) } : next;
     rows = rows.map((candidate) => (candidate.id === story.id ? withCounts : candidate));
     return withCounts;
   }
@@ -322,7 +433,7 @@ export function createMockStories(deps: MockStoryDeps): { stories: StoryService;
   }
   const isReused = (outcome: object): outcome is typeof KEY_REUSED => "code" in outcome;
 
-  const stories: StoryService = {
+  const stories: Omit<StoryService, "attachPhoto" | "updatePhoto" | "removePhoto"> = {
     async list({ orgId, pubId, filter }) {
       const checked = await check<{ items: StoryListItemDto[]; nextCursor: string | null }>("stories.list", orgId, pubId, "story.view");
       if (refused(checked)) return checked;
@@ -505,9 +616,197 @@ export function createMockStories(deps: MockStoryDeps): { stories: StoryService;
     },
   };
 
+
+  const PHOTO_NOT_THEIRS = NOT_ALLOWED;
+  /** canAttachPhoto: whoever edits the story, or a Photo Editor of the publication on any story they see but a spiked one. */
+  const mayPhoto = (s: MockStanding, story: Row, userId: string) =>
+    canEdit(s, story, userId) || (story.status !== "spiked" && sees(s, story, userId) && has(s, "photo_editor"));
+  /** maySee: all of the publication's pictures with a full media.view; a Reporter's own, or their stories' photos. */
+  const maySeeAsset = (s: MockStanding, asset: MockAsset, userId: string) => {
+    if (asset.status === "rejected") return false;
+    const seen = reach("media.view", s.orgRole, s.access);
+    if (seen === "full") return true;
+    if (seen !== "scoped") return false;
+    return asset.uploadedBy === userId || rows.some((story) => story.photo?.assetId === asset.id && theirs(story, userId));
+  };
+  const changed = (story: Row, s: MockStanding, userId: string) =>
+    failure<StoryDto>({ ...answer(409, "story_changed", "Someone changed this story."), current: view(story, s, userId) });
+
+  const photoOps = {
+    async attachPhoto({ orgId, pubId, storyId, baseRevision, assetId, caption, credit }: Parameters<StoryService["attachPhoto"]>[0]) {
+      const checked = await check<StoryDto>("stories.photo", orgId, pubId, "media.upload");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const story = find(orgId, pubId, storyId);
+      if (!story || !sees(s, story, person.userId)) return failure<StoryDto>(NOT_FOUND);
+      if (baseRevision !== story.revision) return changed(story, s, person.userId);
+      if (!mayPhoto(s, story, person.userId)) return failure<StoryDto>(PHOTO_NOT_THEIRS);
+      const asset = assets.get(assetId);
+      if (asset && asset.pubId === pubId && asset.status !== "rejected" && !maySeeAsset(s, asset, person.userId)) {
+        return failure<StoryDto>(NOT_FOUND);
+      }
+      if (!asset || asset.pubId !== pubId || asset.status === "rejected") {
+        return failure<StoryDto>(invalid("body.assetId", "is not a picture of this publication"));
+      }
+      const photo = {
+        assetId,
+        caption: cleanText(caption),
+        credit: cleanText(credit),
+        status: asset.status,
+        widthPx: asset.widthPx,
+        heightPx: asset.heightPx,
+        previewUrl: null,
+      };
+      return success(view(touch(story, person, { photo }, false), s, person.userId));
+    },
+    async updatePhoto({ orgId, pubId, storyId, baseRevision, caption, credit }: Parameters<StoryService["updatePhoto"]>[0]) {
+      const checked = await check<StoryDto>("stories.photo", orgId, pubId, "media.upload");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const story = find(orgId, pubId, storyId);
+      if (!story || !sees(s, story, person.userId)) return failure<StoryDto>(NOT_FOUND);
+      if (baseRevision !== story.revision) return changed(story, s, person.userId);
+      if (!mayPhoto(s, story, person.userId)) return failure<StoryDto>(PHOTO_NOT_THEIRS);
+      if (!story.photo) return failure<StoryDto>(NOT_FOUND);
+      const photo = {
+        ...story.photo,
+        ...(caption !== undefined ? { caption: cleanText(caption) } : {}),
+        ...(credit !== undefined ? { credit: cleanText(credit) } : {}),
+      };
+      return success(view(touch(story, person, { photo }, false), s, person.userId));
+    },
+    async removePhoto({ orgId, pubId, storyId, baseRevision }: Parameters<StoryService["removePhoto"]>[0]) {
+      const checked = await check<StoryDto>("stories.photo", orgId, pubId, "media.upload");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const story = find(orgId, pubId, storyId);
+      if (!story || !sees(s, story, person.userId)) return failure<StoryDto>(NOT_FOUND);
+      if (baseRevision !== story.revision) return changed(story, s, person.userId);
+      if (!mayPhoto(s, story, person.userId)) return failure<StoryDto>(PHOTO_NOT_THEIRS);
+      if (!story.photo) return failure<StoryDto>(NOT_FOUND);
+      return success(view(touch(story, person, { photo: null }, false), s, person.userId));
+    },
+  };
+  const withPhotos: StoryService = { ...stories, ...photoOps };
+
+  const media: MediaService = {
+    async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey }) {
+      const checked = await check<never>("media.presign", orgId, pubId, "media.upload");
+      if (refused(checked)) return checked;
+      const { person } = checked;
+      const body = { filename, contentType, bytes };
+      const replayed = replay<{ uploadId: string; url: string; fields: Record<string, string>; expiresAt: string }>(idempotencyKey, "presign", body);
+      if (replayed && isReused(replayed)) return failure(replayed);
+      if (replayed) return success(replayed.value);
+      if (!(TYPES as readonly string[]).includes(contentType)) return failure(invalid("body.contentType", "must be JPEG, PNG or WebP"));
+      if (bytes > MAX_BYTES) return failure(answer(413, "file_too_large", "This picture is larger than 40 MB."));
+      const used = orgBytes.get(orgId) ?? 0;
+      const count = uploadCount.get(person.userId) ?? 0;
+      if (used + bytes > ORG_BYTES_PER_DAY || count >= UPLOADS_PER_HOUR) {
+        return failure(answer(429, "slow_down", "Too many tries. Wait a minute and try again."));
+      }
+      orgBytes.set(orgId, used + bytes);
+      uploadCount.set(person.userId, count + 1);
+      const id = `upload-${String(uploads.size + 1).padStart(3, "0")}`;
+      uploads.set(id, { id, orgId, pubId, userId: person.userId, contentType, bytes, status: "presigned" });
+      const presigned = {
+        uploadId: id,
+        url: "mock-store://pgn-dev-work",
+        fields: { key: `uploads/orgs/${orgId}/pubs/${pubId}/${id}`, "Content-Type": contentType, "x-amz-meta-upload-id": id },
+        // the double has no clock: its policies do not run out (a test changes this answer to see one that has)
+        expiresAt: "2099-01-01T00:00:00.000Z",
+      };
+      keep(idempotencyKey, "presign", body, presigned);
+      return success(presigned);
+    },
+
+    async send({ upload, file, onProgress, signal }) {
+      const cancelled = answer(0, "upload_cancelled", "");
+      if (signal?.aborted) return failure(cancelled);
+      const problem = await deps.gate("media.send");
+      if (problem) return failure(problem);
+      const kept = uploads.get(upload.uploadId);
+      if (!kept || upload.fields["Content-Type"] !== kept.contentType) return failure(answer(403, "upload_denied", "AccessDenied"));
+      // the policy's content-length-range is the declared size exactly
+      if (file.size !== kept.bytes) return failure(answer(400, "upload_size_mismatch", ""));
+      onProgress?.(0.5);
+      await Promise.resolve();
+      if (signal?.aborted) return failure(cancelled);
+      kept.file = file;
+      onProgress?.(1);
+      return success(undefined);
+    },
+
+    async complete({ orgId, pubId, uploadId }) {
+      const checked = await check<AssetDto>("media.complete", orgId, pubId, "media.upload");
+      if (refused(checked)) return checked;
+      const { person } = checked;
+      const upload = uploads.get(uploadId);
+      if (!upload || upload.userId !== person.userId || upload.pubId !== pubId) return failure(NOT_FOUND);
+      const asDto = (asset: MockAsset): AssetDto => ({
+        id: asset.id,
+        kind: "photo",
+        status: asset.status,
+        mime: asset.mime,
+        bytes: asset.bytes,
+        widthPx: asset.widthPx,
+        heightPx: asset.heightPx,
+        sha256: `fictional-${asset.id}`,
+        createdAt: "2026-10-22T10:00:00.000Z",
+      });
+      if (upload.status === "completed" && upload.assetId) {
+        const done = assets.get(upload.assetId);
+        if (done) return success(asDto(done));
+      }
+      if (upload.status !== "presigned") return failure(answer(422, "not_a_picture", "This file is not a picture Pageinator can use."));
+      if (!upload.file) return failure(invalid("params.u", "The file has not arrived yet."));
+      const found = sniff(await headOf(upload.file));
+      if (!found) {
+        upload.status = "rejected";
+        return failure({
+          ...answer(422, "not_a_picture", "This file is not a picture Pageinator can use."),
+          details: [{ field: "file", message: "The file was refused: it is not a JPEG, PNG or WebP picture." }],
+        });
+      }
+      assetCounter += 1;
+      const asset: MockAsset = {
+        id: `asset-new-${String(assetCounter).padStart(3, "0")}`,
+        orgId,
+        pubId,
+        uploadedBy: person.userId,
+        ...found,
+        bytes: upload.bytes,
+        data: upload.file,
+        status: "received",
+      };
+      assets = new Map(assets).set(asset.id, asset);
+      upload.status = "completed";
+      upload.assetId = asset.id;
+      return success(asDto(asset));
+    },
+
+    fileUrl({ orgId, pubId, assetId }) {
+      return `/api/v1/orgs/${encodeURIComponent(orgId)}/pubs/${encodeURIComponent(pubId)}/assets/${encodeURIComponent(assetId)}/file`;
+    },
+
+    async loadOriginal({ orgId, pubId, assetId }) {
+      const checked = await check<Blob>("media.load", orgId, pubId, "media.view");
+      if (refused(checked)) return checked;
+      const asset = assets.get(assetId);
+      if (!asset || asset.pubId !== pubId || !maySeeAsset(checked.s, asset, checked.person.userId)) return failure(NOT_FOUND);
+      return success(asset.data);
+    },
+  };
+
   return {
-    stories,
+    stories: withPhotos,
+    media,
     reset() {
+      assets = fixtureAssets();
+      uploads = new Map();
+      uploadCount = new Map();
+      orgBytes = new Map();
+      assetCounter = 0;
       rows = fixtures();
       counter = 0;
       clock = 0;

@@ -21,6 +21,7 @@ import type {
   SessionService,
   SessionSnapshot,
   StoryService,
+  MediaService,
   TeamService,
   WorkspaceAccessDto,
   WorkspaceAccessService,
@@ -139,6 +140,7 @@ export interface MockSessionEnvironment {
   readonly security: SecurityService;
   readonly team: TeamService;
   readonly stories: StoryService;
+  readonly media: MediaService;
   readonly access: WorkspaceAccessService;
   readonly sessionController: MockSessionController;
   readonly invalidatePendingSessionMutations: () => void;
@@ -957,6 +959,7 @@ export function createMockSessionEnvironment(
     security,
     team,
     stories: storyDouble.stories,
+    media: storyDouble.media,
     access,
     sessionController,
     invalidatePendingSessionMutations: () => {
