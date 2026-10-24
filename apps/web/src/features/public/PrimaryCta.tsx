@@ -1,35 +1,35 @@
 /**
- * The one primary call to action shared by all five public surfaces (§20.1).
+ * The primary call to action (03 §4.1): "Book a demo", to /contact?intent=demo. On /pricing it is "Talk to us about a
+ * pilot", to /contact?intent=pilot. A signed-in person with a workspace gets "Open your workspace" instead.
  *
- * Its destination is derived from the live session rather than hard-coded:
- * a signed-in reader lands in their workspace when they have one, and on the
- * signed-in page otherwise.
- *
- * It is a router `Link`, never a button that navigates, and it never mutates
- * session state. While the session is still loading it renders its
- * signed-out form rather than a spinner or a disabled control — a public
- * page must never present a dead primary action.
+ * It is a router `Link`, never a button that navigates, and it never changes the session. While the session is still
+ * loading it shows its signed-out form: a public page never shows a dead primary action.
  */
 import { Link } from "react-router";
 import { paths } from "../../app/routes.ts";
 import { useSession } from "../auth/SessionProvider.tsx";
-import { t } from "./content.ts";
+import { usePublicText } from "./usePublicText.ts";
+
+export type CtaIntent = "demo" | "pilot";
+
+const LABEL: Record<CtaIntent, string> = { demo: "cta-book-demo", pilot: "cta-pilot" };
+
+/** /contact with the form's intent preset. */
+export function contactPath(intent: "demo" | "pilot" | "press" | "other"): string {
+  return `${paths.contact()}?intent=${intent}`;
+}
 
 export interface PrimaryCtaProps {
-  /** Extra classes for the band the CTA sits in. */
+  readonly intent?: CtaIntent;
   readonly className?: string;
 }
 
-export function PrimaryCta({ className }: PrimaryCtaProps) {
+export function PrimaryCta({ intent = "demo", className }: PrimaryCtaProps) {
   const { state } = useSession();
-
-  const signedIn = state.status === "ready";
-  const label = signedIn ? t("cta-primary-signed-in") : t("cta-primary-signed-out");
-  // A signed-in person with no workspace yet lands on the signed-in page, which says what is open to them.
-  const workspace = signedIn ? state.workspace : null;
-  const destination = workspace
-    ? paths.orgHome(workspace.activeOrganizationId)
-    : paths.login();
+  const { t } = usePublicText();
+  const workspace = state.status === "ready" ? state.workspace : null;
+  const label = workspace ? t("cta-open-workspace") : t(LABEL[intent]);
+  const destination = workspace ? paths.orgHome(workspace.activeOrganizationId) : contactPath(intent);
 
   return (
     <Link

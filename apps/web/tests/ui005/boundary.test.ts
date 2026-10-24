@@ -60,7 +60,17 @@ describe("src/features/public import boundaries (AC-46)", () => {
 
     for (const { pattern, name } of FORBIDDEN_FOR_PUBLIC) {
       it(`${path} does not import a ${name}`, () => {
-        expect(imports.filter((specifier) => pattern.test(specifier))).toEqual([]);
+        // The contact form's service type is the one exception: an `import type` statement of the services' index
+        // (types only, erased at build). Judged per import statement, so a value import of the same module fails.
+        const statements = [...stripComments(source).matchAll(/import\s+(type\s+)?[^;]*?from\s+["']([^"']+)["']/g)];
+        const offending = statements
+          .filter((match) => pattern.test(match[2]!))
+          .filter((match) => !(match[1] && /\/services\/index\.ts$/.test(match[2]!)))
+          .map((match) => match[0]);
+        expect(offending).toEqual([]);
+        // and no side-effect or dynamic import of one either
+        const other = importsOf(source).filter((specifier) => pattern.test(specifier));
+        expect(other.every((specifier) => statements.some((match) => match[2] === specifier))).toBe(true);
       });
     }
 
@@ -281,5 +291,22 @@ describe("No dependency was added (AC-47)", () => {
     for (const forbidden of ["mdx", "markdown", "framer", "gsap", "swiper", "i18next", "lucide"]) {
       expect(names).not.toContain(forbidden);
     }
+  });
+});
+
+
+describe("the type-only exemption is judged per import statement", () => {
+  const check = (source: string) =>
+    [...source.matchAll(/import\s+(type\s+)?[^;]*?from\s+["']([^"']+)["']/g)]
+      .filter((match) => /(^|\/)services(\/|$)/.test(match[2]!))
+      .filter((match) => !(match[1] && /\/services\/index\.ts$/.test(match[2]!)))
+      .map((match) => match[0]);
+
+  it("allows `import type` of the services' index, and refuses a value import of the same module beside it", () => {
+    expect(check('import type { ContactService } from "../../services/index.ts";')).toEqual([]);
+    expect(
+      check('import type { ContactService } from "../../services/index.ts";\nimport { grantsOf } from "../../services/index.ts";'),
+    ).toHaveLength(1);
+    expect(check('import { type ContactService } from "../../services/index.ts";')).toHaveLength(1);
   });
 });

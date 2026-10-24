@@ -353,28 +353,45 @@
 }
 
 /* ── Hero ───────────────────────────────────────────────────────────── */
+/*
+ * Text at the start, the page-structure diagram at the end, on the editorial
+ * grid; below laptop width the diagram follows the text.
+ */
 
 .pg-public__hero {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pg-space-6);
+  align-items: center;
 }
 
-/*
- * The qualification sits opposite the lead at laptop width and above,
- * separated by a rule — earned asymmetry rather than a centred stack.
- */
+.pg-public__hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-5);
+}
+
+.pg-public .pg-public__hero-text > * + * {
+  margin-block-start: 0;
+}
+
 .pg-public__hero-aside {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-200);
+  line-height: var(--pg-line-height-200);
+  color: var(--pg-color-text-muted);
+  margin: 0;
+  max-inline-size: var(--pg-reading-measure);
   border-block-start: var(--pg-border-width) solid var(--pg-color-border);
   padding-block-start: var(--pg-space-4);
 }
 
+.pg-public__hero-figure .pg-public__figure {
+  margin-inline: auto;
+  max-inline-size: 18rem;
+}
+
 @media (min-width: 64rem) {
-  .pg-public__hero-aside {
-    border-block-start: none;
-    border-inline-start: var(--pg-border-width) solid var(--pg-color-border);
-    padding-block-start: 0;
-    padding-inline-start: var(--pg-space-6);
+  .pg-public__hero-figure .pg-public__figure {
+    margin-inline-end: 0;
+    max-inline-size: 22rem;
   }
 }
 
@@ -428,7 +445,7 @@
   font-family: var(--pg-font-mono);
   font-size: var(--pg-font-size-200);
   font-weight: var(--pg-font-weight-regular);
-  color: var(--pg-color-border-subtle);
+  color: var(--pg-color-text-muted);
 }
 
 .pg-public__band--ink .pg-public__sequence-ordinal {
@@ -606,6 +623,227 @@
   font-family: var(--pg-font-sans);
 }
 
+
+/* ── State of a stage today ─────────────────────────────────────────── */
+
+.pg-capability-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-1);
+}
+
+/* ── Proof facts (homepage) ─────────────────────────────────────────── */
+/*
+ * Four facts on hairline-topped columns: the figure large, the claim in the
+ * serif, what it does not show in body type, and its record in small type.
+ */
+
+.pg-public__proofs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--pg-space-7);
+}
+
+@media (min-width: 48rem) {
+  .pg-public__proofs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 80rem) {
+  .pg-public__proofs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--pg-space-6);
+  }
+}
+
+.pg-public__proof {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+  border-block-start: var(--pg-space-1) solid var(--pg-color-text);
+  padding-block-start: var(--pg-space-4);
+}
+
+.pg-public__proof-figure {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-700);
+  line-height: var(--pg-line-height-700);
+  font-weight: var(--pg-font-weight-bold);
+  font-variant-numeric: lining-nums;
+  margin: 0;
+}
+
+.pg-public__proof-claim {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-400);
+  line-height: var(--pg-line-height-400);
+  font-weight: var(--pg-font-weight-semibold);
+  margin: 0;
+}
+
+.pg-public__proof-source {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-100);
+  line-height: var(--pg-line-height-100);
+  color: var(--pg-color-text-muted);
+  margin: 0;
+  margin-block-start: auto;
+  padding-block-start: var(--pg-space-3);
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+}
+
+.pg-public__proof-source-label {
+  font-weight: var(--pg-font-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* ── Marathi typography showcase (homepage) ─────────────────────────── */
+/*
+ * A single column of a fictional Marathi story, set by the browser in the
+ * system's Devanagari face, with the conjunct and digit sets beside it.
+ * Devanagari needs more leading than Latin, so the body steps up a line height.
+ */
+
+.pg-public__specimen {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-4);
+}
+
+.pg-public__specimen-page {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--pg-space-6);
+  padding: var(--pg-space-6);
+  background-color: var(--pg-color-surface);
+  border: var(--pg-border-width) solid var(--pg-color-border);
+  border-radius: var(--pg-radius-sm);
+}
+
+@media (min-width: 48rem) {
+  .pg-public__specimen-page {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+
+  .pg-public__specimen-label:first-child {
+    grid-column: span 2;
+  }
+}
+
+.pg-public__specimen-label {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-100);
+  line-height: var(--pg-line-height-100);
+  font-weight: var(--pg-font-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--pg-color-text-muted);
+  margin: 0;
+}
+
+.pg-public__specimen-story {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+}
+
+.pg-public__specimen-folio {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-200);
+  line-height: var(--pg-line-height-300);
+  color: var(--pg-color-text-muted);
+  margin: 0;
+  padding-block-end: var(--pg-space-2);
+  border-block-end: var(--pg-border-width) solid var(--pg-color-text);
+}
+
+.pg-public__specimen-kicker {
+  font-family: var(--pg-font-sans);
+  font-size: var(--pg-font-size-300);
+  line-height: var(--pg-line-height-400);
+  font-weight: var(--pg-font-weight-bold);
+  color: var(--pg-color-action);
+  margin: 0;
+}
+
+.pg-public__specimen-headline {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-600);
+  line-height: var(--pg-line-height-700);
+  font-weight: var(--pg-font-weight-bold);
+  margin: 0;
+  text-wrap: balance;
+}
+
+.pg-public__specimen-deck {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-400);
+  line-height: var(--pg-line-height-500);
+  margin: 0;
+  color: var(--pg-color-text-muted);
+}
+
+.pg-public__specimen-body {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-300);
+  line-height: var(--pg-line-height-400);
+  margin: 0;
+  padding-block-start: var(--pg-space-3);
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+}
+
+.pg-public__specimen-sets {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-5);
+}
+
+.pg-public__specimen-sets > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-2);
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  padding-block-start: var(--pg-space-3);
+}
+
+.pg-public__specimen-glyphs {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-400);
+  line-height: var(--pg-line-height-500);
+  margin: 0;
+}
+
+/* ── Deliberate limits ──────────────────────────────────────────────── */
+
+.pg-public__limit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+  border-block-start: var(--pg-border-width) solid var(--pg-color-border);
+  padding-block-start: var(--pg-space-4);
+}
+
+.pg-public .pg-public__grid > .pg-public__limit > * + * {
+  margin-block-start: 0;
+}
+
+/* ── Closing band ───────────────────────────────────────────────────── */
+
+.pg-public__closing .pg-public__note {
+  font-size: var(--pg-font-size-200);
+  line-height: var(--pg-line-height-200);
+}
+
 /* ── Contact form (§18) ─────────────────────────────────────────────── */
 
 .pg-public__form {
@@ -613,6 +851,68 @@
   flex-direction: column;
   gap: var(--pg-space-5);
   max-inline-size: var(--pg-reading-measure);
+}
+
+.pg-public__form-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--pg-space-5);
+}
+
+@media (min-width: 48rem) {
+  .pg-public__form-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.pg-public .pg-public__form-hint {
+  margin-block-end: calc(var(--pg-space-3) * -1);
+  color: var(--pg-color-text-muted);
+}
+
+.pg-public__privacy {
+  font-size: var(--pg-font-size-200);
+  line-height: var(--pg-line-height-200);
+}
+
+.pg-public__outcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-5);
+  max-inline-size: var(--pg-reading-measure);
+}
+
+/* ── Marathi: Devanagari is never smaller than 13 CSS pixels ────────── */
+/*
+ * The small type steps (--pg-font-size-100 is 12 px) move up one step on a
+ * Marathi page, and the Latin label treatments (tracking, capitals) are
+ * dropped: letter-spacing would pull Devanagari conjuncts apart.
+ */
+.pg-public:lang(mr) .pg-public__note,
+.pg-public:lang(mr) .pg-standing-head__label,
+.pg-public:lang(mr) .pg-capability,
+.pg-public:lang(mr) .pg-public__constraint-label,
+.pg-public:lang(mr) .pg-public__proof-source,
+.pg-public:lang(mr) .pg-public__specimen-label,
+.pg-public .pg-public__specimen-label:lang(mr) {
+  font-size: var(--pg-font-size-200);
+  line-height: var(--pg-line-height-200);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.pg-public:lang(mr) .pg-public__proof-source-label {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.pg-public:lang(mr) .pg-public__body,
+.pg-public:lang(mr) .pg-public__lead {
+  line-height: var(--pg-line-height-500);
+}
+
+.pg-public:lang(mr) .pg-public__body {
+  line-height: var(--pg-line-height-400);
 }
 
 /* ── Overflow protection at 320 CSS pixels (§21.5) ──────────────────── */

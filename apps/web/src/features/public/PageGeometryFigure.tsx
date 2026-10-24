@@ -1,15 +1,16 @@
 /**
- * The one graphic UI005 is permitted to render (§14).
+ * The homepage hero's diagram (UI005 §14).
  *
  * It is a schematic of a newspaper page's *structure* — margins, a column
  * grid, a reserved advertisement, and a linked text flow — drawn entirely
  * from the geometry constants below. It deliberately contains no headline,
- * byline, dateline, body text, greeking or measurement, because Pageinator
- * has composed nothing and a page that looked composed would be a
- * fabrication. The caption says so on the page, not only here.
+ * byline, dateline, body text, greeking or measurement: it is a diagram, and
+ * a drawing that looked like a composed page would pass for Pageinator's
+ * output, which it is not. The caption says so on the page, not only here.
+ * Its labels follow the page's language.
  */
 import { useId } from "react";
-import { t } from "./content.ts";
+import { usePublicText } from "./usePublicText.ts";
 
 /** Static page geometry in viewBox units. No value is a real measurement. */
 const VIEW_WIDTH = 320;
@@ -24,12 +25,16 @@ const COLUMN_TOP = 52;
 const COLUMN_BOTTOM = 352;
 const AD_TOP = 262;
 const LEGEND_ROWS = [452, 474, 496];
-const LABEL_SIZE = 12;
+const LABEL_SIZE = 13;
+const LABEL_SIZE_MR = 16;
 
 const columnX = (index: number) => MARGIN + index * (COLUMN_WIDTH + GUTTER);
 
 export function PageGeometryFigure() {
   const arrowId = useId();
+  const { t, language } = usePublicText();
+  // Devanagari stays at 13 CSS px or more where the diagram is drawn smallest (a 320 px phone)
+  const labelSize = language === "mr" ? LABEL_SIZE_MR : LABEL_SIZE;
 
   return (
     <figure className="pg-public__figure">
@@ -110,7 +115,7 @@ export function PageGeometryFigure() {
           className="pg-figure__label"
           x={MARGIN + 22}
           y={LEGEND_ROWS[0]!}
-          fontSize={LABEL_SIZE}
+          fontSize={labelSize}
         >
           {t("figure-label-grid")}
         </text>
@@ -126,7 +131,7 @@ export function PageGeometryFigure() {
           className="pg-figure__label"
           x={MARGIN + 22}
           y={LEGEND_ROWS[1]!}
-          fontSize={LABEL_SIZE}
+          fontSize={labelSize}
         >
           {t("figure-label-ad")}
         </text>
@@ -140,7 +145,7 @@ export function PageGeometryFigure() {
           className="pg-figure__label"
           x={MARGIN + 22}
           y={LEGEND_ROWS[2]!}
-          fontSize={LABEL_SIZE}
+          fontSize={labelSize}
         >
           {t("figure-label-flow")}
         </text>

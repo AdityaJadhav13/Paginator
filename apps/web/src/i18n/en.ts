@@ -93,6 +93,21 @@ export const EN = {
   "shell.notice":
     "Pageinator is still being built. Accounts are by invitation; no payments or press services exist here.",
 
+  // ── The public website's header and footer (03 §4.1) ─────────────────
+  "public.nav.primary": "Primary",
+  "public.nav.secondary": "Secondary",
+  "public.nav.show": "Show menu",
+  "public.nav.hide": "Hide menu",
+  "public.nav.home": "Home",
+  "public.nav.features": "Features",
+  "public.nav.pricing": "Pricing",
+  "public.nav.security": "Security",
+  "public.nav.contact": "Contact",
+  "public.signIn": "Sign in",
+  "public.bookDemo": "Book a demo",
+  "public.footer.hosting": "Hosting in India is planned; no paper's data is hosted yet.",
+  "public.footer.copyright": "© {year} Pageinator. All rights reserved.",
+
   // The names a screen reader gives the kit's message icons
   "message.info": "Information",
   "message.success": "Success",
@@ -148,6 +163,9 @@ export const EN = {
   "error.not_json": "This request must be sent as JSON.",
   "error.not_a_picture": "This file is not a picture Pageinator can read. Use a JPEG, PNG or WebP file.",
   "error.slow_down": "Too many tries. Wait a minute and try again.",
+  "error.contact_unavailable": "Messages cannot be sent from this website yet.",
+  "error.contact_send_failed": "The message could not be sent just now. Try again later.",
+  "error.contact_limit": "Too many messages. Try again later.",
   "error.server_error": "Something went wrong on our side. Try again.",
   "error.idempotency_key_reused": "This was already sent with different content. Reload the page and try again.",
   "error.request_in_progress": "This is still being handled. Wait a moment, then check.",

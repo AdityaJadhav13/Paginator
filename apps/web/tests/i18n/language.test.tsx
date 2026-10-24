@@ -67,13 +67,23 @@ describe("The interface language", () => {
     expect(window.localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe("en");
   });
 
-  it("keeps the English-only public pages marked English while Marathi is chosen", async () => {
+  it("shows the public pages in Marathi, marked Marathi, when Marathi is chosen", async () => {
     window.localStorage.setItem(LANGUAGE_STORAGE_KEY, "mr");
     const view = renderUi004("/security", "signed-out");
-    expect(await screen.findByRole("heading", { level: 1, name: "Security posture and current limits" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "सुरक्षा, गोपनीयता आणि सध्याच्या मर्यादा" })).toBeInTheDocument();
     expect(document.documentElement.lang).toBe("mr");
+    expect(view.container.querySelector(".pg-shell--public")).toHaveAttribute("lang", "mr");
+    expect(within(screen.getByRole("banner")).getByRole("link", { name: "प्रवेश करा" })).toHaveAttribute("href", "/login");
+  });
+
+  it("switches a public page to English from its header, and remembers it", async () => {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, "mr");
+    const view = renderUi004("/", "signed-out");
+    await screen.findByRole("heading", { level: 1, name: "अंकनिर्मिती, सर्वप्रथम मराठी वृत्तपत्रांसाठी घडवलेली" });
+    await userEvent.setup().click(screen.getByRole("button", { name: "English" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Newspaper production, built first for Marathi papers" })).toBeInTheDocument();
     expect(view.container.querySelector(".pg-shell--public")).toHaveAttribute("lang", "en");
-    expect(screen.getByRole("link", { name: "Sign in" })).toBeInTheDocument();
+    expect(window.localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe("en");
   });
 
   it("ignores a stored value that is not a language", async () => {

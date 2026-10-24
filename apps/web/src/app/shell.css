@@ -123,3 +123,95 @@
     display: block;
   }
 }
+
+/* ── The public website's header (03 §4.1) ────────────────────────────── */
+/*
+ * One wrapping row: the wordmark, the page links, then the language switch,
+ * Sign in and Book a demo at the end. On a phone the links fold under the
+ * menu toggle, which sits at the end of the first row, and the actions take
+ * the second row; DOM order (and so Tab order) is the same at every width.
+ */
+.pg-site-header__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--pg-space-6);
+  row-gap: var(--pg-space-3);
+}
+
+.pg-site-header__brand {
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-500);
+  line-height: var(--pg-line-height-500);
+  font-weight: var(--pg-font-weight-bold);
+  letter-spacing: -0.01em;
+}
+
+.pg-site-header__links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pg-space-2) var(--pg-space-5);
+}
+
+.pg-site-header .pg-shell__nav a {
+  color: var(--pg-color-text);
+  font-size: var(--pg-font-size-300);
+}
+
+.pg-site-header .pg-shell__nav a[aria-current="page"] {
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.pg-site-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-3) var(--pg-space-4);
+  margin-inline-start: auto;
+}
+
+.pg-site-header__sign-in {
+  color: var(--pg-color-action);
+  font-size: var(--pg-font-size-300);
+  text-decoration: none;
+}
+
+.pg-site-header__sign-in:hover {
+  text-decoration: underline;
+}
+
+.pg-site-header__cta {
+  text-decoration: none;
+}
+
+@media (max-width: 767px) {
+  .pg-site-header .pg-shell__nav-toggle {
+    margin-inline-start: auto;
+  }
+
+  .pg-site-header .pg-shell__nav--open {
+    flex-basis: 100%;
+    padding-block: var(--pg-space-2);
+  }
+
+  .pg-site-header .pg-shell__nav--open .pg-site-header__links {
+    flex-direction: column;
+  }
+
+  .pg-site-header__actions {
+    flex-basis: 100%;
+    margin-inline-start: 0;
+  }
+}
+
+.pg-site-footer .pg-type-body-small {
+  color: var(--pg-color-text-muted);
+}
+
+.pg-site-footer p {
+  margin: 0;
+}

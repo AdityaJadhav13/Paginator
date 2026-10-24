@@ -17,6 +17,7 @@ import type {
   WorkspaceQueryService,
 } from "../services/index.ts";
 import type { MockScenarioController } from "./scenarios.ts";
+import { createMockContact, type MockContactController } from "./create-mock-contact.ts";
 
 /** The whole app on test doubles: the placeholder workspace's fictional data and the session double. */
 export interface MockApplicationEnvironment extends ServiceEnvironment {
@@ -31,6 +32,7 @@ export interface MockApplicationEnvironment extends ServiceEnvironment {
   readonly access: WorkspaceAccessService;
   readonly scenarios: MockScenarioController;
   readonly sessionController: MockSessionController;
+  readonly contactController: MockContactController;
   readonly invalidatePendingSessionMutations: () => void;
   readonly getSessionMutationGeneration: () => number;
   readonly onSignedOut: (listener: () => void) => () => void;
@@ -42,14 +44,18 @@ export function createMockApplicationEnvironment(
 ): MockApplicationEnvironment {
   const { users, workspace, scenarios, intercept } = createMockServiceEnvironment(options);
   const sessionEnvironment = createMockSessionEnvironment({ intercept });
+  const { contact, contactController } = createMockContact();
   return {
     users,
     workspace,
     scenarios,
     ...sessionEnvironment,
+    contact,
+    contactController,
     reset() {
       scenarios.reset();
       sessionEnvironment.sessionController.reset();
+      contactController.reset();
     },
   };
 }

@@ -26,6 +26,7 @@ import { peopleRoutes } from "./modules/people/plugin.ts";
 import { storyRoutes } from "./modules/stories/routes.ts";
 import { photoRoutes } from "./modules/media/photos.ts";
 import { uploadRoutes } from "./modules/media/uploads.ts";
+import { contactRoutes } from "./modules/contact/routes.ts";
 import { closeWhenStopping } from "./shutdown.ts";
 import type { ObjectStore } from "./storage/object-store.ts";
 import { s3Store } from "./storage/s3.ts";
@@ -50,12 +51,23 @@ export type AppDeps = {
   checks: Checks;
   /** How often a live-update stream re-checks its person (25 s; tests make it short). */
   liveHeartbeatMs?: number;
+  /** Where the log lines go: standard output by default; tests read them. */
+  logStream?: { write(line: string): void };
+  /** The contact form's limits (src/modules/contact/routes.ts); tests make them small. */
+  contactLimits?: { perHour: number; perDay: number; perDayAll: number };
+  /** The pause before a dropped contact message's answer (ms); tests make it 0. */
+  contactDropPause?: () => number;
 };
 
 export async function buildApp(deps: AppDeps) {
   const { config } = deps;
   const fastify = Fastify({
-    logger: { level: config.logLevel, serializers: { req: requestSerializer } }, // no tokens in the logs
+    // no tokens in the logs
+    logger: {
+      level: config.logLevel,
+      serializers: { req: requestSerializer },
+      ...(deps.logStream ? { stream: deps.logStream } : {}),
+    },
     genReqId: requestId,
     childLoggerFactory,
     frameworkErrors: frameworkErrorHandler,
@@ -117,12 +129,17 @@ export async function buildApp(deps: AppDeps) {
       }
     | undefined;
   let live: ReturnType<typeof startLive> | undefined;
-  if (database) {
-    // a mail server's message may name the recipient, so only its codes are logged
-    const mailer = openMailer(config.mail, deps.mailTransport ?? smtpTransport(config.mail), (kind, error) => {
-      const { code, responseCode } = error as { code?: string; responseCode?: number };
-      fastify.log.warn({ kind, code, responseCode }, "an email was not sent");
-    });
+  // Email, for sign-in and the newsroom (with the database) and for the website's contact form (with PGN_CONTACT_TO).
+  // A mail server's message may name the recipient, so only its codes are logged.
+  const mailer =
+    database || config.contactTo !== undefined
+      ? openMailer(config.mail, deps.mailTransport ?? smtpTransport(config.mail), (kind, error) => {
+          const { code, responseCode } = error as { code?: string; responseCode?: number };
+          fastify.log.warn({ kind, code, responseCode }, "an email was not sent");
+        })
+      : undefined;
+  if (mailer) fastify.addHook("onClose", () => mailer.close());
+  if (database && mailer) {
     const auth = await registerIdentity(fastify, { config, database, mailer });
     fastify.addHook("preValidation", afterSession); // the signed-in budget, once identity's hook read the session
     registerAccess(fastify, database); // after identity's hook, which reads the session
@@ -139,6 +156,13 @@ export async function buildApp(deps: AppDeps) {
   const store = deps.store ?? (config.storage ? s3Store(config.storage) : undefined);
   await app.register(health, {
     checks: { ...(store ? { storage: () => store.ready() } : {}), ...deps.checks },
+  });
+  // open to anyone, with or without the database: it keeps nothing
+  await app.register(contactRoutes, {
+    mailer,
+    to: config.contactTo,
+    ...(deps.contactLimits ? { limits: deps.contactLimits } : {}),
+    ...(deps.contactDropPause ? { dropPause: deps.contactDropPause } : {}),
   });
   if (people) {
     await app.register(peopleRoutes, { ...people, config });

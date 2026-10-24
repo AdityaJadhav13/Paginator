@@ -42,6 +42,5 @@ export async function registerIdentity(
     if (found && found.setCookie.length > 0) reply.header("set-cookie", found.setCookie); // the sliding 12 h
   });
   await app.register(identityRoutes, { auth, origin: config.publicOrigin, sessions });
-  app.addHook("onClose", () => mailer.close());
   return auth;
 }

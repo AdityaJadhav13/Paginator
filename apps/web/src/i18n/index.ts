@@ -24,4 +24,12 @@ export {
   type I18nValue,
 } from "./I18nProvider.tsx";
 export { LanguageSwitch } from "./LanguageSwitch.tsx";
-export { REVIEW, REVIEW_NOTES, REVIEWED, type MarathiReview, type ReviewItem } from "./review.ts";
+export {
+  REVIEW,
+  REVIEW_NOTES,
+  REVIEWED,
+  type MarathiReview,
+  type PublicReviewKey,
+  type ReviewItem,
+  type ReviewKey,
+} from "./review.ts";

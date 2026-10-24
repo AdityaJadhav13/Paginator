@@ -1,98 +1,62 @@
 /**
- * UI005 workflow model (§13).
+ * The seven-stage workflow (docs/product/03-website-and-accounts.md §4.2): Plan · Content · Generate · Edit · Check ·
+ * Print · Archive, each with its state today.
  *
- * This module owns **structure only**: the ordering, the stable keys, the
- * canonical route each stage will eventually own, and the availability
- * state. Every rendered sentence — stage name, description, constraint,
- * availability label and owner caption — lives in `content.ts` under the
- * `id`/`text`/`source`/`sourceRef` record structure, so all public prose is
- * governed in one reviewable place (§19.1, AC-13/AC-14).
+ * This module owns structure only: the order, the keys and the states. Every sentence (name, what it does, what is
+ * live today, the state labels) is a record in `content.ts`. `/` (condensed) and `/features` (in full) read the same
+ * array, so they cannot drift.
  *
- * Both `/` (condensed) and `/features` (in full) read the same array, so
- * the two surfaces cannot drift (AC-37).
- *
- * A stage may only be marked `demonstrated` when its route actually renders
- * something other than a placeholder, which `tests/ui005/routes.test.tsx`
- * enforces at runtime.
+ * The states, and why (each stage's "today" record names its evidence):
+ *   - desk: it works today in Pageinator Desk (tools/desk; L1 in docs/product/09-launch-plan.md);
+ *   - pilot: it is built in the newsroom app (apps/), which is being prepared for a pilot and is not deployed;
+ *   - planned: nothing of it is built.
+ * A stage may carry two states when its parts differ (Content: the Desk's typing, pasting and Word import work today;
+ * filing from a phone is built for the pilot). Raising a state without the evidence fails the claims test.
  */
-import type { ROUTE_LABELS } from "../../app/routes.ts";
-import { t } from "./content.ts";
 
-/** Which of the three availability states a stage is in (§13.2). */
-export type StageAvailability = "demonstrated" | "routed" | "planned";
+export type StageState = "desk" | "pilot" | "planned";
 
-/** Content-record id holding each state's visible label. */
-const AVAILABILITY_CONTENT_ID: Record<StageAvailability, string> = {
-  demonstrated: "availability-demonstrated",
-  routed: "availability-routed",
+/** Content-record id of each state's visible label. */
+const STATE_CONTENT_ID: Record<StageState, string> = {
+  desk: "availability-desk",
+  pilot: "availability-pilot",
   planned: "availability-planned",
 };
 
-/** The visible label for a state. Components never invent their own. */
-export function availabilityLabel(availability: StageAvailability): string {
-  return t(AVAILABILITY_CONTENT_ID[availability]);
+export function stateLabelId(state: StageState): string {
+  return STATE_CONTENT_ID[state];
 }
 
-/** Every permitted availability label, for tests and scans. */
-export function availabilityLabels(): readonly string[] {
-  return Object.values(AVAILABILITY_CONTENT_ID).map((id) => t(id));
+/** Every state label's record id, for tests and scans. */
+export function stateLabelIds(): readonly string[] {
+  return Object.values(STATE_CONTENT_ID);
 }
 
-type RouteKey = keyof typeof ROUTE_LABELS;
-
-/** Structural definition of one workflow stage. Carries no prose. */
 export interface WorkflowStage {
   /** 1–7, rendered as the stage's ordinal. */
   readonly number: number;
   /** Stable key; also the `workflow-<key>-*` content-record prefix. */
   readonly key: string;
-  readonly availability: StageAvailability;
-  /** The canonical route this stage will eventually own. */
-  readonly routeKey: RouteKey;
+  /** Its states today, the main one first. */
+  readonly states: readonly StageState[];
 }
 
-/**
- * All seven stages are `routed` today: every workspace surface in this build
- * is a labeled placeholder. Upgrading a label without shipping the surface
- * fails the availability-honesty test — do not do it for visual impact.
- */
 export const WORKFLOW_STAGES: readonly WorkflowStage[] = [
-  { number: 1, key: "ingest", availability: "routed", routeKey: "pubNewsroom" },
-  { number: 2, key: "organize", availability: "routed", routeKey: "pubStories" },
-  { number: 3, key: "generate", availability: "routed", routeKey: "editionGenerate" },
-  { number: 4, key: "edit", availability: "routed", routeKey: "editionEditor" },
-  { number: 5, key: "validate", availability: "routed", routeKey: "editionPreflight" },
-  { number: 6, key: "export", availability: "routed", routeKey: "editionExport" },
-  { number: 7, key: "archive", availability: "routed", routeKey: "pubArchive" },
+  { number: 1, key: "plan", states: ["desk"] },
+  { number: 2, key: "content", states: ["desk", "pilot"] },
+  { number: 3, key: "generate", states: ["desk"] },
+  { number: 4, key: "edit", states: ["desk"] },
+  { number: 5, key: "check", states: ["desk"] },
+  { number: 6, key: "print", states: ["desk"] },
+  { number: 7, key: "archive", states: ["planned"] },
 ];
 
-/**
- * A stage resolved for rendering: structure from `WORKFLOW_STAGES`, every
- * string from `content.ts`. Components consume this and never assemble a
- * sentence themselves.
- */
-export interface WorkflowStageView {
-  readonly number: number;
-  readonly key: string;
-  readonly availability: StageAvailability;
-  readonly routeKey: RouteKey;
-  readonly name: string;
-  readonly description: string;
-  readonly constraint: string;
-  readonly availabilityLabel: string;
-}
-
-export function stageView(stage: WorkflowStage): WorkflowStageView {
+/** A stage's content-record ids. */
+export function stageIds(stage: WorkflowStage) {
   return {
-    ...stage,
-    name: t(`workflow-${stage.key}-name`),
-    description: t(`workflow-${stage.key}-description`),
-    constraint: t(`workflow-${stage.key}-constraint`),
-    availabilityLabel: availabilityLabel(stage.availability),
+    name: `workflow-${stage.key}-name`,
+    description: `workflow-${stage.key}-description`,
+    today: `workflow-${stage.key}-today`,
+    states: stage.states.map(stateLabelId),
   };
-}
-
-/** The seven stages resolved for rendering, in order. */
-export function workflowStageViews(): readonly WorkflowStageView[] {
-  return WORKFLOW_STAGES.map(stageView);
 }

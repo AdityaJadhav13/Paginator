@@ -13,3 +13,4 @@ export { FeaturesPage } from "./FeaturesPage.tsx";
 export { PricingPage } from "./PricingPage.tsx";
 export { SecurityPage } from "./SecurityPage.tsx";
 export { ContactPage } from "./ContactPage.tsx";
+export { ContactProvider } from "./contact-context.tsx";

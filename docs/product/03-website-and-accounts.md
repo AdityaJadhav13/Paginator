@@ -4,39 +4,71 @@ Part of the product specification ([index](README.md)). Examples are fictional.
 
 ## 4. Public website
 
-The website **EXISTS** with 5 pages, light theme, serif editorial identity and claims governance.
-- **The existing pages stay as they are** until a capability ships (doc 15 §14).
-- Each claim below is added **only when it is true and sourced** in `content.ts`. Its source is shown with it: a gate record, a report section, or a measured number.
-- Proposed claims that are not yet true ("laid out in minutes", "legacy fonts", "WhatsApp delivery", an editor screenshot) wait for the milestone that makes them true.
+The website **EXISTS** with 5 pages (`/`, `/features`, `/pricing`, `/security`, `/contact`), in English and Marathi,
+light theme, serif editorial identity and claims governance (built 2026-10-24, `apps/web/src/features/public`).
+- **Claims rule.** Each claim below is added **only when it is true and sourced** in `content.ts`. A record is a `fact`, a
+  `plan`, a `denial`, `copy` or the Marathi `specimen`; every fact and plan names its evidence (`evidence.ts`: a file
+  in this repository and the exact words there), and `tests/ui005/claims.test.ts` reads every file back. A number in a
+  fact must appear in its evidence, and the Marathi must say the same numbers. The claim vocabulary (press-ready,
+  certified, AI-powered, seamless…) is refused everywhere except in a denial ("No certification…"). The page shows a
+  fact's source with it (the proof facts' "Source" line).
+- **Never claimed:** press-ready, PDF/X-valid or certified (ADR-022 needs a commercial preflight or a press proof
+  first); a customer, logo, testimonial, price or invented number; the pilot newspaper's name ("a Marathi daily" at
+  most); "Data stored in India" (hosting in India is said only as planned).
+- Proposed claims that are not yet true ("laid out in minutes", "legacy fonts", "WhatsApp delivery", an editor
+  screenshot) wait for the milestone that makes them true.
+- **Languages.** Every public page is in English and Marathi: the header's English / मराठी switch chooses, the browser
+  remembers it (`pageinator.language`), and the shell carries the page's `lang`. Devanagari is never under 13 CSS px.
+  The Marathi is a first draft on the `REVIEW` list (`src/i18n/review.ts`) for the native editor (D-5).
 
 ### 4.1 Header and footer (all public pages)
 
-**Header**
+**Header** (as built)
 
-| Control | Icon | Label | Does | Notes |
-|---|---|---|---|---|
-| Logo wordmark | — | "Pageinator" | Goes to `/` | Text wordmark until a logo exists |
-| Nav links | — | Features · How it works · Marathi · Pricing · Security | Navigate | Collapses under ☰ on phones |
-| Language | ui.lang | English / मराठी | Switches site language | Choice is remembered |
-| Sign in | — | Sign in | `/login` | When signed out |
-| Primary CTA | — | Book a demo | `/contact?intent=demo` | Becomes "Open workspace" when signed in |
+| Control | Label | Does | Notes |
+|---|---|---|---|
+| Logo wordmark | "Pageinator" | Goes to `/` | Text wordmark until a logo exists |
+| Nav links | Features · Pricing · Security · Contact | Navigate | Collapses under ☰ on phones. "How it works" and "Marathi" come with their pages (doc 11, L2-232) |
+| Language | English / मराठी | Switches the site's language | Remembered by the browser |
+| Sign in | Sign in | `/login` | When signed out |
+| Primary CTA | Book a demo | `/contact?intent=demo` | When signed in: the person's name, "Open workspace" and Sign out |
 
-**Footer:** product links, Legal (Privacy, Terms, Grievance officer, as required by DPDP), Status, Contact, "Made in India · Data stored in India" (once hosting is decided), and the copyright line.
+**Footer** (as built): the page links and Sign in; the notice; "Hosting in India is planned; no paper's data is hosted
+yet."; the copyright line. **Not yet:** Legal (Privacy, Terms, Grievance officer, as required by DPDP), Status, and
+"Made in India · Data stored in India" (once hosting is decided): no link to a page that does not exist (doc 11,
+L2-230, L2-237).
 
 ### 4.2 Pages
 
 | Page | Sections (in order) | Primary action |
 |---|---|---|
-| `/` Home | Hero ("Newspaper production for Marathi and English papers"); sourced proof facts as they become true (today: "28 of 28 held-out test pages laid out automatically and passed every automatic check" — EXP-GEN-1; "A test page was accepted and printed by a real press" — G2 record); the 7-stage workflow strip; editor screenshot (after M12); Marathi typography showcase (before/after); "Built for Indian newspapers" (Devanagari digits now; legacy fonts and WhatsApp delivery once built); security summary; closing CTA | Book a demo |
-| `/features` | One block per stage: Plan · Content · Generate · Edit · Check · Print · Archive. Each block has "what it does" and "what's live today" | Book a demo |
+| `/` Home | Hero ("Newspaper production, built first for Marathi papers": no English paper has been laid out yet; "a whole edition, with page designs and measures taken from the paper's own printed pages"; the page-structure diagram); proof facts, each with its source (a whole 4-, 8- or 16-page edition laid out automatically, Desk / doc 09 L1; "28 of 28 held-out test pages laid out automatically, and all 28 passed every automatic check", EXP-GEN-1, with "No editor has judged the layouts yet"; "A real newspaper press accepted and printed a test page made by Pageinator", EXP-PDF-1 / G2, with "It was a text-only page"; every page's print file checked by our own independent checker, doc 09 / ADR-022); the 7-stage workflow strip with each stage's state; "Built for Marathi newspapers" (conjuncts, Devanagari digits, headline rules, no AI on layout; a fictional Marathi story set by the browser in the system's Devanagari font); "What Pageinator will not be"; security and privacy summary; closing band | Book a demo |
+| `/features` | One block per stage: Plan · Content · Generate · Edit · Check · Print · Archive, each with "what it does", "Today" (what's live) and its state; the newsroom app, "being prepared for a pilot"; the limits; closing band | Book a demo |
 | `/how-it-works` ★ | A night at a newspaper with Pageinator, step by step, with screenshots | Book a demo |
 | `/marathi` ★ | Marathi typography: conjuncts, headline line-breaking rules, digits, legacy-font conversion. Written in Marathi with an English summary | Book a demo |
-| `/pricing` | Plans once decided (OP09). Until then: "Pilot pricing by conversation" plus what each plan will include | Talk to us |
-| `/security` | Tenancy, India data region, backups, archive immutability, AI data policy, current limits | — |
-| `/contact` | Form: name, newspaper, city, phone/WhatsApp, email, message, intent (demo, pilot, press partner). Real submit (email to the team + CRM later), with confirmation copy | Send |
+| `/pricing` | Plans once decided (OP09). Until then: "Pilot pricing by conversation": "Pageinator is not for sale yet. Pricing for a pilot is agreed in conversation"; plans after the pilot; what a pilot would include; what is not on offer. No price, figure or tier | Talk to us about a pilot (`/contact?intent=pilot`) |
+| `/security` | What is true today (tenancy walls, the audit log, two-step sign-in, hashed passwords, cookies, the Origin guard, the contact form keeps nothing); planned (hosting in India, backups and monitoring, an unalterable archive, the legal pages); not true today (denials); another paper's records stay invisible; how to report a problem | Book a demo |
+| `/contact` | The page asks `GET /api/v1/contact` first. Connected: "Messages sent here go by email to the people who build Pageinator", and the form: what you want (a demo, a pilot, a press partner, something else; preset by `?intent=`), name, newspaper, city, phone/WhatsApp, email, message, and the privacy line (emailed to the team and kept in their mailbox; the website keeps no copy; the server's log notes the connection's address). Not connected: "The contact form is not connected yet", and no form. `/security` says the form sends only when it is connected | Send |
 | `/about` ★ | Who builds it, the mission | — |
 | `/legal/*` ★ | Privacy notice (DPDP), Terms, Grievance officer contact | — |
 
+**Workflow states today** (`workflow.ts`): Plan, Generate, Edit, Check and Print are "Working in the Desk"; Content is
+"Working in the Desk" (typed, pasted, Word import) and "Built for the pilot" (filing from a phone in the newsroom app);
+Archive is "Planned".
+
+**The contact endpoints** (`apps/api/src/modules/contact/routes.ts`, contract `@pageinator/contracts`
+`ContactRequest` and `ContactStatus`), public, no sign-in:
+- `GET /api/v1/contact` answers `{connected}`: true only when `PGN_CONTACT_TO` is set; nothing else; no-store; counted
+  in the signed-out per-address budget.
+- `POST /api/v1/contact`, behind the Origin and `X-Pageinator` guard, body at most 16 KiB: fields checked with length
+  limits and no control, bidirectional or byte-order characters; per address 5 an hour and 20 a day, and 200 a day in
+  all (429 `contact_limit`), each read first and counted only once a message is sent or dropped (a message the mail
+  server did not take costs nothing); then a trap field and a minimum fill time (dropped after a pause like a send's,
+  with the same 200 answer; the web waits out the minimum itself); one plain-text email to `PGN_CONTACT_TO` from
+  `PGN_MAIL_FROM`, Reply-To the sender's address when it is one, nothing typed in any other header; no storage; 503
+  `contact_unavailable` while the address is unset, 503 `contact_send_failed` when the mail server refuses. The contact
+  log lines name only the intent and the language; the request's own log line carries the client's address, as for
+  every request.
 
 ## 5. Sign-in, accounts, onboarding
 

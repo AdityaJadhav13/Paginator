@@ -120,3 +120,47 @@ describe("the sign-in emails", () => {
     expect(newSignInEmail({ name: "x", at: new Date(0), device: "" }).text).toContain("(an unknown browser)");
   });
 });
+
+describe("delivering and checking a message", () => {
+  it("deliver settles once the mail server took it, and passes Reply-To; no html means plain text only", async () => {
+    const { sent, transport } = capture();
+    const mailer = openMailer({ from: "no-reply@example.test" }, transport, () => undefined);
+    await mailer.deliver({
+      kind: "contact",
+      to: "team@example.test",
+      subject: "s",
+      text: "t",
+      replyTo: "a@example.test",
+    });
+    expect(sent).toEqual([
+      { from: "no-reply@example.test", to: "team@example.test", subject: "s", text: "t", replyTo: "a@example.test" },
+    ]);
+  });
+
+  it("deliver rejects when the mail server refuses, and reports the kind only", async () => {
+    const { transport } = capture(
+      Object.assign(new Error("552 mailbox full for team@example.test"), { responseCode: 552 }),
+    );
+    const failures: string[] = [];
+    const mailer = openMailer({ from: "no-reply@example.test" }, transport, (kind) => failures.push(kind));
+    await expect(
+      mailer.deliver({ kind: "contact", to: "team@example.test", subject: "s", text: "t" }),
+    ).rejects.toThrow();
+    await mailer.idle();
+    expect(failures).toEqual(["contact"]);
+  });
+
+  it.each([
+    ["a reply-to that is not one plain address", { replyTo: "a@example.test, b@evil.example.test" }],
+    ["a reply-to with a line break", { replyTo: "a@example.test\r\nBcc: b@evil.example.test" }],
+    ["a subject with a line break", { subject: "Hello\r\nBcc: b@evil.example.test" }],
+    ["a subject with a line separator", { subject: "Hello Bcc: b@evil.example.test" }],
+  ])("refuses %s, sending nothing", async (_case, change) => {
+    const { sent, transport } = capture();
+    const mailer = openMailer({ from: "no-reply@example.test" }, transport, () => undefined);
+    const mail = { kind: "contact" as const, to: "team@example.test", subject: "s", text: "t", ...change };
+    expect(() => mailer.send(mail)).toThrow(RecipientError);
+    await expect(mailer.deliver(mail)).rejects.toThrow(RecipientError);
+    expect(sent).toEqual([]);
+  });
+});

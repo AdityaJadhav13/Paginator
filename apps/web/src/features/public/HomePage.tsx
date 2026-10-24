@@ -1,160 +1,117 @@
 /**
- * `/` — the landing surface (§12).
- *
- * Seven regions in a fixed DOM order. The homepage carries a condensed form
- * of each other surface; full treatments live on their own routes. Region 2
- * exists specifically so a reader cannot get past the opening believing the
- * product runs.
+ * `/` — the landing page (03 §4.2), in this order:
+ *   1. the hero, with one primary action (Book a demo) and the page-structure diagram;
+ *   2. proof facts, each with its source;
+ *   3. the seven-stage workflow, each stage with its state today;
+ *   4. Built for Marathi newspapers, with a fictional Devanagari example;
+ *   5. What Pageinator will not be;
+ *   6. the security and privacy summary;
+ *   7. the closing band (Book a demo again).
  */
 import { Link } from "react-router";
 import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
-import { t } from "./content.ts";
-import { workflowStageViews } from "./workflow.ts";
 import { StandingHead } from "./StandingHead.tsx";
 import { Section } from "./Section.tsx";
-import { CapabilityNote } from "./CapabilityNote.tsx";
 import { PrimaryCta } from "./PrimaryCta.tsx";
 import { PageGeometryFigure } from "./PageGeometryFigure.tsx";
 import { ClosingBand } from "./ClosingBand.tsx";
-import { TodayList } from "./TodayList.tsx";
+import { ProofFacts } from "./ProofFacts.tsx";
+import { WorkflowSequence } from "./WorkflowSequence.tsx";
+import { MarathiShowcase } from "./MarathiShowcase.tsx";
+import { LimitsGrid } from "./LimitsGrid.tsx";
+import { CapabilityNote } from "./CapabilityNote.tsx";
+import { usePublicText } from "./usePublicText.ts";
 
-const LIMITS = [
-  { name: "limit-dashboard-name", body: "limit-dashboard-body" },
-  { name: "limit-indesign-name", body: "limit-indesign-body" },
-  { name: "limit-press-name", body: "limit-press-body" },
-] as const;
+const SECURITY_FACTS = ["security-separate", "security-audit", "security-two-step"] as const;
 
 export function HomePage() {
-  const stages = workflowStageViews();
+  const { t } = usePublicText();
 
   return (
     <div className="pg-public">
-      {/* Region 1 — hero */}
-      <section className="pg-public__band">
+      {/* 1 — hero */}
+      <section className="pg-public__band pg-public__hero-band">
         <div className="pg-public__measure">
-          <div className="pg-public__hero">
-            <h1
-              id={ROUTE_HEADING_ID}
-              tabIndex={-1}
-              className="pg-public__hero-title"
-            >
-              {t("home-hero-title")}
-            </h1>
-            <div className="pg-public__grid">
-              <div className="pg-public__span-7">
-                <p className="pg-public__lead">{t("home-hero-lead-1")}</p>
-                <p className="pg-public__lead">{t("home-hero-lead-2")}</p>
-                <div className="pg-public__actions">
-                  <PrimaryCta />
-                  <Link to={paths.features()}>{t("cta-secondary-workflow")}</Link>
-                </div>
+          <div className="pg-public__grid pg-public__hero">
+            <div className="pg-public__span-7 pg-public__hero-text">
+              <p className="pg-standing-head__label">{t("home-hero-standing")}</p>
+              <h1 id={ROUTE_HEADING_ID} tabIndex={-1} className="pg-public__hero-title">
+                {t("home-hero-title")}
+              </h1>
+              <p className="pg-public__lead">{t("home-hero-lead")}</p>
+              <div className="pg-public__actions">
+                <PrimaryCta />
+                <Link to={paths.features()}>{t("cta-stages")}</Link>
               </div>
-              <div className="pg-public__span-5 pg-public__hero-aside">
-                <p className="pg-public__note">{t("qualification-standing")}</p>
-              </div>
+              <p className="pg-public__hero-aside">{t("home-hero-aside")}</p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Region 2 — what actually works today */}
-      <Section label={t("today-standing")} title={t("today-title")} tone="subtle">
-        <p className="pg-public__lead">{t("today-lead")}</p>
-        <TodayList />
-        <p className="pg-public__body">{t("today-closing")}</p>
-      </Section>
-
-      {/* Region 3 — the workflow, as an editorial index */}
-      <section className="pg-public__band pg-public__band--ink">
-        <div className="pg-public__measure">
-          <StandingHead
-            label={t("home-workflow-standing")}
-            title={t("home-workflow-title")}
-            level={2}
-          />
-          <p className="pg-public__lead">{t("home-workflow-lead")}</p>
-          <ol className="pg-public__sequence">
-            {stages.map((stage) => (
-              <li key={stage.key} className="pg-public__sequence-item">
-                <p className="pg-public__sequence-name">
-                  <span className="pg-public__sequence-ordinal" aria-hidden="true">
-                    {stage.number}
-                  </span>
-                  {stage.name}
-                </p>
-                <p className="pg-public__body">{stage.description}</p>
-                <CapabilityNote label={stage.availabilityLabel} />
-              </li>
-            ))}
-          </ol>
-          <p className="pg-public__actions">
-            <Link to={paths.features()}>{t("cta-secondary-workflow-full")}</Link>
-          </p>
-        </div>
-      </section>
-
-      {/* Region 4 — why newspaper structure is the problem */}
-      <section className="pg-public__band">
-        <div className="pg-public__measure">
-          <StandingHead
-            label={t("home-structure-standing")}
-            title={t("home-structure-title")}
-            level={2}
-          />
-          <div className="pg-public__grid">
-            <div className="pg-public__span-5">
+            <div className="pg-public__span-5 pg-public__hero-figure">
               <PageGeometryFigure />
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 2 — proof facts */}
+      <section className="pg-public__band pg-public__band--subtle">
+        <div className="pg-public__measure">
+          <StandingHead label={t("proof-standing")} title={t("proof-title")} level={2} />
+          <p className="pg-public__lead">{t("proof-lead")}</p>
+          <ProofFacts />
+        </div>
+      </section>
+
+      {/* 3 — the workflow */}
+      <section className="pg-public__band pg-public__band--ink">
+        <div className="pg-public__measure">
+          <StandingHead label={t("home-workflow-standing")} title={t("home-workflow-title")} level={2} />
+          <p className="pg-public__lead">{t("home-workflow-lead")}</p>
+          <WorkflowSequence />
+          <p className="pg-public__actions">
+            <Link to={paths.features()}>{t("cta-stages")}</Link>
+          </p>
+        </div>
+      </section>
+
+      {/* 4 — built for Marathi newspapers */}
+      <section className="pg-public__band">
+        <div className="pg-public__measure">
+          <StandingHead label={t("marathi-standing")} title={t("marathi-title")} level={2} />
+          <div className="pg-public__grid">
+            <div className="pg-public__span-5">
+              <p className="pg-public__lead">{t("marathi-body-1")}</p>
+              <p className="pg-public__body">{t("marathi-body-2")}</p>
+            </div>
             <div className="pg-public__span-7">
-              <p className="pg-public__body">{t("home-structure-body-1")}</p>
-              <p className="pg-public__body">{t("home-structure-body-2")}</p>
+              <MarathiShowcase />
             </div>
           </div>
         </div>
       </section>
 
-      {/* Region 5 — deliberate limits */}
-      <section className="pg-public__band pg-public__band--subtle">
-        <div className="pg-public__measure">
-          <StandingHead label={t("limits-standing")} title={t("limits-title")} level={2} />
-          <div className="pg-public__grid">
-            {LIMITS.map((limit) => (
-              <div key={limit.name} className="pg-public__span-4">
-                <h3 className="pg-public__item-title">{t(limit.name)}</h3>
-                <p className="pg-public__body">{t(limit.body)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* 5 — deliberate limits */}
+      <LimitsGrid />
 
-      {/* Region 6 — the two open questions */}
-      <Section
-        label={t("home-provisional-standing")}
-        title={t("home-provisional-title")}
-      >
-        <div className="pg-public__block">
-          <h3 className="pg-public__item-title">
-            {t("home-provisional-pricing-title")}
-          </h3>
-          <p className="pg-public__body">{t("home-provisional-pricing-body")}</p>
-          <p className="pg-public__actions">
-            <Link to={paths.pricing()}>{t("cta-secondary-pricing")}</Link>
-          </p>
-        </div>
-        <div className="pg-public__block">
-          <h3 className="pg-public__item-title">
-            {t("home-provisional-security-title")}
-          </h3>
-          <p className="pg-public__body">{t("home-provisional-security-body")}</p>
-          <p className="pg-public__actions">
-            <Link to={paths.security()}>{t("cta-secondary-security")}</Link>
-          </p>
-        </div>
+      {/* 6 — security and privacy */}
+      <Section label={t("home-security-standing")} title={t("home-security-title")}>
+        <ul className="pg-public__list">
+          {SECURITY_FACTS.map((id) => (
+            <li key={id} className="pg-public__list-item">
+              <p className="pg-public__body">{t(id)}</p>
+            </li>
+          ))}
+          <li className="pg-public__list-item">
+            <p className="pg-public__body">{t("security-india")}</p>
+            <CapabilityNote states={["planned"]} />
+          </li>
+        </ul>
+        <p className="pg-public__actions">
+          <Link to={paths.security()}>{t("cta-security")}</Link>
+        </p>
       </Section>
 
-      {/* Region 7 — closing call to action */}
-      <ClosingBand />
+      {/* 7 — closing */}
+      <ClosingBand secondary="pricing" />
     </div>
   );
 }

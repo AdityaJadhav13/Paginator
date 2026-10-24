@@ -17,9 +17,11 @@
   /*
    * Editorial display family (UI005 §10.2). Operating-system stack only —
    * nothing is downloaded or bundled, and no qualified newspaper font is
-   * implied (UI001 §6.1).
+   * implied (UI001 §6.1). Devanagari falls back to a serif Devanagari face
+   * where the system has one, then to the system's own.
    */
-  --pg-font-serif: ui-serif, Georgia, "Times New Roman", "Noto Serif", serif;
+  --pg-font-serif: ui-serif, Georgia, "Times New Roman", "Noto Serif", "Noto Serif Devanagari", "Shree Devanagari 714",
+    "Kohinoor Devanagari", "Nirmala UI", serif;
 
   /* ── Typography: sizes ─────────────────────────────────────────────── */
   --pg-font-size-100: 0.75rem;

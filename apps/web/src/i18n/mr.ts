@@ -91,6 +91,21 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   "shell.notice":
     "Pageinator अजून तयार होत आहे. खाती फक्त निमंत्रणावरून उघडता येतात; इथे पैसे भरण्याची किंवा छापखान्याची कोणतीही सेवा नाही.",
 
+  // ── The public website's header and footer (03 §4.1) ─────────────────
+  "public.nav.primary": "मुख्य",
+  "public.nav.secondary": "इतर दुवे",
+  "public.nav.show": "मेनू दाखवा",
+  "public.nav.hide": "मेनू लपवा",
+  "public.nav.home": "मुखपृष्ठ",
+  "public.nav.features": "वैशिष्ट्ये",
+  "public.nav.pricing": "किंमत",
+  "public.nav.security": "सुरक्षा",
+  "public.nav.contact": "संपर्क",
+  "public.signIn": "प्रवेश करा",
+  "public.bookDemo": "डेमो ठरवा",
+  "public.footer.hosting": "भारतातच होस्टिंग नियोजित आहे; अद्याप कोणत्याही वृत्तपत्राची माहिती होस्ट केलेली नाही.",
+  "public.footer.copyright": "© {year} Pageinator. सर्व हक्क राखीव.",
+
   "message.info": "माहिती",
   "message.success": "यशस्वी",
   "message.warning": "इशारा",
@@ -145,6 +160,9 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   "error.not_json": "ही विनंती JSON स्वरूपात पाठवायला हवी.",
   "error.not_a_picture": "ही फाइल Pageinator वाचू शकेल असे छायाचित्र नाही. JPEG, PNG किंवा WebP फाइल वापरा.",
   "error.slow_down": "खूप वेळा प्रयत्न झाले. एक मिनिट थांबा आणि पुन्हा प्रयत्न करा.",
+  "error.contact_unavailable": "या संकेतस्थळावरून अद्याप संदेश पाठवता येत नाहीत.",
+  "error.contact_send_failed": "संदेश आत्ता पाठवता आला नाही. नंतर पुन्हा प्रयत्न करा.",
+  "error.contact_limit": "खूप संदेश आले आहेत. नंतर पुन्हा प्रयत्न करा.",
   "error.server_error": "आमच्याकडून काहीतरी चूक झाली. पुन्हा प्रयत्न करा.",
   "error.idempotency_key_reused": "हे आधीच वेगळ्या मजकुरासह पाठवले गेले आहे. स्क्रीन रीलोड करा आणि पुन्हा प्रयत्न करा.",
   "error.request_in_progress": "यावर अजून काम सुरू आहे. थोडे थांबा आणि मग तपासा.",

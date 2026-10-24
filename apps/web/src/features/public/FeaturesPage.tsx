@@ -1,131 +1,90 @@
 /**
- * `/features` — the full workflow treatment the homepage condenses (§15).
- *
- * Stage 1 is given greater weight than the six that follow; the six are not
- * six identical cards. "What this is not" deliberately sits before the
- * closing call to action, so the last substantive thing a reader sees is a
- * limit rather than a pitch.
+ * `/features` (03 §4.2): one block per stage (Plan · Content · Generate · Edit · Check · Print · Archive), each with
+ * what it does and what is live today; then the newsroom app, which is being prepared for a pilot; then the limits.
  */
-import { Link } from "react-router";
-import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
-import { t } from "./content.ts";
-import { workflowStageViews, type WorkflowStageView } from "./workflow.ts";
+import { ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { StandingHead } from "./StandingHead.tsx";
 import { Section } from "./Section.tsx";
 import { CapabilityNote } from "./CapabilityNote.tsx";
 import { PrimaryCta } from "./PrimaryCta.tsx";
 import { ClosingBand } from "./ClosingBand.tsx";
-import { TodayList } from "./TodayList.tsx";
+import { LimitsGrid } from "./LimitsGrid.tsx";
+import { stageIds, WORKFLOW_STAGES, type WorkflowStage } from "./workflow.ts";
+import { usePublicText } from "./usePublicText.ts";
 
-const NON_GOALS = [
-  { name: "limit-dashboard-name", body: "limit-dashboard-body" },
-  { name: "limit-republication-name", body: "limit-republication-body" },
-  { name: "limit-oracle-name", body: "limit-oracle-body" },
-  { name: "limit-indesign-name", body: "limit-indesign-body" },
-  { name: "limit-crm-name", body: "limit-crm-body" },
-  { name: "limit-press-name", body: "limit-press-body" },
+const NEWSROOM = [
+  "newsroom-accounts",
+  "newsroom-filing",
+  "newsroom-server",
+  "newsroom-desk",
+  "newsroom-languages",
 ] as const;
 
-function Stage({ stage, lead }: { readonly stage: WorkflowStageView; readonly lead: boolean }) {
+function Stage({ stage }: { readonly stage: WorkflowStage }) {
+  const { t, digits } = usePublicText();
+  const ids = stageIds(stage);
   return (
-    <article
-      className={["pg-public__stage", lead ? "pg-public__stage--lead" : null]
-        .filter(Boolean)
-        .join(" ")}
-    >
+    <article className="pg-public__stage">
       <h3 className="pg-public__item-title">
         <span className="pg-public__sequence-ordinal" aria-hidden="true">
-          {stage.number}
+          {digits(stage.number)}
         </span>{" "}
-        {stage.name}
+        {t(ids.name)}
       </h3>
-      <p className="pg-public__body">{stage.description}</p>
+      <p className="pg-public__body">{t(ids.description)}</p>
       <div className="pg-public__constraint">
-        <p className="pg-public__constraint-label">{t("features-constraint-label")}</p>
-        <p className="pg-public__body">{stage.constraint}</p>
+        <p className="pg-public__constraint-label">{t("workflow-today-label")}</p>
+        <p className="pg-public__body">{t(ids.today)}</p>
       </div>
-      <CapabilityNote label={stage.availabilityLabel} />
+      <CapabilityNote states={stage.states} />
     </article>
   );
 }
 
 export function FeaturesPage() {
-  const [first, ...rest] = workflowStageViews();
-
+  const { t } = usePublicText();
   return (
     <div className="pg-public">
-      {/* Page title and lead */}
       <section className="pg-public__band">
         <div className="pg-public__measure">
           <h1 id={ROUTE_HEADING_ID} tabIndex={-1} className="pg-public__page-title">
             {t("features-title")}
           </h1>
-          <div className="pg-public__grid">
-            <div className="pg-public__span-7">
-              <p className="pg-public__lead">{t("features-lead-1")}</p>
-              <p className="pg-public__lead">{t("features-lead-2")}</p>
-              <div className="pg-public__actions">
-                <PrimaryCta />
-              </div>
-            </div>
-            <div className="pg-public__span-5 pg-public__hero-aside">
-              <p className="pg-public__note">{t("qualification-standing")}</p>
-            </div>
+          <p className="pg-public__lead">{t("features-lead")}</p>
+          <div className="pg-public__actions">
+            <PrimaryCta />
           </div>
         </div>
       </section>
 
-      {/* The seven stages in full */}
       <section className="pg-public__band">
         <div className="pg-public__measure">
-          <StandingHead
-            label={t("features-stages-standing")}
-            title={t("home-workflow-title")}
-            level={2}
-          />
-          {first && (
-            <div className="pg-public__grid">
-              <div className="pg-public__span-8">
-                <Stage stage={first} lead />
-              </div>
-            </div>
-          )}
+          <StandingHead label={t("features-stages-standing")} title={t("home-workflow-title")} level={2} />
+          <p className="pg-public__lead">{t("home-workflow-lead")}</p>
           <div className="pg-public__grid">
-            {rest.map((stage) => (
+            {WORKFLOW_STAGES.map((stage) => (
               <div key={stage.key} className="pg-public__span-4">
-                <Stage stage={stage} lead={false} />
+                <Stage stage={stage} />
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* What this is not — before the closing CTA, on purpose */}
-      <section className="pg-public__band pg-public__band--subtle">
-        <div className="pg-public__measure">
-          <StandingHead label={t("limits-standing")} title={t("limits-title")} level={2} />
-          <div className="pg-public__grid">
-            {NON_GOALS.map((goal) => (
-              <div key={goal.name} className="pg-public__span-4">
-                <h3 className="pg-public__item-title">{t(goal.name)}</h3>
-                <p className="pg-public__body">{t(goal.body)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* What actually works today — the same three records the homepage uses */}
-      <Section label={t("today-standing")} title={t("today-title")}>
-        <p className="pg-public__lead">{t("today-lead")}</p>
-        <TodayList />
-        <p className="pg-public__body">{t("today-closing")}</p>
-        <p className="pg-public__actions">
-          <Link to={paths.security()}>{t("cta-secondary-security")}</Link>
-        </p>
+      <Section label={t("newsroom-standing")} title={t("newsroom-title")} tone="subtle">
+        <p className="pg-public__lead">{t("newsroom-lead")}</p>
+        <ul className="pg-public__list">
+          {NEWSROOM.map((id) => (
+            <li key={id} className="pg-public__list-item">
+              <p className="pg-public__body">{t(id)}</p>
+            </li>
+          ))}
+        </ul>
       </Section>
 
-      <ClosingBand />
+      <LimitsGrid />
+
+      <ClosingBand secondary="security" />
     </div>
   );
 }
