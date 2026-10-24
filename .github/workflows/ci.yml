@@ -150,3 +150,55 @@ jobs:
         run: tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py
       - name: browser module tests (page editor view, words, paste)
         run: node --test tools/desk/test/*.mjs
+
+  worker:
+    name: engine worker and Python licences
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    defaults:
+      run:
+        shell: bash # -eo pipefail: a failing command in a pipe fails the step
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: worker environment (its lock, with hashes, as the worker's image installs it)
+        run: |
+          uv venv --python 3.11.14 apps/engine-worker/.venv
+          uv pip install --python apps/engine-worker/.venv --require-hashes -r apps/engine-worker/requirements.lock
+      - name: worker task core tests (fictional pictures; no colour profile, no network)
+        run: apps/engine-worker/.venv/bin/python -B -m unittest discover -s apps/engine-worker/test
+      - name: the licence inventory's own tests (offline)
+        run: apps/engine-worker/.venv/bin/python -B -m unittest discover -s tools/licences
+      - name: the Python licence inventory is the locks' manylinux wheels as PyPI serves them
+        run: apps/engine-worker/.venv/bin/python -B tools/licences/python_inventory.py --check
+      - name: a SeaweedFS of the job's own (random keys, as the api job's, masked in the log)
+        run: |
+          umask 077
+          grep -oE '^PGN_[A-Z0-9_]+=' .env.dev.example | while IFS== read -r name _; do
+            value="$(openssl rand -hex 24)"
+            echo "::add-mask::$value"
+            echo "$name=$value"
+          done > .env.dev.lines
+          grep -v '^::add-mask::' .env.dev.lines > .env.dev
+          grep '^::add-mask::' .env.dev.lines
+          rm .env.dev.lines
+          docker compose -p pgn-ci-worker --env-file .env.dev -f infra/docker/compose.dev.yml up -d --wait s3
+      - name: the S3 adapter against it (buckets of the tests' own, removed after)
+        run: |
+          set -a; . ./.env.dev; set +a
+          PGN_WORKER_S3_RUN=1 apps/engine-worker/.venv/bin/python -B -m unittest discover -s apps/engine-worker/test
+      - name: the worker image's tests, inside the image (linux/amd64; built, never pushed)
+        run: docker build --platform linux/amd64 -f infra/docker/engine-worker.Dockerfile --target test -t pgn-engine-worker:test .
+      - name: the worker image, and its files (the repository's own byte for byte, the stand-in fonts only, nothing private)
+        run: |
+          docker build --platform linux/amd64 -f infra/docker/engine-worker.Dockerfile -t pgn-engine-worker:ci .
+          container="$(docker create pgn-engine-worker:ci)"
+          docker export "$container" | python3 -B infra/docker/check_image_files.py
+          docker rm "$container"
+      - name: the image runs with a read-only root and reports itself healthy with a (fictional) profile mounted
+        run: |
+          printf 'a fictional colour profile' > "$RUNNER_TEMP/fictional.icc"
+          docker run --rm --read-only --tmpfs /tmp -v pgn-ci-homes:/var/lib/pageinator/homes \
+            -v "$RUNNER_TEMP/fictional.icc:/run/pageinator/newsprint.icc:ro" \
+            -e PGN_ICC_SHA256="$(sha256sum "$RUNNER_TEMP/fictional.icc" | cut -d' ' -f1)" pgn-engine-worker:ci

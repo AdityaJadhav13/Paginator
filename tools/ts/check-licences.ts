@@ -12,6 +12,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { join, posix, relative, sep } from "node:path";
 import { REPO, fail } from "./lib.ts";
+import { INVENTORY, pythonProblems, readPython } from "./python-licences.ts";
 
 export const ALLOWED = new Set(["MIT", "MIT-0", "ISC", "0BSD", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0"]);
 /** "<licence> WITH <exception>" forms that keep the licence permissive. */
@@ -369,7 +370,18 @@ export function licenceProblems(pkgs: Pkg[], lock?: Lockfile, unreadable: string
 if (import.meta.main) {
   const { pkgs, unreadable } = installed(REPO);
   const lock = lockfile(readFileSync(join(REPO, "pnpm-lock.yaml"), "utf8"));
-  const problems = [...licenceProblems(pkgs, lock, unreadable), ...installedLinks(REPO, lock.importers)];
+  const python = readPython(REPO);
+  const py = python.inv
+    ? pythonProblems(python.inv, python.locks)
+    : { problems: [`${INVENTORY} cannot be read: run tools/licences/python_inventory.py`], awaiting: [] };
+  const problems = [
+    ...licenceProblems(pkgs, lock, unreadable),
+    ...installedLinks(REPO, lock.importers),
+    ...py.problems,
+  ];
   fail(problems, `licence check: ${problems.length} problem(s)`);
   console.log(`✓ licence check: ${pkgs.length} installed packages and pnpm-lock.yaml, all with allowed licences`);
+  const pins = Object.keys(python.inv?.packages ?? {}).length;
+  console.log(`✓ licence check: ${pins} Python pins of ${Object.keys(python.locks).length} locks (manylinux wheels)`);
+  for (const a of py.awaiting) console.log(`  ⚑ ${a}`);
 }

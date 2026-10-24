@@ -318,14 +318,16 @@ Why folders and not `/modules/*` packages (as in doc 03 §3): fewer manifests an
 
 **No private data in the image.** The dataset, the colour profile and later the house fonts are fetched at run time from the private bucket.
 
+**As built (W3, W4):** `infra/docker/engine-worker.Dockerfile` builds the io env only for now (the engine env comes with L2.3): linux/amd64 only (the wheels the Python licence inventory covers), `python:3.11.14-slim-bookworm` pinned by its amd64 digest, the worker lock installed with `--require-hashes` and wheels only (the venv then holds only the lock: its own pip and setuptools are removed), the repository's code and its 22 OFL stand-in fonts at their paths, user `pgn` (10001), meant to run with `--read-only`, the homes on a volume, `/tmp` on a tmpfs and the colour profile mounted at `/run/pageinator/newsprint.icc` (checked against `PGN_ICC_SHA256`). Its health command (`pgn_worker.health`) needs a homes folder that is the worker's own (mode 0700, writable, not a link), `PGN_ICC_SHA256`, and that profile. CI builds it (never pushes), runs the worker's tests inside it, and checks its files (`infra/docker/check_image_files.py`: under `/opt/pageinator` only the repository's files, byte for byte against the commit; the 22 stand-in fonts only and no colour profile anywhere, by name or by content; nothing private). The S3 adapter (`pgn_worker/storage_s3.py`, boto3) takes the API's `PGN_S3_*` settings, reads only a named version (refused before reading when the store lists no length or more than 64 MB), sends each write's SHA-256 (`ChecksumSHA256`, which SeaweedFS and S3 check), refuses a store that gives no version on a write, deletes by version, passes every key through the job's key guard, and keeps every credential out of logs and errors. **A second layer for the pilot:** the worker's IAM policy allows `s3:GetObject*`, `s3:PutObject` and `s3:DeleteObjectVersion` on `<work bucket>/orgs/*` only (never `uploads/`, never another bucket), so a guard bug still cannot reach the quarantine or the archive.
+
 **Reused unchanged from `tools/desk/deskserver`:**
 - `images.convert_photo` / `convert_ad`;
-- `jobs.render_page` / `check_pdfx` / `merge_pdfs` / `zip_pdfs` / `press_state`;
+- `jobs.render_page` / `check_pdfx` / `merge_pdfs` / `zip_pdfs`, and `press.press_state`;
 - `editing.EditService` and `after_save` helpers;
 - `engine_client.EngineClient`;
 - `docx.articles_from_docx`.
 
-`JobManager` and `store.py` stay Desk-only.
+`JobManager` and `store.py` stay Desk-only. **A layout needs a new launcher in the worker:** `EngineClient.run` is a one-shot call with a timeout (enough for `setup`, `plan` and `measure`), while a layout runs `generate` in its own process group that an abort or a stalled run can stop, as `JobManager` does for the Desk (correction, W1).
 
 **Job contracts.**
 - Every job's arguments include `org_id` and `pub_id`.
@@ -333,13 +335,13 @@ Why folders and not `/modules/*` packages (as in doc 03 §3): fewer manifests an
 
 | Task (queue) | Arguments | Lock / queueing lock | Runs | Writes (S3) | Reports (event kind) |
 |---|---|---|---|---|---|
-| `media.ingest` (media) | asset_id, upload_key | queueing lock `asset:<id>` | `images.convert_photo` (Pillow + littleCMS, newsprint profile, perceptual, black-point compensation; at most 2000 px long side) | `assets/<id>/original`, preview, thumb, CMYK raster | `media.ready` {sha256, bytes, mime, width_px, height_px, renditions[]} or `media.rejected` {code, message} |
+| `media.ingest` (media) | asset_id, original_key, version_id, sha256 (the original as `complete` stored it: the upload's quarantine copy is deleted by then, and `uploads/…` is outside the key guard; correction, W1) | queueing lock `asset:<id>` | `images.convert_photo` (Pillow + littleCMS, newsprint profile, perceptual, black-point compensation; at most 2000 px long side) | `assets/<id>/original`, preview, thumb, CMYK raster | `media.ready` {sha256, bytes, mime, width_px, height_px (after the EXIF orientation, L2-123), raster {width_px, height_px} (what prints), params_hash, renditions[]} or `media.rejected` {code, message, status} (the Desk's words and code) |
 | `docx.import` (media) | upload_key, import_id | — | `docx.articles_from_docx` | `imports/<id>/result.json` | `import.parsed` {result_key, counts} (no story text in the event) |
 | `media.ad` (media, L2.3) | asset_id, slot {w_mm, h_mm} | — | `images.convert_ad` (fitted at 200 ppi) | ad raster, preview | `media.ready` |
 | `engine.setup` (layout, L2.3) | profile_id, dataset_key | lock `engine-cpu` | `desk_engine.py setup` | `profiles/<id>/config.json` | `profile.ready` |
 | `engine.measure` (measure) | edition_id, `editions/<id>/measure/latest.json` | lock `engine-cpu`; queueing lock `measure:<edition>`; starts 8 s after the last change | `desk_engine.py measure` | local cache only | `measure.status` |
 | `engine.layout` (layout, priority 10) | edition_id, run_id, request_key, request_sha256, profile_id | lock `engine-cpu` | `generate`, then previews, the check on each page, merge, ZIP (`JobManager._complete`'s steps) | `runs/<run>/…` | `run.progress`, `run.page`, `run.finished` |
-| `engine.check_pdf` (check) | key, version_id, sha256 | queueing lock `check:<sha256>` | `check_pdfx1a_independent.py` | the report beside the PDF | `check.done` {passed, fails, warnings, checker_sha256} |
+| `engine.check_pdf` (check) | key, version_id, sha256 | queueing lock `check:<org>:<sha256>` (with the organisation: two organisations' identical PDFs must not block each other's job; correction, W1) | `check_pdfx1a_independent.py` | the report beside the PDF | `check.done` {passed, fails, warnings, checker_sha256} |
 | `engine.export_page` (layout, L2.5) | run_id, page, page_rev | lock `run:<run>` | a one-shot PageSession builds the PDF from the persisted revision (an exact-revision export and a consistency check) | `pages/NN/export-<rev>.pdf` | `export.done` |
 
 **Scheduling and failures:**
@@ -374,6 +376,8 @@ Why folders and not `/modules/*` packages (as in doc 03 §3): fewer manifests an
 - `layout_run.desk_key` = `r-YYYYMMDD-HHMMSS`.
 
 **The frozen request.** At run creation the API builds `request.json` from the database: the edition, the stories' current revisions in the Desk's article shape, and the rendition keys. It writes the file to S3, stores its SHA-256 on the run, and defers the job in the same transaction. The worker re-checks the hash. This is the "exact revision" rule (P3) applied to layout runs.
+
+**As built (W1, `apps/engine-worker/pgn_worker/home.py`):** the job carries `edition_id` (the edition's `desk_key`) and the request must be for that edition. Each photo and ad names its raster as `{key, version_id, sha256, width_px, height_px}`, the CMYK rendition's facts from `media.ready`; the key must be a CMYK rendition of the job's organisation and publication (`assets/<uuid7>/r/cmyk-<32 hex>.cmyk.gz`, never an upload or an original), its size the photo's, and the raster must unpack to exactly width × height × 4 bytes. A home folder that is a symbolic link is refused, and every attempt starts from an empty run folder.
 
 ### 2.3 How the PDF/X check runs
 
@@ -976,7 +980,7 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 3. **Complete.** `POST /uploads/{u}/complete`:
    - L2.1: the API reads the whole object once (at most 40 MB): its SHA-256 (for deduplication and the object's metadata), its type from its magic bytes, and its width and height from the format's own header (our own small reader, no image library; a JPEG's markers are walked through the whole file, since its EXIF can fill several MB before the frame). A ranged GET of 32 bytes, as first planned, gives neither the hash nor the size. It reads and copies the version HeadObject named, and refuses to complete when the store names none (an unversioned bucket; `/readyz` reports the bucket failing unless its versioning is Enabled). Then it deletes every version of the quarantine key, so a file sent again under the still-valid policy is not kept either. A side over 100000 pixels is refused. HEIC and AVIF are refused (422 `not_a_picture`) for now. The asset is created as `received`.
    - L2.2 onward: the API also defers `media.ingest`, and the worker decides `ready` or `rejected`.
-4. **The original is never altered.** EXIF (including GPS) stays only in the original; renditions drop all metadata, as the Desk's do.
+4. **The original is never altered.** EXIF (including GPS) stays only in the original; renditions drop all metadata (EXIF, XMP, colour profile and comment), as the Desk's do. Junk *before* the picture is refused as not a picture; data *after* it (a JPEG with a ZIP appended, a PNG with HTML after its end) is accepted, as the Desk accepts it, and reaches only the original, never a rendition, which is made from the decoded pixels (L2-120 stays open for the originals).
 
 ### 6.3 CMYK conversion and previews
 
