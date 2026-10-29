@@ -595,6 +595,13 @@ class ImagePipeline(unittest.TestCase):
         turned = images.convert_photo(jpeg_bytes((300, 100), orientation=6))
         self.assertEqual((turned.width, turned.height), (100, 300))
 
+    def test_running_out_of_memory_is_not_a_damaged_picture(self):
+        from unittest import mock
+        from PIL import ImageFile
+        with mock.patch.object(ImageFile.ImageFile, "load", side_effect=MemoryError):
+            with self.assertRaises(MemoryError):
+                images.convert_photo(jpeg_bytes((300, 200)))
+
     def test_bad_uploads(self):
         for data, status in ((b"", 400), (b"not a picture at all", 400), (jpeg_bytes((50, 50))[:200], 400)):
             with self.assertRaises(DeskError) as e:

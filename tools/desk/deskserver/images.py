@@ -94,6 +94,8 @@ def _open(data: bytes, min_long_side: int) -> tuple[Image.Image, str]:
             probe.verify()
     except Image.DecompressionBombError:
         raise DeskError(413, TOO_MANY_PIXELS) from None
+    except MemoryError:                                  # the machine ran short, the picture may be fine
+        raise
     except Exception:
         raise DeskError(400, NOT_A_PICTURE) from None
     if size[0] * size[1] > MAX_PIXELS:                   # before decoding: a small file can unpack to gigabytes
@@ -108,10 +110,14 @@ def _open(data: bytes, min_long_side: int) -> tuple[Image.Image, str]:
         img.load()
     except Image.DecompressionBombError:
         raise DeskError(413, TOO_MANY_PIXELS) from None
+    except MemoryError:
+        raise
     except Exception:
         raise DeskError(400, M.msg("m.img.damaged")) from None
     try:
         img = ImageOps.exif_transpose(img)
+    except MemoryError:
+        raise
     except Exception:          # damaged EXIF: keep the picture as stored
         pass
     return to_srgb(img), FORMATS[fmt]
