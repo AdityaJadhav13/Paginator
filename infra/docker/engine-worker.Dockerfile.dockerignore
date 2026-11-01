@@ -8,6 +8,13 @@
 !tools/desk/engine
 !experiments/phase0/compose2/fonts
 !tools/oracle/v0/assets/fonts
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!apps/engine-queue/package.json
+!apps/engine-queue/src
+!packages/contracts/package.json
+!packages/contracts/src
 **/__pycache__
 **/*.pyc
 **/.DS_Store

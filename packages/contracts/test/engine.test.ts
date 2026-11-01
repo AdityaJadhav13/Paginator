@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { EngineEvent, MediaIngestPayload, WorkerResult } from "../src/index.ts";
+import { EngineEvent, MediaIngestPayload, WORKER_JOB_FORMAT, WorkerJob, WorkerResult } from "../src/index.ts";
 
 // What the Python runner really wrote (apps/engine-worker test_jobs.py ContractTests, on fictional pictures), one result
 // of each kind: a ready photo, refused ones, and every error code (a long store message cut to the contract's length).
@@ -55,5 +55,21 @@ describe("the engine's contracts", () => {
     for (const extra of [{ original_key: "orgs/x" }, { filename: "fictional.jpg" }, { headline: "x" }])
       expect(MediaIngestPayload.safeParse({ ...good, ...extra }).success).toBe(false);
     expect(MediaIngestPayload.safeParse({ ...good, sha256: "A".repeat(64) }).success).toBe(false);
+  });
+
+  it("give the runner a job it takes: the format, the queue's id, the kind and the payload, nothing more", () => {
+    const args = { org_id: ORG, pub_id: ORG, asset_id: ORG, version_id: "v1", sha256: "a".repeat(64) };
+    const job = { format: WORKER_JOB_FORMAT, id: "42", kind: "media.ingest", args };
+    expect(WorkerJob.parse(job)).toEqual(job);
+    for (const bad of [
+      { ...job, extra: 1 },
+      { ...job, id: "" },
+      { ...job, id: "a b" },
+      { ...job, id: "x".repeat(129) },
+      { ...job, kind: "engine.layout" },
+      { ...job, format: "pageinator.worker-job/2" },
+      { ...job, args: { ...args, original_key: "orgs/x" } },
+    ])
+      expect(WorkerJob.safeParse(bad).success).toBe(false);
   });
 });

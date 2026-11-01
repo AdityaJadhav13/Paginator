@@ -44,6 +44,9 @@ catalog:
   "@aws-sdk/client-s3": "3.1152.0"
   "@aws-sdk/s3-presigned-post": "3.1152.0"
   "@aws-sdk/s3-request-presigner": "3.1152.0"
+  # The engine's queue (apps/engine-queue): Graphile Worker over node-postgres, owner decision 2026-10-24; MIT. Its
+  # configuration loader brings argparse 2.0.1 (Python-2.0, reviewed: tools/ts/check-licences.ts).
+  graphile-worker: "0.18.0"
 
 overrides:
   typescript: "npm:@typescript/typescript6@6.0.2"

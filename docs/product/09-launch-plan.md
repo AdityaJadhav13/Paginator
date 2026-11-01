@@ -14,8 +14,9 @@ The owner wants to use Pageinator on their own paper now, and to launch it to ot
   alongside. It replaces the Python service one piece at a time, only where its output is proven identical (the
   golden vectors). Nothing waits for the port.
 - **Open-source parts wherever they fit.** The licences allowed are MIT, Apache-2.0, BSD and ISC (with MIT-0 and
-  0BSD). Any other licence needs a review, package by package: MPL-2.0 for build and test tools, and two permissive
-  licences that common tools use (BlueOak-1.0.0, CC0-1.0). Proprietary, licence-key, AGPL/GPL and SSPL/BSL parts are
+  0BSD). Any other licence needs a review, package by package: MPL-2.0 for build and test tools, and three permissive
+  licences that common tools use (BlueOak-1.0.0, CC0-1.0, and, by the owner's decision of 2026-10-24, the PSF licence,
+  SPDX `Python-2.0`, for argparse 2.0.1 only, used unmodified through Graphile Worker's configuration loader). Proprietary, licence-key, AGPL/GPL and SSPL/BSL parts are
   not used.
   - Reverse engineering closed products is not done.
 - **Gates become release checks.** Gates G0–G7 now decide what may be used for a real printed edition and what may be
@@ -66,7 +67,7 @@ ships them.
 | API | **Fastify + Kysely** in `apps/api` | MIT | The same language as the web app and the TS kernel |
 | Accounts | **Better Auth**: email and password, the organization plugin, two-step sign-in | MIT | Pin versions and watch its security advisories (several in 2026). Our own tests for invitations and paper separation. Fallback: Keycloak (Apache-2.0) |
 | Files | **S3 Mumbai**: versioning, Object Lock for the printed archive, presigned uploads | — | On a VPS instead: SeaweedFS (Apache-2.0). Never MinIO (AGPL, archived) |
-| Jobs | **Procrastinate** (Postgres) for the Python engine workers: measure, lay out, export, check | MIT | No Redis |
+| Jobs | **Graphile Worker 0.18.0** (Postgres, Node, with `pg`) drives the Python engine runner (`python -m pgn_worker.run`, one process per job): photo intake now; measure, lay out, export, check later | MIT | No Redis. Owner decision 2026-10-24, replacing Procrastinate: no LGPL Python database driver (psycopg) in the worker. Its configuration loader brings argparse (PSF licence, reviewed, §1) |
 | Live updates | Server-sent events with Postgres LISTEN/NOTIFY; Hocuspocus later | MIT | |
 | Images | Pillow with Little CMS (CMYK, exists); sharp for previews and zoom tiles | MIT-CMU / Apache-2.0 | sharp's prebuilt libvips (`@img/sharp-libvips-*`) is LGPL-3.0-or-later: it needs a review before sharp is added (the licence check refuses it until then) |
 | Print check | Our independent PDF/X-1a checker on every page (exists), plus a commercial preflight or a press proof before any PDF/X claim (ADR-022) | ours | No open-source PDF/X validator exists (veraPDF checks PDF/A) |
@@ -84,7 +85,7 @@ WhatsApp messages and payment fees are extra.
 - **Web app:** the React app (`apps/web`), which also holds the page editor.
 - **API:** the Fastify API (`apps/api`) owns accounts, data and files.
 - **Engine workers:** the Python engine runs as workers. Each layout, export and check is a job; an open page has an
-  editing session.
+  editing session. The queue is Graphile Worker in Node (`apps/engine-queue`), which runs the Python runner once per job.
 - **The Desk's own server** stays for local, own-paper use until the hosted product covers its features.
 
 ## 4. Phases

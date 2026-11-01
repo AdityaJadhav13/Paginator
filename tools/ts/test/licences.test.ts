@@ -58,6 +58,25 @@ describe("licence problems", () => {
     expect(licenceProblems([{ name: "some-editor", version: "1.0.0", licence: "MPL-2.0" }])).toHaveLength(1);
     expect(licenceProblems([{ name: "toString", version: "1.0.0", licence: "MPL-2.0" }])).toHaveLength(1);
   });
+  it("lets argparse through under its PSF licence (owner decision 2026-10-24), and nothing else under it", () => {
+    expect(licenceProblems([{ name: "argparse", version: "2.0.1", licence: "Python-2.0" }])).toEqual([]);
+    for (const [name, licence] of [
+      ["argparse", "CNRI-Python"], // the older Python licences of the same family are not reviewed
+      ["argparse", "CNRI-Python-GPL-Compatible"],
+      ["argparse", "PSF-2.0 AND GPL-3.0"],
+      ["argparse", "GPL-3.0"],
+      ["another-parser", "Python-2.0"], // narrowly argparse: no other package under it
+      ["another-parser", "CNRI-Python"],
+    ] as const)
+      expect(licenceProblems([{ name, version: "2.0.1", licence }]), `${name} ${licence}`).toEqual([
+        `${name}@2.0.1: licence ${licence} is not allowed`,
+      ]);
+    // the version reviewed only: another argparse under the same licence is reviewed again first
+    expect(licenceProblems([{ name: "argparse", version: "2.0.2", licence: "Python-2.0" }])).toEqual([
+      "argparse@2.0.2: licence Python-2.0 is not allowed",
+    ]);
+    expect(licenceOk("Python-2.0")).toBe(false); // not on the allowlist itself
+  });
   it("fails when nothing is installed, or a locked package was not installed and checked", () => {
     expect(licenceProblems([], lock([]))).toEqual([
       "no installed packages were found: run pnpm install first",

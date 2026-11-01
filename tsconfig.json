@@ -29,6 +29,12 @@
       "path": "apps/api/test"
     },
     {
+      "path": "apps/engine-queue"
+    },
+    {
+      "path": "apps/engine-queue/test"
+    },
+    {
       "path": "tools/ts"
     }
   ]

@@ -74,6 +74,15 @@ export type EngineEvent = z.infer<typeof EngineEvent>;
 
 export const WORKER_JOB_FORMAT = "pageinator.worker-job/1";
 export const WORKER_RESULT_FORMAT = "pageinator.worker-result/1";
+/** One job for the Python runner (`python -m pgn_worker.run` on stdin; pgn_worker/jobs.py checks the same): the queue's
+ * job id, the kind, and its payload (ids only). */
+export const WorkerJob = z.strictObject({
+  format: z.literal(WORKER_JOB_FORMAT),
+  id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
+  kind: z.literal("media.ingest"),
+  args: MediaIngestPayload,
+});
+export type WorkerJob = z.infer<typeof WorkerJob>;
 const ErrorPart = z.strictObject({ code: z.string().regex(/^worker\.[a-z]+$/), message: z.string().max(2000) });
 const ResultBase = {
   format: z.literal(WORKER_RESULT_FORMAT),

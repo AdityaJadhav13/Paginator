@@ -77,5 +77,6 @@ export {
   Uuid7,
   WORKER_JOB_FORMAT,
   WORKER_RESULT_FORMAT,
+  WorkerJob,
   WorkerResult,
 } from "./engine.ts";
