@@ -24,3 +24,4 @@ export {
   type MockApplicationEnvironment,
 } from "./create-mock-application-environment.ts";
 export type { MockContactController } from "./create-mock-contact.ts";
+export type { MockLiveController } from "./create-mock-live.ts";

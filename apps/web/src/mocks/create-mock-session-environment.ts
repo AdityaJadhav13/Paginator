@@ -22,6 +22,10 @@ import type {
   SessionSnapshot,
   StoryService,
   MediaService,
+  CommentService,
+  LiveEventDto,
+  LiveService,
+  NotificationService,
   TeamService,
   WorkspaceAccessDto,
   WorkspaceAccessService,
@@ -30,6 +34,8 @@ import { grantsOf } from "../services/index.ts";
 import type { MockOperation } from "./scenarios.ts";
 import { createCanonicalSeed } from "./seed.ts";
 import { createMockStories, type MockStoryOperation } from "./create-mock-stories.ts";
+import { createMockLive, type MockLiveController } from "./create-mock-live.ts";
+import { createMockNotifications, type MockNotificationOperation, type MockOrgStanding } from "./create-mock-notifications.ts";
 import {
   createAccounts,
   createInvitations,
@@ -77,7 +83,8 @@ export type MockAuthOperation =
   | "team.invite"
   | "team.resendInvitation"
   | "team.cancelInvitation"
-  | MockStoryOperation;
+  | MockStoryOperation
+  | MockNotificationOperation;
 
 /** An email the double "sent". */
 export interface MockMail {
@@ -131,6 +138,11 @@ export interface MockSessionController {
   endSession(): void;
   /** Whether the current session was made with two-step, and whether a device was trusted at the last code. */
   twoStepState(): { readonly sessionTwoStep: boolean; readonly trustedDevice: boolean };
+  /**
+   * Runs `run` as another person (a colleague on another computer), then goes back to this one. The live updates
+   * their changes make reach this browser once it is back, as the API sends them to whoever may hear them.
+   */
+  actAs<T>(preset: MockSessionPreset, run: () => Promise<T>): Promise<T>;
   readonly fixtures: MockSessionFixtures;
 }
 
@@ -141,6 +153,10 @@ export interface MockSessionEnvironment {
   readonly team: TeamService;
   readonly stories: StoryService;
   readonly media: MediaService;
+  readonly comments: CommentService;
+  readonly notifications: NotificationService;
+  readonly live: LiveService;
+  readonly liveController: MockLiveController;
   readonly access: WorkspaceAccessService;
   readonly sessionController: MockSessionController;
   readonly invalidatePendingSessionMutations: () => void;
@@ -436,6 +452,7 @@ export function createMockSessionEnvironment(
       signedInUserId = undefined;
       sessionTwoStep = false;
       preset = "signed-out";
+      liveDouble.live.stopAll(); // as the API environment does: every stream of the browser ends
       return success({ status: "signed-out" });
     },
   };
@@ -860,6 +877,47 @@ export function createMockSessionEnvironment(
     return { email: found.email, password: found.password, name: found.name };
   };
 
+  const liveDouble = createMockLive();
+  /** While acting as someone else: the live updates wait until this browser's person is back. */
+  let acting = 0;
+  let held: { orgId: string; event: LiveEventDto; to?: string }[] = [];
+  function deliverLive(orgId: string, event: LiveEventDto, to?: string) {
+    const person = current();
+    if (!person) return;
+    if (to !== undefined ? to !== person.userId : !storyDouble.hears(person.userId, orgId, event)) return;
+    liveDouble.controller.emit(orgId, event);
+  }
+  function emitLive(orgId: string, event: LiveEventDto, to?: string) {
+    if (acting > 0) held.push({ orgId, event, ...(to !== undefined ? { to } : {}) });
+    else deliverLive(orgId, event, to);
+  }
+  const memberIds = (orgId: string) => membersOf(orgId).map((member) => member.userId);
+  function orgStanding(userId: string, orgId: string): MockOrgStanding | undefined {
+    const mine = orgRoles.get(userId)?.find((org) => org.organizationId === orgId);
+    if (!mine) return undefined;
+    const all = names.publications.filter((pub) => pub.orgId === orgId).map((pub) => pub.id);
+    const here = mine.publications.filter((publication) => all.includes(publication.publicationId));
+    return {
+      orgRole: mine.orgRole,
+      publications: mine.orgRole === "member" ? here.map((publication) => publication.publicationId) : all,
+      union: {
+        roles: [...new Set(here.flatMap((publication) => publication.roles))] as MemberDto["publications"][number]["roles"],
+        grants: [...new Set(here.flatMap((publication) => publication.grants))] as MemberDto["publications"][number]["grants"],
+      },
+      twoStepBlocked: twoStepRolesOf(orgId).includes(mine.orgRole) && !(userId === signedInUserId && sessionTwoStep),
+    };
+  }
+  const notificationDouble = createMockNotifications({
+    person: () => {
+      const account = current();
+      return account ? { userId: account.userId, name: account.name } : undefined;
+    },
+    orgStanding,
+    gate: (operation) => gate(operation),
+    signedOut: () => signedOutAnswer(),
+    told: (orgId, userId, id) => emitLive(orgId, { type: "notification", id }, userId),
+  });
+
   const storyDouble = createMockStories({
     person: () => {
       const account = current();
@@ -884,6 +942,9 @@ export function createMockSessionEnvironment(
     gate: (operation) => gate(operation),
     signedOut: () => signedOutAnswer(),
     nameOf: (userId) => accounts.find((account) => account.userId === userId)?.name,
+    members: memberIds,
+    notify: (orgId, userId, notice) => notificationDouble.add(orgId, userId, notice),
+    emit: (orgId, event) => emitLive(orgId, event),
   });
 
   const sessionController: MockSessionController = {
@@ -912,6 +973,10 @@ export function createMockSessionEnvironment(
       acceptedKeys = new Set();
       problems = new Map();
       storyDouble.reset();
+      notificationDouble.reset();
+      liveDouble.reset();
+      acting = 0;
+      held = [];
     },
     setProblem(problem, operations) {
       for (const operation of operations ?? ["*" as const]) {
@@ -932,6 +997,26 @@ export function createMockSessionEnvironment(
       preset = "signed-out";
     },
     twoStepState: () => ({ sessionTwoStep, trustedDevice }),
+    async actAs(other, run) {
+      const was = { preset, signedInUserId, sessionTwoStep };
+      preset = other;
+      signedInUserId = other === "signed-out" ? undefined : userForPreset(other);
+      sessionTwoStep = Boolean(current()?.twoFactorEnabled);
+      acting += 1;
+      try {
+        return await run();
+      } finally {
+        preset = was.preset;
+        signedInUserId = was.signedInUserId;
+        sessionTwoStep = was.sessionTwoStep;
+        acting -= 1;
+        if (acting === 0) {
+          const waiting = held;
+          held = [];
+          for (const item of waiting) deliverLive(item.orgId, item.event, item.to);
+        }
+      }
+    },
     fixtures: {
       accounts: {
         editor: fixture("editor@sahyadri.example"),
@@ -960,6 +1045,10 @@ export function createMockSessionEnvironment(
     team,
     stories: storyDouble.stories,
     media: storyDouble.media,
+    comments: storyDouble.comments,
+    notifications: notificationDouble.notifications,
+    live: liveDouble.live,
+    liveController: liveDouble.controller,
     access,
     sessionController,
     invalidatePendingSessionMutations: () => {

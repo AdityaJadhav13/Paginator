@@ -2,7 +2,10 @@ import type { AccountService } from "./account-service.ts";
 import type { ContactService } from "./contact-service.ts";
 import type { SecurityService } from "./security-service.ts";
 import type { SessionService } from "./session-service.ts";
+import type { CommentService } from "./comment-service.ts";
+import type { LiveService } from "./live-service.ts";
 import type { MediaService } from "./media-service.ts";
+import type { NotificationService } from "./notification-service.ts";
 import type { StoryService } from "./story-service.ts";
 import type { TeamService } from "./team-service.ts";
 import type { WorkspaceAccessService } from "./workspace-access.ts";
@@ -21,6 +24,9 @@ export interface ServiceEnvironment {
   readonly media: MediaService;
   /** The public website's contact form. */
   readonly contact: ContactService;
+  readonly comments: CommentService;
+  readonly notifications: NotificationService;
+  readonly live: LiveService;
   /** The placeholder workspace's access; absent where nothing provides one (the deployed app, until `/me`). */
   readonly access?: WorkspaceAccessService;
   readonly workspace: WorkspaceQueryService;

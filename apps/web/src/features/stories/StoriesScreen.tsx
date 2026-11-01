@@ -4,10 +4,13 @@
  * edition, given to me, reporter, search) live in the address, so a filtered list can be shared; pages come from the
  * API's cursor. "New story" and "Paste stories" for whoever may create one.
  *
+ * A live change to a story of this publication (or a `resync`) says the list has changed, with a button that fetches
+ * it again: rows never move under the person's finger, and the pages loaded so far stay until they ask.
+ *
  * There is no editions endpoint yet, so the edition filter offers the editions of the stories seen so far, and there is
  * no "Create edition" here.
  */
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { Button, Checkbox, Cluster, Field, InlineMessage, ProgressIndicator, Select, Stack, TextInput } from "../../ui/index.ts";
 import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
@@ -21,6 +24,7 @@ import { useSession } from "../auth/SessionProvider.tsx";
 import { isDesk, mayCreate, storyScope } from "./access.ts";
 import { PasteDialog } from "./PasteDialog.tsx";
 import { StatusChip, statusKey } from "./StatusChip.tsx";
+import { useLiveEvents } from "../live/live-context.tsx";
 import { useStories } from "./stories-context.tsx";
 import "./stories.css";
 
@@ -101,6 +105,15 @@ function StoriesContent({
   const [more, setMore] = useState<{ pending: boolean; problem: ApiProblem | null }>({ pending: false, problem: null });
   const [search, setSearch] = useState(filter.q ?? "");
   const [pasting, setPasting] = useState(false);
+  /** A live update says the list has changed since it was fetched. */
+  const [changed, setChanged] = useState(false);
+  /** Live updates heard: one heard while the list was being fetched keeps the notice. */
+  const heard = useRef(0);
+  useLiveEvents((event) => {
+    if (event.type !== "resync" && !(event.type === "story" && event.publicationId === pubId)) return;
+    heard.current += 1;
+    setChanged(true);
+  });
   /** Editions and reporters seen in this list so far: there is no endpoint that lists them yet. */
   const [editions, setEditions] = useState<ReadonlyMap<string, string>>(new Map());
   const [reporters, setReporters] = useState<ReadonlyMap<string, string>>(new Map());
@@ -120,8 +133,10 @@ function StoriesContent({
 
   const fetchFirst = useCallback(
     async (live: boolean) => {
+      const before = heard.current;
       const result = await stories.list({ orgId, pubId, filter });
       if (!result.ok) return setLoad({ status: "failed", problem: result.error, live });
+      if (heard.current === before) setChanged(false);
       remember(result.value.items);
       setLoad({ status: "ready", items: result.value.items, nextCursor: result.value.nextCursor });
     },
@@ -227,6 +242,22 @@ function StoriesContent({
         </form>
       </section>
 
+      <div aria-live="polite">
+        {changed && load.status === "ready" && (
+          <InlineMessage variant="info" heading={t("stories.live.changed")} iconLabel={t("message.info")}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={async () => {
+                await fetchFirst(true);
+                document.getElementById(ROUTE_HEADING_ID)?.focus(); // the button is gone: focus goes to the page's heading
+              }}
+            >
+              {t("stories.live.refresh")}
+            </Button>
+          </InlineMessage>
+        )}
+      </div>
       {load.status === "loading" && <ProgressIndicator role="status" label={t("stories.loading")} />}
       {load.status === "failed" && (
         <Stack gap="3">

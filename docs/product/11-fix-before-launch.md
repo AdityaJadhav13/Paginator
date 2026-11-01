@@ -487,3 +487,12 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | L2-246 | `pnpm run guard` with `GUARD_BASE=origin/main` | The guard fails against `origin/main` because of commits this branch inherits from the unmerged L2 branches; it passes against `origin/chore/m0-monorepo` | Expected until the branches merge |
 | L2-247 | `docs/phase0/EXP_GEN_1_REPORT.md` (frozen evidence) | The stale "11 pages" status line (L2-239) can be corrected only with the owner's evidence-change approval | The site quotes the 28-of-28 lines, which §9 confirms |
 | L2-248 | `pnpm-workspace.yaml` nodemailer 10.1.1 (L2-22) | Must be upgraded before `PGN_CONTACT_TO` is set anywhere real: the fixed versions (10.1.4–10.1.7, released 2026-10-18) are not yet 7 days old on 2026-10-24; upgrade with an exact pin from 2026-10-25 and run the mail tests | Development sends only to Mailpit; every recipient and Reply-To passes the strict address check first |
+
+## Newsroom web app: comments, live updates, notifications (PR 23, `apps/web/src/features/live`, `features/stories`)
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| L2-300 | `StoryEditor.tsx` `refreshLive` | Each of the person's own autosaves is heard back as a live `story` event and fetches the story once more (`stories.get`); the answer is seen as not newer and dropped | One small GET per save; nothing shown changes |
+| L2-301 | `StoryEditor.tsx` / `CommentsPanel.tsx` held live change | A live change held for the box being typed in is applied only when the box is left or the composing ends; a person who stays in one box for a long time sees other people's changes late (the next save still merges them first, or the conflict screen asks) | Nothing is lost; the change comes in at the next blur |
+| L2-302 | `CommentsPanel.tsx` post after a lost answer | When the POST's answer is lost but the comment was made, a live update shows the comment while the box still shows "cannot be reached" with the text in it; sending again is safe (same Idempotency-Key) but the message is untrue | The retry makes no second comment and clears the box |
+| L2-303 | `StoryEditor.tsx` drafts | The draft of a story that was deleted stays on the device when its page is reloaded (the 404 screen never offers or drops it) | Local only, the person's own text; it is cleared with the browser's site data |

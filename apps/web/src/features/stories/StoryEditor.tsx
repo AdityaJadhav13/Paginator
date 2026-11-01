@@ -30,8 +30,10 @@ import type { ApiProblem, MemberDto, StoryDto, TransitionTargetDto } from "../..
 import { OfflineNotice, useOnline } from "../auth/connection.tsx";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useSession } from "../auth/SessionProvider.tsx";
+import { useLiveEvents } from "../live/live-context.tsx";
 import { useTeam } from "../people/services-context.tsx";
 import { isDesk, mayCreate, mayUpload, mayViewMedia, storyScope } from "./access.ts";
+import { CommentsPanel } from "./CommentsPanel.tsx";
 import { PhotoPanel, type PhotoOutcome } from "./PhotoPanel.tsx";
 import { currentStory } from "./conflict.ts";
 import { draftKey, dropDraft, readDraft, writeDraft, type PendingCreate, type StoryDraft, type StoryFields } from "./drafts.ts";
@@ -118,6 +120,36 @@ const cleaned = (text: string) =>
     .map((line) => line.replace(/\s+$/u, ""))
     .join("\n")
     .trim();
+
+/**
+ * A newer version heard live, merged field by field against what the boxes were based on (`base`): a field only they
+ * changed takes theirs (`taken`); one only the person changed keeps the person's text, sent next on top of theirs; one
+ * that already says what theirs says stays as typed. Null when both changed a field differently, or the person wrote a
+ * caption or credit for a photo that has since changed: their next save then meets the new version, and the conflict
+ * screen asks.
+ */
+function liveMerge(
+  base: StoryFields,
+  mine: StoryFields,
+  theirs: StoryFields,
+  photoChanged: boolean,
+): { readonly fields: StoryFields; readonly saved: StoryFields; readonly taken: readonly FieldKey[] } | null {
+  if (photoChanged && (mine.caption !== base.caption || mine.credit !== base.credit)) return null;
+  const agrees = (key: FieldKey, value: StoryFields[FieldKey]) =>
+    typeof value === "string" ? cleaned(value) === theirs[key] : value === theirs[key];
+  const fields: Record<string, StoryFields[FieldKey]> = { ...mine };
+  const saved: Record<string, StoryFields[FieldKey]> = { ...theirs };
+  const taken: FieldKey[] = [];
+  for (const key of ALL_KEYS) {
+    if (agrees(key, mine[key])) saved[key] = mine[key];
+    else if (agrees(key, base[key])) saved[key] = base[key];
+    else if (mine[key] === base[key]) {
+      fields[key] = theirs[key];
+      taken.push(key);
+    } else return null;
+  }
+  return { fields: fields as unknown as StoryFields, saved: saved as unknown as StoryFields, taken };
+}
 
 /** Theirs is exactly mine, as the API cleans text: no choice to make (a change of this device's that arrived late). */
 function sameAsMine(theirs: StoryDto, mine: StoryFields): boolean {
@@ -253,6 +285,18 @@ function EditorContent({
   const [notice, setNotice] = useState<string | null>(null);
   const [moveProblem, setMoveProblem] = useState<ApiProblem | null>(null);
   const [sendingBack, setSendingBack] = useState(false);
+  /** The story was deleted, or is no longer the person's to see (a live update found it so). */
+  const [gone, setGone] = useState(false);
+  /** A live change waits for the box being typed in to be left, or the input method to end composing. */
+  const held = useRef(false);
+  const composing = useRef(false);
+  /** The same, for rendering: no autosave and no read-only box while an input method composes (a half-made word). */
+  const [composingNow, setComposingNow] = useState(false);
+  /** The box the person was in when the story was taken out of their hands: it takes their typing until they leave it
+   * (kept on this device, said to be unsaved), so no keystroke is refused unseen. */
+  const [typingOn, setTypingOn] = useState<string | null>(null);
+  /** A live fetch is queued and has not started: another event needs no other fetch. */
+  const queued = useRef(false);
   /** The create sent without a known answer: its key and exact body, retried as they are. */
   const pendingCreate = useRef<PendingCreate | null>(null);
   /** The fields the pending create carries. */
@@ -290,8 +334,12 @@ function EditorContent({
   const mayPhoto = photoFor(story);
   const dirty = !same(fields, saved);
   /** The boxes take no typing while a question is open or a move is being made (nothing typed can then be lost). */
-  const locked = !editable || conflict !== null || offered !== null || moving;
-  const photoLocked = !mayPhoto || conflict !== null || offered !== null || moving;
+  const locked = !editable || conflict !== null || offered !== null || moving || gone;
+  /** A box being composed in, or the one typed in when the story was taken away, is never made read only under them. */
+  const boxLocked = (field: FieldKey) => locked && !composingNow && typingOn !== field;
+  /** Text typed that can no longer be saved here (the story was moved out of the person's hands): kept, and said so. */
+  const unsavable = Boolean(story) && !editable && Object.keys(changes(saved, fields, desk)).length > 0;
+  const photoLocked = !mayPhoto || conflict !== null || offered !== null || moving || gone;
   /** A caption or credit typed that cannot be saved now: why, said with it (it is kept, read only, and drafted). */
   const photoKeysDirty = fields.caption !== saved.caption || fields.credit !== saved.credit;
   const keptBecause = !photoKeysDirty
@@ -504,13 +552,13 @@ function EditorContent({
   // autosave after a pause in typing; again after each save while something still waits
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    if (!dirty || conflict || offered || !(editable || mayPhoto) || loaded.status !== "ready") return;
+    if (!dirty || composingNow || conflict || offered || gone || !(editable || mayPhoto) || loaded.status !== "ready") return;
     setSave((previous) => (previous.state === "failed" || previous.state === "saving" ? previous : { state: "pending" }));
     timer.current = setTimeout(() => void flush(), AUTOSAVE_MS);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [conflict, dirty, editable, fields, flush, loaded.status, mayPhoto, offered, saved]);
+  }, [composingNow, conflict, dirty, editable, fields, flush, gone, loaded.status, mayPhoto, offered, saved]);
 
   // back online: send what waited
   const wasOnline = useRef(online);
@@ -695,6 +743,58 @@ function EditorContent({
     setConflict(null);
     setSave({ state: "saved" });
   };
+  /** A newer version heard live, merged into the boxes (liveMerge), unless the person's own choice or typing comes first. */
+  const applyLive = (fresh: StoryDto) => {
+    held.current = false;
+    const { story: current, fields: mine, saved: base, conflict: open, offered: asking } = latest.current;
+    // the person's choice comes first; a version not newer is this screen's own change, already here
+    if (!current || open || asking || fresh.revision <= current.revision) return;
+    const theirs = fieldsOf(fresh);
+    const merged = liveMerge(base, mine, theirs, (fresh.photo?.assetId ?? null) !== (current.photo?.assetId ?? null));
+    if (!merged) return; // both changed a field: the next save meets their version, and the conflict screen asks
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement.dataset["field"] : undefined;
+    if (composing.current || merged.taken.some((key) => key === focused)) {
+      held.current = true; // never rewrite the box being typed in, nor any box while an input method composes
+      return;
+    }
+    if (current.can.edit && !fresh.can.edit && focused && (ALL_KEYS as readonly string[]).includes(focused)) setTypingOn(focused);
+    // at once, for a save queued right behind this
+    latest.current = { ...latest.current, story: fresh, saved: merged.saved, fields: merged.fields };
+    setStory(fresh);
+    setSaved(merged.saved);
+    // only boxes still as the merge saw them take theirs
+    setFields((typed) => ({
+      ...typed,
+      ...Object.fromEntries(merged.taken.filter((key) => typed[key] === mine[key]).map((key) => [key, theirs[key]])),
+    }));
+    const name = fresh.updatedBy.name;
+    if (fresh.status !== current.status) setNotice(t("editor.live.moved", { name, status: t(statusKey(fresh.status)) }));
+    else if (merged.taken.length > 0) setNotice(t("editor.live.merged", { name }));
+  };
+  /** Fetches the story after this screen's own changes (the queue), so its own saves are never taken for theirs. */
+  const refreshLive = () => {
+    if (queued.current) return;
+    queued.current = true;
+    const run = chain.current.then(async () => {
+      queued.current = false;
+      const current = latest.current.story;
+      if (!current || !mounted.current) return;
+      const result = await stories.get({ orgId, pubId, storyId: current.id });
+      if (!mounted.current) return;
+      if (result.ok) applyLive(result.value);
+      else if (result.error.kind === "answer" && result.error.status === 404) setGone(true);
+      // any other failure keeps what is shown: the next update, or the next save, meets the new version
+    });
+    chain.current = run.catch(() => undefined);
+  };
+  useLiveEvents((event) => {
+    if (event.type === "resync" || (event.type === "story" && event.storyId === latest.current.story?.id)) refreshLive();
+  });
+  const release = () => {
+    setTypingOn(null);
+    if (held.current && !composing.current) refreshLive();
+  };
+
   const restore = () => {
     if (!offered) return;
     const draft = offered;
@@ -756,7 +856,19 @@ function EditorContent({
           </p>
         )}
         <SaveState save={save} dirty={dirty} editable={editable || mayPhoto} onSave={() => void flush()} />
-        <div aria-live="polite">{notice && <p>{notice}</p>}</div>
+        <div aria-live="polite">
+          {gone && (
+            <InlineMessage variant="warning" heading={t("editor.gone.heading")} iconLabel={t("message.warning")}>
+              {t("editor.gone.body")}
+            </InlineMessage>
+          )}
+          {notice && <p>{notice}</p>}
+          {unsavable && story && (
+            <InlineMessage variant="warning" heading={t("editor.unsavable.heading")} iconLabel={t("message.warning")}>
+              {t("editor.unsavable.body", { status: t(statusKey(story.status)) })}
+            </InlineMessage>
+          )}
+        </div>
         {!editable && <p>{mayPhoto ? t("editor.photoOnly") : t("editor.readOnly")}</p>}
 
         {offered && (
@@ -786,7 +898,22 @@ function EditorContent({
           <ConflictPanel conflict={conflict} mine={fields} lang={textLang} onKeepMine={keepMine} onTakeTheirs={takeTheirs} />
         )}
 
-        <form noValidate onSubmit={(event) => (event.preventDefault(), void flush())} aria-busy={moving}>
+        <form
+          noValidate
+          onSubmit={(event) => (event.preventDefault(), void flush())}
+          aria-busy={moving}
+          onBlur={release}
+          onCompositionStart={() => {
+            composing.current = true;
+            setComposingNow(true);
+          }}
+          onCompositionEnd={() => {
+            composing.current = false;
+            setComposingNow(false);
+            // the held live change goes in first (the queue), then autosave sends the composed text on its version
+            release();
+          }}
+        >
           <Stack gap="4">
             <Field
               label={t("glossary.headline")}
@@ -795,8 +922,9 @@ function EditorContent({
             >
               <TextInput
                 lang={textLang}
+                data-field="headline"
                 value={fields.headline}
-                readOnly={locked}
+                readOnly={boxLocked("headline")}
                 onChange={(event) => change("headline")(event.target.value)}
                 onBlur={leaveBox}
               />
@@ -806,8 +934,9 @@ function EditorContent({
               <TextArea
                 lang={textLang}
                 rows={16}
+                data-field="body"
                 value={fields.body}
-                readOnly={locked}
+                readOnly={boxLocked("body")}
                 onChange={(event) => change("body")(event.target.value)}
                 onBlur={leaveBox}
               />
@@ -839,13 +968,13 @@ function EditorContent({
               />
             )}
             <Field label={t("glossary.byline")}>
-              <TextInput lang={textLang} value={fields.byline} readOnly={locked} onChange={(event) => change("byline")(event.target.value)} onBlur={leaveBox} />
+              <TextInput lang={textLang} data-field="byline" value={fields.byline} readOnly={boxLocked("byline")} onChange={(event) => change("byline")(event.target.value)} onBlur={leaveBox} />
             </Field>
             <Field label={t("glossary.kicker")}>
-              <TextInput lang={textLang} value={fields.kicker} readOnly={locked} onChange={(event) => change("kicker")(event.target.value)} onBlur={leaveBox} />
+              <TextInput lang={textLang} data-field="kicker" value={fields.kicker} readOnly={boxLocked("kicker")} onChange={(event) => change("kicker")(event.target.value)} onBlur={leaveBox} />
             </Field>
             <Field label={t("glossary.deck")}>
-              <TextInput lang={textLang} value={fields.deck} readOnly={locked} onChange={(event) => change("deck")(event.target.value)} onBlur={leaveBox} />
+              <TextInput lang={textLang} data-field="deck" value={fields.deck} readOnly={boxLocked("deck")} onChange={(event) => change("deck")(event.target.value)} onBlur={leaveBox} />
             </Field>
             {desk && (
               <fieldset className="pg-radio-group">
@@ -881,7 +1010,7 @@ function EditorContent({
                     </Field>
                   </Cluster>
                   <Field label={t("editor.deskNote")} description={t("editor.deskNoteHint")}>
-                    <TextInput value={fields.deskNote} readOnly={locked} onChange={(event) => change("deskNote")(event.target.value)} onBlur={leaveBox} />
+                    <TextInput data-field="deskNote" value={fields.deskNote} readOnly={boxLocked("deskNote")} onChange={(event) => change("deskNote")(event.target.value)} onBlur={leaveBox} />
                   </Field>
                 </Stack>
               </fieldset>
@@ -889,7 +1018,7 @@ function EditorContent({
           </Stack>
         </form>
 
-        {story && story.can.transitions.length > 0 && (
+        {story && !gone && story.can.transitions.length > 0 && (
           <section aria-labelledby="pg-editor-moves">
             <Stack gap="3">
               <h2 id="pg-editor-moves" className="pg-type-section-title">
@@ -914,9 +1043,11 @@ function EditorContent({
           </section>
         )}
 
-        {story && story.can.assign && (
+        {story && !gone && story.can.assign && (
           <Assignment orgId={orgId} pubId={pubId} story={story} onChanged={(next, text) => (setStory(next), setNotice(text))} onConflict={(theirs) => openConflict(theirs, latest.current.saved)} />
         )}
+
+        {story && !gone && <CommentsPanel orgId={orgId} pubId={pubId} storyId={story.id} mayComment={story.can.comment} />}
 
         {sendingBack && (
         <SendBackDialog

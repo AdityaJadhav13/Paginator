@@ -43,3 +43,11 @@ export { grantsOf } from "./workspace-access.ts";
 export type { AssetDto, MediaService, PictureTypeDto, PresignedUploadDto } from "./media-service.ts";
 export type { ContactConnection, ContactOutcome, ContactRequestDto, ContactService } from "./contact-service.ts";
 export type { ServiceEnvironment } from "./environment.ts";
+export type { CommentDto, CommentPatchDto, CommentService } from "./comment-service.ts";
+export type {
+  NotificationDto,
+  NotificationKindDto,
+  NotificationPageDto,
+  NotificationService,
+} from "./notification-service.ts";
+export type { LiveEventDto, LiveService } from "./live-service.ts";

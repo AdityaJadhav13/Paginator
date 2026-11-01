@@ -148,6 +148,7 @@ describe("Adding a photo", () => {
 describe("Attaching on the story's version", () => {
   it("attaches again by itself when only a move or an assignment came between", async () => {
     const environment = createMockApplicationEnvironment();
+    environment.liveController.drop(true); // no live update reaches this screen: its next save meets their version
     const complete = environment.media.complete.bind(environment.media);
     vi.spyOn(environment.media, "complete").mockImplementation(async (input) => {
       const now = await storyOf(environment, "story-demo-001");
@@ -169,6 +170,7 @@ describe("Attaching on the story's version", () => {
 
   it("opens the conflict screen when the text changed, and attaches again once chosen", async () => {
     const environment = createMockApplicationEnvironment();
+    environment.liveController.drop(true); // no live update reaches this screen: its next save meets their version
     const complete = environment.media.complete.bind(environment.media);
     vi.spyOn(environment.media, "complete").mockImplementationOnce(async (input) => {
       const now = await storyOf(environment, "story-demo-001");
