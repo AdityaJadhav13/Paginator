@@ -15,6 +15,7 @@ import type {
   NotificationService,
   LiveService,
   TeamService,
+  AuditService,
   UserQueryService,
   WorkspaceAccessService,
   WorkspaceQueryService,
@@ -31,6 +32,7 @@ export interface MockApplicationEnvironment extends ServiceEnvironment {
   readonly account: AccountService;
   readonly security: SecurityService;
   readonly team: TeamService;
+  readonly audit: AuditService;
   readonly stories: StoryService;
   readonly media: MediaService;
   readonly comments: CommentService;

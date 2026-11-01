@@ -51,3 +51,4 @@ export type {
   NotificationService,
 } from "./notification-service.ts";
 export type { LiveEventDto, LiveService } from "./live-service.ts";
+export type { AuditEventDto, AuditFilterDto, AuditPageDto, AuditService } from "./audit-service.ts";

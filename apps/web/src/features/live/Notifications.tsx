@@ -4,9 +4,10 @@
  * about, marked read when it is opened; "Mark all as read"; older ones a page at a time. A live `notification` (or a
  * `resync`) fetches the count again, and the open list's first page.
  *
- * A notification names what happened by ids. Its sentence is built from its kind and who acted only, so it works for
- * every notification the API sends now; the story's headline and the invitee's name will join it once the API gives
- * them (`notificationText` is the one place that changes).
+ * A notification names what happened by ids, with the text to show it by: the story's headline and status as the
+ * reader may see the story now, and the invitee's name. A story the reader no longer reaches (deleted, given away, or
+ * their role changed) comes as `story: null`: its sentence then names no story, says it is no longer here, and has no
+ * link, so nothing of it is shown.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -17,15 +18,15 @@ import { useI18n, type Translate } from "../../i18n/index.ts";
 import type { ApiProblem, NotificationDto } from "../../services/index.ts";
 import { OfflineNotice } from "../auth/connection.tsx";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
+import { statusKey } from "../stories/StatusChip.tsx";
 import { useLiveEvents, useNotifications } from "./live-context.tsx";
 import "./live.css";
 
 const PAGE = 20;
 
-/** The notification's sentence: who did what. */
-export function notificationText(item: NotificationDto, t: Translate): string {
-  const name = item.actor?.name;
-  switch (item.kind) {
+/** Who did what, to a story the reader can no longer see: no headline. */
+function aboutAStory(kind: Exclude<NotificationDto["kind"], "invitation_accepted">, name: string | undefined, t: Translate) {
+  switch (kind) {
     case "story_filed":
       return name ? t("notification.storyFiled", { name }) : t("notification.storyFiled.someone");
     case "story_sent_back":
@@ -34,15 +35,49 @@ export function notificationText(item: NotificationDto, t: Translate): string {
       return name ? t("notification.storyAssigned", { name }) : t("notification.storyAssigned.someone");
     case "comment":
       return name ? t("notification.comment", { name }) : t("notification.comment.someone");
-    case "invitation_accepted":
-      return name ? t("notification.invitationAccepted", { name }) : t("notification.invitationAccepted.someone");
   }
+}
+
+/** Who did what, to the story named by its headline. */
+function aboutTheStory(
+  kind: Exclude<NotificationDto["kind"], "invitation_accepted">,
+  name: string | undefined,
+  headline: string,
+  t: Translate,
+) {
+  switch (kind) {
+    case "story_filed":
+      return name ? t("notification.storyFiled.story", { name, headline }) : t("notification.storyFiled.story.someone", { headline });
+    case "story_sent_back":
+      return name
+        ? t("notification.storySentBack.story", { name, headline })
+        : t("notification.storySentBack.story.someone", { headline });
+    case "story_assigned":
+      return name
+        ? t("notification.storyAssigned.story", { name, headline })
+        : t("notification.storyAssigned.story.someone", { headline });
+    case "comment":
+      return name ? t("notification.comment.story", { name, headline }) : t("notification.comment.story.someone", { headline });
+  }
+}
+
+/** The notification's sentences: who did what, to which story and where it stands now (or that it is gone). */
+export function notificationText(item: NotificationDto, t: Translate): string {
+  const name = item.actor?.name;
+  if (item.kind === "invitation_accepted") {
+    const invitee = item.invitee?.name ?? name;
+    return invitee ? t("notification.invitationAccepted", { name: invitee }) : t("notification.invitationAccepted.someone");
+  }
+  if (!item.story) return `${aboutAStory(item.kind, name, t)} ${t("notification.storyGone")}`;
+  const now = t("notification.storyNow", { status: t(statusKey(item.story.status)) });
+  return `${aboutTheStory(item.kind, name, item.story.headline, t)} ${now}`;
 }
 
 /** Where the notification leads: the story (at its comment), or the team; null when there is nowhere to go. */
 export function notificationLink(item: NotificationDto, orgId: string, mayViewTeam: boolean): string | null {
   if (item.kind === "invitation_accepted") return mayViewTeam ? paths.orgTeam(orgId) : null;
-  if (!item.publicationId || !item.storyId) return null;
+  // a story the reader no longer reaches would only open "not found"
+  if (!item.story || !item.publicationId || !item.storyId) return null;
   const story = paths.pubStory(orgId, item.publicationId, item.storyId);
   return item.commentId ? `${story}#comment-${item.commentId}` : story;
 }
@@ -307,12 +342,12 @@ function NotificationsDrawer({
                         variant="quiet"
                         size="sm"
                         disabled={marking.pending}
+                        aria-label={t("notifications.markOneNamed", { notification: text })}
                         onClick={async () => {
                           if (await markRead({ ids: [item.id] })) setSaid(t("notifications.oneRead"));
                         }}
                       >
                         {t("notifications.markOne")}
-                        <VisuallyHidden>{`: ${text}`}</VisuallyHidden>
                       </Button>
                     )}
                   </Cluster>

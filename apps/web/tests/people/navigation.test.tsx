@@ -28,9 +28,10 @@ const labels = (entries: ReturnType<typeof navigation>) => entries.map((entry) =
 
 describe("Navigation from permissions", () => {
   it("gives the deployed app only built screens: Home for everyone, Team for whoever may see it", () => {
-    expect(labels(navigation(org("owner", []), undefined, false))).toEqual(["nav.home /org/o", "glossary.team /org/o/team"]);
-    expect(labels(navigation(org("admin", []), undefined, false))).toEqual(["nav.home /org/o", "glossary.team /org/o/team"]);
-    expect(labels(navigation(org("member", ["chief_editor"]), undefined, false))).toEqual(["nav.home /org/o", "glossary.team /org/o/team"]);
+    const managers = ["nav.home /org/o", "glossary.team /org/o/team", "nav.audit /org/o/audit"];
+    expect(labels(navigation(org("owner", []), undefined, false))).toEqual(managers);
+    expect(labels(navigation(org("admin", []), undefined, false))).toEqual(managers);
+    expect(labels(navigation(org("member", ["chief_editor"]), undefined, false))).toEqual(managers);
     for (const role of ["editor", "sub_editor", "reporter", "page_designer", "photo_editor", "advertising", "prepress", "viewer"] as const) {
       expect(labels(navigation(org("member", [role]), undefined, false)), role).toEqual(["nav.home /org/o"]);
     }
@@ -40,6 +41,7 @@ describe("Navigation from permissions", () => {
     expect(labels(navigation(org("admin", []), undefined, true))).toEqual([
       "nav.home /org/o",
       "glossary.team /org/o/team",
+      "nav.audit /org/o/audit",
       "nav.orgSettings /org/o/settings",
       "nav.storage /org/o/storage",
     ]); // billing is the owner's alone
@@ -54,11 +56,24 @@ describe("Navigation from permissions", () => {
     expect(labels(navigation(org("member", ["photo_editor"]), "p", false))).toEqual(["glossary.stories /org/o/pub/p/stories"]);
   });
 
+  it("offers the audit log (audit.view) to Owner, Admin and a Chief Editor only, under the publication too", () => {
+    expect(labels(navigation(org("member", ["chief_editor"]), "p", false))).toContain("nav.audit /org/o/audit");
+    expect(labels(navigation(org("admin", []), "p", false))).toContain("nav.audit /org/o/audit");
+    for (const role of ["editor", "sub_editor", "reporter", "page_designer", "photo_editor", "advertising", "prepress", "viewer"] as const) {
+      expect(labels(navigation(org("member", [role]), "p", true)), role).not.toContain("nav.audit /org/o/audit");
+      expect(labels(navigation(org("member", [role]), undefined, true)), role).not.toContain("nav.audit /org/o/audit");
+    }
+  });
+
   it("offers only Home while the organisation's two-step rule is unmet", () => {
     const blocked = org("owner", [], { required: true, satisfied: false });
     expect(labels(navigation(blocked, undefined, true))).toEqual(["nav.home /org/o"]);
     const met = org("owner", [], { required: true, satisfied: true });
-    expect(labels(navigation(met, undefined, false))).toEqual(["nav.home /org/o", "glossary.team /org/o/team"]);
+    expect(labels(navigation(met, undefined, false))).toEqual([
+      "nav.home /org/o",
+      "glossary.team /org/o/team",
+      "nav.audit /org/o/audit",
+    ]);
   });
 });
 

@@ -30,6 +30,9 @@ export interface MockNotificationDeps {
   signedOut<T>(): ServiceResult<T, ApiProblem>;
   /** A new notification for this person, in this organisation (the live double decides who hears it). */
   told(orgId: string, userId: string, id: string): void;
+  /** The story's headline and status as this person may see it now (the API's join under the story rules), or null
+   * when it is gone or out of their reach. */
+  storyShown(userId: string, orgId: string, storyId: string): NotificationDto["story"];
 }
 
 /** What a change tells someone of (the API's NewNotification). */
@@ -42,7 +45,7 @@ export interface MockNotice {
   readonly actor: { readonly id: string; readonly name: string } | null;
 }
 
-interface Row extends Omit<NotificationDto, "readAt" | "story" | "invitee"> {
+interface Row extends Omit<NotificationDto, "readAt" | "story"> {
   readonly orgId: string;
   readonly userId: string;
   readonly order: number;
@@ -56,10 +59,44 @@ const NOT_ALLOWED = answer(403, "not_allowed", "Your role cannot do this. Ask an
 const TWO_STEP = answer(403, "two_step_required", "Your role needs two-step sign-in. Set it up in Account → Security.");
 const invalid = (field: string, message: string): Answer => ({ ...answer(400, "invalid_request", "Some fields are not right."), details: [{ field, message }] });
 
-/** Fictional notifications: the Sahyadri reporter's, one read, one not. */
+/** Fictional notifications: the Sahyadri reporter's (one about a story no longer theirs to see, one read, one not),
+ * and the Sahyadri admin's, of an invitation accepted. */
 function fixtures(): Row[] {
-  const base = { orgId: "org-demo-sahyadri", publicationId: "pub-demo-pune-daily", commentId: null, invitationId: null };
+  const base = {
+    orgId: "org-demo-sahyadri",
+    publicationId: "pub-demo-pune-daily",
+    commentId: null,
+    invitationId: null,
+    invitee: null,
+  };
   return [
+    {
+      ...base,
+      id: "notification-demo-000",
+      userId: "user-demo-sahyadri-reporter",
+      kind: "comment",
+      // the desk's own story, which a Reporter does not see: shown without its headline
+      storyId: "story-demo-003",
+      commentId: "comment-demo-gone",
+      actor: { id: "user-demo-sahyadri-editor", name: "Sahyadri Demo Editor" },
+      createdAt: "2026-10-21T08:00:00.000Z",
+      readAt: "2026-10-21T09:00:00.000Z",
+      order: 0,
+    },
+    {
+      ...base,
+      id: "notification-demo-003",
+      userId: "user-demo-sahyadri-editor",
+      kind: "invitation_accepted",
+      publicationId: null,
+      storyId: null,
+      invitationId: "invitation-demo-photo",
+      actor: { id: "user-demo-sahyadri-photo", name: "Sahyadri Demo Photo Editor" },
+      invitee: { id: "user-demo-sahyadri-photo", name: "Sahyadri Demo Photo Editor" },
+      createdAt: "2026-10-20T10:00:00.000Z",
+      readAt: null,
+      order: 3,
+    },
     {
       ...base,
       id: "notification-demo-001",
@@ -125,9 +162,8 @@ export function createMockNotifications(deps: MockNotificationDeps): {
     commentId: row.commentId,
     invitationId: row.invitationId,
     actor: row.actor ? { ...row.actor } : null,
-    // shortcut: no display text (the API resolves story/invitee under the reader's access), until the drawer shows it
-    story: null,
-    invitee: null,
+    story: row.storyId ? deps.storyShown(row.userId, row.orgId, row.storyId) : null,
+    invitee: row.invitee ? { ...row.invitee } : null,
     createdAt: row.createdAt,
     readAt: row.readAt,
   });
@@ -197,6 +233,7 @@ export function createMockNotifications(deps: MockNotificationDeps): {
           commentId: notice.commentId ?? null,
           invitationId: notice.invitationId ?? null,
           actor: notice.actor ? { ...notice.actor } : null,
+          invitee: null, // no change of the story double tells of an invitation
           createdAt: `2026-10-22T11:${String(counter % 60).padStart(2, "0")}:00.000Z`,
           readAt: null,
           order: 100 + counter,

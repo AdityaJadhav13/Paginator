@@ -37,6 +37,8 @@ export const REVIEW_NOTES: Readonly<Partial<Record<CatalogueKey, string>>> = {
     "Reads the same as team.invite (निमंत्रण पाठवा): the button inside the invitation dialog that sends it.",
   "grant.release_approve":
     "Open question for the owner's reviewer: the Marathi term for \"release\" (an edition sent to press and kept in the archive). The draft avoids प्रकाशन, which is Publication.",
+  "nav.audit":
+    "The term for \"audit log\" (the record of who did what, when): the draft says कामकाजाची नोंद; the same words are used on the audit screen's headings and messages (auditLog.*).",
   "nav.release":
     "Open question for the owner's reviewer: the Marathi term for \"release\". The draft says प्रकाशित आवृत्ती; keep it consistent with grant.release_approve and invalid.release.",
   "invalid.release":

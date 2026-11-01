@@ -24,6 +24,7 @@ import { OrgHome } from "../features/people/OrgHome.tsx";
 import { SecurityScreen } from "../features/people/SecurityScreen.tsx";
 import { PeopleProvider } from "../features/people/services-context.tsx";
 import { TeamScreen } from "../features/people/TeamScreen.tsx";
+import { AuditScreen } from "../features/people/AuditScreen.tsx";
 import { StoriesProvider } from "../features/stories/stories-context.tsx";
 import { MediaProvider } from "../features/stories/media-context.tsx";
 import { NewsroomProvider } from "../features/live/live-context.tsx";
@@ -91,7 +92,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
     <I18nProvider>
       <EnvironmentContext.Provider value={activeEnvironment}>
         <AccountProvider account={activeEnvironment.account}>
-          <PeopleProvider security={activeEnvironment.security} team={activeEnvironment.team}>
+          <PeopleProvider security={activeEnvironment.security} team={activeEnvironment.team} audit={activeEnvironment.audit}>
           <StoriesProvider stories={activeEnvironment.stories}>
           <MediaProvider media={activeEnvironment.media}>
           <ContactProvider contact={activeEnvironment.contact}>
@@ -130,6 +131,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
               <Route path={PATTERNS.workspaceRoot} element={<WorkspaceBoundary />}>
                 <Route index element={<OrgHome />} />
                 <Route path={PATTERNS.orgTeam} element={<TeamScreen />} />
+                <Route path={PATTERNS.orgAudit} element={<AuditScreen />} />
                 <Route path={PATTERNS.pubStories} element={<StoriesScreen />} />
                 <Route path={PATTERNS.pubStory} element={<StoryEditor />} />
                 {DEVELOPMENT && (

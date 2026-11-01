@@ -27,6 +27,7 @@ import type {
   LiveService,
   NotificationService,
   TeamService,
+  AuditService,
   WorkspaceAccessDto,
   WorkspaceAccessService,
 } from "../services/index.ts";
@@ -35,6 +36,7 @@ import type { MockOperation } from "./scenarios.ts";
 import { createCanonicalSeed } from "./seed.ts";
 import { createMockStories, type MockStoryOperation } from "./create-mock-stories.ts";
 import { createMockLive, type MockLiveController } from "./create-mock-live.ts";
+import { createMockAudit, type MockAuditOperation } from "./create-mock-audit.ts";
 import { createMockNotifications, type MockNotificationOperation, type MockOrgStanding } from "./create-mock-notifications.ts";
 import {
   createAccounts,
@@ -57,6 +59,7 @@ export type MockSessionPreset =
   | "sahyadri-subeditor"
   | "sahyadri-reporter"
   | "sahyadri-photo-editor"
+  | "sahyadri-chief-editor"
   | "signed-out";
 
 export type MockAuthOperation =
@@ -84,7 +87,8 @@ export type MockAuthOperation =
   | "team.resendInvitation"
   | "team.cancelInvitation"
   | MockStoryOperation
-  | MockNotificationOperation;
+  | MockNotificationOperation
+  | MockAuditOperation;
 
 /** An email the double "sent". */
 export interface MockMail {
@@ -151,6 +155,7 @@ export interface MockSessionEnvironment {
   readonly account: AccountService;
   readonly security: SecurityService;
   readonly team: TeamService;
+  readonly audit: AuditService;
   readonly stories: StoryService;
   readonly media: MediaService;
   readonly comments: CommentService;
@@ -176,6 +181,7 @@ const PRESETS: readonly MockSessionPreset[] = [
   "sahyadri-subeditor",
   "sahyadri-reporter",
   "sahyadri-photo-editor",
+  "sahyadri-chief-editor",
   "signed-out",
 ];
 const MIN_PASSWORD = 12;
@@ -916,6 +922,21 @@ export function createMockSessionEnvironment(
     gate: (operation) => gate(operation),
     signedOut: () => signedOutAnswer(),
     told: (orgId, userId, id) => emitLive(orgId, { type: "notification", id }, userId),
+    storyShown: (userId, orgId, storyId) => storyDouble.shown(userId, orgId, storyId),
+  });
+
+  const auditDouble = createMockAudit({
+    person: () => {
+      const account = current();
+      return account ? { userId: account.userId } : undefined;
+    },
+    orgStanding,
+    chiefOf: (userId, orgId) =>
+      (orgRoles.get(userId)?.find((org) => org.organizationId === orgId)?.publications ?? [])
+        .filter((publication) => (publication.roles as readonly string[]).includes("chief_editor"))
+        .map((publication) => publication.publicationId),
+    gate: (operation) => gate(operation),
+    signedOut: () => signedOutAnswer(),
   });
 
   const storyDouble = createMockStories({
@@ -1043,6 +1064,7 @@ export function createMockSessionEnvironment(
     account,
     security,
     team,
+    audit: auditDouble.audit,
     stories: storyDouble.stories,
     media: storyDouble.media,
     comments: storyDouble.comments,

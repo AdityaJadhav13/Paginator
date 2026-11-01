@@ -1,6 +1,6 @@
 /**
  * An organisation's home, /org/:orgId: where sign-in lands. It says the person's role here, their roles on each of
- * its publications (from /me), and links to what is built for them: Team, if they may see it, and their account's
+ * its publications (from /me), and links to what is built for them: Team and the audit log, if they may see them, and their account's
  * security. The newsroom screens come with later PRs (plan §10), so this page says they are still being built.
  */
 import { Link, useParams } from "react-router";
@@ -61,6 +61,11 @@ export function OrgHome() {
         {!blocked && may(org, "members.view") && (
           <li>
             <Link to={paths.orgTeam(org.org.id)}>{t("glossary.team")}</Link>
+          </li>
+        )}
+        {!blocked && may(org, "audit.view") && (
+          <li>
+            <Link to={paths.orgAudit(org.org.id)}>{t("nav.audit")}</Link>
           </li>
         )}
         <li>

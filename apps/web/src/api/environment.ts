@@ -4,6 +4,7 @@
  */
 import type { ServiceEnvironment } from "../services/index.ts";
 import { createApiAccountService } from "./account-service.ts";
+import { createApiAuditService } from "./audit-service.ts";
 import { createApiContactService } from "./contact-service.ts";
 import { createApiClient, type ApiClientOptions } from "./client.ts";
 import { createApiCommentService } from "./comment-service.ts";
@@ -56,6 +57,7 @@ export function createApiEnvironment(
     account: createApiAccountService(client),
     security: createApiSecurityService(client),
     team: createApiTeamService(client),
+    audit: createApiAuditService(client),
     stories: createApiStoryService(client),
     contact: createApiContactService(client),
     media: createApiMediaService(client, { ...(options.fetch ? { fetch: options.fetch } : {}), onSignedOut: signedOut }),
