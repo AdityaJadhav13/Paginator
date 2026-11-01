@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { screen, within } from "../../src/test/render.tsx";
 import { text } from "../../src/features/public/content.ts";
-import { LANGUAGES, renderPublic } from "./renderPublic.tsx";
+import { LANGUAGES, contactAnswered, renderPublic } from "./renderPublic.tsx";
 
 const FORBIDDEN_CLAIMS = [
   "SOC 2",
@@ -20,9 +20,11 @@ const FORBIDDEN_CLAIMS = [
   "end-to-end encrypted",
 ];
 
-async function securityMain(language: "en" | "mr" = "en") {
-  const { container } = renderPublic("/security", "signed-out", language);
+async function securityMain(language: "en" | "mr" = "en", connection: "connected" | "notConnected" = "connected") {
+  const { container, environment } = renderPublic("/security", "signed-out", language);
+  environment.contactController.setConnection(connection);
   await screen.findByRole("heading", { level: 1, name: text("security-title", language) });
+  await contactAnswered(environment);
   return within(container).getByRole("main");
 }
 
@@ -61,10 +63,21 @@ describe("/security", () => {
     expect(main).not.toHaveTextContent(/data (is )?stored in India/i);
   });
 
-  it("points a security report to the contact form, intent preset", async () => {
-    const main = await securityMain();
-    expect(within(main).getByRole("link", { name: "Open the contact form" })).toHaveAttribute("href", "/contact?intent=other");
-  });
+  for (const language of LANGUAGES) {
+    it(`points a security report to the contact form, intent preset, in ${language}`, async () => {
+      const main = await securityMain(language);
+      expect(within(main).getByRole("heading", { level: 2, name: text("security-report-title", language) })).toBeInTheDocument();
+      expect(within(main).getByRole("link", { name: text("cta-report", language) })).toHaveAttribute("href", "/contact?intent=other");
+    });
+
+    it(`says nothing of reporting through a form that is not connected, in ${language}`, async () => {
+      const main = await securityMain(language, "notConnected");
+      expect(main).toHaveTextContent(text("security-contact-off", language));
+      expect(main).not.toHaveTextContent(text("security-report-title", language));
+      expect(main).not.toHaveTextContent(text("security-report-body", language));
+      expect(within(main).queryByRole("link", { name: text("cta-report", language) })).toBeNull();
+    });
+  }
 
   it("shows no security-theatre imagery", async () => {
     const main = await securityMain();

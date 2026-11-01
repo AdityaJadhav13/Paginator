@@ -6,9 +6,13 @@
  * does (the browser's remembered choice).
  */
 import { BrowserRouter } from "react-router";
-import { render } from "../../src/test/render.tsx";
+import { act, render } from "../../src/test/render.tsx";
 import { AppRoutes as Ui004Routes } from "../../src/root/AppRoot.tsx";
-import { createMockApplicationEnvironment, type MockSessionPreset } from "../../src/mocks/index.ts";
+import {
+  createMockApplicationEnvironment,
+  type MockApplicationEnvironment,
+  type MockSessionPreset,
+} from "../../src/mocks/index.ts";
 import { LANGUAGE_STORAGE_KEY } from "../../src/i18n/index.ts";
 import { text, type PublicLanguage } from "../../src/features/public/content.ts";
 
@@ -43,4 +47,14 @@ export function renderPublic(path: string, preset?: MockSessionPreset, language:
       </BrowserRouter>,
     ),
   };
+}
+
+/**
+ * Waits until the rendered page has the contact form's answer (GET /api/v1/contact; the test double answers on a
+ * later turn): the page asked first, so its answer is in once this second question's is.
+ */
+export async function contactAnswered(environment: MockApplicationEnvironment): Promise<void> {
+  await act(async () => {
+    await environment.contact.connection();
+  });
 }

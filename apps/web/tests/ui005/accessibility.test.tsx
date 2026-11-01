@@ -12,7 +12,7 @@ import axe from "axe-core";
 import userEvent from "@testing-library/user-event";
 import { screen, within } from "../../src/test/render.tsx";
 import { text } from "../../src/features/public/content.ts";
-import { LANGUAGES, PUBLIC_PAGES, PUBLIC_ROUTES, renderPublic } from "./renderPublic.tsx";
+import { LANGUAGES, PUBLIC_PAGES, PUBLIC_ROUTES, contactAnswered, renderPublic } from "./renderPublic.tsx";
 
 async function violations(container: HTMLElement) {
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
@@ -24,20 +24,22 @@ describe("axe — every public page, both languages", () => {
     for (const { path, headingId } of PUBLIC_PAGES) {
       for (const preset of ["signed-out", undefined] as const) {
         it(`"${path}" in ${language} (${preset ?? "signed in"}) has zero violations`, async () => {
-          const { container } = renderPublic(path, preset, language);
+          const { container, environment } = renderPublic(path, preset, language);
           await screen.findByRole("heading", { level: 1, name: text(headingId, language) });
+          await contactAnswered(environment);
           expect(await violations(container)).toEqual([]);
         });
       }
+
+      it(`"${path}" in ${language} has zero violations when the contact form is not connected`, async () => {
+        const { container, environment } = renderPublic(path, "signed-out", language);
+        environment.contactController.setConnection("notConnected");
+        await screen.findByRole("heading", { level: 1, name: text(headingId, language) });
+        await contactAnswered(environment);
+        expect(await violations(container)).toEqual([]);
+      });
     }
   }
-
-  it("/contact has zero violations when the form is not connected", async () => {
-    const { container, environment } = renderPublic("/contact", "signed-out", "mr");
-    environment.contactController.setConnection("notConnected");
-    await screen.findByText(text("contact-off-body", "mr"));
-    expect(await violations(container)).toEqual([]);
-  });
 
   for (const outcome of ["sent", "unavailable", "errors"] as const) {
     it(`/contact has zero violations when ${outcome}`, async () => {

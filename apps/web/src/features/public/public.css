@@ -343,6 +343,11 @@
   gap: var(--pg-space-5);
 }
 
+/* A hero whose only action is hidden (the contact form cannot send) keeps no empty row's space */
+.pg-public__actions:empty {
+  display: none;
+}
+
 .pg-public__actions a:not(.pg-public__cta) {
   color: var(--pg-color-action);
   font-size: var(--pg-font-size-300);

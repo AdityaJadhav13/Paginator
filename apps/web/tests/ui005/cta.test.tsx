@@ -1,12 +1,13 @@
 /**
  * The primary call to action (03 §4.1): Book a demo, to /contact?intent=demo (on /pricing first "Talk to us about a
- * pilot", to /contact?intent=pilot); "Open your workspace" for a signed-in person with a workspace. And the links a
- * public page may have.
+ * pilot", to /contact?intent=pilot), only once the API says the contact form is connected; "Open your workspace" for
+ * a signed-in person with a workspace. And the links a public page may have.
  */
-import { describe, it, expect } from "vitest";
-import { screen, within } from "../../src/test/render.tsx";
+import { describe, it, expect, vi } from "vitest";
+import { fireEvent, screen, within } from "../../src/test/render.tsx";
 import { text } from "../../src/features/public/content.ts";
-import { LANGUAGES, PUBLIC_PAGES, PUBLIC_ROUTES, renderPublic } from "./renderPublic.tsx";
+import { CATALOGUES } from "../../src/i18n/index.ts";
+import { LANGUAGES, PUBLIC_PAGES, PUBLIC_ROUTES, contactAnswered, renderPublic } from "./renderPublic.tsx";
 
 const SIGNED_IN_DESTINATION = "/org/org-demo-sahyadri";
 
@@ -22,12 +23,13 @@ const EXPECTED: Record<string, Array<[string, string]>> = {
   "/contact": [],
 };
 
-describe("Primary call to action, signed out", () => {
+describe("Primary call to action, signed out, once the contact form is connected", () => {
   for (const language of LANGUAGES) {
     for (const { path, headingId } of PUBLIC_PAGES) {
       it(`"${path}" in ${language}: at the top and in the closing band, as a link`, async () => {
-        const { container } = renderPublic(path, "signed-out", language);
+        const { container, environment } = renderPublic(path, "signed-out", language);
         await screen.findByRole("heading", { level: 1, name: text(headingId, language) });
+        await contactAnswered(environment);
         const links = ctaLinks(container);
         expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual(
           (EXPECTED[path] ?? []).map(([id, href]) => [text(id, language), href]),
@@ -35,16 +37,64 @@ describe("Primary call to action, signed out", () => {
         for (const link of links) expect(link.tagName).toBe("A");
       });
     }
+
+    it(`is also in the header in ${language}: Sign in and Book a demo`, async () => {
+      const { container, environment } = renderPublic("/", "signed-out", language);
+      await screen.findByRole("heading", { level: 1, name: text("home-hero-title", language) });
+      await contactAnswered(environment);
+      const header = container.querySelector("header") as HTMLElement;
+      expect(within(header).getByRole("link", { name: CATALOGUES[language]["public.signIn"] })).toHaveAttribute("href", "/login");
+      expect(within(header).getByRole("link", { name: CATALOGUES[language]["public.bookDemo"] })).toHaveAttribute(
+        "href",
+        "/contact?intent=demo",
+      );
+      expect(within(header).queryByRole("link", { name: /sign up/i })).toBeNull();
+    });
   }
 
-  it("is also in the header: Sign in and Book a demo", async () => {
-    const { container } = renderPublic("/", "signed-out");
+  it("is there at once on the next page: the answer is asked once per page load and kept", async () => {
+    const { container, environment } = renderPublic("/", "signed-out");
     await screen.findByRole("heading", { level: 1, name: PUBLIC_ROUTES[0].heading });
-    const header = container.querySelector("header") as HTMLElement;
-    expect(within(header).getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
-    expect(within(header).getByRole("link", { name: "Book a demo" })).toHaveAttribute("href", "/contact?intent=demo");
-    expect(within(header).queryByRole("link", { name: /sign up/i })).toBeNull();
+    await contactAnswered(environment);
+    const asked = vi.spyOn(environment.contact, "connection");
+    fireEvent.click(within(container.querySelector("header") as HTMLElement).getByRole("link", { name: "Pricing" }));
+    // checked before any promise settles
+    expect(screen.getByRole("heading", { level: 1, name: text("pricing-title", "en") })).toBeInTheDocument();
+    expect(ctaLinks(container).map((link) => link.getAttribute("href"))).toEqual(["/contact?intent=pilot", "/contact?intent=demo"]);
+    expect(asked).not.toHaveBeenCalled();
   });
+});
+
+describe("No call to action to a form that cannot send", () => {
+  /** Every link to the form with an intent: Book a demo, Talk to us about a pilot, and how to report a problem. */
+  const formLinks = (container: HTMLElement) => Array.from(container.querySelectorAll("a[href^='/contact?']"));
+
+  for (const language of LANGUAGES) {
+    for (const connection of ["notConnected", "unknown"] as const) {
+      it(`${connection}, in ${language}: none in the header or on any page; Sign in stays`, async () => {
+        for (const { path, headingId } of PUBLIC_PAGES) {
+          const view = renderPublic(path, "signed-out", language);
+          view.environment.contactController.setConnection(connection);
+          await screen.findByRole("heading", { level: 1, name: text(headingId, language) });
+          await contactAnswered(view.environment);
+          expect(formLinks(view.container), path).toEqual([]);
+          const header = view.container.querySelector("header") as HTMLElement;
+          expect(within(header).getByRole("link", { name: CATALOGUES[language]["public.signIn"] })).toBeInTheDocument();
+          view.unmount();
+        }
+      });
+    }
+
+    it(`none while the API has not answered yet, in ${language}`, () => {
+      for (const { path, headingId } of PUBLIC_PAGES) {
+        // checked at once: the test double answers on a later turn
+        const view = renderPublic(path, "signed-out", language);
+        expect(screen.getByRole("heading", { level: 1, name: text(headingId, language) })).toBeInTheDocument();
+        expect(formLinks(view.container), path).toEqual([]);
+        view.unmount();
+      }
+    });
+  }
 });
 
 describe("Primary call to action, signed in", () => {

@@ -11,11 +11,13 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { screen, within } from "../../src/test/render.tsx";
-import { PUBLIC_ROUTES, renderPublic } from "./renderPublic.tsx";
+import { PUBLIC_ROUTES, contactAnswered, renderPublic } from "./renderPublic.tsx";
 
+/** The page's main once the contact form answered (connected): every section is there. */
 async function mainFor(path: string, heading: string) {
-  const { container } = renderPublic(path);
+  const { container, environment } = renderPublic(path);
   await screen.findByRole("heading", { level: 1, name: heading });
+  await contactAnswered(environment);
   return within(container).getByRole("main");
 }
 

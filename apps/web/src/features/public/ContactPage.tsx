@@ -25,7 +25,7 @@ import { Button, Field, InlineMessage, RadioGroup, TextArea, TextInput } from ".
 import { ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { useI18n } from "../../i18n/index.ts";
 import { Section } from "./Section.tsx";
-import { useContact, useContactConnection } from "./contact-context.tsx";
+import { useContact, useContactConnection } from "../contact/contact-context.tsx";
 import { usePublicText } from "./usePublicText.ts";
 
 type FieldName = "name" | "newspaper" | "city" | "phone" | "email" | "message";
@@ -182,32 +182,51 @@ export function ContactPage() {
   } as const;
   const notSentStatus = status in notSent ? (status as keyof typeof notSent) : null;
 
+  const intro = (
+    <section className="pg-public__band">
+      <div className="pg-public__measure">
+        <h1 id={ROUTE_HEADING_ID} tabIndex={-1} className="pg-public__page-title">
+          {t("contact-title")}
+        </h1>
+        <p className="pg-public__lead">{t("contact-lead")}</p>
+        {connection === "connected" && <p className="pg-public__body">{t("contact-connected")}</p>}
+      </div>
+    </section>
+  );
+
+  // no form, so no "Tell us about your paper" heading over an empty section: only what is true now
+  if (connection !== "connected") {
+    return (
+      <div className="pg-public">
+        {intro}
+        <section className="pg-public__band">
+          <div className="pg-public__measure">
+            <div className="pg-public__prose">
+              {connection === "checking" ? (
+                <p className="pg-public__body" role="status">
+                  {t("contact-checking")}
+                </p>
+              ) : (
+                <InlineMessage
+                  variant={connection === "unknown" ? "error" : "info"}
+                  heading={t(connection === "unknown" ? "contact-unknown-heading" : "contact-unavailable-heading")}
+                  iconLabel={i18n.t(connection === "unknown" ? "message.error" : "message.info")}
+                >
+                  {t(connection === "unknown" ? "contact-unknown-body" : "contact-off-body")}
+                </InlineMessage>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="pg-public">
-      <section className="pg-public__band">
-        <div className="pg-public__measure">
-          <h1 id={ROUTE_HEADING_ID} tabIndex={-1} className="pg-public__page-title">
-            {t("contact-title")}
-          </h1>
-          <p className="pg-public__lead">{t("contact-lead")}</p>
-          {connection === "connected" && <p className="pg-public__body">{t("contact-connected")}</p>}
-        </div>
-      </section>
-
+      {intro}
       <Section label={t("contact-form-standing")} title={t("contact-form-title")}>
-        {connection === "checking" ? (
-          <p className="pg-public__body" role="status">
-            {t("contact-checking")}
-          </p>
-        ) : connection !== "connected" ? (
-          <InlineMessage
-            variant={connection === "unknown" ? "error" : "info"}
-            heading={t(connection === "unknown" ? "contact-unknown-heading" : "contact-unavailable-heading")}
-            iconLabel={i18n.t(connection === "unknown" ? "message.error" : "message.info")}
-          >
-            {t(connection === "unknown" ? "contact-unknown-body" : "contact-off-body")}
-          </InlineMessage>
-        ) : status === "sent" ? (
+        {status === "sent" ? (
           <div ref={outcomeRef} tabIndex={-1} className="pg-public__outcome">
             <InlineMessage
               variant="success"

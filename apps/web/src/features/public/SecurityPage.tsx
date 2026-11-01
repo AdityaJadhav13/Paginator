@@ -8,7 +8,7 @@ import { Section } from "./Section.tsx";
 import { PrimaryCta, contactPath } from "./PrimaryCta.tsx";
 import { ClosingBand } from "./ClosingBand.tsx";
 import { usePublicText } from "./usePublicText.ts";
-import { useContactConnection } from "./contact-context.tsx";
+import { useContactConnection } from "../contact/contact-context.tsx";
 
 const TRUE_TODAY = [
   "security-separate",
@@ -84,12 +84,15 @@ export function SecurityPage() {
         <p className="pg-public__body">{t("security-nonleak-body")}</p>
       </Section>
 
-      <Section label={t("security-report-standing")} title={t("security-report-title")} tone="subtle">
-        <p className="pg-public__body">{t("security-report-body")}</p>
-        <p className="pg-public__actions">
-          <Link to={contactPath("other")}>{t("cta-report")}</Link>
-        </p>
-      </Section>
+      {/* the way to report is the contact form: only while it sends, never a link to a form that cannot */}
+      {connection === "connected" && (
+        <Section label={t("security-report-standing")} title={t("security-report-title")} tone="subtle">
+          <p className="pg-public__body">{t("security-report-body")}</p>
+          <p className="pg-public__actions">
+            <Link to={contactPath("other")}>{t("cta-report")}</Link>
+          </p>
+        </Section>
+      )}
 
       <ClosingBand secondary="pricing" />
     </div>

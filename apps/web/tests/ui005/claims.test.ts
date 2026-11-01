@@ -19,7 +19,7 @@ import { CONTENT_RECORDS, text, type ContentRecord, type PublicLanguage } from "
 import { EVIDENCE } from "../../src/features/public/evidence.ts";
 import { stageIds, stateLabelIds, WORKFLOW_STAGES } from "../../src/features/public/workflow.ts";
 import { CATALOGUES } from "../../src/i18n/index.ts";
-import { LANGUAGES, PUBLIC_PAGES, renderPublic } from "./renderPublic.tsx";
+import { LANGUAGES, PUBLIC_PAGES, contactAnswered, renderPublic } from "./renderPublic.tsx";
 
 const REPO = resolve(__dirname, "../../../..");
 const DEVANAGARI = /[ऀ-ॿ]/;
@@ -383,6 +383,8 @@ async function shownEverywhere(language: PublicLanguage): Promise<Set<string>> {
     for (const preset of ["signed-out", undefined] as const) {
       const view = renderPublic(path, preset, language);
       await screen.findByRole("heading", { level: 1, name: text(headingId, language) });
+      // connected: the calls to action, the form and how to report a problem are shown
+      await contactAnswered(view.environment);
       if (!preset && path !== "/contact") await screen.findAllByText(text("cta-open-workspace", language));
       harvest(view.container);
       view.unmount();

@@ -31,7 +31,7 @@ light theme, serif editorial identity and claims governance (built 2026-10-24, `
 | Nav links | Features · Pricing · Security · Contact | Navigate | Collapses under ☰ on phones. "How it works" and "Marathi" come with their pages (doc 11, L2-232) |
 | Language | English / मराठी | Switches the site's language | Remembered by the browser |
 | Sign in | Sign in | `/login` | When signed out |
-| Primary CTA | Book a demo | `/contact?intent=demo` | When signed in: the person's name, "Open workspace" and Sign out |
+| Primary CTA | Book a demo | `/contact?intent=demo` | Only once the contact form is connected (see below). When signed in: the person's name, "Open workspace" and Sign out |
 
 **Footer** (as built): the page links and Sign in; the notice; "Hosting in India is planned; no paper's data is hosted
 yet."; the copyright line. **Not yet:** Legal (Privacy, Terms, Grievance officer, as required by DPDP), Status, and
@@ -47,10 +47,16 @@ L2-230, L2-237).
 | `/how-it-works` ★ | A night at a newspaper with Pageinator, step by step, with screenshots | Book a demo |
 | `/marathi` ★ | Marathi typography: conjuncts, headline line-breaking rules, digits, legacy-font conversion. Written in Marathi with an English summary | Book a demo |
 | `/pricing` | Plans once decided (OP09). Until then: "Pilot pricing by conversation": "Pageinator is not for sale yet. Pricing for a pilot is agreed in conversation"; plans after the pilot; what a pilot would include; what is not on offer. No price, figure or tier | Talk to us about a pilot (`/contact?intent=pilot`) |
-| `/security` | What is true today (tenancy walls, the audit log, two-step sign-in, hashed passwords, cookies, the Origin guard, the contact form keeps nothing); planned (hosting in India, backups and monitoring, an unalterable archive, the legal pages); not true today (denials); another paper's records stay invisible; how to report a problem | Book a demo |
-| `/contact` | The page asks `GET /api/v1/contact` first. Connected: "Messages sent here go by email to the people who build Pageinator", and the form: what you want (a demo, a pilot, a press partner, something else; preset by `?intent=`), name, newspaper, city, phone/WhatsApp, email, message, and the privacy line (emailed to the team and kept in their mailbox; the website keeps no copy; the server's log notes the connection's address). Not connected: "The contact form is not connected yet", and no form. `/security` says the form sends only when it is connected | Send |
+| `/security` | What is true today (tenancy walls, the audit log, two-step sign-in, hashed passwords, cookies, the Origin guard, the contact form keeps nothing); planned (hosting in India, backups and monitoring, an unalterable archive, the legal pages); not true today (denials); another paper's records stay invisible; how to report a problem (only while the contact form is connected) | Book a demo |
+| `/contact` | The page asks `GET /api/v1/contact` first. Connected: "Messages sent here go by email to the people who build Pageinator", and the form: what you want (a demo, a pilot, a press partner, something else; preset by `?intent=`), name, newspaper, city, phone/WhatsApp, email, message, and the privacy line (emailed to the team and kept in their mailbox; the website keeps no copy; the server's log notes the connection's address). Not connected: "The contact form is not connected yet", and no form and no "Tell us about your paper" heading. `/security` says the form sends only when it is connected | Send |
 | `/about` ★ | Who builds it, the mission | — |
 | `/legal/*` ★ | Privacy notice (DPDP), Terms, Grievance officer contact | — |
+
+**No call to action to a form that cannot send.** The site asks `GET /api/v1/contact` once per page load (the first
+page that needs it asks; an unanswered question is asked again by the next one). Every "Book a demo" and "Talk to us
+about a pilot" (header, hero, closing band, `/pricing`) appears only once the answer is "connected": while it is asked,
+when the form is not connected, or when the API does not answer, there is none, and nothing takes its place.
+"Open your workspace", for a signed-in person, does not depend on it.
 
 **Workflow states today** (`workflow.ts`): Plan, Generate, Edit, Check and Print are "Working in the Desk"; Content is
 "Working in the Desk" (typed, pasted, Word import) and "Built for the pilot" (filing from a phone in the newsroom app);

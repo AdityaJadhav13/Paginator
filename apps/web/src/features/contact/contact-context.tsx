@@ -1,6 +1,10 @@
 /**
- * The contact form's service (src/services/contact-service.ts): the API in the app, the test double in tests. Only
- * its type comes from the services layer; the public pages never reach the API any other way.
+ * The contact form's service (src/services/contact-service.ts): the API in the app, the test double in tests. The
+ * public pages and the public shell's header read it here, never the API directly.
+ *
+ * `useContactConnection` is the one answer to "does the form send?" for the whole page: asked once per service (one
+ * per page load) and kept for the session; only "unknown" (no answer) is asked again by the next component that
+ * needs it. Every "Book a demo" depends on it: shown only when connected, never while checking.
  */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { ContactConnection, ContactService } from "../../services/index.ts";
@@ -23,11 +27,13 @@ export function useContact(): ContactService {
 
 /** One question to the API per service and page load; "unknown" (no answer) is asked again next time. */
 const ASKED = new WeakMap<ContactService, Promise<ContactConnection>>();
+/** The answer once it came, so a page opened after it starts with it: no button that appears a moment later. */
+const ANSWERED = new WeakMap<ContactService, ContactConnection>();
 
 /** Whether the form is connected: "checking" until the API answers. */
 export function useContactConnection(): ContactConnection | "checking" {
   const contact = useContact();
-  const [connection, setConnection] = useState<ContactConnection | "checking">("checking");
+  const [connection, setConnection] = useState<ContactConnection | "checking">(() => ANSWERED.get(contact) ?? "checking");
   useEffect(() => {
     let current = true;
     let asking = ASKED.get(contact);
@@ -37,6 +43,7 @@ export function useContactConnection(): ContactConnection | "checking" {
     }
     void asking.then((answer) => {
       if (answer === "unknown") ASKED.delete(contact);
+      else ANSWERED.set(contact, answer);
       if (current) setConnection(answer);
     });
     return () => {

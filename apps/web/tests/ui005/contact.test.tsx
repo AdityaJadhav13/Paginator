@@ -278,7 +278,7 @@ describe("Whether the form is connected", () => {
   });
 
   for (const language of ["en", "mr"] as const) {
-    it(`says up front that it is not connected, with no form, in ${language}`, async () => {
+    it(`says up front that it is not connected, with no form and no heading over one, in ${language}`, async () => {
       const view = renderPublic("/contact", "signed-out", language);
       view.environment.contactController.setConnection("notConnected");
       await screen.findByRole("heading", { level: 1, name: text("contact-title", language) });
@@ -286,6 +286,8 @@ describe("Whether the form is connected", () => {
       expect(await within(main).findByText(text("contact-unavailable-heading", language))).toBeInTheDocument();
       expect(main).toHaveTextContent(text("contact-off-body", language));
       expect(main.querySelector("form, input, textarea, button")).toBeNull();
+      expect(main.querySelector("h2")).toBeNull();
+      expect(main).not.toHaveTextContent(text("contact-form-title", language));
       expect(main).not.toHaveTextContent(text("contact-connected", language));
       expect(main.querySelector("a[href^='mailto:']")).toBeNull();
     });

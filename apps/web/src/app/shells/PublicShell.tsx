@@ -3,8 +3,8 @@
  *
  * The public site is in English and Marathi: the language switch in the header chooses, the browser remembers the
  * choice (src/i18n), and the shell's element carries the page's `lang`. Its header: the wordmark, the page links
- * (collapsed under ☰ on a phone), the language switch, Sign in and Book a demo when signed out, or the signed-in
- * person's controls. Its footer: the page links, the notice, the hosting line (planned) and the copyright line. The
+ * (collapsed under ☰ on a phone), the language switch, Sign in and Book a demo when signed out (Book a demo only once
+ * the API says the contact form is connected), or the signed-in person's controls. Its footer: the page links, the notice, the hosting line (planned) and the copyright line. The
  * legal pages (privacy notice, terms, grievance officer) do not exist yet, so the footer does not link to them
  * (docs/product/11-fix-before-launch.md).
  *
@@ -21,6 +21,7 @@ import { MAIN_LANDMARK_ID, paths } from "../routes.ts";
 import { SignedInSessionControls } from "../../features/auth/SessionStatus.tsx";
 import { useSession } from "../../features/auth/SessionProvider.tsx";
 import { isAuthPath } from "../../features/auth/return-to.ts";
+import { useContactConnection } from "../../features/contact/contact-context.tsx";
 import { LanguageSwitch, useI18n, type PlainKey } from "../../i18n/index.ts";
 
 const PAGES: readonly { to: string; label: PlainKey }[] = [
@@ -73,6 +74,8 @@ function PublicChrome() {
   const { state } = useSession();
   const { language, t } = useI18n();
   const signedIn = state.status === "ready";
+  // Book a demo only when the contact form sends (never while that is checked): no button to a dead end
+  const connection = useContactConnection();
 
   return (
     <div className="pg-shell pg-shell--public pg-shell--site" lang={language}>
@@ -102,12 +105,14 @@ function PublicChrome() {
                   <Link to={paths.login()} className="pg-site-header__sign-in">
                     {t("public.signIn")}
                   </Link>
-                  <Link
-                    to={`${paths.contact()}?intent=demo`}
-                    className="pg-button pg-button--primary pg-button--sm pg-site-header__cta"
-                  >
-                    {t("public.bookDemo")}
-                  </Link>
+                  {connection === "connected" && (
+                    <Link
+                      to={`${paths.contact()}?intent=demo`}
+                      className="pg-button pg-button--primary pg-button--sm pg-site-header__cta"
+                    >
+                      {t("public.bookDemo")}
+                    </Link>
+                  )}
                 </>
               )}
             </div>
