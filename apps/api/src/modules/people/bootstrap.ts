@@ -8,6 +8,7 @@
 // No one-time secret guards it: running it needs a shell on the server and the database settings, which already give
 // every power it uses (plan §4.3, changed 2026-10-22).
 import { randomBytes } from "node:crypto";
+import { recordAudit } from "../../db/audit.ts";
 import type { Database } from "../../db/pools.ts";
 import type { Auth } from "../identity/auth.ts";
 
@@ -75,19 +76,15 @@ export async function bootstrapOrg(
       })
       .returning("id")
       .executeTakeFirstOrThrow();
-    await tx
-      .insertInto("app.audit_event")
-      .values({
-        org_id: organization.id,
-        publication_id: id,
-        actor_kind: "system",
-        action: "org.bootstrap",
-        target_type: "organization",
-        target_id: organization.id,
-        data: JSON.stringify({ owner: ownerId, publication: id }),
-        request_id: requestId,
-      })
-      .execute();
+    // the system acts (a script on the server): no person, no client
+    await recordAudit(tx, tenant, {
+      action: "org.bootstrap",
+      actorKind: "system",
+      targetType: "organization",
+      targetId: organization.id,
+      publicationId: id,
+      data: { owner: ownerId, publication: id },
+    });
     return id;
   });
   return { orgId: organization.id, ownerId, publicationId };

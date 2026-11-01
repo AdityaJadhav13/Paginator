@@ -16,6 +16,7 @@ import { health, type Checks } from "./http/health.ts";
 import { requestSerializer } from "./http/log.ts";
 import { registerSecurity } from "./http/security.ts";
 import { registerAccess } from "./modules/access/access.ts";
+import { auditRoutes } from "./modules/audit/routes.ts";
 import type { Auth } from "./modules/identity/auth.ts";
 import { registerIdentity } from "./modules/identity/plugin.ts";
 import { type Mailer, type Transport, openMailer, smtpTransport } from "./modules/notifications/mailer.ts";
@@ -145,6 +146,7 @@ export async function buildApp(deps: AppDeps) {
     await app.register(peopleRoutes, { ...people, config });
     await app.register(storyRoutes, { database: people.database, notify: people.notify, mail: people.mail });
     await app.register(commentRoutes, { database: people.database, notify: people.notify });
+    await app.register(auditRoutes, { database: people.database });
     if (live) {
       await app.register(notificationRoutes, {
         database: people.database,

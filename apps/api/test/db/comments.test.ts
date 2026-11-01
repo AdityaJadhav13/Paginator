@@ -135,11 +135,12 @@ describe("comments", () => {
       [made.id],
     );
     expect(rows.map((row) => [row.action, row.actor_id])).toEqual([
+      ["comment.create", P("sub").id],
       ["comment.edit", P("sub").id],
       ["comment.resolve", P("reporter").id],
       ["comment.reopen", P("editor").id],
     ]);
-    expect(rows[0].data).toEqual({ story: s.id }); // ids only
+    expect(rows[1].data).toEqual({ story: s.id, parent: null }); // ids only
     const denied = await su.query(
       `select data->>'reason' as reason from app.audit_event
        where actor_id = $1 and action = 'access.denied' and data->>'route' = '/api/v1/orgs/:o/pubs/:p/comments/:c'`,

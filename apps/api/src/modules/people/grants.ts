@@ -7,9 +7,11 @@
 //     after the membership was made), and an invitation marked accepted with no membership at all (Better Auth's
 //     own undo after a failed membership write failed too). A membership is made again only when the person was
 //     never in the organisation's directory: one who was removed after accepting is never brought back.
+import type { AuditAction } from "@pageinator/contracts";
 import type { Database } from "../../db/pools.ts";
 import type { Invitation } from "../../db/identity.ts";
-import type { Tenant, Tx } from "../../db/tenant.ts";
+import { recordAudit } from "../../db/audit.ts";
+import type { Client, Tenant, Tx } from "../../db/tenant.ts";
 
 export type Person = { id: string; name: string; email: string };
 
@@ -20,8 +22,8 @@ export function displayName(name: string, email: string): string {
   return trimmed !== "" ? trimmed : [...(email.split("@")[0] || "person")].slice(0, 200).join("");
 }
 
-function tenantOf(orgId: string, userId: string, requestId: string): Tenant {
-  return { orgId, userId, pubIds: [], requestId };
+function tenantOf(orgId: string, userId: string, requestId: string, client?: Client): Tenant {
+  return { orgId, userId, pubIds: [], requestId, ...(client ? { client } : {}) };
 }
 
 /**
@@ -32,12 +34,13 @@ export async function applyInvitation(
   database: Database,
   invitation: Pick<Invitation, "id" | "orgId">,
   person: Person,
-  requestId: string,
+  who: { requestId: string; client?: Client },
   rejoin: boolean,
-  /** More to write in the same transaction (the accept's notice to the inviter): all of it is saved, or none. */
-  also?: (tx: Tx, tenant: Tenant) => Promise<void>,
+  /** More to write in the same transaction (the accept's notice and event, a repair's event), given the publications
+   * the invitation reaches: all of it is saved, or none. */
+  also?: (tx: Tx, tenant: Tenant, publications: string[]) => Promise<void>,
 ): Promise<string[]> {
-  const tenant = tenantOf(invitation.orgId, person.id, requestId);
+  const tenant = tenantOf(invitation.orgId, person.id, who.requestId, who.client);
   return database.withTenant(tenant, async (tx) => {
     const name = displayName(person.name, person.email);
     const row = { org_id: invitation.orgId, user_id: person.id, display_name: name, email: person.email };
@@ -88,15 +91,21 @@ export async function applyInvitation(
       .select("publication_id")
       .where("invitation_id", "=", invitation.id)
       .execute();
-    if (also) await also(tx, tenant);
-    return all.map((grant) => grant.publication_id);
+    const publications = all.map((grant) => grant.publication_id);
+    if (also) await also(tx, tenant, publications);
+    return publications;
   });
 }
 
 /** Finishes every accepted invitation of this person that an accept left half done. */
-export async function repairInvitations(database: Database, person: Person, requestId: string): Promise<void> {
+export async function repairInvitations(
+  database: Database,
+  person: Person,
+  requestId: string,
+  client?: Client,
+): Promise<void> {
   for (const invitation of await database.identity.acceptedInvitations(person.email)) {
-    const tenant = tenantOf(invitation.orgId, person.id, requestId);
+    const tenant = tenantOf(invitation.orgId, person.id, requestId, client);
     const member = await database.identity.membership(invitation.orgId, person.id);
     if (!member) {
       const known = await database.withTenant(tenant, (tx) =>
@@ -119,32 +128,19 @@ export async function repairInvitations(database: Database, person: Person, requ
       tx.selectFrom("app.person").select("status").where("user_id", "=", person.id).executeTakeFirst(),
     );
     if (pending.length === 0 && directory) continue;
-    await applyInvitation(database, invitation, person, requestId, false);
-    await audit(database, tenant, "invitation.grants_repaired", invitation.id);
+    await applyInvitation(database, invitation, person, { requestId, ...(client ? { client } : {}) }, false, (tx, t) =>
+      recordAudit(tx, t, { action: "invitation.grants_repaired", targetType: "invitation", targetId: invitation.id }),
+    );
   }
 }
 
 export async function audit(
   database: Database,
   tenant: Tenant,
-  action: string,
+  action: AuditAction,
   targetId: string,
   data: Record<string, unknown> = {},
   targetType = "invitation",
 ): Promise<void> {
-  await database.withTenant(tenant, (tx) =>
-    tx
-      .insertInto("app.audit_event")
-      .values({
-        org_id: tenant.orgId,
-        actor_kind: "user",
-        actor_id: tenant.userId,
-        action,
-        target_type: targetType,
-        target_id: targetId,
-        data: JSON.stringify(data),
-        request_id: tenant.requestId,
-      })
-      .execute(),
-  );
+  await database.withTenant(tenant, (tx) => recordAudit(tx, tenant, { action, targetType, targetId, data }));
 }

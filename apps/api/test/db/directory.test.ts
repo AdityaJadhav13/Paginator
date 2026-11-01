@@ -19,10 +19,10 @@ beforeAll(async () => {
 async function asA(text: string, values: unknown[] = []) {
   await app.query("begin");
   try {
-    await app.query("select set_config('app.org_id', $1, true), set_config('app.user_id', $2, true)", [
-      ORG_A.id,
-      ORG_A.user,
-    ]);
+    await app.query(
+      "select set_config('app.org_id', $1, true), set_config('app.user_id', $2, true), set_config('app.pub_ids', $3, true)",
+      [ORG_A.id, ORG_A.user, `{${ORG_A.pubs.map((pub) => pub.id).join(",")}}`],
+    );
     return await app.query(text, values);
   } finally {
     await app.query("rollback");

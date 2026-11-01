@@ -30,6 +30,7 @@ import {
   setAssetVersion,
   uploadsLastHour,
 } from "../../db/media.ts";
+import { recordAudit } from "../../db/audit.ts";
 import type { Database } from "../../db/pools.ts";
 import { ApiError } from "../../http/errors.ts";
 import type { ObjectStore } from "../../storage/object-store.ts";
@@ -110,6 +111,14 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
             bytes: input.bytes,
             expiresSeconds: POST_SECONDS,
           });
+          // the size charged to the quota, never the file's name
+          await recordAudit(tx, access.tenant, {
+            action: "upload.presign",
+            targetType: "upload",
+            targetId: upload.id,
+            publicationId: pub,
+            data: { bytes: input.bytes },
+          });
           const post = await store.presignPost({
             key: upload.key,
             contentType: input.contentType,
@@ -160,7 +169,15 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
       const version = arrived.versionId;
       if (!version) throw new Error("The work bucket gave the upload no version: its versioning must be Enabled.");
       const refuse = async (message: string): Promise<never> => {
-        await database.withTenant(access.tenant, (tx) => rejectUpload(tx, pub, u));
+        await database.withTenant(access.tenant, async (tx) => {
+          if (!(await rejectUpload(tx, pub, u))) return;
+          await recordAudit(tx, access.tenant, {
+            action: "upload.reject",
+            targetType: "upload",
+            targetId: u,
+            publicationId: pub,
+          });
+        });
         await store.removeAll(upload.key).catch(() => undefined); // the lifecycle rule would, within two days
         throw new ApiError("not_a_picture", [{ field: "file", message }]);
       };
@@ -183,9 +200,25 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
           const locked = await findUpload(tx, pub, u, true);
           if (locked?.status === "completed" && locked.asset_id) return findAsset(tx, pub, locked.asset_id);
           if (locked?.status !== "presigned") throw new ApiError("not_a_picture");
+          const completed = (assetId: string, existing: boolean) =>
+            recordAudit(tx, access.tenant, {
+              action: "upload.complete",
+              targetType: "asset",
+              targetId: assetId,
+              publicationId: pub,
+              data: {
+                upload: u,
+                existing,
+                bytes: read.bytes,
+                mime: picked.mime,
+                widthPx: picked.width,
+                heightPx: picked.height,
+              },
+            });
           const same = await assetWithBytes(tx, pub, read.sha256);
           if (same) {
             await completeUpload(tx, pub, u, same.id);
+            await completed(same.id, true);
             return same;
           }
           const made = await createAsset(tx, access.tenant, pub, {
@@ -204,6 +237,7 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
           });
           await setAssetVersion(tx, pub, made.id, copied.versionId);
           await completeUpload(tx, pub, u, made.id);
+          await completed(made.id, false);
           return { ...made, version_id: copied.versionId };
         });
       let asset;

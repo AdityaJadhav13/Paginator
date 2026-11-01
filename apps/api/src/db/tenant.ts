@@ -20,7 +20,13 @@ export type Tenant = {
   pubIds: readonly string[];
   /** The request's id, recorded with audit events. */
   requestId: string;
+  /** The client's address and browser, recorded with audit events (none for a script or the system). */
+  client?: Client;
 };
+
+/** Who sent the request, as the audit log records it: the address Fastify gives (the proxy's client only behind a
+ * trusted proxy, PGN_TRUST_PROXY) and the User-Agent header, cut to 512 characters. */
+export type Client = { ip: string | null; userAgent: string | null };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;

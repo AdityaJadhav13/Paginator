@@ -9,13 +9,15 @@ import { randomBytes } from "node:crypto";
 import { BODY_FORMAT, bodyWords } from "@pageinator/desk-text";
 import { type StoryStatus } from "@pageinator/contracts";
 import { sql } from "kysely";
-import type { Tx } from "./tenant.ts";
+import { auditStory } from "./audit.ts";
+import type { Tenant, Tx } from "./tenant.ts";
 
 export const TEXT_KEYS = ["headline", "kicker", "deck", "byline", "body"] as const;
 export type TextKey = (typeof TEXT_KEYS)[number];
 export type Text = Record<TextKey, string>;
 
-export type Who = { orgId: string; userId: string };
+/** Who changes a story: the request's tenant (its person, request id and client go into the audit log). */
+export type Who = Tenant;
 
 /** A story row with its current revision and the names it shows. */
 export type StoryRow = {
@@ -120,7 +122,7 @@ export async function listStories(tx: Tx, f: ListFilter): Promise<StoryRow[]> {
 export async function lockStory(tx: Tx, publicationId: string, storyId: string) {
   return tx
     .selectFrom("app.story")
-    .select(["status", "version", "current_rev", "reporter_id", "assignee_id", "edition_id", "page_pin"])
+    .select(["status", "version", "current_rev", "reporter_id", "assignee_id", "due_at", "edition_id", "page_pin"])
     .where("publication_id", "=", publicationId)
     .where("id", "=", storyId)
     .where("deleted_at", "is", null)
@@ -227,6 +229,14 @@ export async function createStory(tx: Tx, who: Who, publicationId: string, story
   }
   if (!made) throw new Error("No free Desk article id after 5 tries.");
   await openRevision(tx, who, publicationId, made.id, 1, story);
+  await auditStory(tx, who, publicationId, made.id, "story.create", {
+    rev: 1,
+    origin: story.origin,
+    edition: story.editionId,
+    section: story.sectionId,
+    priority: story.priority,
+    pagePin: story.pagePin,
+  });
   return made.id;
 }
 
@@ -243,6 +253,8 @@ export async function saveChange(
   if (text) {
     await closeRevision(tx, publicationId, storyId);
     await openRevision(tx, who, publicationId, storyId, currentRev + 1, text);
+    // one event per saved revision: its number, never its text
+    await auditStory(tx, who, publicationId, storyId, "story.revise", { rev: currentRev + 1 });
   }
   await touch(tx, who, publicationId, storyId, { ...fields, ...(text ? { current_rev: currentRev + 1 } : {}) });
 }
@@ -287,6 +299,7 @@ export async function changeStatus(
     })
     .execute();
   await closeRevision(tx, publicationId, storyId);
+  await auditStory(tx, who, publicationId, storyId, "story.status_change", { from, to, comment: commentId });
   if (bump) await touch(tx, who, publicationId, storyId, { status: to });
   else
     await tx
@@ -322,27 +335,14 @@ export async function restoreTarget(tx: Tx, publicationId: string, storyId: stri
 }
 
 /** Soft-deletes the story and records it in the audit log, in the caller's transaction. */
-export async function deleteStory(tx: Tx, who: Who, publicationId: string, storyId: string, requestId: string) {
+export async function deleteStory(tx: Tx, who: Who, publicationId: string, storyId: string) {
   await tx
     .updateTable("app.story")
     .set({ deleted_at: sql`now()`, updated_at: sql`now()`, updated_by: who.userId, version: sql`version + 1` })
     .where("publication_id", "=", publicationId)
     .where("id", "=", storyId)
     .execute();
-  await tx
-    .insertInto("app.audit_event")
-    .values({
-      org_id: who.orgId,
-      publication_id: publicationId,
-      actor_kind: "user",
-      actor_id: who.userId,
-      action: "story.delete",
-      target_type: "story",
-      target_id: storyId,
-      data: JSON.stringify({}),
-      request_id: requestId,
-    })
-    .execute();
+  await auditStory(tx, who, publicationId, storyId, "story.delete");
 }
 
 export async function publicationOf(tx: Tx, publicationId: string) {
@@ -410,7 +410,37 @@ export async function revision(tx: Tx, publicationId: string, storyId: string, r
   return rows[0] ?? null;
 }
 
-/** Gives the story its one photo (or replaces it), with its caption and credit: a change of the story. */
+/** The story's photo as it is, locked until the transaction ends. */
+async function photoNow(tx: Tx, publicationId: string, storyId: string) {
+  return tx
+    .selectFrom("app.story_photo")
+    .select(["asset_id", "caption", "credit"])
+    .where("publication_id", "=", publicationId)
+    .where("story_id", "=", storyId)
+    .forUpdate()
+    .executeTakeFirst();
+}
+
+/** Audits the caption and credit that changed (that they changed, never what they say). */
+async function auditWords(
+  tx: Tx,
+  who: Who,
+  publicationId: string,
+  storyId: string,
+  assetId: string,
+  before: { caption: string; credit: string },
+  after: { caption?: string; credit?: string },
+) {
+  if (after.caption !== undefined && after.caption !== before.caption) {
+    await auditStory(tx, who, publicationId, storyId, "photo.caption_change", { asset: assetId });
+  }
+  if (after.credit !== undefined && after.credit !== before.credit) {
+    await auditStory(tx, who, publicationId, storyId, "photo.credit_change", { asset: assetId });
+  }
+}
+
+/** Gives the story its one photo (or replaces it), with its caption and credit: a change of the story. Audited as
+ * attached, or as replaced (another picture) and the caption and credit that changed. */
 export async function setPhoto(
   tx: Tx,
   who: Who,
@@ -418,6 +448,7 @@ export async function setPhoto(
   storyId: string,
   photo: { assetId: string; caption: string; credit: string },
 ): Promise<void> {
+  const before = await photoNow(tx, publicationId, storyId);
   await tx
     .insertInto("app.story_photo")
     .values({
@@ -434,6 +465,16 @@ export async function setPhoto(
         .doUpdateSet({ asset_id: photo.assetId, caption: photo.caption, credit: photo.credit, updated_at: sql`now()` }),
     )
     .execute();
+  if (!before) await auditStory(tx, who, publicationId, storyId, "photo.attach", { asset: photo.assetId });
+  else {
+    if (before.asset_id !== photo.assetId) {
+      await auditStory(tx, who, publicationId, storyId, "photo.replace", {
+        asset: photo.assetId,
+        previous: before.asset_id,
+      });
+    }
+    await auditWords(tx, who, publicationId, storyId, photo.assetId, before, photo);
+  }
   await touch(tx, who, publicationId, storyId, {});
 }
 
@@ -445,6 +486,8 @@ export async function updatePhoto(
   storyId: string,
   change: { caption?: string; credit?: string },
 ): Promise<boolean> {
+  const before = await photoNow(tx, publicationId, storyId);
+  if (!before) return false;
   const done = await tx
     .updateTable("app.story_photo")
     .set({ ...change, updated_at: sql`now()` })
@@ -452,7 +495,10 @@ export async function updatePhoto(
     .where("story_id", "=", storyId)
     .returning("story_id")
     .executeTakeFirst();
-  if (done) await touch(tx, who, publicationId, storyId, {});
+  if (done) {
+    await auditWords(tx, who, publicationId, storyId, before.asset_id, before, change);
+    await touch(tx, who, publicationId, storyId, {});
+  }
   return done !== undefined;
 }
 
@@ -462,9 +508,12 @@ export async function removePhoto(tx: Tx, who: Who, publicationId: string, story
     .deleteFrom("app.story_photo")
     .where("publication_id", "=", publicationId)
     .where("story_id", "=", storyId)
-    .returning("story_id")
+    .returning("asset_id")
     .executeTakeFirst();
-  if (done) await touch(tx, who, publicationId, storyId, {});
+  if (done) {
+    await auditStory(tx, who, publicationId, storyId, "photo.remove", { asset: done.asset_id });
+    await touch(tx, who, publicationId, storyId, {});
+  }
   return done !== undefined;
 }
 

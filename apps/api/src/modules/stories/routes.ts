@@ -23,7 +23,6 @@ import {
   type TransitionTarget,
 } from "@pageinator/contracts";
 import { BODY_FORMAT, DeskTextError, isBrief, pasteArticles } from "@pageinator/desk-text";
-import type { FastifyInstance } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { Database } from "../../db/pools.ts";
@@ -45,9 +44,10 @@ import {
   saveChange,
   standing,
 } from "../../db/stories.ts";
-import type { Tx } from "../../db/tenant.ts";
+import { auditStory } from "../../db/audit.ts";
+import type { Tenant, Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
-import { type Access, accessOf, actorOf, orgRoleOf } from "../access/access.ts";
+import { type Access, accessOf, actorOf, auditRefusals, orgRoleOf, refused } from "../access/access.ts";
 import { type Notifier, type Outbox } from "../notifications/notify.ts";
 import { idempotent } from "../requests/idempotency.ts";
 import {
@@ -84,11 +84,6 @@ export type StoryOptions = {
   /** Sends the emails of a change once it has committed. */
   mail: (outbox: Outbox) => void;
 };
-
-/** A refusal by the story rules, with why (audited by the plugin's onError hook). */
-export function refused(reason: string): ApiError {
-  return Object.assign(new ApiError("not_allowed"), { reason });
-}
 
 export const factsOf = (row: { status: string; reporter_id: string; assignee_id: string | null }): StoryFacts => ({
   status: row.status as StoryStatus,
@@ -207,6 +202,36 @@ function decodeCursor(cursor: string): { updatedAt: string; id: string } {
   throw new ApiError("invalid_request", [{ field: "querystring.cursor", message: "is not a cursor this API gave" }]);
 }
 
+/** Audits each of a story's fields that a change moved (from and to: ids, numbers and language codes; the desk note
+ * only that it changed). The text's revisions are audited by saveChange. */
+async function auditFields(tx: Tx, tenant: Tenant, before: StoryRow, fields: StoryFields): Promise<void> {
+  const p = before.publication_id;
+  const s = before.id;
+  const moved = <T>(to: T | undefined, from: T) => to !== undefined && to !== from;
+  if (moved(fields.edition_id, before.edition_id)) {
+    await auditStory(tx, tenant, p, s, "story.edition_change", {
+      from: before.edition_id,
+      to: fields.edition_id ?? null,
+    });
+  }
+  if (moved(fields.section_id, before.section_id)) {
+    await auditStory(tx, tenant, p, s, "story.section_change", {
+      from: before.section_id,
+      to: fields.section_id ?? null,
+    });
+  }
+  if (moved(fields.priority, before.priority)) {
+    await auditStory(tx, tenant, p, s, "story.priority_change", { from: before.priority, to: fields.priority ?? null });
+  }
+  if (moved(fields.page_pin, before.page_pin)) {
+    await auditStory(tx, tenant, p, s, "story.page_pin_change", { from: before.page_pin, to: fields.page_pin ?? null });
+  }
+  if (moved(fields.language, before.language)) {
+    await auditStory(tx, tenant, p, s, "story.language_change", { from: before.language, to: fields.language ?? null });
+  }
+  if (moved(fields.desk_note, before.desk_note)) await auditStory(tx, tenant, p, s, "story.desk_note_change");
+}
+
 /** Refuses the desk's own fields to anyone but the desk. */
 function deskOnly(access: Access, pub: string, input: Record<string, unknown>): void {
   if (!isDesk(access, pub) && DESK_FIELDS.some((field) => input[field] !== undefined)) {
@@ -219,37 +244,6 @@ function everAllowed(access: Access, pub: string, from: StoryStatus, to: Transit
   if (to === "filed") return true; // any author may, if the story is theirs
   if (to === "spiked" || (to === "restore" && from === "spiked")) return spikes(access, pub);
   return isDesk(access, pub);
-}
-
-/** Records the rules' refusals (403 not_allowed, from refused()) in the audit log, as authorize() records its own
- * (plan §4.2). Each plugin that throws refused() adds it: hooks do not cross plugins. */
-export function auditRefusals(app: FastifyInstance, database: Database): void {
-  app.addHook("onError", async (request, _reply, error) => {
-    if (!(error instanceof ApiError) || error.code !== "not_allowed" || !request.access) return;
-    if ((error as { audited?: boolean }).audited) return;
-    const tenant = request.access.tenant;
-    await database.withTenant(tenant, (tx) =>
-      tx
-        .insertInto("app.audit_event")
-        .values({
-          org_id: tenant.orgId,
-          actor_kind: "user",
-          actor_id: tenant.userId,
-          action: "access.denied",
-          target_type: "route",
-          data: JSON.stringify({
-            permission: request.routeOptions.config.permission ?? null,
-            reason: (error as { reason?: string }).reason ?? "the story rules",
-            method: request.method,
-            route: request.routeOptions.url ?? "",
-          }),
-          ip: request.ip,
-          user_agent: request.headers["user-agent"]?.slice(0, 512) ?? null,
-          request_id: tenant.requestId,
-        })
-        .execute(),
-    );
-  });
 }
 
 export const storyRoutes: FastifyPluginAsyncZod<StoryOptions> = async (app, { database, notify, mail }) => {
@@ -463,6 +457,7 @@ export const storyRoutes: FastifyPluginAsyncZod<StoryOptions> = async (app, { da
         };
         if (!textChanged && Object.keys(fields).length === 0) return view(current, access, userId); // nothing changed
         await saveChange(tx, access.tenant, p, s, story.current_rev, textChanged ? text : null, fields);
+        await auditFields(tx, access.tenant, current, fields);
         return view((await findStory(tx, p, s)) as StoryRow, access, userId);
       });
     },
@@ -561,6 +556,20 @@ export const storyRoutes: FastifyPluginAsyncZod<StoryOptions> = async (app, { da
           ...(dueAt !== undefined ? { due_at: dueAt === null ? null : new Date(dueAt) } : {}),
         });
         const after = (await findStory(tx, p, s)) as StoryRow;
+        const due = (at: Date | null) => (at ? at.toISOString() : null);
+        const was = { assignee: story.facts.assigneeId, dueAt: due(story.due_at) };
+        const now = { assignee: after.assignee_id, dueAt: due(after.due_at) };
+        if (now.assignee !== was.assignee) {
+          await auditStory(tx, access.tenant, p, s, now.assignee ? "story.assign" : "story.unassign", {
+            from: was.assignee,
+            to: now.assignee,
+            dueAt: now.dueAt,
+          });
+        }
+        // a due time moved, with or without the assignee: its own event, so the old time is kept
+        if (now.dueAt !== was.dueAt) {
+          await auditStory(tx, access.tenant, p, s, "story.due_change", { from: was.dueAt, to: now.dueAt });
+        }
         // the person given the story is told (not again when only its due time changes)
         if (assignee && assignee !== story.facts.assigneeId) {
           await notify.storyAssigned(tx, access.tenant, p, s, factsOf(after));
@@ -634,7 +643,7 @@ export const storyRoutes: FastifyPluginAsyncZod<StoryOptions> = async (app, { da
         const locked = UUID.test(s) ? await lockStory(tx, p, s) : undefined;
         if (!locked || !sees(access, p, factsOf(locked), userId)) throw new ApiError("not_found");
         if (!canDelete(access, p, factsOf(locked), userId)) throw refused("this story is not theirs to delete now");
-        await deleteStory(tx, access.tenant, p, s, request.id); // with its audit row, in this transaction
+        await deleteStory(tx, access.tenant, p, s); // with its audit row, in this transaction
       });
       return reply.status(204).send();
     },

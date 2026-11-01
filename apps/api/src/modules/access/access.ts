@@ -8,7 +8,7 @@
 //      organisation that does not exist;
 //   3. a role the organisation requires two-step sign-in for, without it: 403 two_step_required;
 //   4. a publication the person does not reach: 404;
-//   5. the permission missing: 403 not_allowed, recorded in the audit log.
+//   5. the permission missing: 403 not_allowed, recorded in the audit log (with the route's publication, if any).
 // The publications a person reaches are every one of the organisation for Owner and Admin, and those of their
 // publication_grant rows for everyone else, read under the organisation wall (app, pgn_app). request.access then
 // carries the tenant for withTenant, the person's roles, and how far the permission reaches ("scoped" for a ◐ cell).
@@ -24,7 +24,8 @@ import {
 } from "@pageinator/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Database } from "../../db/pools.ts";
-import type { Tenant } from "../../db/tenant.ts";
+import { recordAudit } from "../../db/audit.ts";
+import type { Client, Tenant } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 import type { Actor } from "../identity/session.ts";
 
@@ -128,28 +129,33 @@ function union(publications: ReadonlyMap<string, PublicationAccess>): Publicatio
   return { roles: [...roles], grants: [...grants] };
 }
 
+/** The publication of the request's route (its :p), once the access check has found it is one the person reaches:
+ * a refusal there names it, so that publication's Chief Editor sees it in the audit log. */
+export function routePublication(request: FastifyRequest): string | null {
+  const p = (request.params as { p?: unknown } | undefined)?.p;
+  return typeof p === "string" && UUID.test(p) ? p : null;
+}
+
+/** The request's client, as the audit log records it (src/db/tenant.ts Client). */
+export function clientOf(request: FastifyRequest): Client {
+  return { ip: request.ip || null, userAgent: request.headers["user-agent"]?.slice(0, 512) ?? null };
+}
+
 async function refuse(
   database: Database,
   request: FastifyRequest,
   tenant: Tenant,
   permission: Permission,
+  publicationId: string | null,
 ): Promise<never> {
-  await database.withTenant(tenant, async (tx) => {
-    await tx
-      .insertInto("app.audit_event")
-      .values({
-        org_id: tenant.orgId,
-        actor_kind: "user",
-        actor_id: tenant.userId,
-        action: "access.denied",
-        target_type: "route",
-        data: JSON.stringify({ permission, method: request.method, route: request.routeOptions.url ?? "" }),
-        ip: request.ip,
-        user_agent: request.headers["user-agent"]?.slice(0, 512) ?? null,
-        request_id: tenant.requestId,
-      })
-      .execute();
-  });
+  await database.withTenant(tenant, (tx) =>
+    recordAudit(tx, tenant, {
+      action: "access.denied",
+      targetType: "route",
+      publicationId,
+      data: { permission, method: request.method, route: request.routeOptions.url ?? "" },
+    }),
+  );
   throw Object.assign(new ApiError("not_allowed"), { audited: true });
 }
 
@@ -167,14 +173,20 @@ export async function decide(database: Database, request: FastifyRequest, permis
     throw new ApiError("two_step_required");
   }
   if (pubId !== undefined && !view.publications.has(pubId)) throw new ApiError("not_found");
-  const tenant: Tenant = { orgId, userId: actor.userId, pubIds: [...view.publications.keys()], requestId: request.id };
+  const tenant: Tenant = {
+    orgId,
+    userId: actor.userId,
+    pubIds: [...view.publications.keys()],
+    requestId: request.id,
+    client: clientOf(request),
+  };
   const rule = PERMISSIONS[permission];
   const here =
     rule.scope === "publication" && pubId !== undefined
       ? (view.publications.get(pubId) ?? { roles: [], grants: [] })
       : union(view.publications);
   const reached = reach(permission, view.orgRole, here);
-  if (!reached) return refuse(database, request, tenant, permission);
+  if (!reached) return refuse(database, request, tenant, permission, pubId ?? null);
   return { tenant, orgRole: view.orgRole, publications: view.publications, reach: reached };
 }
 
@@ -208,6 +220,35 @@ export function registerAccess(app: FastifyInstance, database: Database): void {
     // a route without a declaration is refused (none can be registered)
     if (!config.permission) throw new ApiError("not_found");
     request.access = await decide(database, request, config.permission);
+  });
+}
+
+/** A refusal by a service's rules (the stories', the photos', the people's), with why: audited by auditRefusals. */
+export function refused(reason: string): ApiError {
+  return Object.assign(new ApiError("not_allowed"), { reason });
+}
+
+/** Records the services' refusals (403 not_allowed, from refused()) in the audit log, as authorize() records its own
+ * (plan §4.2): one access.denied with the organisation, the route's publication if it has one, and the client. Each
+ * plugin that throws refused() adds it (hooks reach the plugins registered inside it, not its siblings). */
+export function auditRefusals(app: FastifyInstance, database: Database): void {
+  app.addHook("onError", async (request, _reply, error) => {
+    if (!(error instanceof ApiError) || error.code !== "not_allowed" || !request.access) return;
+    if ((error as { audited?: boolean }).audited) return;
+    const tenant = request.access.tenant;
+    await database.withTenant(tenant, (tx) =>
+      recordAudit(tx, tenant, {
+        action: "access.denied",
+        targetType: "route",
+        publicationId: routePublication(request),
+        data: {
+          permission: request.routeOptions.config.permission ?? null,
+          reason: (error as { reason?: string }).reason ?? "the service's rules",
+          method: request.method,
+          route: request.routeOptions.url ?? "",
+        },
+      }),
+    );
   });
 }
 

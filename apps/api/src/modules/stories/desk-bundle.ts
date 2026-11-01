@@ -31,6 +31,7 @@ import { BODY_FORMAT, blocks, isSpace, skipSpace, strip } from "@pageinator/desk
 import { Zip, ZipPassThrough } from "fflate";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { recordAudit } from "../../db/audit.ts";
 import { type BundleStory, bundleStories, editionOf, recordBundle } from "../../db/desk-bundles.ts";
 import type { Database } from "../../db/pools.ts";
 import { ApiError } from "../../http/errors.ts";
@@ -296,21 +297,13 @@ export const deskBundleRoutes: FastifyPluginAsyncZod<DeskBundleOptions> = async 
           e,
           rows.map((row) => ({ id: row.id, rev: row.current_rev, version: row.version })),
         );
-        await tx
-          .insertInto("app.audit_event")
-          .values({
-            org_id: access.tenant.orgId,
-            publication_id: p,
-            actor_kind: "user",
-            actor_id: access.tenant.userId,
-            action: "desk.export",
-            target_type: "edition",
-            target_id: e,
-            data: JSON.stringify({ bundle: bundle.id, stories: rows.length, photos: originals.size }),
-            ip: request.ip,
-            request_id: access.tenant.requestId,
-          })
-          .execute();
+        await recordAudit(tx, access.tenant, {
+          action: "desk.export",
+          targetType: "edition",
+          targetId: e,
+          publicationId: p,
+          data: { bundle: bundle.id, stories: rows.length, photos: originals.size },
+        });
         const json = new TextEncoder().encode(JSON.stringify(doc(bundle)));
         return { bundle, edition, json, originals: [...originals.values()], count: rows.length };
       });
