@@ -40,3 +40,18 @@ export function mayUpload(org: OrgAccessDto, publicationId: string): boolean {
 export function mayViewMedia(org: OrgAccessDto, publicationId: string): boolean {
   return reach("media.view", org.orgRole, pubAccess(org, publicationId)) !== null;
 }
+
+/** edition.view: whoever may see the publication's editions (Advertising's and Prepress's ◐ too). */
+export function mayViewEditions(org: OrgAccessDto, publicationId: string): boolean {
+  return reach("edition.view", org.orgRole, pubAccess(org, publicationId)) !== null;
+}
+
+/** A full edition.create: Owner, Admin, Chief Editor, Editor (the API refuses a ◐ one). */
+export function mayCreateEdition(org: OrgAccessDto, publicationId: string): boolean {
+  return reach("edition.create", org.orgRole, pubAccess(org, publicationId)) === "full";
+}
+
+/** A full desk.export: "Send to the Desk" (Owner, Admin, Chief Editor, Editor). */
+export function mayExport(org: OrgAccessDto, publicationId: string): boolean {
+  return reach("desk.export", org.orgRole, pubAccess(org, publicationId)) === "full";
+}

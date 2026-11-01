@@ -174,7 +174,7 @@ export function createApiWorkspace(client: ApiClient): {
       const publication = org.publications.find((candidate) => candidate.id === publicationId);
       return publication ? { ok: true, value: publicationDto(org.org.id, publication) } : unavailable("publication");
     },
-    // no editions endpoint yet (plan PR 17 onward)
+    // the edition workspace (its tabs and editor) is a development placeholder; the editions list has its own service
     getEdition: async () => unavailable("edition"),
   };
 

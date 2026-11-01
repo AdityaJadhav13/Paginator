@@ -7,8 +7,9 @@
  * A live change to a story of this publication (or a `resync`) says the list has changed, with a button that fetches
  * it again: rows never move under the person's finger, and the pages loaded so far stay until they ask.
  *
- * There is no editions endpoint yet, so the edition filter offers the editions of the stories seen so far, and there is
- * no "Create edition" here.
+ * The edition filter (and the paste dialog's edition) offers the publication's editions to whoever may see them
+ * (edition.view); for anyone else (a Reporter), the editions of the stories seen so far. Editions are made on the
+ * Editions screen.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -21,7 +22,8 @@ import type { ApiProblem, StoryFilterDto, StoryListItemDto, StoryStatusDto } fro
 import { OfflineNotice } from "../auth/connection.tsx";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useSession } from "../auth/SessionProvider.tsx";
-import { isDesk, mayCreate, storyScope } from "./access.ts";
+import { isDesk, mayCreate, mayViewEditions, storyScope } from "./access.ts";
+import { usePublicationEditions } from "../editions/editions-context.tsx";
 import { PasteDialog } from "./PasteDialog.tsx";
 import { StatusChip, statusKey } from "./StatusChip.tsx";
 import { useLiveEvents } from "../live/live-context.tsx";
@@ -72,6 +74,7 @@ export function StoriesScreen() {
           own={scope === "own"}
           readOnly={scope === "all" && !isDesk(org, pubId) && !mayCreate(org, pubId)}
           desk={isDesk(org, pubId)}
+          viewEditions={mayViewEditions(org, pubId)}
         />
       )}
     </Stack>
@@ -86,6 +89,7 @@ function StoriesContent({
   own,
   readOnly,
   desk,
+  viewEditions,
 }: {
   readonly orgId: string;
   readonly pubId: string;
@@ -95,6 +99,8 @@ function StoriesContent({
   readonly readOnly: boolean;
   /** Only the desk places a story in an edition, pasted ones too. */
   readonly desk: boolean;
+  /** edition.view: the filter offers the publication's editions, not only those seen in the list. */
+  readonly viewEditions: boolean;
 }) {
   const stories = useStories();
   const { t, language } = useI18n();
@@ -114,8 +120,13 @@ function StoriesContent({
     heard.current += 1;
     setChanged(true);
   });
-  /** Editions and reporters seen in this list so far: there is no endpoint that lists them yet. */
-  const [editions, setEditions] = useState<ReadonlyMap<string, string>>(new Map());
+  /** Editions and reporters seen in this list so far (no endpoint lists reporters; editions only for edition.view). */
+  const [seenEditions, setEditions] = useState<ReadonlyMap<string, string>>(new Map());
+  const listed = usePublicationEditions(orgId, pubId, viewEditions);
+  const editions = useMemo(
+    () => (listed ? new Map(listed.map((edition) => [edition.id, edition.date])) : seenEditions),
+    [listed, seenEditions],
+  );
   const [reporters, setReporters] = useState<ReadonlyMap<string, string>>(new Map());
 
   const remember = useCallback((items: readonly StoryListItemDto[]) => {

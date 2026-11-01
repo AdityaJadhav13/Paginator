@@ -30,6 +30,23 @@ const comment = (people: string[] = [SOMEONE]) =>
   ({ v: 1, type: "comment", org: ORG, pub: PUB, story: STORY, comment: id(7), people }) as const;
 
 describe("messageFor", () => {
+  const edition = (pub = PUB) => ({ v: 1, type: "edition", org: ORG, pub, edition: id(8) }) as const;
+  it.each([
+    ["the Owner", listener("owner"), true],
+    ["an Editor", listener("member", ["editor"]), true],
+    ["a Viewer", listener("member", ["viewer"]), true],
+    ["Advertising (◐ edition.view)", listener("member", ["advertising"]), true],
+    ["a Reporter (no edition.view)", listener("member", ["reporter"]), false],
+    ["an Editor of another publication", listener("member", ["editor"], OTHER_PUB), false],
+  ])("an edition of the publication: %s hears it: %s", (_who, me, hears) => {
+    expect(messageFor(me, edition())).toEqual(
+      hears ? { event: "edition", data: { publicationId: PUB, editionId: id(8) } } : null,
+    );
+  });
+  it("an edition of another organisation is never heard", () => {
+    expect(messageFor(listener("owner"), { ...edition(), org: id(9) })).toBeNull();
+  });
+
   it.each([
     ["the Owner", listener("owner"), true],
     ["an Editor", listener("member", ["editor"]), true],

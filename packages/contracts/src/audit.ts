@@ -27,6 +27,8 @@ export const AUDIT_ACTIONS = {
   "asset.fail": { scope: "publication" },
   "asset.ready": { scope: "publication" },
   "asset.reject": { scope: "publication" },
+  /** An edition made ({date, pages}); a story put in or taken out of one is story.edition_change. */
+  "edition.create": { scope: "publication" },
   /** A story bundle sent to the Desk, on its edition ({bundle, stories, photos}). */
   "desk.export": { scope: "publication" },
   /** An engine event the inbox would not apply ({event, job, kind, reason}): not the contract's, or for an asset that

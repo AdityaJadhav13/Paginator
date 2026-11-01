@@ -3,6 +3,7 @@
 // (src/db/events.ts) hands it here. A hint is untrusted: it is parsed strictly (ids only, or it is dropped), and each
 // open stream decides from its own person's access, not from the hint, whether to pass it on:
 //   - a notification: to its own person only, in its own organisation;
+//   - an edition: to people of its organisation who may view its publication's editions (edition.view);
 //   - a story, or a comment on one: to people of its organisation who reach its publication and see the story; a
 //     comment also needs comment.read. A Reporter sees their own stories only: the hint's people (the story's reporter
 //     and assignees, before and after) only narrow who is asked, and the story is then read under the Reporter's own
@@ -35,6 +36,7 @@ export const AppEvent = z.discriminatedUnion("type", [
     people: z.array(Id).max(2),
   }),
   z.strictObject({ v: z.literal(1), type: z.literal("notification"), org: Id, user: Id, notification: Id }),
+  z.strictObject({ v: z.literal(1), type: z.literal("edition"), org: Id, pub: Id, edition: Id }),
 ]);
 export type AppEvent = z.infer<typeof AppEvent>;
 
@@ -56,6 +58,11 @@ export function messageFor(listener: Listener, event: AppEvent): Message | null 
   }
   const access = listener.access as Access;
   if (!access.publications.has(event.pub)) return null;
+  if (event.type === "edition") {
+    const here = access.publications.get(event.pub) ?? { roles: [], grants: [] };
+    if (reach("edition.view", access.orgRole, here) === null) return null;
+    return { event: "edition", data: { publicationId: event.pub, editionId: event.edition } };
+  }
   const scope = storyScope(access, event.pub);
   if (scope === "none" || (scope === "own" && !event.people.includes(listener.userId))) return null;
   const confirm = scope === "own" ? { confirm: { publicationId: event.pub, storyId: event.story } } : {};

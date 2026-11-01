@@ -24,6 +24,7 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     message: "Someone changed this story after you opened it. Your text is kept; reload to see theirs.",
   },
   invalid_transition: { status: 409, message: "This story cannot be moved to that state now." },
+  edition_exists: { status: 409, message: "There is already an edition for this date. Open it instead." },
   request_in_progress: { status: 409, message: "This request is still being handled. Wait a moment, then check." },
   idempotency_key_reused: { status: 422, message: "This request was already sent with different content." },
   file_too_large: { status: 413, message: "This picture is larger than 40 MB. Save it smaller and try again." },
@@ -81,7 +82,7 @@ export class ApiError extends Error {
   readonly code: ErrorCode;
   readonly statusCode: number;
   readonly details: FieldProblem[] | undefined;
-  /** With story_changed: the story as it is now. */
+  /** With story_changed: the story as it is now; with edition_exists: the edition of that date. */
   readonly current: unknown;
 
   constructor(code: ErrorCode, details?: FieldProblem[], current?: unknown) {

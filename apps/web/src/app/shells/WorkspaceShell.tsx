@@ -9,7 +9,6 @@ import { Container, Inline, Cluster, Stack, Field, Select } from "../../ui/index
 import { SkipLink } from "../SkipLink.tsx";
 import { CollapsibleNav } from "../CollapsibleNav.tsx";
 import { Breadcrumbs, type BreadcrumbItem } from "../Breadcrumbs.tsx";
-import { StatusSurface } from "../StatusSurface.tsx";
 import { MAIN_LANDMARK_ID, paths } from "../routes.ts";
 import { useWorkspaceRouteContext } from "../contracts/route-context.ts";
 import { ProtectedRouteState } from "../../features/auth/ProtectedRouteState.tsx";
@@ -131,11 +130,6 @@ export function WorkspaceShell() {
                   <NotificationsButton orgId={organization.id} mayViewTeam={may(access, "members.view")} />
                 )}
                 <LanguageSwitch />
-                {DEVELOPMENT && (
-                  <span lang="en">
-                    <StatusSurface subject={resolution.edition?.label ?? publication?.name ?? organization.name} />
-                  </span>
-                )}
               </Cluster>
             </Inline>
             <CollapsibleNav

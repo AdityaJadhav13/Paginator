@@ -40,13 +40,13 @@ describe("Plain action names", () => {
       }
       expect(new Set(names).size, language).toBe(AUDIT_ACTION_NAMES.length);
     }
-    expect(AUDIT_ACTION_NAMES).toHaveLength(41);
+    expect(AUDIT_ACTION_NAMES).toHaveLength(42);
     expect(CATALOGUES.mr["auditLog.action.story.status_change"]).not.toBe(CATALOGUES.en["auditLog.action.story.status_change"]);
   });
 
   it("show an action this screen does not know by its code", () => {
-    expect(actionName("edition.create", translator("en"))).toBe("An action this screen does not name yet (edition.create)");
-    expect(actionName("edition.create", translator("mr"))).toBe("या पानाला अजून नाव माहीत नसलेली कृती (edition.create)");
+    expect(actionName("edition.release", translator("en"))).toBe("An action this screen does not name yet (edition.release)");
+    expect(actionName("edition.release", translator("mr"))).toBe("या पानाला अजून नाव माहीत नसलेली कृती (edition.release)");
   });
 });
 
@@ -74,7 +74,7 @@ describe("The audit log for an admin", () => {
     await waitFor(async () => expect(await events()).toHaveLength(61));
     expect(screen.queryByRole("button", { name: "Show older events" })).not.toBeInTheDocument();
 
-    expect(itemOf("An action this screen does not name yet (edition.create)")).toHaveTextContent("Edition (edition-demo-2026-10-24)");
+    expect(itemOf("An action this screen does not name yet (edition.release)")).toHaveTextContent("Edition (edition-demo-2026-10-24)");
     const bootstrap = itemOf("Created the organization");
     expect(bootstrap).toHaveTextContent("Pageinator itself");
     // the API sent no address or browser for it: neither is shown

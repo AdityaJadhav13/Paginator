@@ -2,7 +2,7 @@
 // The web shows its own English or Marathi text for `code` and falls back to `message`.
 import { z } from "zod";
 
-/** The codes the API answers with today; later PRs add theirs from §5.1 (edition_exists, …). */
+/** The codes the API answers with today; later PRs add theirs from §5.1. */
 export const ERROR_CODES = [
   "invalid_request",
   "signed_out",
@@ -12,6 +12,7 @@ export const ERROR_CODES = [
   "not_found",
   "story_changed",
   "invalid_transition",
+  "edition_exists",
   "request_in_progress",
   "idempotency_key_reused",
   "file_too_large",
@@ -38,7 +39,8 @@ export const ErrorEnvelope = z.strictObject({
     code: ErrorCode,
     message: z.string().min(1),
     details: z.array(FieldProblem).min(1).optional(),
-    /** With story_changed: the story as it is now, so the web can show theirs beside the text it keeps. */
+    /** With story_changed: the story as it is now, so the web can show theirs beside the text it keeps; with
+     * edition_exists: the edition that has that date. */
     current: z.unknown().optional(),
     requestId: z.string().min(1),
   }),

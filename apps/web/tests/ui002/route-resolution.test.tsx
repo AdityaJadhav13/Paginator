@@ -316,21 +316,16 @@ describe("No record leakage between the two invalid-publication causes", () => {
 
 // ── AC-23, AC-24: reserved seams ────────────────────────────────────────
 
-describe("Reserved status-surface seam (§9.4, BLV2-07)", () => {
-  it("renders on WorkspaceShell with the exact required detail text", async () => {
-    renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
-    expect(await screen.findByText("Simulated")).toBeInTheDocument();
-    expect(
-      screen.getByText("Reserved workspace status surface — bound to real edition state in UI015–020.")
-    ).toBeInTheDocument();
-  });
-
-  it("renders on EditorShell with the exact required detail text", async () => {
+describe("Reserved status-surface seam (§9.4, BLV2-07): removed", () => {
+  // doc 11 L2-340: the "Simulated" note had no real edition state behind it, so neither shell shows it
+  it("is on neither the workspace shell nor the editor shell", async () => {
+    const view = renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByText("Simulated")).not.toBeInTheDocument();
+    view.unmount();
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-001/editor");
-    expect(await screen.findByText("Simulated")).toBeInTheDocument();
-    expect(
-      screen.getByText("Reserved workspace status surface — bound to real edition state in UI015–020.")
-    ).toBeInTheDocument();
+    await screen.findByRole("main");
+    expect(screen.queryByText("Simulated")).not.toBeInTheDocument();
   });
 });
 

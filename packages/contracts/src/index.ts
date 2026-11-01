@@ -92,6 +92,7 @@ export {
   NotificationsRead,
 } from "./notifications.ts";
 export { BUNDLE_FORMAT, DeskBundleRequest } from "./desk-bundle.ts";
+export { EDITION_PAGES, Edition, EditionInput, EditionList, EditionQuery } from "./editions.ts";
 export {
   CONTACT_EMAIL,
   CONTACT_INTENTS,

@@ -3,7 +3,7 @@
  *   - same origin only: paths start with /api/, the browser sends its cookies (credentials "same-origin"), no CORS;
  *   - `X-Pageinator: 1` on every request, so the API's Origin and header guard lets changes through (ADR-025), and
  *     Better Auth's routes under /api/auth stay behind that guard too;
- *   - JSON bodies only;
+ *   - JSON bodies only; JSON answers, but for `download`, which takes a file (the Desk's story bundle) as a Blob;
  *   - an `Idempotency-Key` on a change when the caller gives one (creates and transitions: the same key on every
  *     retry of one action), never on a GET;
  *   - nothing from it kept in the browser's HTTP cache (`cache: "no-store"`): story text must not stay behind on a
@@ -37,6 +37,8 @@ export interface ApiClient {
   put<T = unknown>(path: string, body?: unknown, options?: RequestOptions): Promise<ApiResult<T>>;
   patch<T = unknown>(path: string, body?: unknown, options?: RequestOptions): Promise<ApiResult<T>>;
   delete<T = unknown>(path: string, options?: RequestOptions): Promise<ApiResult<T>>;
+  /** A POST answered with a file: its bytes and headers on success, an `ApiProblem` from the error envelope else. */
+  download(path: string, body?: unknown, options?: RequestOptions): Promise<ApiResult<{ readonly blob: Blob; readonly headers: Headers }>>;
   /** A new Idempotency-Key (a random UUID). */
   newIdempotencyKey(): string;
 }
@@ -151,6 +153,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     path: string,
     body: unknown,
     requestOptions: RequestOptions = {},
+    file = false,
   ): Promise<ApiResult<T>> {
     if (!path.startsWith("/api/") || path.startsWith("//")) {
       throw new Error(`The API client only calls this app's own /api/ paths, not "${path}".`);
@@ -178,6 +181,9 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         signal: controller.signal,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
+      if (file && response.ok) {
+        return { ok: true, status: response.status, value: { blob: await response.blob(), headers: response.headers } as T };
+      }
       text = await response.text();
     } catch {
       return { ok: false, problem: online() ? { kind: "network" } : { kind: "offline" } };
@@ -208,6 +214,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       request<T>("PATCH", path, body, requestOptions),
     delete: <T,>(path: string, requestOptions?: RequestOptions) =>
       request<T>("DELETE", path, undefined, requestOptions),
+    download: (path: string, body?: unknown, requestOptions?: RequestOptions) =>
+      request<{ readonly blob: Blob; readonly headers: Headers }>("POST", path, body, requestOptions, true),
     newIdempotencyKey: newKey,
   };
 }

@@ -84,6 +84,10 @@ export function liveEventOf(type: string, data: unknown): LiveEventDto | null {
         : null;
     case "notification":
       return isId(data["id"]) ? { type, id: data["id"] } : null;
+    case "edition":
+      return isId(data["publicationId"]) && isId(data["editionId"])
+        ? { type, publicationId: data["publicationId"], editionId: data["editionId"] }
+        : null;
     case "resync":
       return { type };
     default:

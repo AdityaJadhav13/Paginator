@@ -7,6 +7,8 @@ export type LiveEventDto =
   | { readonly type: "story"; readonly publicationId: string; readonly storyId: string }
   | { readonly type: "comment"; readonly publicationId: string; readonly storyId: string; readonly commentId: string }
   | { readonly type: "notification"; readonly id: string }
+  /** An edition of the publication was made or changed (its list and counts are fetched again). */
+  | { readonly type: "edition"; readonly publicationId: string; readonly editionId: string }
   | { readonly type: "resync" };
 
 export interface LiveService {
