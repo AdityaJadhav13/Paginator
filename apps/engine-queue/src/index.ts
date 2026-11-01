@@ -4,9 +4,14 @@ export {
   APP_ENQUEUE,
   ENGINE_GRANTS,
   exhaustedJobs,
+  LOCK_CHECK_MS,
+  LOCK_MARGIN_MS,
   MAX_ATTEMPTS,
   QUEUE_SCHEMA,
+  releaseStaleLocks,
   startQueue,
   type ExhaustedJob,
   type QueueSettings,
 } from "./queue.ts";
+export { INBOX_CHANNEL, reportToInbox } from "./inbox.ts";
+export { installQueueSchema, type Query } from "./schema.ts";

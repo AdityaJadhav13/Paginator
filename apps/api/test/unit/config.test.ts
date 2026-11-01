@@ -25,7 +25,14 @@ describe("config", () => {
       trustProxy: [],
       shutdownGraceSeconds: 10,
       logLevel: "info",
+      engineSweep: { staleMs: 7_200_000, deadlineMs: 1_800_000 },
     });
+    expect(load({ PGN_ENGINE_STALE_S: "3600", PGN_ENGINE_DEADLINE_S: "60" }).engineSweep).toEqual({
+      staleMs: 3_600_000,
+      deadlineMs: 60_000,
+    });
+    // never below the hour the database's policy waits before a locked spent job may be removed
+    expect(problems({ PGN_ENGINE_STALE_S: "600" })).toContain("PGN_ENGINE_STALE_S must be a whole number from 3600");
   });
 
   it("reads every setting, and ignores the rest of the environment", () => {

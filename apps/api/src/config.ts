@@ -154,6 +154,11 @@ const Env = z
       .default([]),
     // seconds a stop (SIGTERM, SIGINT) waits for requests in flight before closing their connections
     PGN_SHUTDOWN_GRACE_S: wholeNumber(0, 600).default(10),
+    // The engine sweep (src/modules/media/engine-inbox.ts), overridable for an operator's check: how long a spent job
+    // stays locked before its worker counts as dead (at least the hour the database's policy waits), and how long an
+    // asset waits with no job and no event before it is called lost.
+    PGN_ENGINE_STALE_S: wholeNumber(3600, 86_400).default(7200),
+    PGN_ENGINE_DEADLINE_S: wholeNumber(60, 86_400).default(1800),
     PGN_LOG_LEVEL: z.enum(LOG_LEVELS, { error: `must be one of ${LOG_LEVELS.join(", ")}` }).default("info"),
     // The security baseline (§4.5–4.6). The web app's origins: in production exactly the app's own origin; in
     // development Vite on 127.0.0.1:5180 (§7.1).
@@ -244,6 +249,7 @@ const Env = z
     port: env.PGN_API_PORT,
     trustProxy: env.PGN_TRUST_PROXY,
     shutdownGraceSeconds: env.PGN_SHUTDOWN_GRACE_S,
+    engineSweep: { staleMs: env.PGN_ENGINE_STALE_S * 1000, deadlineMs: env.PGN_ENGINE_DEADLINE_S * 1000 },
     logLevel: env.PGN_LOG_LEVEL,
     allowedOrigins: env.PGN_ALLOWED_ORIGINS,
     rateLimitPerMinute: env.PGN_RATE_LIMIT_PER_MINUTE,

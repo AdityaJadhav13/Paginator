@@ -276,11 +276,16 @@ class KeyTests(unittest.TestCase):
                 with self.assertRaises(keys.KeyRefused):
                     g.check(key)
         for org in (ORG.upper(), "not-an-id", "", None, ORG + "0",
-                    "01890a5d-ac96-474b-bcce-b302099a8057",                  # version 4, not 7
+                    "01890a5d-ac96-074b-bcce-b302099a8057",                  # version 0
                     "01890a5d-ac96-774b-ccce-b302099a8057",                  # not the RFC variant
                     "01890a5d-ac96-774b-bcce-b302099a805\u0967"):            # a Devanagari digit
             with self.subTest(org=org), self.assertRaises(keys.KeyRefused):
                 keys.KeyGuard(org, PUB)
+        # an organisation's id is Better Auth's, a version 4 UUID; a publication's is the database's, version 7 only
+        v4 = "9b2f4c1e-5d3a-4f6b-8c7d-0e1f2a3b4c5d"
+        self.assertEqual(keys.KeyGuard(v4, PUB).asset_original(ASSET), f"orgs/{v4}/pubs/{PUB}/assets/{ASSET}/original")
+        with self.assertRaises(keys.KeyRefused):
+            keys.KeyGuard(ORG, v4)
 
     def test_only_a_cmyk_rendition_can_be_a_raster(self):
         g = keys.KeyGuard(ORG, PUB)

@@ -1,6 +1,7 @@
 // Uploads and assets in the database (docs/product/10-l2-newsroom-plan.md §3.3, §6; migration 2026_11_23_0001), for
 // src/modules/media. Each function runs inside withTenant (a Tx): the organisation and publication walls apply.
 import { randomBytes } from "node:crypto";
+import { MediaIngestPayload } from "@pageinator/contracts";
 import { sql } from "kysely";
 import type { Tx } from "./tenant.ts";
 
@@ -85,7 +86,7 @@ export async function completeUpload(tx: Tx, publicationId: string, uploadId: st
 export type AssetRow = {
   id: string;
   publication_id: string;
-  status: "received" | "ready" | "rejected";
+  status: "received" | "ready" | "rejected" | "failed";
   mime: "image/jpeg" | "image/png" | "image/webp";
   bytes: number;
   width_px: number;
@@ -124,15 +125,15 @@ export async function findAsset(tx: Tx, publicationId: string, assetId: string):
     .executeTakeFirst()) as AssetRow | undefined;
 }
 
-/** The publication's asset with these bytes, if any (one asset per picture and publication; a rejected one is not
- * found, and the same bytes sent again make a new asset). */
+/** The publication's asset with these bytes, if any (one asset per picture and publication; a rejected or failed one is
+ * not found, and the same bytes sent again make a new asset, tried afresh). */
 export async function assetWithBytes(tx: Tx, publicationId: string, sha256: string): Promise<AssetRow | undefined> {
   return (await tx
     .selectFrom("app.asset")
     .select(ASSET)
     .where("publication_id", "=", publicationId)
     .where("sha256", "=", sha256)
-    .where("status", "!=", "rejected")
+    .where("status", "not in", ["rejected", "failed"])
     .where("deleted_at", "is", null)
     .executeTakeFirst()) as AssetRow | undefined;
 }
@@ -183,4 +184,21 @@ export async function uploadedBy(tx: Tx, publicationId: string, assetId: string,
     .limit(1)
     .executeTakeFirst();
   return row !== undefined;
+}
+
+/** Enqueues the asset's print versions (media.ingest: ids only, job_key asset:<id>) in the caller's transaction, through
+ * app.enqueue_media_ingest, which refuses another organisation's (migration 2026_11_27_0001): a rollback leaves no job. */
+export async function enqueueMediaIngest(
+  tx: Tx,
+  job: { orgId: string; publicationId: string; assetId: string; versionId: string; sha256: string },
+): Promise<void> {
+  const payload = MediaIngestPayload.parse({
+    org_id: job.orgId,
+    pub_id: job.publicationId,
+    asset_id: job.assetId,
+    version_id: job.versionId,
+    sha256: job.sha256,
+  });
+  await sql`select app.enqueue_media_ingest(${payload.org_id}::uuid, ${payload.pub_id}::uuid, ${payload.asset_id}::uuid,
+    ${payload.version_id}, ${payload.sha256})`.execute(tx);
 }

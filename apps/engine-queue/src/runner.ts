@@ -32,9 +32,10 @@ const EXIT: Record<number, WorkerResult["outcome"]> = {
 };
 const MAX_STDOUT = 1024 * 1024; // a result line is a few kilobytes; more is not a result
 const DRAIN_MS = 2_000; // after the runner exits, how long its output may take to arrive
-/** The runner's settings, copied from the queue's environment: nothing else reaches Python (no database URL). */
+/** The runner's settings, copied from the queue's environment: nothing else reaches Python (no database URL).
+ * AWS_CA_BUNDLE: a store behind a private CA (pilot-local's Caddy), which boto3 then trusts. */
 const PASSED =
-  /^(PATH|HOME|LANG|LC_[A-Z]+|TMPDIR|PYTHONPATH|PYTHONDONTWRITEBYTECODE|PAGEINATOR_ICC|PGN_ICC_SHA256|PGN_S3_[A-Z_]+|PGN_WORKER_HOMES)$/;
+  /^(PATH|HOME|LANG|LC_[A-Z]+|TMPDIR|PYTHONPATH|PYTHONDONTWRITEBYTECODE|PAGEINATOR_ICC|PGN_ICC_SHA256|PGN_S3_[A-Z_]+|PGN_WORKER_HOMES|AWS_CA_BUNDLE)$/;
 
 export function runnerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(Object.entries(env).filter(([name]) => PASSED.test(name)));

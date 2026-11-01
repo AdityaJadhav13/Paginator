@@ -27,10 +27,15 @@ export const PresignedUpload = z.strictObject({
   expiresAt: Moment,
 });
 
+/** A picture's state: received (its print versions are being made), ready, rejected (the Desk's rules refuse it), or
+ * failed (the engine could not make them; the same picture sent again is tried afresh). */
+export const AssetStatus = z.enum(["received", "ready", "rejected", "failed"]);
+export type AssetStatus = z.infer<typeof AssetStatus>;
+
 export const Asset = z.strictObject({
   id: Id,
   kind: z.literal("photo"),
-  status: z.enum(["received", "ready", "rejected"]),
+  status: AssetStatus,
   mime: PictureType,
   bytes: z.number().int().min(1),
   widthPx: z.number().int().min(1),
@@ -46,7 +51,9 @@ export const StoryPhoto = z.strictObject({
   assetId: Id,
   caption: z.string(),
   credit: z.string(),
-  status: z.enum(["received", "ready", "rejected"]),
+  status: AssetStatus,
+  /** why it is rejected or failed: the Desk's message code (m.img.…), the engine's (worker.…), or null */
+  problem: z.string().nullable(),
   widthPx: z.number().int().min(1),
   heightPx: z.number().int().min(1),
   /** a preview comes with renditions (L2.2): null until then */

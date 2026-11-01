@@ -462,3 +462,66 @@ describe("P12. A lost answer to the attach", () => {
     expect(screen.queryByRole("heading", { name: "Someone else changed this story" })).not.toBeInTheDocument();
   });
 });
+
+describe("L2.2. The photo's state from the engine", () => {
+  const panel = (photo: Record<string, unknown>, mayView = true) => {
+    const environment = createMockApplicationEnvironment();
+    const story = {
+      photo: { assetId: "asset-demo-001", caption: "c", credit: "", widthPx: 10, heightPx: 10, previewUrl: null, problem: null, ...photo },
+    } as unknown as StoryDto;
+    const props = {
+      orgId: ORG, pubId: PUB, story, may: false, locked: true, caption: "c", credit: "", keptBecause: null, lang: undefined,
+      onCaption: () => undefined, onCredit: () => undefined, onLeave: () => undefined, onDiscardKept: () => undefined,
+      onAttach: async () => ({ ok: true as const }), onRemove: async () => ({ ok: true as const }),
+    };
+    return render(<I18nProvider><MediaProvider media={environment.media}><PhotoPanel {...props} mayView={mayView} /></MediaProvider></I18nProvider>);
+  };
+
+  it("says it is being prepared, to whoever sees the story, pictures or not", () => {
+    panel({ status: "received" }, false);
+    expect(screen.getByText("Preparing the photo for print…")).toBeInTheDocument();
+  });
+
+  it("gives a refusal in the Desk's own words, by its code, and only the heading for a code it does not carry", () => {
+    const view = panel({ status: "rejected", problem: "m.img.damaged" });
+    expect(screen.getByText("This photo was refused.")).toBeInTheDocument();
+    expect(screen.getByText("The picture file is damaged or incomplete. Try saving it again.")).toBeInTheDocument();
+    view.unmount();
+    panel({ status: "rejected", problem: "m.img.badProfile" });
+    expect(screen.getByText("This photo was refused.")).toBeInTheDocument();
+    expect(screen.queryByText(/Try saving it again/)).not.toBeInTheDocument();
+  });
+
+  it("words a refusal for the file's type (m.img.format) without the type the Desk named", () => {
+    panel({ status: "rejected", problem: "m.img.format" });
+    expect(screen.getByText(/file type is not one the Desk takes/)).toBeInTheDocument();
+  });
+
+  it("offers neither Show the photo nor Download the original for a refused or failed photo (it holds no bytes)", () => {
+    for (const status of ["rejected", "failed"]) {
+      const view = panel({ status, problem: status === "failed" ? "worker.lost" : "m.img.damaged" });
+      expect(screen.queryByRole("button", { name: "Show the photo" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Download the original" })).not.toBeInTheDocument();
+      view.unmount();
+    }
+    panel({ status: "ready" });
+    expect(screen.getByRole("button", { name: "Show the photo" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Download the original" })).toBeInTheDocument();
+  });
+
+  it("says a failed preparation is not the photo's fault", () => {
+    panel({ status: "failed", problem: "worker.lost" });
+    expect(screen.getByText("The photo could not be prepared for print.")).toBeInTheDocument();
+    expect(screen.getByText(/This is not the photo's fault/)).toBeInTheDocument();
+    expect(screen.queryByText("Preparing the photo for print…")).not.toBeInTheDocument();
+  });
+
+  it("says it in Marathi, the Desk's Marathi for a refusal", () => {
+    window.localStorage.setItem("pageinator.language", "mr");
+    panel({ status: "rejected", problem: "m.img.tooManyPixels" });
+    expect(screen.getByText("हे छायाचित्र नाकारले गेले.")).toBeInTheDocument();
+    expect(
+      screen.getByText("या चित्रात डेस्कसाठी खूप जास्त पिक्सेल आहेत. ते लहान करून जतन करा आणि पुन्हा प्रयत्न करा."),
+    ).toBeInTheDocument();
+  });
+});

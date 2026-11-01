@@ -592,3 +592,20 @@ describe("Live updates elsewhere", () => {
     expect(environment.liveController.stops()).toBe(1);
   });
 });
+
+describe("The photo's state, live", () => {
+  it("shows the engine's answer for the photo though the story's version did not change", async () => {
+    const environment = createMockApplicationEnvironment();
+    renderAuth(at("story-demo-004"), { preset: "sahyadri-editor", environment });
+    expect(await screen.findByText("Preparing the photo for print…")).toBeInTheDocument();
+    const get = environment.stories.get.bind(environment.stories);
+    vi.spyOn(environment.stories, "get").mockImplementation(async (input) => {
+      const result = await get(input);
+      if (!result.ok || !result.value.photo) return result;
+      return { ...result, value: { ...result.value, photo: { ...result.value.photo, status: "rejected", problem: "m.img.damaged" } } };
+    });
+    act(() => environment.liveController.emit(ORG, { type: "story", publicationId: PUB, storyId: "story-demo-004" }));
+    expect(await screen.findByText("The picture file is damaged or incomplete. Try saving it again.")).toBeInTheDocument();
+    expect(screen.queryByText("Preparing the photo for print…")).not.toBeInTheDocument();
+  });
+});

@@ -10,9 +10,10 @@
 //     type from its bytes and its width and height (picture.ts). A file of another size than declared, or that is not
 //     a picture, is refused (422 not_a_picture). A picture becomes an asset, copied out of quarantine to
 //     orgs/<org>/pubs/<pub>/assets/<asset>/original (its version kept, the SHA-256 in its metadata), or, when the
-//     publication has those very bytes already, the asset it has. Then, completed or refused, every version of the
-//     quarantine key is deleted by its version id (a file sent twice under one policy leaves two); the bucket's
-//     lifecycle rule removes whatever is sent after that (scripts/dev-buckets.ts).
+//     publication has those very bytes already, the asset it has. A new asset's print versions are enqueued in the
+//     same transaction (media.ingest; src/modules/media/engine-inbox.ts settles the asset). Then, completed or
+//     refused, every version of the quarantine key is deleted by its version id (a file sent twice under one policy
+//     leaves two); the bucket's lifecycle rule removes whatever is sent after that (scripts/dev-buckets.ts).
 import { createHash } from "node:crypto";
 import { Asset, CompletedUpload, MAX_PICTURE_BYTES, PresignedUpload, UploadRequest } from "@pageinator/contracts";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -24,6 +25,7 @@ import {
   completeUpload,
   createAsset,
   createUpload,
+  enqueueMediaIngest,
   findAsset,
   findUpload,
   rejectUpload,
@@ -236,6 +238,14 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
             metadata: { sha256: read.sha256 },
           });
           await setAssetVersion(tx, pub, made.id, copied.versionId);
+          // its print versions (L2.2): the job commits with the asset, or neither does
+          await enqueueMediaIngest(tx, {
+            orgId: access.tenant.orgId,
+            publicationId: pub,
+            assetId: made.id,
+            versionId: copied.versionId,
+            sha256: read.sha256,
+          });
           await completeUpload(tx, pub, u, made.id);
           await completed(made.id, false);
           return { ...made, version_id: copied.versionId };

@@ -47,7 +47,8 @@ export type StoryRow = {
   photo_asset_id: string | null;
   photo_caption: string | null;
   photo_credit: string | null;
-  photo_status: "received" | "ready" | "rejected" | null;
+  photo_status: "received" | "ready" | "rejected" | "failed" | null;
+  photo_problem: string | null;
   photo_width: number | null;
   photo_height: number | null;
 } & Text & { words: number };
@@ -60,7 +61,7 @@ const STORY = sql`
     s.updated_by, ub.display_name as updated_by_name,
     r.headline, r.kicker, r.deck, r.byline, r.body, r.words,
     sp.asset_id as photo_asset_id, sp.caption as photo_caption, sp.credit as photo_credit, pa.status as photo_status,
-    pa.width_px as photo_width, pa.height_px as photo_height,
+    pa.problem as photo_problem, pa.width_px as photo_width, pa.height_px as photo_height,
     (select count(*)::int from app.comment c
       where c.org_id = s.org_id and c.publication_id = s.publication_id and c.target_id = s.id
         and c.deleted_at is null) as comment_count

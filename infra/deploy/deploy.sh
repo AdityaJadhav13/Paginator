@@ -8,9 +8,10 @@
 #
 # The steps (docs/product/10-l2-newsroom-plan.md §8.2):
 #   1. settings: every parameter under /pageinator/pilot/ in SSM Parameter Store, written to the root-only env file;
-#   2. images: an ECR login, then `docker compose pull` of ${PGN_REGISTRY}/pageinator-{api,web,backup}:<tag>;
+#   2. images: an ECR login, then `docker compose pull` of ${PGN_REGISTRY}/pageinator-{api,web,backup,engine-worker}:<tag>;
 #   3. `docker compose run --rm migrate` (expand/contract migrations: the running version keeps working);
-#   4. `docker compose up -d --wait` (the API stops within 20 s of its signal), then /readyz through the monitor port;
+#   4. `docker compose up -d --wait` (the API stops within 20 s of its signal, the engine within 200 s: its running job
+#      finishes first), then /readyz through the monitor port;
 #   5. the tag is recorded, and the one before it kept for a rollback.
 # The tag being deployed is written to $STATE_DIR/attempt before step 2 and removed after step 5, so a rollback knows
 # a deploy failed part way: it then starts the current tag (the release that ran before the attempt) again. Otherwise

@@ -24,6 +24,7 @@
     "@fastify/rate-limit": "catalog:",
     "@pageinator/contracts": "workspace:*",
     "@pageinator/desk-text": "workspace:*",
+    "@pageinator/engine-queue": "workspace:*",
     "better-auth": "catalog:",
     "fastify": "catalog:",
     "fastify-type-provider-zod": "catalog:",

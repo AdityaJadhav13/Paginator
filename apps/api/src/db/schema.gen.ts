@@ -24,6 +24,7 @@ export interface AppAsset {
   org_id: string;
   original_key: GeneratedAlways<string>;
   photographer: Generated<string>;
+  problem: string | null;
   publication_id: string;
   sha256: string;
   status: Generated<string>;
@@ -103,6 +104,20 @@ export interface AppEdition {
   volume: Generated<string>;
 }
 
+export interface AppEngineEvent {
+  asset_id: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  job_id: string;
+  kind: string;
+  org_id: string;
+  outcome: string | null;
+  payload: Json;
+  processed_at: Timestamp | null;
+  retry_at: Timestamp | null;
+  tries: Generated<number>;
+}
+
 export interface AppIdempotencyKey {
   created_at: Generated<Timestamp>;
   expires_at: Generated<Timestamp>;
@@ -176,6 +191,22 @@ export interface AppPublicationGrant {
   roles: string[];
   updated_at: Generated<Timestamp>;
   user_id: string;
+}
+
+export interface AppRendition {
+  asset_id: string;
+  bytes: number;
+  created_at: Generated<Timestamp>;
+  height_px: number;
+  key: string;
+  mime: string;
+  org_id: string;
+  params_hash: string;
+  publication_id: string;
+  purpose: string;
+  sha256: string;
+  version_id: string;
+  width_px: number;
 }
 
 export interface AppSection {
@@ -282,6 +313,7 @@ export interface DB {
   "app.desk_bundle": AppDeskBundle;
   "app.desk_bundle_revision": AppDeskBundleRevision;
   "app.edition": AppEdition;
+  "app.engine_event": AppEngineEvent;
   "app.idempotency_key": AppIdempotencyKey;
   "app.invitation_grant": AppInvitationGrant;
   "app.notification": AppNotification;
@@ -289,6 +321,7 @@ export interface DB {
   "app.person": AppPerson;
   "app.publication": AppPublication;
   "app.publication_grant": AppPublicationGrant;
+  "app.rendition": AppRendition;
   "app.section": AppSection;
   "app.story": AppStory;
   "app.story_photo": AppStoryPhoto;

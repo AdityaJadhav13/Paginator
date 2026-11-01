@@ -27,6 +27,7 @@ import { deskBundleRoutes } from "./modules/stories/desk-bundle.ts";
 import { peopleRoutes } from "./modules/people/plugin.ts";
 import { storyRoutes } from "./modules/stories/routes.ts";
 import { photoRoutes } from "./modules/media/photos.ts";
+import { startEngineInbox } from "./modules/media/engine-inbox.ts";
 import { uploadRoutes } from "./modules/media/uploads.ts";
 import { contactRoutes } from "./modules/contact/routes.ts";
 import { closeWhenStopping } from "./shutdown.ts";
@@ -59,6 +60,9 @@ export type AppDeps = {
   contactLimits?: { perHour: number; perDay: number; perDayAll: number };
   /** The pause before a dropped contact message's answer (ms); tests make it 0. */
   contactDropPause?: () => number;
+  /** Runs the engine inbox's consumer and the queue's sweep (src/modules/media/engine-inbox.ts) while the app is open:
+   * main.ts does; tests that do not drive them leave it out. */
+  engineInbox?: boolean;
 };
 
 export async function buildApp(deps: AppDeps) {
@@ -150,6 +154,10 @@ export async function buildApp(deps: AppDeps) {
       sendAll(mailer, outbox, (kind) => fastify.log.warn({ kind }, "an email was not sent: its address is refused"));
     people = { auth, mailer, database, notify, mail };
     live = startLive(fastify, database);
+    if (deps.engineInbox) {
+      const inbox = startEngineInbox(database, fastify.log, config.engineSweep);
+      fastify.addHook("preClose", () => inbox.close()); // before the database closes (onClose)
+    }
   }
 
   const app = fastify.withTypeProvider<ZodTypeProvider>();

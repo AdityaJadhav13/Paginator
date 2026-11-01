@@ -199,6 +199,11 @@ jobs:
           set -a; . ./.env.dev; set +a
           PGN_QUEUE_DB_URL="postgres://postgres:${PGN_POSTGRES_PASSWORD}@127.0.0.1:55432/postgres" \
             PGN_QUEUE_PYTHON="$PWD/apps/engine-worker/.venv/bin/python" pnpm exec vitest run --project engine-queue
+      - name: a photo end to end on that database and store (the API's upload, the queue, the real runner, the inbox)
+        run: |
+          set -a; . ./.env.dev; set +a
+          PAGEINATOR_DB_RUN=1 PGN_QUEUE_PYTHON="$PWD/apps/engine-worker/.venv/bin/python" \
+            pnpm exec vitest run --project api-db apps/api/test/db/engine-e2e.test.ts
       - name: the worker image's tests, inside the image (linux/amd64; built, never pushed)
         run: docker build --platform linux/amd64 -f infra/docker/engine-worker.Dockerfile --target test -t pgn-engine-worker:test .
       - name: the worker image, and its files (the repository's own byte for byte, the stand-in fonts only, nothing private)
@@ -212,7 +217,12 @@ jobs:
           printf 'a fictional colour profile' > "$RUNNER_TEMP/fictional.icc"
           docker run --rm --read-only --tmpfs /tmp -v pgn-ci-homes:/var/lib/pageinator/homes \
             -v "$RUNNER_TEMP/fictional.icc:/run/pageinator/newsprint.icc:ro" \
-            -e PGN_ICC_SHA256="$(sha256sum "$RUNNER_TEMP/fictional.icc" | cut -d' ' -f1)" pgn-engine-worker:ci
+            -e PGN_ICC_SHA256="$(sha256sum "$RUNNER_TEMP/fictional.icc" | cut -d' ' -f1)" pgn-engine-worker:ci \
+            python -B -m pgn_worker.health
+      - name: the image's queue process refuses to start without its settings (and names the one missing)
+        run: |
+          out="$(docker run --rm --read-only --tmpfs /tmp pgn-engine-worker:ci 2>&1)" && exit 1
+          echo "$out" | grep -q "PGN_DB_HOST is not set"
 
   api-image:
     name: the pilot's images build; the API answers /healthz; Caddy's configuration is valid

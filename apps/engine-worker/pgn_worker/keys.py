@@ -6,6 +6,8 @@ import re
 
 # the database's ids: uuidv7 (version 7, the RFC 9562 variant), written as PostgreSQL writes a uuid (lowercase)
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", re.ASCII)
+# an organisation's id is Better Auth's (gen_random_uuid(), version 4): any RFC 9562 version, lowercase
+ORG_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", re.ASCII)
 CMYK_RASTER = re.compile(r"assets/(?P<asset>[^/]+)/r/cmyk-[0-9a-f]{32}\.cmyk\.gz", re.ASCII)
 SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", re.ASCII)      # one part of a key: no "/", "..", spaces or controls
 
@@ -14,8 +16,8 @@ class KeyRefused(ValueError):
     """A key outside the job's organisation and publication, or not made of plain parts: the job stops."""
 
 
-def uuid(value: object, what: str) -> str:
-    if not isinstance(value, str) or not UUID.fullmatch(value):
+def uuid(value: object, what: str, pattern: re.Pattern = UUID) -> str:
+    if not isinstance(value, str) or not pattern.fullmatch(value):
         raise KeyRefused(f"{what} is not an id")
     return value
 
@@ -24,7 +26,7 @@ class KeyGuard:
     """The keys of one organisation and publication."""
 
     def __init__(self, org_id: object, pub_id: object):
-        self.org_id = uuid(org_id, "org_id")
+        self.org_id = uuid(org_id, "org_id", ORG_UUID)
         self.pub_id = uuid(pub_id, "pub_id")
         self.prefix = f"orgs/{self.org_id}/pubs/{self.pub_id}/"
 

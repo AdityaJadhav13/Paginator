@@ -196,7 +196,7 @@ describe("A story's photo", () => {
     const load = vi.spyOn(environment.media, "loadOriginal");
     renderAuth(at("story-demo-004"), { preset: "sahyadri-editor", environment });
     const user = userEvent.setup();
-    expect(await screen.findByText(/There is no small preview yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/Showing the photo downloads the whole picture/)).toBeInTheDocument();
     expect(load).not.toHaveBeenCalled();
     expect(screen.getByRole("link", { name: "Download the original" })).toHaveAttribute(
       "href",

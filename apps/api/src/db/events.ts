@@ -1,6 +1,7 @@
-// The API's one LISTEN connection (docs/product/10-l2-newsroom-plan.md §2; pgn_listen, made by Database.listener()):
-// it hears channel app_events (migration 2026_11_24_0001) and hands each message's text on, unparsed: the receiver
-// treats it as an untrusted hint (src/modules/notifications/events.ts). A lost connection is made again after a pause
+// A LISTEN connection (docs/product/10-l2-newsroom-plan.md §2; pgn_listen, made by Database.listener()): it hears
+// channel app_events (migration 2026_11_24_0001), or engine_events for the engine inbox's consumer (a second
+// connection), and hands each message's text on, unparsed: the receiver treats it as an untrusted hint
+// (src/modules/notifications/events.ts, src/modules/media/engine-inbox.ts). A lost connection is made again after a pause
 // (1 s, doubling to 30 s); since messages sent meanwhile are lost, `onGap` is called once it listens again, so the
 // receiver can tell everyone to fetch afresh.
 import type { Client } from "pg";
@@ -18,6 +19,7 @@ export type Listening = {
 export function listenAppEvents(
   database: Pick<Database, "listener">,
   handlers: { onMessage(text: string): void; onGap(): void; onError(error: Error): void },
+  channel: typeof CHANNEL | "engine_events" = CHANNEL,
 ): Listening {
   let client: Client | undefined;
   let closed = false;
@@ -57,11 +59,11 @@ export function listenAppEvents(
       if (!closed) fail(new Error("the LISTEN connection ended"));
     });
     next.on("notification", (message) => {
-      if (message.channel === CHANNEL && typeof message.payload === "string") handlers.onMessage(message.payload);
+      if (message.channel === channel && typeof message.payload === "string") handlers.onMessage(message.payload);
     });
     try {
       await next.connect();
-      await next.query(`listen ${CHANNEL}`);
+      await next.query(`listen ${channel}`);
     } catch (error) {
       fail(error instanceof Error ? error : new Error(String(error)));
       return;

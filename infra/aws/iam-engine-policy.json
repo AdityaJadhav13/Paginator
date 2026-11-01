@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "WorkBucketOrganisationsReadOnly",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:GetObjectVersion"],
+      "Resource": "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*"
+    },
+    {
+      "Sid": "WorkBucketRenditionsWriteOnly",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject"],
+      "Resource": "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/assets/*/r/*"
+    }
+  ]
+}

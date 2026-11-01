@@ -747,6 +747,15 @@ function EditorContent({
   const applyLive = (fresh: StoryDto) => {
     held.current = false;
     const { story: current, fields: mine, saved: base, conflict: open, offered: asking } = latest.current;
+    // the photo's state from the engine (L2.2) changes no version: taken as it comes, nothing else of the story
+    if (current && fresh.revision === current.revision && fresh.photo && current.photo?.assetId === fresh.photo.assetId) {
+      if (fresh.photo.status !== current.photo.status || fresh.photo.problem !== current.photo.problem) {
+        const next = { ...current, photo: { ...current.photo, status: fresh.photo.status, problem: fresh.photo.problem } };
+        latest.current = { ...latest.current, story: next };
+        setStory(next);
+      }
+      return;
+    }
     // the person's choice comes first; a version not newer is this screen's own change, already here
     if (!current || open || asking || fresh.revision <= current.revision) return;
     const theirs = fieldsOf(fresh);

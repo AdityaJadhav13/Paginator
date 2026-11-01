@@ -34,6 +34,17 @@ deploy.sh refuses a state file that holds anything but a tag, and runs one deplo
 ahead of it) only if no migration came after it. If one did, an older release than the previous one may not run on the
 schema: check `apps/api/src/db/migrations` between the two commits first.
 
+## Releases from before the engine's queue (migration `2026_11_27_0001_engine_queue`)
+
+Rolling back to a release older than that migration is not safe as it stands (doc 11 L2-333):
+- such a release does not know the photo state `failed`: a story whose photo failed cannot be read (500) until its
+  photo is taken off (in the story editor, while the newer release still runs) or the release is rolled forward;
+- its upload completion enqueues no job: photos sent while it runs stay "Preparing…", and after the next deploy the
+  sweep fails them (`worker.lost`) after 30 minutes, so they must be sent again.
+
+Prefer fixing forward. If a rollback past it cannot wait, take the failed photos off their stories first and tell the
+desk that photos sent meanwhile must be sent again.
+
 ## If a migration itself was wrong
 
 Fix forward: a new migration that undoes or repairs it, in a new release. Restore the database (`restore.md`) only if

@@ -48,10 +48,46 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   // notifications (migration 2026_11_24_0001): never deleted; only read_at and emailed_at change (COLUMN_RIGHTS)
   notification: ["INSERT", "SELECT"],
   publication_grant: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  // the engine (migration 2026_11_27_0001): renditions only grow; the inbox's rows are added (the sweep's) and marked
+  // processed (COLUMN_RIGHTS), never removed
+  rendition: ["INSERT", "SELECT"],
+  engine_event: ["INSERT", "SELECT"],
 };
 
+/** pgn_engine's rights on app tables: only adding to the inbox (plan §3.1). */
+export const ENGINE_APP_RIGHTS: Readonly<Record<string, readonly string[]>> = { engine_event: ["INSERT"] };
+
+/** The rights on Graphile Worker's tables in schema queue (migration 2026_11_27_0001): pgn_engine's ENGINE_GRANTS
+ * (apps/engine-queue), and pgn_app's for the sweep (read the jobs, remove a spent one). */
+export const QUEUE_RIGHTS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  pgn_engine: {
+    migrations: ["SELECT"],
+    _private_jobs: ["DELETE", "SELECT", "UPDATE"],
+    _private_job_queues: ["SELECT", "UPDATE"],
+    _private_tasks: ["INSERT", "SELECT"],
+    _private_known_crontabs: ["SELECT"],
+  },
+  pgn_app: { _private_jobs: ["DELETE", "SELECT"], _private_tasks: ["SELECT"] },
+};
+
+/** The queue's tables pgn_app reaches, for the sweep: job payloads are ids only, of every organisation by design (the
+ * sweep writes each job's failure under its own organisation's wall). */
+const QUEUE_REACH = ["queue._private_jobs", "queue._private_tasks"];
+
+/** Permissive policies an app table may have beside its organisation wall, as `name role command` (command r select,
+ * a insert): the engine's report, and the system reader's flag (plan §3.2). Any other widens the wall. */
+export const OPENINGS: Readonly<Record<string, readonly string[]>> = {
+  engine_event: ["engine_consumer pgn_app r", "engine_reports pgn_engine a"],
+};
+
+/** The SECURITY DEFINER functions there may be, each executable by pgn_app alone: the enqueue wrapper. */
+export const DEFINERS = ["app.enqueue_media_ingest"];
+
 /** The column-level grants allowed, as `schema.table role RIGHT (columns)`: any other is a problem. */
-export const COLUMN_RIGHTS: readonly string[] = ["app.notification pgn_app UPDATE (emailed_at, read_at)"];
+export const COLUMN_RIGHTS: readonly string[] = [
+  "app.engine_event pgn_app UPDATE (outcome, processed_at, retry_at, tries)",
+  "app.notification pgn_app UPDATE (emailed_at, read_at)",
+];
 
 /** pgn_auth's rights on each identity table: Better Auth's own (it reads and writes them as it needs), and ours,
  * with auth_event append-only. A table missing here is a problem. Identity tables have no row-level security: no other
@@ -74,9 +110,9 @@ export const IDENTITY_RIGHTS: Readonly<Record<string, readonly string[]>> = {
 /** The schemas each login role may use; none may create anything anywhere. */
 export const SCHEMA_USAGE: Readonly<Record<string, readonly string[]>> = {
   pgn_migrator: [],
-  pgn_app: ["app"],
+  pgn_app: ["app", "queue"],
   pgn_auth: ["identity"],
-  pgn_engine: ["queue"],
+  pgn_engine: ["app", "queue"],
   pgn_listen: [],
 };
 const LOGINS = Object.keys(SCHEMA_USAGE);
@@ -139,11 +175,14 @@ export async function catalogProblems(su: Client, options: CatalogOptions = {}):
     name: string;
     permissive: boolean;
     all: boolean;
+    to: string;
     using: string | null;
     check: string | null;
   }>(
     `select c.relname as table, p.polname as name, p.polpermissive as permissive,
        p.polcmd = '*' and p.polroles = '{0}' as all,
+       p.polname || ' ' || array_to_string(array(select rolname from pg_roles where oid = any (p.polroles)), ',')
+         || case when p.polroles = '{0}' then 'public' else '' end || ' ' || p.polcmd::text as to,
        pg_get_expr(p.polqual, p.polrelid) as using, pg_get_expr(p.polwithcheck, p.polrelid) as check
      from pg_policy p join pg_class c on c.oid = p.polrelid where c.relnamespace = 'app'::regnamespace`,
   );
@@ -158,7 +197,8 @@ export async function catalogProblems(su: Client, options: CatalogOptions = {}):
     else if (!table.forced) add(`${t}: row-level security is not forced, so its owner would pass the walls`);
     if (!walls(table.name, "org_wall", true, ORG_WALL)) add(`${t} lacks the organisation wall (policy org_wall)`);
     for (const p of policies.rows.filter((p) => p.table === table.name && p.permissive && p.name !== "org_wall")) {
-      add(`${t}: the permissive policy ${p.name} widens the organisation wall`);
+      if (!(OPENINGS[table.name] ?? []).includes(p.to))
+        add(`${t}: the permissive policy ${p.name} widens the organisation wall`);
     }
     if (isContent(table) && !walls(table.name, "pub_wall", false, PUB_WALL)) {
       add(`${t} is a content table without the publication wall (restrictive policy pub_wall)`);
@@ -184,9 +224,13 @@ export async function catalogProblems(su: Client, options: CatalogOptions = {}):
     const zone =
       table && row.schema === "app" && row.role === "pgn_app"
         ? rights
-        : table && row.schema === "identity" && row.role === "pgn_auth"
-          ? identityRights
-          : undefined;
+        : table && row.schema === "app" && row.role === "pgn_engine"
+          ? ENGINE_APP_RIGHTS
+          : table && row.schema === "identity" && row.role === "pgn_auth"
+            ? identityRights
+            : table && row.schema === "queue"
+              ? QUEUE_RIGHTS[row.role]
+              : undefined;
     if (table && row.schema === "identity" && identityRights[row.name] === undefined && !listed.has(row.name)) {
       listed.add(row.name);
       add(`identity.${row.name}: pgn_auth's rights on it are not listed (test/tenancy/checks.ts)`);
@@ -286,9 +330,15 @@ export async function catalogProblems(su: Client, options: CatalogOptions = {}):
     [LOGINS],
   );
   for (const fn of functions.rows) {
-    if (fn.definer) add(`${fn.name}() runs with its owner's rights (SECURITY DEFINER)`);
-    if (!fn.path) add(`${fn.name}() does not set its search_path`);
-    const want = APP_FUNCTIONS.map((name) => `app.${name}`).includes(fn.name) ? ["pgn_app"] : [];
+    if (fn.definer && !DEFINERS.includes(fn.name)) add(`${fn.name}() runs with its owner's rights (SECURITY DEFINER)`);
+    // Graphile Worker's own functions set none; nobody may execute them (below), and they run only under the wrapper
+    if (!fn.path && !fn.name.startsWith("queue.")) add(`${fn.name}() does not set its search_path`);
+    const want =
+      fn.name === "app.current_org"
+        ? ["pgn_app", "pgn_engine"] // pgn_engine's insert into the inbox passes the organisation wall's check
+        : [...APP_FUNCTIONS.map((name) => `app.${name}`), ...DEFINERS].includes(fn.name)
+          ? ["pgn_app"]
+          : [];
     if (!same(fn.executors, want)) add(`${fn.name}() may be executed by ${fn.executors.join(", ") || "nobody"}`);
   }
 
@@ -378,7 +428,9 @@ export async function crossTenantProblems(
      where ${USER_SCHEMA} and n.nspname <> 'app' and c.relkind in ('r', 'p', 'v', 'm', 'f')
        and has_table_privilege('pgn_app', c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE') order by 1`,
   );
-  for (const { relation } of outside.rows) add(`${relation}: pgn_app can reach it outside app, so it is not checked`);
+  for (const { relation } of outside.rows) {
+    if (!QUEUE_REACH.includes(relation)) add(`${relation}: pgn_app can reach it outside app, so it is not checked`);
+  }
   const app = await db.connect("app");
   for (const table of tables.rows) {
     const t = `app.${table.name}`;

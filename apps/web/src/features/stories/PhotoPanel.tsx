@@ -12,9 +12,12 @@
  * - The API's refusals in plain words: not a picture, too large, the upload quotas (a 429 at presign only), a policy
  *   that ran out or was refused, a file that changed while it was sent.
  * - Privacy: the photo is kept as it was taken, EXIF and place included; said where the photo is added.
- * - Showing it: there is no small preview yet (the worker makes them in L2.2), so the original loads only when asked,
+ * - Its state, from the engine (L2.2): being prepared for print, refused by the Desk's rules (in the Desk's words, by
+ *   its message code), or not prepared (the engine failed: not the photo's fault); an open editor hears the change live.
+ * - Showing it: the original loads only when asked (this panel does not use the engine's preview yet, L2-322),
  *   through a fresh 5-minute link each time, held in memory only and let go when the screen goes. Only for whoever
- *   may see the publication's pictures (media.view).
+ *   may see the publication's pictures (media.view), and never for a refused or failed photo: it no longer holds its
+ *   bytes, so neither Show nor Download is offered.
  * - Leaving the screen stops every step: nothing is attached after the person has gone.
  * - A caption and credit typed for a photo that is no longer there (removed by someone, or no longer theirs to
  *   change) are kept, read only, until a photo comes back or the person lets them go.
@@ -124,6 +127,16 @@ function FailureMessage({ why }: { readonly why: Failure }) {
   return <ProblemMessage problem={problem} />;
 }
 
+/** The Desk's own words for a photo it refused (media.rejected's code), when the Desk's message has a code we carry. */
+const DESK_WORDS: Readonly<Record<string, PlainKey>> = {
+  "m.img.tooManyPixels": "photo.rejected.m.img.tooManyPixels",
+  "m.img.notAPicture": "photo.rejected.m.img.notAPicture",
+  "m.img.format": "photo.rejected.m.img.format",
+  "m.img.damaged": "photo.rejected.m.img.damaged",
+  "m.img.tooLarge": "photo.rejected.m.img.tooLarge",
+};
+const deskWords = (code: string | null): PlainKey | undefined => (code ? DESK_WORDS[code] : undefined);
+
 /** The original, loaded only when asked, from a fresh link each time; held in memory and let go. */
 function PhotoView({ orgId, pubId, story }: { readonly orgId: string; readonly pubId: string; readonly story: StoryDto }) {
   const media = useMedia();
@@ -195,9 +208,30 @@ function PhotoView({ orgId, pubId, story }: { readonly orgId: string; readonly p
           {t("photo.download")}
         </a>
       </p>
-      {photo.status === "rejected" && <InlineMessage variant="error" heading={t("photo.rejected")} iconLabel={t("message.error")} />}
     </Stack>
   );
+}
+
+/** The photo's state from the engine: being prepared for print, refused in the Desk's words, or not prepared. */
+function PhotoState({ photo }: { readonly photo: NonNullable<StoryDto["photo"]> }) {
+  const { t } = useI18n();
+  const words = deskWords(photo.problem);
+  if (photo.status === "received") return <ProgressIndicator role="status" label={t("photo.processing")} />;
+  if (photo.status === "rejected") {
+    return (
+      <InlineMessage variant="error" heading={t("photo.rejected")} iconLabel={t("message.error")}>
+        {words && <p>{t(words)}</p>}
+      </InlineMessage>
+    );
+  }
+  if (photo.status === "failed") {
+    return (
+      <InlineMessage variant="error" heading={t("photo.failed")} iconLabel={t("message.error")}>
+        <p>{t("photo.failed.body")}</p>
+      </InlineMessage>
+    );
+  }
+  return null;
 }
 
 /** A caption and credit with no photo to go on: shown read only, to copy, until a photo comes back or they are let go. */
@@ -422,7 +456,10 @@ export function PhotoPanel({
           {t("glossary.photo")}
         </h2>
         <div aria-live="polite">{notice && <p>{notice}</p>}</div>
-        {photo && mayView && <PhotoView orgId={orgId} pubId={pubId} story={story} />}
+        {photo && mayView && photo.status !== "rejected" && photo.status !== "failed" && (
+          <PhotoView orgId={orgId} pubId={pubId} story={story} />
+        )}
+        {photo && <PhotoState photo={photo} />}
         {kept && keptBecause ? (
           <KeptCaption caption={caption} credit={credit} why={keptBecause} onDiscard={onDiscardKept} />
         ) : (

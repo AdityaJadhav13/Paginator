@@ -109,7 +109,7 @@ describe("(a) the catalog", () => {
       "reporting.people: pgn_app has SELECT, not none",
       "app.planted_unforced pgn_engine UPDATE (org_id) is a column-level grant not listed",
       mayCreate("pgn_migrator"),
-      "pgn_app may use the schemas app, reporting",
+      "pgn_app may use the schemas app, queue, reporting",
       ...everyone.slice(1).map(mayCreate),
       "app.planted_definer() runs with its owner's rights (SECURITY DEFINER)",
       "app.planted_open() does not set its search_path",

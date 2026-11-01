@@ -22,8 +22,20 @@ export const AUDIT_ACTIONS = {
   "comment.edit": { scope: "publication" },
   "comment.reopen": { scope: "publication" },
   "comment.resolve": { scope: "publication" },
+  /** A picture's print versions, from the engine's inbox (actor: the system): made ({job, paramsHash}), refused by the
+   * Desk's rules ({job, code, status}), or not made ({job, code}: the job failed, or the sweep found it lost). */
+  "asset.fail": { scope: "publication" },
+  "asset.ready": { scope: "publication" },
+  "asset.reject": { scope: "publication" },
   /** A story bundle sent to the Desk, on its edition ({bundle, stories, photos}). */
   "desk.export": { scope: "publication" },
+  /** An engine event the inbox would not apply ({event, job, kind, reason}): not the contract's, or for an asset that
+   * is not the organisation's and publication's it names, or one that still could not be applied after every try
+   * (reason "error"). Only Owner and Admin see it (its publication is unchecked). */
+  "engine.event_refuse": { scope: "org" },
+  /** An engine event for an asset still waiting but for other bytes ({event, job, kind, reason: "other_bytes"}): late
+   * or forged, never applied. A duplicate for a settled or deleted asset is ignored without a record. */
+  "engine.event_ignore": { scope: "org" },
   "invitation.accept": { scope: "org" },
   "invitation.cancel": { scope: "org" },
   "invitation.create": { scope: "org" },
