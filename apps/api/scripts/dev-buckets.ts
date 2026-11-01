@@ -5,17 +5,21 @@
 //     alone. The API deletes every version of a completed or refused upload itself (src/modules/media/uploads.ts);
 //     the rule takes what is left: uploads never completed, and files sent again under a policy after that.
 //     SeaweedFS 4.48 accepts the rule; whether it deletes was not observed (11-fix-before-launch);
-//   - the archive bucket, with Object Lock enabled at creation (SeaweedFS needs it then; releases use it from L2.5).
+//   - the archive bucket, with Object Lock enabled at creation (SeaweedFS needs it then; releases use it from L2.5);
+//   - when PGN_S3_CORS_ORIGIN names the app's origin (the pilot-local stack, infra/docker/compose.pilot.yml): the work
+//     bucket's CORS rule for that origin (uploadsCors in src/storage/s3.ts), so the browser may upload to it;
+//   - when PGN_S3_BACKUPS_BUCKET is set: the backups bucket, with Object Lock (apps/api/scripts/db-backup.ts).
 // It prints what it did and what the store refused (SeaweedFS may not support every setting: see its output).
 import {
   BucketAlreadyOwnedByYou,
   CreateBucketCommand,
   HeadBucketCommand,
+  PutBucketCorsCommand,
   PutBucketLifecycleConfigurationCommand,
   PutBucketVersioningCommand,
 } from "@aws-sdk/client-s3";
 import { ConfigError, loadStorageConfig } from "../src/config.ts";
-import { UPLOADS_LIFECYCLE, s3Client } from "../src/storage/s3.ts";
+import { UPLOADS_LIFECYCLE, s3Client, uploadsCors } from "../src/storage/s3.ts";
 
 let storage;
 try {
@@ -30,6 +34,12 @@ if (!storage) {
   process.exit(1);
 }
 const client = s3Client(storage);
+const corsOrigin = process.env["PGN_S3_CORS_ORIGIN"] || undefined;
+if (corsOrigin !== undefined && !(URL.canParse(corsOrigin) && new URL(corsOrigin).origin === corsOrigin)) {
+  console.error("PGN_S3_CORS_ORIGIN must be an origin such as https://app.localhost:59443 (no path).");
+  process.exit(1);
+}
+const backupsBucket = process.env["PGN_S3_BACKUPS_BUCKET"] || undefined;
 
 async function make(bucket: string, objectLock: boolean): Promise<void> {
   try {
@@ -72,3 +82,11 @@ await setting("uploads/ expired after a day, old versions and lone delete marker
   ),
 );
 await make(archiveBucket, true);
+if (corsOrigin !== undefined) {
+  await setting(`CORS for ${corsOrigin}`, () =>
+    client.send(
+      new PutBucketCorsCommand({ Bucket: workBucket, CORSConfiguration: { CORSRules: uploadsCors(corsOrigin) } }),
+    ),
+  );
+}
+if (backupsBucket !== undefined) await make(backupsBucket, true);

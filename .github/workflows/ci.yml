@@ -202,3 +202,49 @@ jobs:
           docker run --rm --read-only --tmpfs /tmp -v pgn-ci-homes:/var/lib/pageinator/homes \
             -v "$RUNNER_TEMP/fictional.icc:/run/pageinator/newsprint.icc:ro" \
             -e PGN_ICC_SHA256="$(sha256sum "$RUNNER_TEMP/fictional.icc" | cut -d' ' -f1)" pgn-engine-worker:ci
+
+  api-image:
+    name: the pilot's images build; the API answers /healthz; Caddy's configuration is valid
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: build (infra/docker/api.Dockerfile; no secret, no push)
+        run: docker build -f infra/docker/api.Dockerfile -t pageinator-api:ci .
+      - name: build the backup image, which has pg_dump 18 and Node
+        run: |
+          docker build -f infra/docker/api.Dockerfile --target backup -t pageinator-backup:ci .
+          docker run --rm pageinator-backup:ci sh -c 'pg_dump --version | grep -q " 18\." && node --version'
+      - name: build the web image, and validate its Caddyfile as the pilot and pilot-local run it
+        run: |
+          docker build -f infra/docker/web.Dockerfile -t pageinator-web:ci .
+          docker run --rm -e PGN_DOMAIN=example.test -e PGN_TLS_ISSUER=ops@example.test \
+            -e PGN_S3_PUBLIC_ORIGIN=https://pgn-pilot-work.s3.ap-south-1.amazonaws.com \
+            pageinator-web:ci caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm -e PGN_DOMAIN=localhost -e PGN_TLS_ISSUER=internal -e PGN_HTTPS_PORT=59443 \
+            -e PGN_S3_PUBLIC_ORIGIN=https://pgn-local-work.s3.localhost:59443 -e PGN_S3_LOCAL_HOST='*.s3.localhost' \
+            -v "$PWD/infra/caddy/local-s3.caddy:/etc/caddy/local/local-s3.caddy:ro" \
+            pageinator-web:ci caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: start it with throwaway settings (no database, which /healthz does not need)
+        run: |
+          docker run -d --name api --init -p 127.0.0.1:8780:8780 \
+            -e PGN_API_HOST=0.0.0.0 -e PGN_DB_HOST=127.0.0.1 -e PGN_DB_PORT=1 \
+            -e PGN_APP_PASSWORD="$(openssl rand -hex 16)" -e PGN_AUTH_PASSWORD="$(openssl rand -hex 16)" \
+            -e PGN_LISTEN_PASSWORD="$(openssl rand -hex 16)" -e PGN_AUTH_SECRET="$(openssl rand -hex 24)" \
+            pageinator-api:ci
+      - name: /healthz answers ok, and the process runs as node
+        run: |
+          for _ in $(seq 1 30); do
+            if [ "$(curl -fsS http://127.0.0.1:8780/healthz)" = '{"status":"ok"}' ]; then ok=1; break; fi
+            sleep 1
+          done
+          [ "${ok:-}" = 1 ]
+          [ "$(docker exec api id -un)" = node ]
+      - name: a stop ends it cleanly, well inside compose's 20 s
+        run: |
+          start=$(date +%s)
+          docker stop --time 20 api
+          [ "$(docker inspect api --format '{{.State.ExitCode}}')" = 0 ]
+          [ $(( $(date +%s) - start )) -lt 15 ]
+      - name: its log
+        if: always()
+        run: docker logs api || true

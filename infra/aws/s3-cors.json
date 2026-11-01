@@ -1,0 +1,10 @@
+{
+  "CORSRules": [
+    {
+      "ID": "app-uploads-and-originals",
+      "AllowedOrigins": ["https://app.${PGN_DOMAIN}"],
+      "AllowedMethods": ["POST", "GET"],
+      "MaxAgeSeconds": 600
+    }
+  ]
+}

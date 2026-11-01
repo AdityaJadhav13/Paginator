@@ -745,7 +745,7 @@ betterAuth({
 - On 401 the web shows "Session expired" and keeps any unsaved story text in local storage.
 
 **CSRF:**
-- One origin for everything, and no CORS.
+- The app and the API share one origin, so the API grants no CORS. Only the file store allows the app's origin: the work bucket's CORS rule lets exactly `https://app.<domain>` POST a presigned upload and GET an original, with no other method or header (`infra/aws/s3-cors.json`, PR 25).
 - Every POST, PUT, PATCH and DELETE on `/api/v1` must carry `Origin` equal to the app's origin and the header `X-Pageinator: 1`; `Sec-Fetch-Site: cross-site` is refused. This is the Desk's `X-Desk` pattern.
 - Bodies are JSON only; uploads go straight to S3.
 - This replaces doc 11's double-submit token with equal protection for a same-origin app (to be recorded in ADR-025).

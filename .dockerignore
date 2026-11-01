@@ -1,0 +1,40 @@
+# The build context of infra/docker/*.Dockerfile is the repository root. Nothing goes in unless listed here (the
+# first line drops everything), so private folders, fonts, colour profiles, artwork, the Desk, the experiments and
+# every .env file stay out of every image layer.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!apps/api/
+!apps/web/
+!packages/contracts/
+!packages/desk-text/
+!infra/caddy/
+!infra/backup/
+
+# and, inside what is let in: no installed or built files, no settings, no secrets, no tests, no fonts or pictures
+**/node_modules
+**/dist
+**/.tsbuild
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+**/test
+**/tests
+**/coverage
+**/Logos
+**/*.ttf
+**/*.otf
+**/*.ttc
+**/*.otc
+**/*.woff
+**/*.woff2
+**/*.icc
+**/*.icm
+**/*.pdf
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.webp
+**/.DS_Store

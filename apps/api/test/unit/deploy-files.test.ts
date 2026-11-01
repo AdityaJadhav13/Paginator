@@ -1,0 +1,168 @@
+// The pilot's deployment files agree with the API (PR 25): the bucket rules the AWS CLI applies (infra/aws) are the
+// ones the API's code names, and the pilot compose waits longer for a stop than the API can take.
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { STUCK_MS } from "../../src/shutdown.ts";
+import { UPLOADS_LIFECYCLE, uploadsCors } from "../../src/storage/s3.ts";
+
+const read = (path: string) => readFileSync(new URL(`../../../../${path}`, import.meta.url), "utf8");
+
+describe("the pilot's deployment files", () => {
+  it("s3-cors.json is uploadsCors for https://app.${PGN_DOMAIN}: POST and GET, no header, nothing exposed", () => {
+    const rule = JSON.parse(read("infra/aws/s3-cors.json")) as { CORSRules: unknown[] };
+    expect(rule.CORSRules).toEqual(uploadsCors("https://app.${PGN_DOMAIN}"));
+    expect(JSON.stringify(rule)).not.toMatch(/PUT|DELETE|AllowedHeaders|ExposeHeaders|\*/);
+  });
+
+  it("s3-work-lifecycle.json holds the uploads/ rules of UPLOADS_LIFECYCLE", () => {
+    const { Rules } = JSON.parse(read("infra/aws/s3-work-lifecycle.json")) as { Rules: { ID: string }[] };
+    expect(Rules.filter((rule) => rule.ID.startsWith("uploads-"))).toEqual(UPLOADS_LIFECYCLE);
+  });
+
+  it("the API's key deletes only under uploads/ (all that src/modules/media/uploads.ts deletes); the host role has no KMS right", () => {
+    type Policy = { Statement: { Action: string | string[]; Resource: string }[] };
+    const api = JSON.parse(read("infra/aws/iam-api-policy.json")) as Policy;
+    const deletes = api.Statement.filter((s) => [s.Action].flat().some((action) => action.startsWith("s3:Delete")));
+    expect(deletes.map((s) => s.Resource)).toEqual(["arn:aws:s3:::${PGN_S3_WORK_BUCKET}/uploads/*"]);
+    expect(UPLOADS_LIFECYCLE.every((rule) => rule.Filter?.Prefix === "uploads/")).toBe(true);
+    const host = JSON.parse(read("infra/aws/iam-app-host-role-policy.json")) as Policy;
+    expect(JSON.stringify(host)).not.toContain("kms:");
+  });
+
+  it("compose waits for a stop longer than the API's grace period and its last 5 s", () => {
+    const compose = read("infra/docker/compose.pilot.yml");
+    const grace = Number(/PGN_SHUTDOWN_GRACE_S: "(\d+)"/.exec(compose)?.[1]);
+    const api = compose.slice(compose.indexOf("x-api: &api"), compose.indexOf("x-migrate:"));
+    const wait = Number(/stop_grace_period: (\d+)s/.exec(api)?.[1]);
+    expect(grace).toBe(10);
+    expect(wait).toBeGreaterThan(grace + STUCK_MS / 1000);
+    expect(api).toMatch(/init: true|<<: \*hardened/);
+    expect(compose).toMatch(/x-hardened: &hardened[\s\S]*?init: true/);
+  });
+});
+
+// infra/deploy/deploy.sh with fake docker, curl, aws, id and flock on PATH: what it starts, in which order, and what
+// it records. Each fake logs its arguments, with the image tag in force, to one file.
+describe("deploy.sh", () => {
+  const script = fileURLToPath(new URL("../../../../infra/deploy/deploy.sh", import.meta.url));
+  let dir = "";
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "pgn-deploy-"));
+    mkdirSync(join(dir, "bin"));
+    const fake = (name: string, body: string) => {
+      writeFileSync(
+        join(dir, "bin", name),
+        `#!/bin/sh\necho "${name} \${PGN_IMAGE_TAG:-} $*" >>"${dir}/log"\n${body}\n`,
+      );
+      chmodSync(join(dir, "bin", name), 0o755);
+    };
+    // FAIL_UP / FAIL_MIGRATE: the tag whose `up --wait` or migration fails
+    fake(
+      "docker",
+      `case "$*" in *" up "*) [ "$PGN_IMAGE_TAG" != "\${FAIL_UP:-}" ] ;; *" run "*) [ "$PGN_IMAGE_TAG" != "\${FAIL_MIGRATE:-}" ] ;; esac`,
+    );
+    fake("curl", "exit 0");
+    fake("flock", "exit 0");
+    fake("id", "echo 0");
+    // SSM's answer: AWS_ANSWER lines, then AWS_EXIT
+    fake("aws", `case "$*" in *ssm*) printf "$AWS_ANSWER"; exit "\${AWS_EXIT:-0}" ;; *) echo token ;; esac`);
+    writeFileSync(join(dir, "pilot.env"), "PGN_REGISTRY='registry.example.test'\n");
+    writeFileSync(join(dir, "ca.pem"), "a certificate\n");
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const deploy = (args: string[], env: Record<string, string> = {}) => {
+    writeFileSync(join(dir, "log"), "");
+    const result = spawnSync("sh", [script, ...args], {
+      encoding: "utf8",
+      env: {
+        PATH: `${dir}/bin:/usr/bin:/bin`,
+        PGN_PROFILE: "pilot-local",
+        PGN_ENV_FILE: join(dir, "pilot.env"),
+        PGN_STATE_DIR: join(dir, "state"),
+        ...env,
+      },
+    });
+    const log = readFileSync(join(dir, "log"), "utf8");
+    return { status: result.status, out: result.stdout + result.stderr, log };
+  };
+  const state = (name: string) => readFileSync(join(dir, "state", name), "utf8").trim();
+  const started = (log: string) => [...log.matchAll(/^docker (\S+) .* up -d --wait/gm)].map((m) => m[1]);
+  const migrated = (log: string) => [...log.matchAll(/^docker (\S+) .* run --rm migrate/gm)].map((m) => m[1]);
+
+  it("after a deploy that failed at the start, a rollback starts the release that ran before it, not the one before that", () => {
+    expect(deploy(["deploy", "r1"]).status).toBe(0);
+    expect(deploy(["deploy", "r2"]).status).toBe(0);
+    const failed = deploy(["deploy", "r3"], { FAIL_UP: "r3" });
+    expect(failed.status).not.toBe(0);
+    expect(migrated(failed.log)).toEqual(["r3"]);
+    expect([state("current"), state("previous"), state("attempt")]).toEqual(["r2", "r1", "r3"]);
+
+    const rollback = deploy(["rollback"]);
+    expect(rollback.status).toBe(0);
+    expect(rollback.out).toContain("the deploy of r3 did not finish: starting r2 again");
+    expect(started(rollback.log)).toEqual(["r2"]);
+    expect(migrated(rollback.log)).toEqual([]);
+    expect([state("current"), state("previous")]).toEqual(["r2", "r1"]);
+    expect(existsSync(join(dir, "state", "attempt"))).toBe(false);
+
+    // with no deploy under way, a rollback goes to the previous release, and the two swap
+    const back = deploy(["rollback"]);
+    expect(started(back.log)).toEqual(["r1"]);
+    expect([state("current"), state("previous")]).toEqual(["r1", "r2"]);
+  });
+
+  it("after a migration that failed, a rollback starts the current release again", () => {
+    deploy(["deploy", "r1"]);
+    deploy(["deploy", "r2"]);
+    const failed = deploy(["deploy", "r3"], { FAIL_MIGRATE: "r3" });
+    expect(failed.status).not.toBe(0);
+    expect(started(failed.log)).toEqual([]);
+    expect(started(deploy(["rollback"]).log)).toEqual(["r2"]);
+  });
+
+  it("refuses a state file that holds anything but a tag", () => {
+    deploy(["deploy", "r1"]);
+    writeFileSync(join(dir, "state", "previous"), "r0; rm -rf /\n");
+    const result = deploy(["rollback"]);
+    expect(result.status).not.toBe(0);
+    expect(result.out).toContain("does not hold an image tag");
+    expect(started(result.log)).toEqual([]);
+  });
+
+  it("keeps the settings file when reading SSM fails part way, and leaves nothing decrypted behind", () => {
+    const pilot = { PGN_PROFILE: "pilot", PGN_DB_CA_FILE: join(dir, "ca.pem") };
+    const answer = "/pageinator/pilot/PGN_A\\ta\\n/pageinator/pilot/PGN_B\\tb\\n/pageinator/pilot/PGN_C\\tc\\n";
+    const result = deploy(["deploy", "r1"], { ...pilot, AWS_ANSWER: answer, AWS_EXIT: "255" });
+    expect(result.status).not.toBe(0);
+    expect(result.out).toContain("is unchanged");
+    expect(readFileSync(join(dir, "pilot.env"), "utf8")).toBe("PGN_REGISTRY='registry.example.test'\n");
+    expect(readdirSync(dir).sort()).toEqual(["bin", "ca.pem", "log", "pilot.env", "state"]);
+    expect(result.log).not.toMatch(/^docker /m);
+  });
+
+  it("writes the settings from a whole SSM answer, and logs out of the registry after the pull", () => {
+    const ok = deploy(["deploy", "r1"], {
+      PGN_PROFILE: "pilot",
+      AWS_ANSWER: `/pageinator/pilot/PGN_REGISTRY\\tregistry.example.test\\n/pageinator/pilot/PGN_DB_CA_FILE\\t${dir}/ca.pem\\n`,
+    });
+    expect(ok.status).toBe(0);
+    expect(readFileSync(join(dir, "pilot.env"), "utf8")).toBe(
+      `PGN_REGISTRY='registry.example.test'\nPGN_DB_CA_FILE='${dir}/ca.pem'\n`,
+    );
+    expect(ok.log).toMatch(/pull --quiet\n(.*\n)?docker \S+ logout registry\.example\.test\n/);
+  });
+});

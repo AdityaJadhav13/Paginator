@@ -1,0 +1,8 @@
+# pilot-local only (infra/docker/compose.pilot.yml mounts this file into /etc/caddy/local/): the local SeaweedFS's
+# work bucket at its own origin, https://{$PGN_S3_LOCAL_HOST}:{$PGN_HTTPS_PORT}, with a certificate from Caddy's local
+# CA, as S3 serves a bucket at https://<bucket>.s3.ap-south-1.amazonaws.com in the pilot. The Host header goes through
+# unchanged, so SeaweedFS checks the signature the API made for that host. CORS is SeaweedFS's own (the bucket's rule).
+{$PGN_S3_LOCAL_HOST} {
+	tls internal
+	reverse_proxy s3-local:8333
+}

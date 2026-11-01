@@ -454,6 +454,15 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | L2-261 | plan §2.2 | The plan's wording on upload keys and `KeyGuard.check()` should say the same thing (uploads are outside the guard by design) | The code refuses them |
 | L2-262 | `apps/engine-worker` `test_media.py` | `ParamsTests`' test title names fewer facts than it checks | Wording only |
 | L2-263 | `apps/engine-worker` `media.py` | Animated frames and progressive scans are not limited (with L2-120) | The 100-megapixel limit and the 40 MB upload limit hold |
+| L2-280 | `infra/aws` backups bucket | Dumps are encrypted with SSE-S3 (AES256); a customer-managed KMS key (SSE-KMS) would let the owner revoke or audit their decryption separately | Found in the PR 25 review |
+| L2-281 | `infra/aws` backups bucket | Object Lock is GOVERNANCE in the same account: an admin with `s3:BypassGovernanceRetention` can still delete a dump. COMPLIANCE mode, or the bucket in a second account (doc 04 §7), is the owner's choice | Found in the PR 25 review |
+| L2-282 | CI, `apps/api/src/db/migrations` | Nothing checks that a migration is expand/contract (no drop or rename of what the running release reads); rollbacks rely on it (`docs/runbooks/rollback.md`) | Found in the PR 25 review |
+| L2-283 | RDS, `infra/docker/backup-role.sql` | That the RDS master user may give BYPASSRLS and `pg_read_all_data` is still to verify on the instance, before the first live night | `docs/runbooks/aws-setup.md` step 4 says so |
+| L2-284 | `apps/api/src/config.ts`, `infra/aws` | The API and the backup use IAM-user access keys (rotated by hand every 90 days); the instance role would need no static key | A small API change: an optional key pair |
+| L2-285 | `infra/caddy/Caddyfile`, pilot-local | pilot-local's HTTP-to-HTTPS redirect drops the port (`http://app.localhost:<http port>` redirects to `https://app.localhost/`) | Local only; the pilot uses 80 and 443 |
+| L2-286 | `infra/backup/backup-loop.sh` | The loop sleeps once until the next night: if the host sleeps or its clock jumps, the dump runs late (the 26-hour alarm catches a missed night) | Sleep in short steps and check the clock |
+| L2-287 | `infra/docker/compose.pilot.yml`, rate limits | An IPv6 client reaches Caddy through Docker's userland proxy, so the API sees the bridge gateway: every IPv6 client shares one rate-limit budget. No AAAA record until fixed (`docs/runbooks/aws-setup.md` step 12) | Found in the PR 25 verification |
+| L2-288 | file store CORS | SeaweedFS 4.48 answers some preflights S3 would refuse (a requested header with no AllowedHeaders); the real-S3 check in `docs/runbooks/aws-setup.md` step 6 must be done before staff upload photos | Found in the PR 25 verification |
 
 ## Public website (`apps/web/src/features/public`, `POST /api/v1/contact`)
 

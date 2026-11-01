@@ -1,0 +1,381 @@
+# The pilot (docs/product/10-l2-newsroom-plan.md §8.2; PR 25), and a copy of it on one machine (profile pilot-local).
+# infra/deploy/deploy.sh runs it; docs/runbooks/deploy.md says how. Two profiles; one is always named:
+#   pilot        on the EC2 app host: Caddy, the API, the migration step and the nightly backup, against RDS, S3 and
+#                SES. Logs go to CloudWatch (awslogs; the instance role may write them).
+#   pilot-local  the same images and settings on a developer's machine, with a scratch Postgres and SeaweedFS of its
+#                own: Caddy's local CA on app.localhost, local logs. It must run under its own project name
+#                (-p pgn-pilot-local), never the development stack's (pageinator).
+# Every setting comes from one env file (--env-file): in the pilot /etc/pageinator/pilot.env, root-only, which deploy.sh
+# writes from SSM Parameter Store (docs/runbooks/aws-setup.md lists every name). Each service gets only the settings
+# listed under it, and compose refuses to start while one of them is missing or empty. No secret is in an image.
+# Images: ${PGN_REGISTRY}/pageinator-{api,web,backup}:${PGN_IMAGE_TAG}, built from infra/docker/*.Dockerfile (the
+# pilot pushes them to ECR; deploy.sh sets the tag). Other images are pinned by digest, with the tag in the comment.
+#
+# Addresses: one network with a fixed subnet (PGN_NET_SUBNET), where Caddy has a fixed address (PGN_CADDY_IP). The
+# API believes X-Forwarded-For from that address only (PGN_TRUST_PROXY). The subnet must not overlap the VPC's.
+# Stopping: the API waits PGN_SHUTDOWN_GRACE_S (10 s) for requests in flight and gives up 5 s after that (src/shutdown.ts),
+# so compose waits 20 s before it kills it. init: true puts tini in front, so a second stop signal still kills it.
+# Memory: every container has a ceiling (mem_limit), so one that grows cannot take the 2 GB host (t3.small) down with
+# it: Caddy 128 MB, the API 640 MB, the backup 256 MB, at most 1 GB together, and the migration step's 384 MB while it
+# runs. pilot-local's scratch database and file store get 512 MB each.
+
+x-hardened: &hardened
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  init: true
+
+x-aws-logs: &aws-logs
+  driver: awslogs
+  options:
+    awslogs-region: ap-south-1
+    awslogs-group: ${PGN_LOG_GROUP:-/pageinator/pilot}
+    awslogs-create-group: "false" # made with its 30-day retention (docs/runbooks/aws-setup.md)
+    tag: "{{.Name}}"
+    mode: non-blocking # a slow CloudWatch never holds up the API; a full 4 MB buffer drops lines instead
+    max-buffer-size: 4m
+
+x-local-logs: &local-logs
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+
+# What the API, the migration step and the backup share: where the database is, and how to reach it over TLS
+# (verify-full against the RDS certificate bundle in the pilot; disable for the scratch database).
+x-database: &database
+  PGN_DB_HOST: ${PGN_DB_HOST:?}
+  PGN_DB_PORT: ${PGN_DB_PORT:-5432}
+  PGN_DB_NAME: ${PGN_DB_NAME:?}
+  PGSSLMODE: ${PGSSLMODE:?}
+
+x-api-environment: &api-environment
+  <<: *database
+  PGN_API_HOST: 0.0.0.0
+  PGN_API_PORT: "8780"
+  PGN_TRUST_PROXY: ${PGN_CADDY_IP:?}
+  PGN_SHUTDOWN_GRACE_S: "10"
+  PGN_LOG_LEVEL: ${PGN_LOG_LEVEL:-info}
+  PGN_ALLOWED_ORIGINS: ${PGN_APP_ORIGIN:?}
+  PGN_PUBLIC_ORIGIN: ${PGN_APP_ORIGIN:?}
+  PGN_APP_PASSWORD: ${PGN_APP_PASSWORD:?}
+  PGN_AUTH_PASSWORD: ${PGN_AUTH_PASSWORD:?}
+  PGN_LISTEN_PASSWORD: ${PGN_LISTEN_PASSWORD:?}
+  PGN_AUTH_SECRET: ${PGN_AUTH_SECRET:?}
+  PGN_SMTP_HOST: ${PGN_SMTP_HOST:?}
+  PGN_SMTP_PORT: ${PGN_SMTP_PORT:-587}
+  PGN_SMTP_USER: ${PGN_SMTP_USER:?}
+  PGN_SMTP_PASSWORD: ${PGN_SMTP_PASSWORD:?}
+  PGN_MAIL_FROM: ${PGN_MAIL_FROM:?}
+  PGN_S3_ENDPOINT: ${PGN_S3_ENDPOINT:?}
+  PGN_S3_REGION: ap-south-1
+  PGN_S3_ACCESS_KEY_ID: ${PGN_S3_ACCESS_KEY_ID:?}
+  PGN_S3_SECRET_ACCESS_KEY: ${PGN_S3_SECRET_ACCESS_KEY:?}
+  PGN_S3_WORK_BUCKET: ${PGN_S3_WORK_BUCKET:?}
+  PGN_S3_ARCHIVE_BUCKET: ${PGN_S3_ARCHIVE_BUCKET:?}
+  NODE_EXTRA_CA_CERTS: /etc/pageinator/ca.pem
+
+x-api: &api
+  <<: *hardened
+  image: ${PGN_REGISTRY:?}/pageinator-api:${PGN_IMAGE_TAG:?}
+  environment: *api-environment
+  mem_limit: 640m
+  stop_grace_period: 20s
+  restart: unless-stopped
+  healthcheck:
+    test:
+      [
+        "CMD",
+        "node",
+        "-e",
+        "fetch('http://127.0.0.1:8780/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+      ]
+    interval: 30s
+    start_interval: 1s
+    start_period: 30s
+    timeout: 5s
+    retries: 3
+
+x-migrate: &migrate
+  <<: *hardened
+  image: ${PGN_REGISTRY:?}/pageinator-api:${PGN_IMAGE_TAG:?}
+  command: ["node", "scripts/db-migrate.ts"]
+  mem_limit: 384m
+  environment:
+    <<: *database
+    PGN_MIGRATOR_PASSWORD: ${PGN_MIGRATOR_PASSWORD:?}
+    NODE_EXTRA_CA_CERTS: /etc/pageinator/ca.pem
+  restart: "no"
+
+x-backup: &backup
+  <<: *hardened
+  image: ${PGN_REGISTRY:?}/pageinator-backup:${PGN_IMAGE_TAG:?}
+  mem_limit: 256m
+  environment:
+    <<: *database
+    PGSSLROOTCERT: /etc/pageinator/ca.pem
+    NODE_EXTRA_CA_CERTS: /etc/pageinator/ca.pem
+    PGN_BACKUP_PASSWORD: ${PGN_BACKUP_PASSWORD:?}
+    PGN_BACKUP_AT_UTC: ${PGN_BACKUP_AT_UTC:-22:30}
+    PGN_BACKUP_RETAIN_DAYS: ${PGN_BACKUP_RETAIN_DAYS:-35}
+    PGN_S3_ENDPOINT: ${PGN_S3_ENDPOINT:?}
+    PGN_S3_REGION: ap-south-1
+    # its own key pair, which may only write dumps under postgres/ in the backups bucket and read them back to check
+    # them (infra/aws/iam-backup-policy.json): no delete, no list, no other bucket
+    PGN_S3_ACCESS_KEY_ID: ${PGN_BACKUP_S3_ACCESS_KEY_ID:?}
+    PGN_S3_SECRET_ACCESS_KEY: ${PGN_BACKUP_S3_SECRET_ACCESS_KEY:?}
+    PGN_S3_BACKUPS_BUCKET: ${PGN_S3_BACKUPS_BUCKET:?}
+    PGN_BACKUP_DIR: /work
+  restart: unless-stopped
+  stop_grace_period: 5s
+
+x-caddy: &caddy
+  <<: *hardened
+  image: ${PGN_REGISTRY:?}/pageinator-web:${PGN_IMAGE_TAG:?}
+  mem_limit: 128m
+  environment:
+    PGN_DOMAIN: ${PGN_DOMAIN:?}
+    PGN_TLS_ISSUER: ${PGN_TLS_ISSUER:?}
+    PGN_S3_PUBLIC_ORIGIN: ${PGN_S3_PUBLIC_ORIGIN:?}
+    PGN_HTTP_PORT: ${PGN_HTTP_PORT:-80}
+    PGN_HTTPS_PORT: ${PGN_HTTPS_PORT:-443}
+    PGN_HEALTH_PORT: ${PGN_HEALTH_PORT:-8781}
+  volumes:
+    - caddy-data:/data # the certificates and their ACME account: kept across deploys
+    - caddy-config:/config
+  restart: unless-stopped
+  stop_grace_period: 10s
+
+services:
+  # ---- pilot -------------------------------------------------------------------------------------------------------
+  caddy:
+    <<: *caddy
+    profiles: [pilot]
+    ports:
+      - "80:80"
+      - "443:443"
+      # the monitor's port, on the host's private address only; the security group lets in only Uptime Kuma
+      - "${PGN_HEALTH_BIND:?}:8781:8781"
+    networks:
+      pilot:
+        ipv4_address: ${PGN_CADDY_IP:?}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8781/healthz"]
+      interval: 30s
+      start_interval: 1s
+      start_period: 30s
+      timeout: 5s
+      retries: 3
+    logging: *aws-logs
+
+  api:
+    <<: *api
+    profiles: [pilot]
+    volumes:
+      - ${PGN_DB_CA_FILE:-/etc/pageinator/rds-ca.pem}:/etc/pageinator/ca.pem:ro
+    networks: [pilot]
+    logging: *aws-logs
+
+  migrate:
+    <<: *migrate
+    # a profile of its own, so `up` never starts it; `run --rm migrate` names it, which is enough
+    profiles: [pilot-migrate]
+    volumes:
+      - ${PGN_DB_CA_FILE:-/etc/pageinator/rds-ca.pem}:/etc/pageinator/ca.pem:ro
+    networks: [pilot]
+    logging: *aws-logs
+
+  backup:
+    <<: *backup
+    profiles: [pilot]
+    volumes:
+      - ${PGN_DB_CA_FILE:-/etc/pageinator/rds-ca.pem}:/etc/pageinator/ca.pem:ro
+      - backup-work:/work # the dump waits here (on disk, not in memory) until it is uploaded
+    networks: [pilot]
+    logging: *aws-logs
+
+  # ---- pilot-local ---------------------------------------------------------------------------------------------------
+  # The same services, and a scratch database and file store. Caddy listens inside on the same ports as outside
+  # (PGN_HTTPS_PORT), so every address works from the browser and from the API alike. The API reaches the store's
+  # buckets at https://<bucket>.s3.localhost:<port> through Caddy (the network aliases below), with Caddy's local CA
+  # in NODE_EXTRA_CA_CERTS, as it reaches S3 in the pilot. ca-local copies that CA's certificate (not its key, which
+  # stays in Caddy's own volume) into a volume of its own for them.
+  caddy-local:
+    <<: *caddy
+    profiles: [pilot-local]
+    environment:
+      PGN_DOMAIN: localhost
+      PGN_TLS_ISSUER: internal
+      PGN_S3_PUBLIC_ORIGIN: ${PGN_S3_PUBLIC_ORIGIN:?}
+      PGN_S3_LOCAL_HOST: "*.s3.localhost"
+      PGN_HTTP_PORT: ${PGN_HTTP_PORT:?}
+      PGN_HTTPS_PORT: ${PGN_HTTPS_PORT:?}
+      PGN_HEALTH_PORT: ${PGN_HEALTH_PORT:?}
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+      - ../caddy/local-s3.caddy:/etc/caddy/local/local-s3.caddy:ro
+    ports:
+      - "127.0.0.1:${PGN_HTTP_PORT:?}:${PGN_HTTP_PORT:?}"
+      - "127.0.0.1:${PGN_HTTPS_PORT:?}:${PGN_HTTPS_PORT:?}"
+      - "127.0.0.1:${PGN_HEALTH_PORT:?}:${PGN_HEALTH_PORT:?}"
+    networks:
+      pilot:
+        ipv4_address: ${PGN_CADDY_IP:?}
+        aliases:
+          - ${PGN_S3_WORK_BUCKET:?}.s3.localhost
+          - ${PGN_S3_ARCHIVE_BUCKET:?}.s3.localhost
+          - ${PGN_S3_BACKUPS_BUCKET:?}.s3.localhost
+    healthcheck:
+      # ready once its local CA exists: the API and the backup trust it
+      test: ["CMD", "test", "-s", "/data/caddy/pki/authorities/local/root.crt"]
+      interval: 30s
+      start_interval: 1s
+      start_period: 30s
+      timeout: 5s
+      retries: 3
+    logging: *local-logs
+
+  ca-local:
+    image: ${PGN_REGISTRY:?}/pageinator-web:${PGN_IMAGE_TAG:?}
+    profiles: [pilot-local]
+    user: "0"
+    cap_drop: [ALL]
+    cap_add: [DAC_READ_SEARCH] # to read Caddy's 0700 folder, as root without any other capability
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    command: ["sh", "-c", "cp /data/caddy/pki/authorities/local/root.crt /ca/root.crt && chmod 0444 /ca/root.crt"]
+    volumes:
+      - caddy-data:/data:ro
+      - local-ca:/ca
+    depends_on:
+      caddy-local: { condition: service_healthy }
+    network_mode: none
+    mem_limit: 32m
+    restart: "no"
+    logging: *local-logs
+
+  api-local:
+    <<: *api
+    profiles: [pilot-local]
+    volumes:
+      - local-ca:/etc/pageinator/ca:ro
+    environment:
+      <<: *api-environment
+      NODE_EXTRA_CA_CERTS: /etc/pageinator/ca/root.crt
+      # the scratch stack sends no email: Caddy's network has no mail server, and the API logs each email it could
+      # not send (without its address)
+    depends_on:
+      ca-local: { condition: service_completed_successfully }
+      db-local: { condition: service_healthy }
+    networks:
+      pilot:
+        aliases: [api]
+    logging: *local-logs
+
+  migrate-local:
+    <<: *migrate
+    profiles: [pilot-local-migrate]
+    environment:
+      <<: *database
+      PGN_MIGRATOR_PASSWORD: ${PGN_MIGRATOR_PASSWORD:?}
+    depends_on:
+      db-local: { condition: service_healthy }
+    networks: [pilot]
+    logging: *local-logs
+
+  backup-local:
+    <<: *backup
+    profiles: [pilot-local]
+    volumes:
+      - backup-work:/work
+      - local-ca:/etc/pageinator/ca:ro
+    environment:
+      <<: *database
+      NODE_EXTRA_CA_CERTS: /etc/pageinator/ca/root.crt
+      PGN_BACKUP_PASSWORD: ${PGN_BACKUP_PASSWORD:?}
+      PGN_BACKUP_AT_UTC: ${PGN_BACKUP_AT_UTC:-22:30}
+      PGN_BACKUP_RETAIN_DAYS: ${PGN_BACKUP_RETAIN_DAYS:-35}
+      PGN_S3_ENDPOINT: ${PGN_S3_ENDPOINT:?}
+      PGN_S3_REGION: ap-south-1
+      PGN_S3_ACCESS_KEY_ID: ${PGN_BACKUP_S3_ACCESS_KEY_ID:?}
+      PGN_S3_SECRET_ACCESS_KEY: ${PGN_BACKUP_S3_SECRET_ACCESS_KEY:?}
+      PGN_S3_BACKUPS_BUCKET: ${PGN_S3_BACKUPS_BUCKET:?}
+      PGN_BACKUP_DIR: /work
+    depends_on:
+      ca-local: { condition: service_completed_successfully }
+      db-local: { condition: service_healthy }
+    networks: [pilot]
+    logging: *local-logs
+
+  db-local:
+    image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # postgres:18.6-trixie
+    profiles: [pilot-local]
+    mem_limit: 512m
+    environment:
+      POSTGRES_DB: ${PGN_DB_NAME:?}
+      POSTGRES_PASSWORD: ${PGN_POSTGRES_PASSWORD:?}
+      PGN_MIGRATOR_PASSWORD: ${PGN_MIGRATOR_PASSWORD:?}
+      PGN_APP_PASSWORD: ${PGN_APP_PASSWORD:?}
+      PGN_AUTH_PASSWORD: ${PGN_AUTH_PASSWORD:?}
+      PGN_ENGINE_PASSWORD: ${PGN_ENGINE_PASSWORD:?}
+      PGN_LISTEN_PASSWORD: ${PGN_LISTEN_PASSWORD:?}
+      PGN_BACKUP_PASSWORD: ${PGN_BACKUP_PASSWORD:?}
+    volumes:
+      - db-local-data:/var/lib/postgresql
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
+      - ./backup-role.sql:/docker-entrypoint-initdb.d/20-backup-role.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'psql --host=127.0.0.1 --username=postgres --dbname=$${POSTGRES_DB} --no-psqlrc --tuples-only --no-align --command="select count(*) = 1 from pg_roles where rolname = ''pgn_backup''" | grep -qx t',
+        ]
+      interval: 30s
+      start_interval: 1s
+      start_period: 30s
+      timeout: 5s
+      retries: 3
+    networks: [pilot]
+    logging: *local-logs
+
+  s3-local:
+    image: chrislusf/seaweedfs@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d # chrislusf/seaweedfs:4.48
+    profiles: [pilot-local]
+    mem_limit: 512m
+    # virtual-hosted buckets (<bucket>.s3.localhost), as S3 serves them; CORS from each bucket's own rule
+    command:
+      ["server", "-s3", "-ip.bind=0.0.0.0", "-s3.port.iceberg=0", "-s3.port.lance=0", "-s3.domainName=s3.localhost"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${PGN_S3_ACCESS_KEY_ID:?}
+      AWS_SECRET_ACCESS_KEY: ${PGN_S3_SECRET_ACCESS_KEY:?}
+    volumes:
+      - s3-local-data:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          '[ "$$(curl -s -o /dev/null -w ''%{http_code}'' http://127.0.0.1:8333/healthz)" = 200 ] && [ "$$(curl -s -o /dev/null -w ''%{http_code}'' http://127.0.0.1:8333/)" = 403 ]',
+        ]
+      interval: 30s
+      start_interval: 1s
+      start_period: 30s
+      timeout: 5s
+      retries: 3
+    networks: [pilot]
+    logging: *local-logs
+
+networks:
+  pilot:
+    ipam:
+      config:
+        - subnet: ${PGN_NET_SUBNET:?}
+
+volumes:
+  caddy-data:
+  caddy-config:
+  backup-work:
+  local-ca:
+  db-local-data:
+  s3-local-data:
