@@ -259,7 +259,6 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | L2-19 | `src/db/migrate.ts` | A refused migration run on a fresh database can leave an empty `migrations` schema | Cosmetic; the next run uses it |
 | L2-20 | Postgres catalog | `pg_class.reltuples` shows `pgn_app` approximate row counts across all organisations | Counts only, never content |
 | L2-21 | `src/db/pools.ts` `ping` | `/readyz` does not check `pgn_listen` (as documented) | Nothing listens until PR 19 |
-| L2-22 | `pnpm-workspace.yaml` catalog (L2-C) | Upgrade nodemailer to ≥ 10.1.4 (GHSA-8c8m-p3m8-cjg8, GHSA-m943-m63m-w62w, GHSA-85x2-q946-cp5h) once it is 7 days old, before any real email is sent (PR 25 at the latest) | Development sends only to Mailpit, and a strict check guards every recipient address |
 | L2-23 | `pnpm-workspace.yaml` `minimumReleaseAgeExclude` | Remove the seven entries after 2026-10-25T21:08Z (each comment gives its own date): they let in versions that were already in the lockfile when the 7-day rule arrived | Each is an exact version; the rule applies to everything else |
 | L2-24 | `src/modules/identity/auth.ts` hooks | The per-email lock's 429 is printed by Better Auth's own console logger ("ERROR [Better Auth]: Too many tries"), outside our log: route it through `onAPIError.onError` | It prints no email or address |
 | L2-25 | `src/modules/identity/sign-in-guard.ts` | Anyone who knows an address can keep its account locked (5 guesses every 15 minutes) | The person can still reset the password; the lock is the plan's §4.6 rule; needs a product decision (for example a lock that a reset link lifts) |
@@ -280,7 +279,7 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | L2-40 | `src/db/identity.ts` `recordEvent` | A failed `auth_event` insert fails the sign-in after the session row is committed (the client gets a 500 but holds a valid session) | The insert has no foreign keys and only checked columns |
 | L2-41 | `auth.ts` `logger` | Every failed attempt logs a warn-level line ("Invalid password", "User not found") | Bare messages, no email or address |
 | L2-42 | `src/modules/identity/emails.ts` `clean()` | Cuts names by UTF-16 units, so a cut can split a surrogate pair | Names come from invitations the newsroom writes |
-| L2-43 | `src/config.ts` `PGN_MAIL_FROM` | nodemailer 10.1.1's address parser mis-reads a display name with `( ) ; ,`: refuse them in `isSender` | The sender is set by the operator |
+| L2-43 | `src/config.ts` `PGN_MAIL_FROM` | nodemailer's address parser (still in 10.1.7: `Desk ( <a@…>` loses the address) mis-reads a display name with `( ) ; ,`: refuse them in `isSender` | The sender is set by the operator |
 | L2-44 | web client (PR 13) | Better Auth's 429 sends `X-Retry-After`, our own 429s `retry-after`: the client must read both | No client yet |
 | L2-45 | Better Auth answers (verification M1) | Its own 429 bodies have no `slow_down` code | The web client reads the status |
 | L2-46 | sign-in timing (verification M2) | A 0.5 ms median difference between known and unknown emails, detectable at about n = 100 with no lock in the way | The per-email lock and the per-address limit stop the sampling |
@@ -494,7 +493,6 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | L2-245 | contact daily cap | The 200-a-day total for every address together can be used up by one sender with many addresses (an IPv6 /48 gives billions), keeping real people out until the window ends; key the per-address limits by /64 and add a per-prefix limit | Only messages that are sent count against the total, so the inbox is protected; the form says to try again later |
 | L2-246 | `pnpm run guard` with `GUARD_BASE=origin/main` | The guard fails against `origin/main` because of commits this branch inherits from the unmerged L2 branches; it passes against `origin/chore/m0-monorepo` | Expected until the branches merge |
 | L2-247 | `docs/phase0/EXP_GEN_1_REPORT.md` (frozen evidence) | The stale "11 pages" status line (L2-239) can be corrected only with the owner's evidence-change approval | The site quotes the 28-of-28 lines, which §9 confirms |
-| L2-248 | `pnpm-workspace.yaml` nodemailer 10.1.1 (L2-22) | Must be upgraded before `PGN_CONTACT_TO` is set anywhere real: the fixed versions (10.1.4–10.1.7, released 2026-10-18) are not yet 7 days old on 2026-10-24; upgrade with an exact pin from 2026-10-25 and run the mail tests | Development sends only to Mailpit; every recipient and Reply-To passes the strict address check first |
 
 ## Newsroom web app: comments, live updates, notifications (PR 23, `apps/web/src/features/live`, `features/stories`)
 

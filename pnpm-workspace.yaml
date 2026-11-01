@@ -35,9 +35,9 @@ catalog:
   kysely: "0.29.7"
   pg: "8.23.1"
   "@types/pg": "8.23.1"
-  # The API's email (verification, password reset, new sign-in); MIT-0. 10.1.1 is the newest 7 days old: move to
-  # >= 10.1.4 (three addressparser advisories) once it is (docs/product/11-fix-before-launch.md, L2-22).
-  nodemailer: "10.1.1"
+  # The API's email (verification, password reset, new sign-in); MIT-0. 10.1.7 (2026-10-18): the newest 10.1.x, with
+  # the three addressparser fixes of 10.1.4 (GHSA-8c8m-p3m8-cjg8, GHSA-m943-m63m-w62w, GHSA-85x2-q946-cp5h).
+  nodemailer: "10.1.7"
   # Sign-in (docs/product/10-l2-newsroom-plan.md §4.1); MIT. 1.7.8: the newest 7 days old, with the password-reset and
   # session-revocation fixes (#11626, #11646); later 1.7.x releases fix nothing our configuration uses but #11521,
   # which src/db/pools.ts works around.

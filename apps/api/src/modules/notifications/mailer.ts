@@ -1,7 +1,7 @@
 // Email (docs/product/10-l2-newsroom-plan.md §4.1): the API's one way to send it, through nodemailer; Mailpit in
 // development. Every recipient passes a strict check first: one plain address, with no name, comment, quote, angle
-// bracket or list, so nodemailer's address parser never meets a crafted string (10.1.1, the version 7 days old, has
-// three parser advisories that 10.1.4 fixes: docs/product/11-fix-before-launch.md, L2-22). Mail goes in the
+// bracket or list, so nodemailer's address parser never meets a crafted string (a second guard: the parser's three
+// advisories are fixed from 10.1.4, and the catalog pins 10.1.7). Mail goes in the
 // background: a request that sends one answers as fast as one that does not, and a failure is reported without the
 // message, whose links carry tokens.
 import { hasControlCharacters } from "@pageinator/contracts";

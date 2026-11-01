@@ -698,7 +698,7 @@ betterAuth({
 **Choices behind it:**
 - **Passwords.** argon2id, because doc 11 §1 asks for it; Better Auth's default is scrypt. It runs on Node's own `crypto.argon2` (Node 24, under the crypto module's "Stability: 2 - Stable"), not @node-rs/argon2: no native package to vet or licence-check. The parameters are OWASP's argon2id minimum, m = 19 MiB, t = 2, p = 1, stored as PHC strings; a test checks RFC 9106's vector and that no warning is printed.
 - **Invite-only sign-up is `user.validateUserInfo`,** not a `hooks.before` on `/sign-up/email`. Better Auth calls it for every account it creates, whatever the endpoint, and a refused sign-up gets the same answer as any other. Over HTTP it refuses every sign-up until PR 10 opens it to invitations; a call from the server (bootstrap, tests) may create an account.
-- **Email.** nodemailer 10.1.1 (MIT-0), the newest release at least 7 days old when installed; 10.1.4 fixes three advisories and is to be installed once it is 7 days old (11-fix-before-launch L2-22). A strict check refuses any recipient that is not one plain address.
+- **Email.** nodemailer 10.1.7 (MIT-0; 10.1.1 until 2026-11-02, upgraded once the three addressparser fixes of 10.1.4 were 7 days old). A strict check refuses any recipient that is not one plain address.
 - **Invitation ids are random UUIDv4.** Better Auth's `generateId: "uuid"` makes them, and the id is the secret in the invitation link. Our own tables use UUIDv7.
 - **Not enabled:** magic link, email OTP, social sign-in, Generic OAuth, OAuth proxy, SSO, SCIM, admin, Stripe.
   - Most 2026 advisories need one of these. Examples: GHSA-965c-763c-88jm (critical; magic link plus OAuth, fixed in 1.7.7); GHSA-qq9h-g4jm-xgf3 (magic link or email OTP plus open sign-up).
@@ -1298,7 +1298,7 @@ Rules for every PR:
 | @fastify/rate-limit · helmet · cookie · cors · under-pressure | 11.2.1 · 13.2.0 · 11.1.3 · 11.3.1 · 9.2.1 | MIT | npm (cookie, cors and under-pressure probably not needed) |
 | @aws-sdk/client-s3 · s3-presigned-post · s3-request-presigner | 3.1152.0 (built; 3.1153.0 was planned) | Apache-2.0 | npm. 3.1153.0 (19 Oct) was younger than the 7-day rule when PR 18 was built; 3.1152.0 (14 Oct) brings 28 packages, 26 Apache-2.0, `bowser` MIT and `tslib` 0BSD, as a registry walk predicted exactly |
 | pino | 10.4.0 | MIT | npm |
-| nodemailer | 10.1.1 (built; 10.1.7 was planned) | MIT-0 | npm (MIT-0 is on the allowlist). The newest release at least 7 days old when installed; upgrade to ≥ 10.1.4 is 11-fix-before-launch L2-22 |
+| nodemailer | 10.1.7 (built with 10.1.1; upgraded 2026-11-02) | MIT-0 | npm (MIT-0 is on the allowlist). 10.1.4 and later fix three addressparser advisories; `test/unit/mail.test.ts` checks the parser |
 | @node-rs/argon2 | not used | — | argon2id runs on Node's built-in `crypto.argon2` (§4.1), so no native package is needed |
 | kysely-codegen · kysely-ctl | 0.20.0 · 0.22.0 | MIT | npm. **Neither is used:** kysely-codegen pulls in argparse 2.0.1 (Python-2.0) through cosmiconfig and js-yaml, outside the licence allowlist, so `src/db/codegen.ts` generates the types (§3.6); kysely-ctl is not needed |
 | testcontainers · @testcontainers/postgresql | 12.2.1 | MIT | npm (optional; compose is the default) |
