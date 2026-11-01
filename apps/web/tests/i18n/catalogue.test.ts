@@ -18,7 +18,9 @@ import {
   isCatalogueKey,
   placeholdersOf,
   translator,
+  type CatalogueKey,
 } from "../../src/i18n/index.ts";
+import { CONTENT_RECORDS } from "../../src/features/public/content.ts";
 
 const DEVANAGARI = /[ऀ-ॿ]/;
 
@@ -169,11 +171,22 @@ describe("Glossary seeds (02 §3.9)", () => {
 describe("The Marathi review list", () => {
   it("holds every Marathi string that no native editor has approved, which today is all of them", () => {
     expect(Object.keys(REVIEWED)).toEqual([]);
-    expect(REVIEW.map((item) => item.key)).toEqual([...CATALOGUE_KEYS]);
+    // the catalogue's strings, then every public website record (src/features/public/content.ts)
+    expect(REVIEW.map((item) => item.key)).toEqual([
+      ...CATALOGUE_KEYS,
+      ...CONTENT_RECORDS.map((record) => `public:${record.id}`),
+    ]);
     expect(REVIEW.filter((item) => item.source === "glossary")).toHaveLength(70);
     for (const item of REVIEW) {
-      expect(item.marathi).toBe(CATALOGUES.mr[item.key]);
-      expect(item.english).toBe(CATALOGUES.en[item.key]);
+      if (item.source === "public") {
+        const record = CONTENT_RECORDS.find((candidate) => `public:${candidate.id}` === item.key);
+        expect(item.marathi).toBe(record?.mr);
+        expect(item.english).toBe(record?.en);
+        continue;
+      }
+      const key = item.key as CatalogueKey;
+      expect(item.marathi).toBe(CATALOGUES.mr[key]);
+      expect(item.english).toBe(CATALOGUES.en[key]);
     }
   });
 
@@ -183,6 +196,11 @@ describe("The Marathi review list", () => {
     // the two invite buttons that read the same in Marathi, as the owner chose
     expect(noted.filter((key) => key.startsWith("team.invite")).sort()).toEqual(["team.invite", "team.invite.submit"]);
     expect(Object.keys(REVIEW_NOTES).every((key) => isCatalogueKey(key))).toBe(true);
+    // the fictional Marathi example carries a note for the reviewer; no other public record does
+    const publicNotes = REVIEW.filter((item) => item.source === "public" && item.note).map((item) => item.key);
+    expect(publicNotes).toEqual(
+      CONTENT_RECORDS.filter((record) => record.kind === "specimen").map((record) => `public:${record.id}`),
+    );
   });
 
   it("keeps the second Marathi pass's fixes (L2-G)", () => {
@@ -206,7 +224,7 @@ describe("The Marathi review list", () => {
 
   it("keeps an approval only while the approved text is unchanged", () => {
     for (const [key, review] of Object.entries(REVIEWED)) {
-      expect(isCatalogueKey(key)).toBe(true);
+      expect(isCatalogueKey(key) || CONTENT_RECORDS.some((record) => key === `public:${record.id}`)).toBe(true);
       expect(review?.by.trim()).not.toBe("");
       expect(review?.on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }

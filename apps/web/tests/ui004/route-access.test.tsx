@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "../../src/test/render.tsx";
+import { screen, within, waitFor } from "../../src/test/render.tsx";
 import userEvent from "@testing-library/user-event";
 import { createMockApplicationEnvironment } from "../../src/mocks/index.ts";
 import { renderUi004, signInWithForm } from "./renderUi004.tsx";
@@ -63,13 +63,14 @@ describe("UI004 auth and public routes", () => {
 
   it("keeps public leaf content while changing only the session affordance", async () => {
     const signedIn = renderUi004("/");
-    expect(await screen.findByRole("heading", { level: 1, name: "Newspaper production, end to end" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Newspaper production, built first for Marathi papers" })).toBeInTheDocument();
     expect(signedIn.container).toHaveTextContent("Sahyadri Demo Editor");
     expect(signedIn.container).toHaveTextContent("editor");
     signedIn.unmount();
     renderUi004("/", "signed-out");
-    expect(await screen.findByRole("heading", { level: 1, name: "Newspaper production, end to end" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sign in" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Newspaper production, built first for Marathi papers" })).toBeInTheDocument();
+    // in the header, and again in the footer's links
+    expect(within(screen.getByRole("banner")).getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
   });
 });
 

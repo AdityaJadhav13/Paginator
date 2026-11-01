@@ -1,44 +1,44 @@
 /**
- * PublicShell (UI002 §7.1). Wraps the public route family (§6 rows
- * 1–10). `/onboarding` renders through the same shell in a
- * pre-context variant that omits the sign-in/sign-up affordance.
+ * PublicShell (UI002 §7.1; docs/product/03-website-and-accounts.md §4.1). Wraps the public route family.
  *
- * The sign-in screens (03 §5.1) render in the shell's sign-in variant:
- * the logo and the language switch on top, the card, and the notice,
- * in the language the person chose. The public pages exist in English
- * only for now, so their whole shell is an English scope (`lang="en"`)
- * whatever the interface language is.
+ * The public site is in English and Marathi: the language switch in the header chooses, the browser remembers the
+ * choice (src/i18n), and the shell's element carries the page's `lang`. Its header: the wordmark, the page links
+ * (collapsed under ☰ on a phone), the language switch, Sign in and Book a demo when signed out (Book a demo only once
+ * the API says the contact form is connected), or the signed-in person's controls. Its footer: the page links, the notice, the hosting line (planned) and the copyright line. The
+ * legal pages (privacy notice, terms, grievance officer) do not exist yet, so the footer does not link to them
+ * (docs/product/11-fix-before-launch.md).
+ *
+ * `/onboarding` renders through the same shell without the sign-in affordance. The sign-in screens (03 §5.1) render
+ * in the shell's sign-in variant: the logo and the language switch on top, the card, and the notice.
+ *
+ * Every word here comes from the catalogue (src/i18n): durable app code never reads the public feature's records.
  */
 import { Outlet, Link, useLocation } from "react-router";
-import { Container, Inline, Cluster, Stack } from "../../ui/index.ts";
+import { Container, Cluster, Stack } from "../../ui/index.ts";
 import { SkipLink } from "../SkipLink.tsx";
 import { CollapsibleNav } from "../CollapsibleNav.tsx";
-import { MAIN_LANDMARK_ID, paths, ROUTE_LABELS } from "../routes.ts";
+import { MAIN_LANDMARK_ID, paths } from "../routes.ts";
 import { SignedInSessionControls } from "../../features/auth/SessionStatus.tsx";
 import { useSession } from "../../features/auth/SessionProvider.tsx";
 import { isAuthPath } from "../../features/auth/return-to.ts";
-import { LanguageScope, LanguageSwitch, useI18n } from "../../i18n/index.ts";
+import { useContactConnection } from "../../features/contact/contact-context.tsx";
+import { LanguageSwitch, useI18n, type PlainKey } from "../../i18n/index.ts";
 
-/** The five public destinations the footer's Secondary navigation lists. */
-const SECONDARY_NAV = [
-  { to: paths.home(), label: ROUTE_LABELS.home },
-  { to: paths.features(), label: ROUTE_LABELS.features },
-  { to: paths.pricing(), label: ROUTE_LABELS.pricing },
-  { to: paths.security(), label: ROUTE_LABELS.security },
-  { to: paths.contact(), label: ROUTE_LABELS.contact },
-] as const;
+const PAGES: readonly { to: string; label: PlainKey }[] = [
+  { to: paths.features(), label: "public.nav.features" },
+  { to: paths.pricing(), label: "public.nav.pricing" },
+  { to: paths.security(), label: "public.nav.security" },
+  { to: paths.contact(), label: "public.nav.contact" },
+];
 
-/**
- * UI001's quiet action treatment plus its small body type step, reused on a
- * router `Link`. Between them they supply the tokenized action colour, the
- * type size and the absence of an underline without this shell declaring any
- * style of its own.
- *
- * No size modifier is applied on purpose: `pg-button--sm` would add its own
- * inline padding and inset the row from the notice beneath it, whereas
- * `pg-button` alone contributes no padding.
- */
+/** UI001's quiet action treatment plus its small body type step, on a router `Link` (no padding of its own). */
 const SECONDARY_NAV_LINK_CLASS = "pg-button pg-button--quiet pg-type-body-small";
+
+/** Western digits to Devanagari ones, for the Marathi copyright year. */
+function digitsFor(language: string, value: number): string {
+  const text = String(value);
+  return language === "mr" ? text.replace(/[0-9]/g, (digit) => String.fromCharCode(0x0966 + Number(digit))) : text;
+}
 
 /** The sign-in screens' chrome: logo and language switch, the card, the notice. */
 function SignInChrome() {
@@ -72,61 +72,77 @@ function PublicChrome() {
   const location = useLocation();
   const isOnboarding = location.pathname === paths.onboarding();
   const { state } = useSession();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const signedIn = state.status === "ready";
+  // Book a demo only when the contact form sends (never while that is checked): no button to a dead end
+  const connection = useContactConnection();
 
   return (
-    <div className="pg-shell pg-shell--public" lang="en">
-      <SkipLink />
-      <header className="pg-shell__header">
+    <div className="pg-shell pg-shell--public pg-shell--site" lang={language}>
+      <SkipLink label={t("shell.skipLink")} />
+      <header className="pg-shell__header pg-site-header">
         <Container>
-          <Inline gap="5" wrap="wrap" align="center">
-            <Link to={paths.home()} className="pg-shell__brand pg-type-section-title">
+          <div className="pg-site-header__row">
+            <Link to={paths.home()} className="pg-shell__brand pg-site-header__brand" lang="en">
               Pageinator
             </Link>
-            <CollapsibleNav ariaLabel="Primary">
-              <Cluster gap="4">
-                <Link to={paths.home()}>{ROUTE_LABELS.home}</Link>
-                <Link to={paths.features()}>{ROUTE_LABELS.features}</Link>
-                <Link to={paths.pricing()}>{ROUTE_LABELS.pricing}</Link>
-                <Link to={paths.security()}>{ROUTE_LABELS.security}</Link>
-                <Link to={paths.contact()}>{ROUTE_LABELS.contact}</Link>
-              </Cluster>
+            <CollapsibleNav ariaLabel={t("public.nav.primary")} showLabel={t("public.nav.show")} hideLabel={t("public.nav.hide")}>
+              <ul className="pg-site-header__links">
+                {PAGES.map(({ to, label }) => (
+                  <li key={to}>
+                    <Link to={to} aria-current={location.pathname === to ? "page" : undefined}>
+                      {t(label)}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </CollapsibleNav>
-            {!isOnboarding && state.status === "ready" && <SignedInSessionControls />}
-            {!isOnboarding && state.status !== "ready" && (
-              <Cluster gap="3" justify="end">
-                <Link to={paths.login()}>{ROUTE_LABELS.login}</Link>
-                <Link to={paths.signup()}>{ROUTE_LABELS.signup}</Link>
-              </Cluster>
-            )}
-          </Inline>
+            <div className="pg-site-header__actions">
+              <LanguageSwitch />
+              {!isOnboarding && signedIn && <SignedInSessionControls />}
+              {!isOnboarding && !signedIn && (
+                <>
+                  <Link to={paths.login()} className="pg-site-header__sign-in">
+                    {t("public.signIn")}
+                  </Link>
+                  {connection === "connected" && (
+                    <Link
+                      to={`${paths.contact()}?intent=demo`}
+                      className="pg-button pg-button--primary pg-button--sm pg-site-header__cta"
+                    >
+                      {t("public.bookDemo")}
+                    </Link>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </Container>
       </header>
-      {/*
-       * UI005 §20.4 edit 1: the content measure moved out of <main> and into
-       * each route's own regions, because the public surfaces render
-       * full-width bands that cannot live inside a constrained container.
-       * Routes that previously relied on the shell's Container now wrap
-       * themselves in one at their route element.
-       */}
       <main id={MAIN_LANDMARK_ID} tabIndex={-1}>
         <Outlet />
       </main>
-      <footer className="pg-shell__footer">
+      <footer className="pg-shell__footer pg-site-footer">
         <Container>
-          {/*
-           * UI005 §20.4 edit 2: conventional public-site footer navigation,
-           * built entirely from UI001 primitives and their existing classes.
-           */}
           <Stack gap="4">
-            <Cluster as="nav" aria-label="Secondary" gap="5">
-              {SECONDARY_NAV.map(({ to, label }) => (
+            <Cluster as="nav" aria-label={t("public.nav.secondary")} gap="5">
+              <Link to={paths.home()} className={SECONDARY_NAV_LINK_CLASS}>
+                {t("public.nav.home")}
+              </Link>
+              {PAGES.map(({ to, label }) => (
                 <Link key={to} to={to} className={SECONDARY_NAV_LINK_CLASS}>
-                  {label}
+                  {t(label)}
                 </Link>
               ))}
+              <Link to={paths.login()} className={SECONDARY_NAV_LINK_CLASS}>
+                {t("public.signIn")}
+              </Link>
             </Cluster>
-            <p className="pg-type-caption">{t("shell.notice")}</p>
+            <p className="pg-type-body-small">{t("shell.notice")}</p>
+            <p className="pg-type-body-small">{t("public.footer.hosting")}</p>
+            <p className="pg-type-body-small">
+              {t("public.footer.copyright", { year: digitsFor(language, new Date().getFullYear()) })}
+            </p>
           </Stack>
         </Container>
       </footer>
@@ -137,9 +153,5 @@ function PublicChrome() {
 export function PublicShell() {
   const location = useLocation();
   if (isAuthPath(location.pathname)) return <SignInChrome />;
-  return (
-    <LanguageScope language="en">
-      <PublicChrome />
-    </LanguageScope>
-  );
+  return <PublicChrome />;
 }

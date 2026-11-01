@@ -4,6 +4,7 @@
 // three parser advisories that 10.1.4 fixes: docs/product/11-fix-before-launch.md, L2-22). Mail goes in the
 // background: a request that sends one answers as fast as one that does not, and a failure is reported without the
 // message, whose links carry tokens.
+import { hasControlCharacters } from "@pageinator/contracts";
 import { createTransport } from "nodemailer";
 
 /** One plain address. The local part and the domain are what people's addresses use; nothing an address parser
@@ -19,20 +20,33 @@ export type MailSettings = {
   auth?: { user: string; pass: string };
 };
 
-/** What a message is, for logs: never its text, which carries links with tokens. */
+/** What a message is, for logs: never its text, which carries links with tokens (or, for "contact", what a person
+ * wrote on the website). */
 export type MailKind =
-  "verify-email" | "reset-password" | "new-sign-in" | "invitation" | "story-sent-back" | "invitation-accepted";
-export type Mail = { kind: MailKind; to: string; subject: string; text: string; html: string };
+  | "verify-email"
+  | "reset-password"
+  | "new-sign-in"
+  | "invitation"
+  | "story-sent-back"
+  | "invitation-accepted"
+  | "contact";
+/** A message. Without `html` it is plain text only. `replyTo` must be one plain address, like the recipient. */
+export type Mail = { kind: MailKind; to: string; subject: string; text: string; html?: string; replyTo?: string };
+
+/** The message as the transport gets it. */
+export type OutgoingMail = { from: string; to: string; subject: string; text: string; html?: string; replyTo?: string };
 
 /** The part of a nodemailer transport the mailer uses (tests give their own). */
 export type Transport = {
-  sendMail(message: { from: string; to: string; subject: string; text: string; html: string }): Promise<unknown>;
+  sendMail(message: OutgoingMail): Promise<unknown>;
   close(): void;
 };
 
 export type Mailer = {
   /** Starts sending; returns at once. A recipient that is not one plain address is refused here (it throws). */
   send(mail: Mail): void;
+  /** Sends and settles once the mail server took the message; rejects if it did not. The same checks as `send`. */
+  deliver(mail: Mail): Promise<void>;
   /** Settles once every message started so far is sent or has failed. */
   idle(): Promise<void>;
   close(): Promise<void>;
@@ -63,20 +77,53 @@ export function openMailer(
   onFailure: (kind: MailKind, error: Error) => void,
 ): Mailer {
   const pending = new Set<Promise<void>>();
+  const outgoing = (mail: Mail): OutgoingMail => {
+    if (mail.to.length > 254 || !PLAIN_ADDRESS.test(mail.to)) {
+      throw new RecipientError(`A ${mail.kind} email was not sent: its recipient is not one plain address.`);
+    }
+    if (mail.replyTo !== undefined && (mail.replyTo.length > 254 || !PLAIN_ADDRESS.test(mail.replyTo))) {
+      throw new RecipientError(`A ${mail.kind} email was not sent: its reply-to is not one plain address.`);
+    }
+    // a subject is one line: a line break there would start a header of its own
+    if (hasControlCharacters(mail.subject)) {
+      throw new RecipientError(`A ${mail.kind} email was not sent: its subject is not one line.`);
+    }
+    const { to, subject, text, html, replyTo } = mail;
+    return {
+      from: settings.from,
+      to,
+      subject,
+      text,
+      ...(html === undefined ? {} : { html }),
+      ...(replyTo === undefined ? {} : { replyTo }),
+    };
+  };
+  const track = (sending: Promise<void>) => {
+    pending.add(sending);
+    void sending.finally(() => pending.delete(sending));
+  };
   return {
     send(mail) {
-      if (mail.to.length > 254 || !PLAIN_ADDRESS.test(mail.to)) {
-        throw new RecipientError(`A ${mail.kind} email was not sent: its recipient is not one plain address.`);
-      }
-      const { to, subject, text, html } = mail;
-      const sending = transport
-        .sendMail({ from: settings.from, to, subject, text, html })
-        .then(
+      const message = outgoing(mail);
+      track(
+        transport.sendMail(message).then(
           () => undefined,
           (error: unknown) => onFailure(mail.kind, error instanceof Error ? error : new Error(String(error))),
-        )
-        .finally(() => pending.delete(sending));
-      pending.add(sending);
+        ),
+      );
+    },
+    async deliver(mail) {
+      const message = outgoing(mail);
+      const sending = transport.sendMail(message).then(
+        () => undefined,
+        (error: unknown) => {
+          const failure = error instanceof Error ? error : new Error(String(error));
+          onFailure(mail.kind, failure);
+          throw failure;
+        },
+      );
+      track(sending.catch(() => undefined));
+      await sending;
     },
     async idle() {
       await Promise.all(pending);

@@ -1,4 +1,5 @@
 import type { AccountService } from "./account-service.ts";
+import type { ContactService } from "./contact-service.ts";
 import type { SecurityService } from "./security-service.ts";
 import type { SessionService } from "./session-service.ts";
 import type { MediaService } from "./media-service.ts";
@@ -18,6 +19,8 @@ export interface ServiceEnvironment {
   readonly team: TeamService;
   readonly stories: StoryService;
   readonly media: MediaService;
+  /** The public website's contact form. */
+  readonly contact: ContactService;
   /** The placeholder workspace's access; absent where nothing provides one (the deployed app, until `/me`). */
   readonly access?: WorkspaceAccessService;
   readonly workspace: WorkspaceQueryService;

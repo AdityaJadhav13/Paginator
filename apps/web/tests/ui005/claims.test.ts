@@ -1,41 +1,39 @@
 /**
- * Content governance scan (UI005 §19.4; AC-13 – AC-15, AC-28, AC-29,
- * AC-33, AC-34, AC-36).
+ * Claims governance for the public website (docs/product/03-website-and-accounts.md §4; CLAUDE.md "No unproven
+ * claims").
  *
- * This is the mechanism by which the backlog's "no invented customers,
- * certifications or press-ready claims" requirement is enforced rather
- * than merely asserted: every sentence the public surfaces can say is a
- * record in one module, and this file reads all of them.
+ * Every sentence the public pages can say, in English and Marathi, is a record in `content.ts`, and this file reads
+ * all of them:
+ *   - every fact and every plan names its evidence, a file in this repository and words it contains, and the file
+ *     really contains them; a number in a fact appears in its evidence, and the Marathi says the same numbers;
+ *   - the claim vocabulary (press-ready, certified, AI-powered, seamless…) is said nowhere, except by a denial;
+ *   - nothing names a customer, a testimonial, a price, a fixture organisation or the demonstration's old wording;
+ *   - every record is shown somewhere, and every word shown on a public page is a whole record, in its language.
  */
 import { describe, it, expect } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import userEvent from "@testing-library/user-event";
-import { screen, within } from "../../src/test/render.tsx";
-import {
-  CONTENT_RECORDS,
-  expandedContentTexts,
-} from "../../src/features/public/content.ts";
-import {
-  WORKFLOW_STAGES,
-  availabilityLabels,
-  workflowStageViews,
-} from "../../src/features/public/workflow.ts";
-import { PUBLIC_ROUTES, renderPublic } from "./renderPublic.tsx";
+import { fireEvent, screen, within } from "../../src/test/render.tsx";
+import { CONTENT_RECORDS, text, type ContentRecord, type PublicLanguage } from "../../src/features/public/content.ts";
+import { EVIDENCE } from "../../src/features/public/evidence.ts";
+import { stageIds, stateLabelIds, WORKFLOW_STAGES } from "../../src/features/public/workflow.ts";
+import { CATALOGUES } from "../../src/i18n/index.ts";
+import { LANGUAGES, PUBLIC_PAGES, contactAnswered, renderPublic } from "./renderPublic.tsx";
 
-/*
- * One corpus. Workflow prose is no longer a second, separately-owned set
- * of strings: every rendered sentence is a record in `content.ts`, so this
- * is the complete list of everything the public surfaces can say.
- */
-const ALL_RECORDS = CONTENT_RECORDS;
+const REPO = resolve(__dirname, "../../../..");
+const DEVANAGARI = /[ऀ-ॿ]/;
 
-/** §19.3 plus the §17.3 security list. Scanned case-insensitively. */
+/** The claim vocabulary (UI005 §19.3 and the §17.3 security list). Scanned case-insensitively in English. */
 const FORBIDDEN_TERMS = [
-  // §19.3 — claim vocabulary
   "press-ready",
+  "press ready",
   "print-ready",
   "production-ready",
   "production ready",
   "ready for press",
+  "pdf/x-valid",
+  "pdf/x valid",
   "certified",
   "guaranteed",
   "guarantee",
@@ -49,6 +47,7 @@ const FORBIDDEN_TERMS = [
   "effortless",
   "ai-powered",
   "powered by ai",
+  "ai-driven",
   "next-generation",
   "cutting-edge",
   "unlock",
@@ -59,7 +58,6 @@ const FORBIDDEN_TERMS = [
   "no code",
   "free trial",
   "money-back",
-  // §17.3 — security vocabulary
   "soc 2",
   "soc2",
   "iso 27001",
@@ -83,13 +81,60 @@ const FORBIDDEN_TERMS = [
 ];
 
 /**
- * The only records permitted to contain a forbidden term, because they
- * exist to deny the claim the term names. Their shape is asserted
- * separately below, so this is a narrowing, not an exemption.
+ * The same claims in Marathi: ready for print, printable, certified, guarantee and assured, and the Marathi for
+ * seamless, AI-powered, guaranteed and production-ready. Scanned in every Marathi text but a denial's.
  */
-const DENIAL_PREFIX = "security-limit-";
+const FORBIDDEN_MR = [
+  "छपाईसाठी तयार",
+  "छपाईयोग्य",
+  "छपाईस योग्य",
+  "प्रमाणित",
+  "हमी",
+  "खात्रीशीर",
+  "हमखास",
+  "अखंड",
+  "विनासायास",
+  "सहजसुंदर",
+  "एआय-चालित",
+  "एआयवर आधारित",
+  "AI-चालित",
+  "AI आधारित",
+  "कृत्रिम बुद्धिमत्तेवर आधारित",
+  "कृत्रिम बुद्धिमत्तेवर चालणारे",
+  "उत्पादनासाठी तयार",
+  "वापरासाठी सज्ज",
+  "छपाईसाठी सज्ज",
+];
 
-/** UI003 fixture names must never appear in public copy (§19.2). */
+/** The claim terms a text says, in its language. */
+function forbiddenIn(text: string, language: PublicLanguage): string[] {
+  // a Marathi term starts a word: नेहमी ("always") does not say हमी ("guarantee")
+  if (language === "mr") return FORBIDDEN_MR.filter((term) => new RegExp(`(?<![\u0900-\u097F])${term}`).test(text));
+  const lower = text.toLowerCase();
+  return FORBIDDEN_TERMS.filter((term) =>
+    new RegExp(`(^|[^a-z])${term.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}($|[^a-z])`).test(lower),
+  );
+}
+
+/** Statements the demonstration stage made, which are no longer true, and its placeholder vocabulary. */
+const NO_LONGER_TRUE = [
+  "does not send anything",
+  "Nothing was sent",
+  "Reserved in the current build",
+  "You can try this in the demonstration",
+  "demonstration workspace",
+  "part of the demonstration",
+  "placeholder",
+  "Preview the acknowledgement",
+  "No content is ingested",
+  "None of them is implemented yet",
+  "None of them describes what runs today",
+  "transmits nothing",
+  "runs entirely in your browser",
+  "Sign in to your newsroom",
+];
+
+/** UI003 fixture names never appear in public copy. */
 const FIXTURE_NAMES = [
   "Sahyadri Media Cooperative",
   "Konkan Coastal Press",
@@ -100,481 +145,366 @@ const FIXTURE_NAMES = [
   "Konkan Demo Reviewer",
 ];
 
-/** Every module a public content id may legitimately be referenced from. */
-const componentSources = import.meta.glob("/src/features/public/**/*.{ts,tsx}", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-}) as Record<string, string>;
+const asciiDigits = (value: string) => value.replace(/[०-९]/g, (digit) => String(digit.charCodeAt(0) - 0x0966));
+/** The numbers a fact or plan states that its evidence does not: whole numbers, compared as numbers. */
+function unsourcedNumbers(record: ContentRecord): string[] {
+  const sourced = new Set(numbersIn((record.evidence ?? []).map((key) => EVIDENCE[key].quote).join(" ")));
+  return numbersIn(record.en).filter((number) => !sourced.has(number));
+}
 
-describe("Content model integrity (AC-13)", () => {
-  it("found the public content modules to scan", () => {
-    expect(ALL_RECORDS.length).toBeGreaterThan(50);
-    expect(Object.keys(componentSources).length).toBeGreaterThan(5);
-  });
+/** Record names (EXP-GEN-1, ADR-022, gate G2) are names, not numbers the text states. */
+const RECORD_NAMES = /EXP-GEN-1|EXP-PDF-1|ADR-022|\bG2\b/g;
+const numbersIn = (value: string) =>
+  [...asciiDigits(value.replace(RECORD_NAMES, "")).matchAll(/\d+/g)].map((match) => match[0]);
 
-  it("holds the workflow prose and availability labels, and no internal unit names", () => {
-    const ids = new Set(ALL_RECORDS.map((record) => record.id));
-    for (const stage of WORKFLOW_STAGES) {
-      expect(ids, `stage ${stage.key} name`).toContain(`workflow-${stage.key}-name`);
-      expect(ids, `stage ${stage.key} description`).toContain(
-        `workflow-${stage.key}-description`
-      );
-      expect(ids, `stage ${stage.key} constraint`).toContain(
-        `workflow-${stage.key}-constraint`
-      );
-    }
-    for (const id of ["availability-demonstrated", "availability-routed", "availability-planned"]) {
-      expect(ids).toContain(id);
-    }
-    // the internal build units (UI014, UI022–024…) are planning labels, not something a reader is told
-    expect(ids).not.toContain("features-owner-caption");
-    expect(ALL_RECORDS.map((record) => record.text).join(" ")).not.toMatch(/\bUI\d{3}/);
-  });
-
-  it("does not duplicate any rendered sentence between records", () => {
-    // Prose only. Short labels may legitimately coincide — a page title and
-    // a nav link can both be "Contact" — but a duplicated sentence means the
-    // same claim is now maintained in two places, which is the drift this
-    // module exists to prevent.
-    const seen = new Map<string, string>();
-    for (const record of ALL_RECORDS) {
-      if (record.text.trim().split(/\s+/).length < 3) continue;
-      const previous = seen.get(record.text);
-      expect(
-        previous,
-        `"${record.id}" duplicates the text of "${previous}"`
-      ).toBeUndefined();
-      seen.set(record.text, record.id);
-    }
-  });
-
-  it("gives every record a unique id", () => {
-    const ids = ALL_RECORDS.map((record) => record.id);
+describe("Records", () => {
+  it("are many, with unique ids", () => {
+    expect(CONTENT_RECORDS.length).toBeGreaterThan(150);
+    const ids = CONTENT_RECORDS.map((record) => record.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("traces every record to an architecture source", () => {
-    for (const record of ALL_RECORDS) {
-      expect(record.source, `${record.id} has no source`).toBeTruthy();
-      expect(record.sourceRef.trim(), `${record.id} has no sourceRef`).not.toBe("");
-      expect(record.text.trim(), `${record.id} has no text`).not.toBe("");
+  it("each have English, Marathi in Devanagari, a source and where in it", () => {
+    for (const record of CONTENT_RECORDS) {
+      expect(record.en.trim(), `${record.id} en`).not.toBe("");
+      expect(record.mr, `${record.id} mr`).toMatch(DEVANAGARI);
+      expect(record.source, record.id).toBeTruthy();
+      expect(record.sourceRef.trim(), record.id).not.toBe("");
+      if (record.kind !== "specimen") expect(record.en, `${record.id} en`).not.toMatch(DEVANAGARI);
     }
+  });
+
+  it("keep Marathi free of English words other than product and record names", () => {
+    const allowed = /^(Pageinator|Desk|Word|WhatsApp|AI|EXP-GEN-1|EXP-PDF-1|ADR-022|G2)$/;
+    for (const record of CONTENT_RECORDS) {
+      const latin = record.mr.match(/[A-Za-z][A-Za-z0-9-]*/g) ?? [];
+      for (const word of latin) expect(word, `${record.id}: "${word}" in the Marathi`).toMatch(allowed);
+    }
+  });
+
+  it("do not repeat a sentence in two records", () => {
+    const seen = new Map<string, string>();
+    for (const record of CONTENT_RECORDS) {
+      if (record.kind === "specimen" || record.en.trim().split(/\s+/).length < 4) continue;
+      expect(seen.get(record.en), `"${record.id}" repeats "${seen.get(record.en)}"`).toBeUndefined();
+      seen.set(record.en, record.id);
+    }
+  });
+
+  it("keep every English sentence to 30 words or fewer", () => {
+    const tooLong = CONTENT_RECORDS.flatMap((record) =>
+      record.en
+        .split(/(?<=[.?!])\s+/)
+        .filter((sentence) => sentence.trim().split(/\s+/).length > 30)
+        .map(() => record.id),
+    );
+    expect(tooLong).toEqual([]);
   });
 });
 
-describe("Forbidden claim vocabulary (AC-33, AC-30)", () => {
-  for (const record of CONTENT_RECORDS) {
-    if (record.id.startsWith(DENIAL_PREFIX)) continue;
+describe("Every fact and plan names its evidence, and the evidence says it", () => {
+  const sourced = CONTENT_RECORDS.filter((record) => record.kind === "fact" || record.kind === "plan");
 
-    it(`"${record.id}" contains no forbidden claim term`, () => {
-      const text = record.text.toLowerCase();
-      for (const term of FORBIDDEN_TERMS) {
-        expect(text, `"${record.id}" contains forbidden term "${term}"`).not.toContain(
-          term
-        );
+  it("covers the claims the site makes", () => {
+    expect(sourced.length).toBeGreaterThan(50);
+  });
+
+  for (const record of sourced) {
+    it(`"${record.id}" (${record.kind})`, () => {
+      expect(record.evidence?.length ?? 0, `${record.id} names no evidence`).toBeGreaterThan(0);
+      for (const key of record.evidence ?? []) {
+        const { path, quote } = EVIDENCE[key];
+        expect(path, `${record.id}: evidence must be a repository path`).not.toMatch(/^\/|PageinatorPrivate|\.\./);
+        const file = resolve(REPO, path);
+        expect(existsSync(file), `${record.id}: ${path} does not exist`).toBe(true);
+        expect(readFileSync(file, "utf8"), `${record.id}: ${path} does not say "${quote}"`).toContain(quote);
       }
     });
   }
 
-  it("scans the strings format() can produce with the same vocabulary", () => {
-    for (const text of expandedContentTexts({})) {
-      for (const term of FORBIDDEN_TERMS) {
-        expect(text.toLowerCase(), `"${text}" contains "${term}"`).not.toContain(term);
-      }
-    }
-  });
-
-  it("only exempts records that are denials, and proves they are denials", () => {
-    const denials = CONTENT_RECORDS.filter((record) =>
-      record.id.startsWith(DENIAL_PREFIX)
-    );
-
-    expect(denials.length).toBeGreaterThan(0);
-    for (const record of denials) {
-      // A denial must begin with "No " — it cannot be reworded into an
-      // assertion while keeping the exemption.
-      expect(record.text.startsWith("No "), `"${record.id}" is not phrased as a denial`).toBe(
-        true
-      );
-    }
-  });
-});
-
-describe("No invented entities (AC-28, AC-29)", () => {
-  it("names no customer, testimonial, logo or usage count", () => {
-    const corpus = ALL_RECORDS.map((record) => record.text).join(" ").toLowerCase();
-
-    for (const phrase of [
-      "trusted by",
-      "used by",
-      "loved by",
-      "our customers",
-      "case study",
-      "testimonial",
-      "award",
-      "join ",
-      "publishers use",
-    ]) {
-      expect(corpus, `corpus contains "${phrase}"`).not.toContain(phrase);
-    }
-  });
-
-  it("never renders a UI003 fixture organization or publication name", () => {
-    const corpus = ALL_RECORDS.map((record) => record.text).join(" ");
-    for (const name of FIXTURE_NAMES) {
-      expect(corpus, `corpus contains fixture name "${name}"`).not.toContain(name);
-    }
-  });
-});
-
-describe("Pricing records carry no figure (AC-24)", () => {
-  it("has no currency symbol, digit or percentage in any pricing record", () => {
-    const pricing = CONTENT_RECORDS.filter((record) => record.id.startsWith("pricing-"));
-
-    expect(pricing.length).toBeGreaterThan(0);
-    for (const record of pricing) {
-      expect(record.text, `"${record.id}" contains a digit`).not.toMatch(/\d/);
-      expect(record.text, `"${record.id}" contains a currency symbol`).not.toMatch(
-        /[$€£₹¥]/
-      );
-      expect(record.text, `"${record.id}" contains a percentage`).not.toMatch(/%/);
-    }
-  });
-});
-
-/*
- * No dead copy (AC-15), proved by rendering rather than by grep.
- *
- * A source-text check cannot serve here: the workflow ids are built as
- * `workflow-${stage.key}-name`, so no literal appears outside the record
- * itself — and because `content.ts` is part of the scanned corpus, a
- * "the id appears somewhere" assertion passes for every record by virtue
- * of its own declaration. It is vacuous.
- *
- * So this walks every reachable state of the five surfaces and asserts each
- * record's text is actually shown to someone. A record nobody renders is
- * unreviewed copy that can drift out of step with the product.
- */
-describe("No dead copy (AC-15)", () => {
-  /** Text and accessible names rendered across every reachable state. */
-  async function renderedEverywhere(): Promise<Set<string>> {
-    const seen = new Set<string>();
-
-    const harvest = (container: HTMLElement) => {
-      const main = within(container).getByRole("main");
-      const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        const value = (node.nodeValue ?? "").replace(/\s+/g, " ").trim();
-        if (value) seen.add(value);
-      }
-      // Some governed copy is an accessible name, not a text node — the
-      // page-geometry figure's description, for instance.
-      for (const el of main.querySelectorAll("[aria-label]")) {
-        seen.add((el.getAttribute("aria-label") ?? "").replace(/\s+/g, " ").trim());
-      }
-    };
-
-    for (const { path, heading } of PUBLIC_ROUTES) {
-      // Signed out: the signed-out CTA label.
-      const out = renderPublic(path, "signed-out");
-      await screen.findByRole("heading", { level: 1, name: heading });
-      harvest(out.container);
-      out.unmount();
-
-      // Signed in: the signed-in CTA label.
-      const inn = renderPublic(path);
-      await screen.findByRole("heading", { level: 1, name: heading });
-      await screen.findAllByText("Open Pageinator");
-      harvest(inn.container);
-      inn.unmount();
-    }
-
-    // The contact form's two post-submit states.
-    const user = userEvent.setup();
-
-    const empty = renderPublic("/contact", "signed-out");
-    await screen.findByRole("heading", { level: 1, name: "Contact" });
-    await user.click(screen.getByRole("button", { name: "Preview the acknowledgement" }));
-    harvest(empty.container);
-    empty.unmount();
-
-    const filled = renderPublic("/contact", "signed-out");
-    await screen.findByRole("heading", { level: 1, name: "Contact" });
-    await user.type(screen.getByLabelText(/^Message/), "Rendered so the acknowledgement appears.");
-    await user.click(screen.getByRole("button", { name: "Preview the acknowledgement" }));
-    await screen.findByText("Nothing was sent");
-    harvest(filled.container);
-    filled.unmount();
-
-    return seen;
-  }
-
-  /**
-   * The availability vocabulary is the one legitimate exception.
-   *
-   * §13.2 fixes three values, but only the state the stages are actually in
-   * is rendered — today that is `routed` for all seven. The other two labels
-   * are not stale copy; they are the vocabulary the honesty test guards, and
-   * deleting them would remove the wording an implementer must use when a
-   * stage genuinely ships. They are held to a different proof below: each
-   * must be wired to a state, and at least one must render.
-   */
-  const VOCABULARY_PREFIX = "availability-";
-
-  it("wires every availability label to a state, and renders the current one", async () => {
-    const rendered = await renderedEverywhere();
-    const labels = availabilityLabels();
-
-    const vocabulary = CONTENT_RECORDS.filter((record) =>
-      record.id.startsWith(VOCABULARY_PREFIX)
-    );
-    expect(vocabulary).toHaveLength(3);
-
-    // Reachable through `availabilityLabel()`, i.e. not orphaned text.
-    for (const record of vocabulary) {
-      expect(labels, `"${record.id}" is not wired to an availability state`).toContain(
-        record.text
-      );
-    }
-    // And the state the build is actually in is on screen.
-    expect(labels.filter((label) => rendered.has(label)).length).toBeGreaterThan(0);
-  });
-
-  it("renders every content record somewhere on a public surface", async () => {
-    const rendered = await renderedEverywhere();
-
-    const dead: string[] = [];
+  it("states a number only where its evidence states it, and the same numbers in Marathi", () => {
     for (const record of CONTENT_RECORDS) {
-      if (record.id.startsWith(VOCABULARY_PREFIX)) continue;
-
-      const placeholders = [...record.text.matchAll(/\{(\w+)\}/g)];
-      if (placeholders.length === 0) {
-        if (!rendered.has(record.text)) dead.push(record.id);
+      const numbers = numbersIn(record.en);
+      if (record.kind === "specimen") continue;
+      if (record.kind !== "fact" && record.kind !== "plan") {
+        expect(numbers, `${record.id} (${record.kind}) states a number without evidence`).toEqual([]);
         continue;
       }
-      // A template is reachable when each of its expansions is rendered.
-      const expansions = expandedContentTexts({}).filter((text) =>
-        text.startsWith(record.text.slice(0, record.text.indexOf("{")))
-      );
-      if (expansions.length === 0 || !expansions.every((text) => rendered.has(text))) {
-        dead.push(record.id);
-      }
+      expect(unsourcedNumbers(record), `${record.id}: numbers not in its evidence`).toEqual([]);
+      expect(numbersIn(record.mr).sort(), `${record.id}: the Marathi says other numbers`).toEqual([...numbers].sort());
     }
-
-    expect(dead, "content records that no surface renders").toEqual([]);
   });
 
-  it("would flag a record that nothing renders", async () => {
-    // Guards the mechanism: a record-shaped string absent from every
-    // surface must not be treated as reachable.
-    const rendered = await renderedEverywhere();
-    expect(rendered.has("A sentence no public surface renders.")).toBe(false);
+  it("compares whole numbers: 20 of 28 is not sourced by evidence that says 28 and 2026", () => {
+    const planted = { ...(CONTENT_RECORDS.find((record) => record.id === "proof-gen1") as ContentRecord) };
+    const twenty = { ...planted, en: "20 of 28 held-out test pages laid out automatically." };
+    expect(EVIDENCE.gen1.quote).toContain("2026");
+    expect(unsourcedNumbers(twenty)).toEqual(["20"]);
+    expect(unsourcedNumbers(planted)).toEqual([]);
+  });
+
+  it("writes numbers in Devanagari digits in Marathi", () => {
+    for (const record of CONTENT_RECORDS) expect(record.mr.replace(RECORD_NAMES, ""), record.id).not.toMatch(/[0-9]/);
   });
 });
 
-describe("No inlined user-visible sentence (AC-14)", () => {
-  it("keeps whole prose blocks out of JSX", () => {
-    // A cheap source-level check that catches a fully inlined sentence.
-    // It cannot see a sentence split by an interpolation, which is what
-    // the rendered-text check below exists for.
-    const offenders: string[] = [];
-    const jsxText = />\s*([A-Z][^<>{}]{25,})</g;
-
-    for (const [path, source] of Object.entries(componentSources)) {
-      if (!path.endsWith(".tsx")) continue;
-      for (const match of source.matchAll(jsxText)) {
-        const text = match[1]!.trim();
-        if (text.startsWith("*") || text.startsWith("//")) continue;
-        offenders.push(`${path}: ${text}`);
-      }
-    }
-
-    expect(offenders).toEqual([]);
-  });
-});
-
-/*
- * The governance rule the source scan above cannot enforce.
- *
- * Writing `Reserved for {unit}` in JSX puts the words "Reserved for"
- * outside `content.ts` while defeating any source regex that excludes
- * braces — and React renders it as *two* text nodes, "Reserved for " and
- * "UI009". So the check operates on what the browser actually shows: every
- * text node rendered inside <main> must be a complete governed string.
- *
- * A sentence assembled from a fragment plus an interpolation therefore
- * fails by construction, because neither fragment is a whole record. This
- * was verified by temporarily restoring the `Reserved for {unit}` pattern:
- * the suite reported the offender `/features: "Reserved for"` and failed.
- */
-describe("Rendered text is governed, including across interpolation (AC-13, AC-14)", () => {
-  /**
-   * Strings UI001 primitives render themselves. They are UI001's copy, not
-   * UI005's, and are listed explicitly rather than pattern-matched so a new
-   * one cannot slip in unnoticed.
-   */
-  const UI001_PRIMITIVE_TEXT = new Set([
-    "(required)", // Field's required affordance
-    "Information", // InlineMessage's icon label
-  ]);
-
-  function governedStrings(): Set<string> {
-    const allowed = new Set<string>();
-    for (const record of CONTENT_RECORDS) {
-      // A record carrying a placeholder is never rendered raw.
-      if (!/\{\w+\}/.test(record.text)) allowed.add(record.text);
-    }
-    for (const text of expandedContentTexts({})) {
-      allowed.add(text);
-    }
-    for (const label of availabilityLabels()) allowed.add(label);
-    for (const text of UI001_PRIMITIVE_TEXT) allowed.add(text);
-    return allowed;
-  }
-
-  /** Text nodes a reader is actually told, ignoring presentational ones. */
-  function renderedTexts(main: HTMLElement): string[] {
-    const readable = main.cloneNode(true) as HTMLElement;
-    for (const hidden of readable.querySelectorAll('[aria-hidden="true"]')) {
-      hidden.remove();
-    }
-
-    const texts: string[] = [];
-    const walker = document.createTreeWalker(readable, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const value = (node.nodeValue ?? "").replace(/\s+/g, " ").trim();
-      // Whitespace and symbol-only nodes carry no claim.
-      if (value === "" || !/\p{L}/u.test(value)) continue;
-      texts.push(value);
-    }
-    return texts;
-  }
-
-  for (const { path, heading } of PUBLIC_ROUTES) {
-    it(`"${path}" renders only complete governed strings`, async () => {
-      const { container } = renderPublic(path);
-      await screen.findByRole("heading", { level: 1, name: heading });
-
-      const allowed = governedStrings();
-      const offenders = renderedTexts(within(container).getByRole("main")).filter(
-        (text) => !allowed.has(text)
-      );
-
-      expect(offenders, `ungoverned rendered text on "${path}"`).toEqual([]);
+describe("The claim vocabulary", () => {
+  for (const record of CONTENT_RECORDS) {
+    if (record.kind === "denial") continue;
+    it(`"${record.id}" says none of it, in English or Marathi`, () => {
+      expect(forbiddenIn(record.en, "en"), `${record.id} en`).toEqual([]);
+      expect(forbiddenIn(record.mr, "mr"), `${record.id} mr`).toEqual([]);
     });
   }
 
-  it("rejects a sentence split by an interpolation", () => {
-    // Guards the mechanism itself: the fragment a `Reserved for {unit}`
-    // pattern would render is not a governed string, so the check above
-    // would report it. If someone widened `governedStrings()` to accept
-    // fragments, this assertion fails. (The owner caption itself is gone:
-    // internal unit names are not told to a reader.)
-    const allowed = governedStrings();
-    expect(allowed.has("Reserved for")).toBe(false);
-    expect(allowed.has("Reserved for UI009.")).toBe(false);
-    expect(allowed.has("Reserved in the current build")).toBe(true);
+  it("is said by none of the header's and footer's words (public.*), in either language", () => {
+    for (const key of Object.keys(CATALOGUES.en).filter((name) => name.startsWith("public."))) {
+      const name = key as keyof typeof CATALOGUES.en;
+      expect(forbiddenIn(CATALOGUES.en[name], "en"), key).toEqual([]);
+      expect(forbiddenIn(CATALOGUES.mr[name], "mr"), key).toEqual([]);
+    }
+  });
+
+  it("catches a planted Marathi claim", () => {
+    expect(forbiddenIn("हे पान छपाईसाठी तयार आहे.", "mr")).toEqual(["छपाईसाठी तयार"]);
+    expect(forbiddenIn("प्रमाणित आणि खात्रीशीर मांडणी", "mr")).toEqual(["प्रमाणित", "खात्रीशीर"]);
+    expect(forbiddenIn("AI-चालित वृत्तपत्र", "mr")).toEqual(["AI-चालित"]);
+    expect(forbiddenIn("हे नेहमी असेच असते.", "mr")).toEqual([]);
+    expect(forbiddenIn("याची हमी आहे.", "mr")).toEqual(["हमी"]);
+    expect(forbiddenIn("A seamless, press-ready page", "en")).toEqual(["press-ready", "seamless"]);
+  });
+
+  it("is said only by denials, and a denial begins with No", () => {
+    const denials = CONTENT_RECORDS.filter((record) => record.kind === "denial");
+    expect(denials.length).toBeGreaterThan(4);
+    for (const record of denials) {
+      expect(record.id, record.id).toMatch(/^security-limit-/);
+      expect(record.en.startsWith("No "), `"${record.id}" is not phrased as a denial`).toBe(true);
+    }
+  });
+
+  it("never claims PDF/X validity or press-readiness, even in passing", () => {
+    const corpus = CONTENT_RECORDS.filter((record) => record.kind !== "denial").map((record) => record.en).join(" ");
+    expect(corpus).not.toMatch(/PDF\/X/);
+    expect(corpus).not.toMatch(/\bready (for|to) (print|press)\b/i);
   });
 });
 
-describe("Statements real sign-in made untrue stay gone (L2 plan PR 12)", () => {
-  const NO_LONGER_TRUE = [
-    "transmits nothing",
-    "holds no customer data",
-    "Nothing is transmitted",
-    "runs entirely in your browser",
-    "lives in memory",
-    "simulation's interface",
-    "No real accounts",
-    // made untrue by L2-G (Account security, two-step sign-in, Team)
-    "everything else still runs in your browser",
-    "No account can be created from this site",
-    "No newsroom screen is open to a signed-in person",
-    "no signed-in person can open them",
-    "property of the placeholder workspace",
-  ];
+describe("No invented entities, prices or leftovers", () => {
+  const corpus = CONTENT_RECORDS.map((record) => `${record.en} ${record.mr}`).join(" ");
 
-  for (const { path, heading } of PUBLIC_ROUTES) {
+  it("names no customer, testimonial, logo or usage count", () => {
+    for (const phrase of ["trusted by", "used by", "loved by", "our customers", "case study", "testimonial", "award", "publishers use"]) {
+      expect(corpus.toLowerCase(), phrase).not.toContain(phrase);
+    }
+  });
+
+  it("names no fixture organisation or publication", () => {
+    for (const name of FIXTURE_NAMES) expect(corpus).not.toContain(name);
+  });
+
+  it("states no price: no currency, and no figure in any pricing record", () => {
+    expect(corpus).not.toMatch(/[$€£₹¥]|\bRs\.?\s?\d|रु\.|रुपये/);
+    for (const record of CONTENT_RECORDS.filter((candidate) => candidate.id.startsWith("pricing-"))) {
+      expect(numbersIn(`${record.en} ${record.mr}`), record.id).toEqual([]);
+      expect(record.en, record.id).not.toMatch(/%|\bfree\b|\btrial\b/i);
+    }
+  });
+
+  it("says none of the demonstration stage's statements any more", () => {
+    for (const phrase of NO_LONGER_TRUE) expect(corpus.toLowerCase(), phrase).not.toContain(phrase.toLowerCase());
+  });
+
+  it("calls hosting in India planned, never done", () => {
+    for (const record of CONTENT_RECORDS.filter((candidate) => /India/.test(candidate.en))) {
+      expect(record.kind, record.id).toBe("plan");
+      if (/hosting/i.test(record.en)) expect(record.en, record.id).toMatch(/planned/);
+    }
+    const footer = CATALOGUES.en["public.footer.hosting"];
+    expect(footer).toMatch(/planned/);
+    expect(footer).not.toMatch(/stored in India/i);
+  });
+
+  it("says the press test was text-only, next to the claim that a press printed a page", () => {
+    expect(text("proof-press-note", "en")).toMatch(/text-only/);
+    expect(text("proof-press-note", "en")).toMatch(/not been press-tested/);
+    expect(text("proof-gen1-note", "en")).toMatch(/No editor has judged/);
+  });
+});
+
+describe("The workflow's states are the evidence's", () => {
+  it("has seven stages, numbered, each with a state", () => {
+    expect(WORKFLOW_STAGES.map((stage) => stage.number)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(WORKFLOW_STAGES.map((stage) => stage.key)).toEqual(["plan", "content", "generate", "edit", "check", "print", "archive"]);
+    for (const stage of WORKFLOW_STAGES) expect(stage.states.length).toBeGreaterThan(0);
+  });
+
+  it("marks a stage working or built only with a fact for what is live today, and planned only with a plan", () => {
+    for (const stage of WORKFLOW_STAGES) {
+      const today = CONTENT_RECORDS.find((record) => record.id === stageIds(stage).today) as ContentRecord;
+      if (stage.states.includes("planned")) {
+        expect(today.kind, stage.key).toBe("plan");
+        expect(today.en, stage.key).toMatch(/^Planned/);
+      } else {
+        expect(today.kind, stage.key).toBe("fact");
+      }
+      if (stage.states.includes("desk")) expect(today.en, stage.key).toMatch(/In the Desk/);
+      if (stage.states.includes("pilot")) expect(today.en, stage.key).toMatch(/Built for the pilot/);
+    }
+  });
+
+  it("archives nothing yet", () => {
+    expect(WORKFLOW_STAGES.find((stage) => stage.key === "archive")?.states).toEqual(["planned"]);
+  });
+});
+
+/** The text a reader is told inside <main>: text nodes, without presentational (aria-hidden) ones. */
+function readableTexts(main: HTMLElement, withPresentational = false): string[] {
+  const readable = main.cloneNode(true) as HTMLElement;
+  if (!withPresentational) for (const hidden of readable.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+  const texts: string[] = [];
+  const walker = document.createTreeWalker(readable, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const value = (node.nodeValue ?? "").replace(/\s+/g, " ").trim();
+    if (value !== "" && /[\p{L}\p{N}]/u.test(value)) texts.push(value);
+  }
+  for (const element of readable.querySelectorAll("[aria-label]")) texts.push(element.getAttribute("aria-label") ?? "");
+  return texts;
+}
+
+/** Everything every public page shows, in one language, across its states (signed out and in; the form's outcomes). */
+async function shownEverywhere(language: PublicLanguage): Promise<Set<string>> {
+  const seen = new Set<string>();
+  const harvest = (container: HTMLElement) => {
+    // the presentational text too: the Field's "(required)" is shown, though not read out
+    for (const value of readableTexts(within(container).getByRole("main"), true)) seen.add(value);
+  };
+  for (const { path, headingId } of PUBLIC_PAGES) {
     for (const preset of ["signed-out", undefined] as const) {
-      it(`"${path}" (${preset ?? "signed in"}) says none of them`, async () => {
-        const { container } = renderPublic(path, preset);
-        await screen.findByRole("heading", { level: 1, name: heading });
-        const text = container.textContent ?? "";
-        for (const phrase of NO_LONGER_TRUE) {
-          expect(text, `"${path}" still says "${phrase}"`).not.toContain(phrase);
-        }
+      const view = renderPublic(path, preset, language);
+      await screen.findByRole("heading", { level: 1, name: text(headingId, language) });
+      // connected: the calls to action, the form and how to report a problem are shown
+      await contactAnswered(view.environment);
+      if (!preset && path !== "/contact") await screen.findAllByText(text("cta-open-workspace", language));
+      harvest(view.container);
+      view.unmount();
+    }
+  }
+  const user = userEvent.setup();
+  const contact = async (setup: (view: ReturnType<typeof renderPublic>) => void, fill: boolean) => {
+    const view = renderPublic("/contact", "signed-out", language);
+    setup(view);
+    await screen.findByRole("heading", { level: 1, name: text("contact-title", language) });
+    await screen.findByRole("button", { name: text("contact-submit", language) });
+    if (fill) {
+      await user.type(screen.getByLabelText(new RegExp(`^${text("contact-label-name", language)}`)), "Asha Kalpit");
+      await user.type(screen.getByLabelText(text("contact-label-phone", language)), "+91 98765 43210");
+    }
+    await user.click(screen.getByRole("button", { name: text("contact-submit", language) }));
+    harvest(view.container);
+    return view;
+  };
+  // empty: name and reach errors
+  (await contact(() => undefined, false)).unmount();
+  // a malformed phone and email
+  {
+    const view = renderPublic("/contact", "signed-out", language);
+    await screen.findByRole("heading", { level: 1, name: text("contact-title", language) });
+    await screen.findByRole("button", { name: text("contact-submit", language) });
+    // longer than allowed (the field's maxlength stops typing; a pasted or scripted value is checked too)
+    fireEvent.change(screen.getByLabelText(new RegExp(`^${text("contact-label-name", language)}`)), {
+      target: { value: "न".repeat(101) },
+    });
+    await user.type(screen.getByLabelText(text("contact-label-phone", language)), "call me");
+    await user.type(screen.getByLabelText(text("contact-label-email", language)), "not an address");
+    await user.click(screen.getByRole("button", { name: text("contact-submit", language) }));
+    harvest(view.container);
+    view.unmount();
+  }
+  for (const outcome of [
+    { kind: "sent" },
+    { kind: "unavailable" },
+    { kind: "busy" },
+    { kind: "failed" },
+    { kind: "sendFailed" },
+    { kind: "refused" },
+    { kind: "invalid", fields: ["newspaper", "message"] },
+  ] as const) {
+    const view = await contact((rendered) => rendered.environment.contactController.setOutcome(outcome), true);
+    if (outcome.kind === "sent") await screen.findByText(text("contact-sent-heading", language));
+    harvest(view.container);
+    view.unmount();
+  }
+  // while sending
+  {
+    const view = renderPublic("/contact", "signed-out", language);
+    view.environment.contactController.hold();
+    await screen.findByRole("heading", { level: 1, name: text("contact-title", language) });
+    await screen.findByRole("button", { name: text("contact-submit", language) });
+    await user.type(screen.getByLabelText(new RegExp(`^${text("contact-label-name", language)}`)), "Asha");
+    await user.type(screen.getByLabelText(text("contact-label-email", language)), "asha@example.test");
+    await user.click(screen.getByRole("button", { name: text("contact-submit", language) }));
+    await screen.findByRole("button", { name: text("contact-sending", language) });
+    harvest(view.container);
+    view.environment.contactController.release();
+    view.unmount();
+  }
+  // the form not connected, or not reachable: the contact page and the security page say so
+  for (const connection of ["notConnected", "unknown"] as const) {
+    for (const path of ["/contact", "/security"]) {
+      const view = renderPublic(path, "signed-out", language);
+      view.environment.contactController.setConnection(connection);
+      await screen.findByRole("heading", { level: 1, name: text(path === "/contact" ? "contact-title" : "security-title", language) });
+      if (path === "/contact") {
+        await screen.findByText(text(connection === "unknown" ? "contact-unknown-heading" : "contact-unavailable-heading", language));
+      } else {
+        await screen.findByText(text("security-contact-off", language));
+      }
+      harvest(view.container);
+      view.unmount();
+    }
+  }
+  // the page while it asks whether the form is connected
+  {
+    const view = renderPublic("/contact", "signed-out", language);
+    harvest(view.container);
+    view.unmount();
+  }
+  return seen;
+}
+
+describe("Every record is shown, and only records are shown", () => {
+  for (const language of LANGUAGES) {
+    it(`shows every record somewhere, in ${language}`, async () => {
+      const shown = await shownEverywhere(language);
+      const dead = CONTENT_RECORDS.filter((record) => !shown.has(text(record.id, language))).map((record) => record.id);
+      expect(dead, `records no page shows: ${dead.join(", ")}`).toEqual([]);
+    }, 60_000);
+  }
+
+  /** Strings the UI kit and the catalogue show inside a page: message icon names. */
+  const KIT = (language: PublicLanguage) =>
+    new Set([CATALOGUES[language]["message.success"], CATALOGUES[language]["message.error"], CATALOGUES[language]["message.warning"]]);
+
+  for (const language of LANGUAGES) {
+    for (const { path, headingId } of PUBLIC_PAGES) {
+      it(`"${path}" in ${language} shows only whole records, in ${language}`, async () => {
+        const view = renderPublic(path, "signed-out", language);
+        await screen.findByRole("heading", { level: 1, name: text(headingId, language) });
+        const allowed = new Set([...CONTENT_RECORDS.map((record) => text(record.id, language)), ...KIT(language)]);
+        const offenders = readableTexts(within(view.container).getByRole("main")).filter((value) => !allowed.has(value));
+        expect(offenders).toEqual([]);
       });
     }
   }
 
-  it("keeps them out of every content record too", () => {
-    const corpus = ALL_RECORDS.map((record) => record.text).join(" ");
-    for (const phrase of NO_LONGER_TRUE) expect(corpus).not.toContain(phrase);
-  });
-});
-
-describe("What L2-G made true is said as it is (Account security, two-step sign-in, Team)", () => {
-  // pinned: a change to any of these is a change of what Pageinator claims in public, and needs the same review
-  const PINNED: Readonly<Record<string, string>> = {
-    "closing-body": "Sign-in, two-step sign-in and the team are real, and accounts open by invitation only. The newsroom screens are still to come. Nothing is charged.",
-    "today-lead": "Signing in, two-step sign-in and the team are real in this build. The newsroom screens are still to come.",
-    "today-item-sign-in": "Sign-in with an email address and a password, in English or Marathi, and two-step sign-in with an authenticator app. An account is opened only from an emailed invitation.",
-    "today-item-no-workspace": "A signed-in person sees their organization, their roles and their account's security. The owner and the admins invite, change and remove members, and chief editors see the team. No newsroom screen is open yet.",
-    "home-provisional-security-body": "Pageinator's server keeps the accounts (a name, an email address and a hashed password), sessions, sign-in events, two-step secrets and backup codes. It also keeps the organizations, memberships and invitations. This build carries no certification of any kind.",
-    "security-true-2": "Two-step sign-in with an authenticator app, its backup codes and the list of signed-in devices are real, and so is the team. The newsroom screens are still placeholders on fictional test data, and the deployed app does not show them.",
-    "security-true-3": "A signed-in browser keeps its session in cookies that page scripts cannot read, and, when you choose to trust the device, a cookie that skips the code for thirty days. This browser's local storage keeps your language, and keeps the organization and publication you last opened until the session ends.",
-    "security-nonleak-body-2": "The server answers an organization you do not belong to exactly as it answers one that does not exist, and the screens show the same page for both. This build's own tests check both.",
-  };
-
-  it("says exactly the reviewed wording", () => {
-    for (const [id, text] of Object.entries(PINNED)) {
-      expect(ALL_RECORDS.find((record) => record.id === id)?.text, id).toBe(text);
-    }
+  it("would notice a sentence split by an interpolation", () => {
+    const allowed = new Set(CONTENT_RECORDS.map((record) => record.en));
+    expect(allowed.has("28 of 28")).toBe(false);
+    expect(allowed.has(text("proof-gen1", "en"))).toBe(true);
   });
 
-  it("names what the server now keeps and what the browser keeps", () => {
-    const server = PINNED["home-provisional-security-body"]!;
-    for (const kept of ["hashed password", "sessions", "sign-in events", "two-step secrets", "backup codes", "organizations", "memberships", "invitations"]) {
-      expect(server).toContain(kept);
-    }
-    const browser = PINNED["security-true-3"]!;
-    for (const kept of ["cookies that page scripts cannot read", "thirty days", "your language", "organization and publication you last opened"]) {
-      expect(browser).toContain(kept);
-    }
-  });
-});
-
-describe("Tense discipline (AC-34)", () => {
-  it("pairs every stage description with an availability label", () => {
-    for (const stage of WORKFLOW_STAGES) {
-      expect(stage.availability, `${stage.key} has no availability`).toBeTruthy();
-      expect(["demonstrated", "routed", "planned"]).toContain(stage.availability);
-    }
-  });
-
-  it("writes no stage description as a present-tense capability claim", () => {
-    for (const stage of workflowStageViews()) {
-      expect(
-        stage.description,
-        `${stage.key} description reads as a live capability`
-      ).not.toMatch(/^Pageinator\s+\w+s\b/);
-      expect(stage.description).not.toMatch(/\b(we|our) (ingest|generate|validate|export)/i);
-    }
-  });
-});
-
-describe("Sentence length discipline (§19.5)", () => {
-  it("keeps every sentence to 30 words or fewer", () => {
-    const tooLong: string[] = [];
-
-    for (const record of ALL_RECORDS) {
-      for (const sentence of record.text.split(/(?<=[.?!])\s+/)) {
-        const words = sentence.trim().split(/\s+/).filter(Boolean);
-        if (words.length > 30) tooLong.push(`${record.id}: ${words.length} words`);
-      }
-    }
-
-    expect(tooLong).toEqual([]);
+  it("wires each state label to a state", () => {
+    for (const id of stateLabelIds()) expect(CONTENT_RECORDS.some((record) => record.id === id), id).toBe(true);
   });
 });

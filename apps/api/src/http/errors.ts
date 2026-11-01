@@ -38,6 +38,9 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
   request_too_large: { status: 413, message: "This request is too large." },
   not_json: { status: 415, message: "This request must be sent as JSON." },
   slow_down: { status: 429, message: "Too many tries. Wait a minute and try again." },
+  contact_unavailable: { status: 503, message: "Messages cannot be sent from this website yet." },
+  contact_send_failed: { status: 503, message: "The message could not be sent just now. Try again later." },
+  contact_limit: { status: 429, message: "Too many messages. Try again later." },
   server_error: { status: 500, message: "Something went wrong on our side. Try again." },
 };
 const UNREADABLE = "This request could not be read.";

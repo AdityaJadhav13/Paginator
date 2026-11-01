@@ -1,27 +1,16 @@
-/**
- * Security honesty (UI005 §28 "Security" row; AC-30 – AC-32).
- */
+/** Security honesty (03 §4.2 /security): true today, planned, and not true today, kept apart and of equal weight. */
 import { describe, it, expect } from "vitest";
 import { screen, within } from "../../src/test/render.tsx";
-import { renderPublic } from "./renderPublic.tsx";
+import { text } from "../../src/features/public/content.ts";
+import { LANGUAGES, contactAnswered, renderPublic } from "./renderPublic.tsx";
 
-const HEADING = "Security posture and current limits";
-
-/**
- * The §17.3 vocabulary. Each entry must be absent as a *claim*; the
- * denial sentences under "What is not true today" are matched separately
- * below, so a term is only searched for outside that block.
- */
 const FORBIDDEN_CLAIMS = [
   "SOC 2",
-  "SOC2",
   "ISO 27001",
-  "ISO27001",
   "GDPR-compliant",
   "HIPAA",
   "PCI",
   "FedRAMP",
-  "CCPA-compliant",
   "certified",
   "accredited",
   "bank-grade",
@@ -31,81 +20,68 @@ const FORBIDDEN_CLAIMS = [
   "end-to-end encrypted",
 ];
 
-async function securityMain() {
-  const { container } = renderPublic("/security");
-  await screen.findByRole("heading", { level: 1, name: HEADING });
+async function securityMain(language: "en" | "mr" = "en", connection: "connected" | "notConnected" = "connected") {
+  const { container, environment } = renderPublic("/security", "signed-out", language);
+  environment.contactController.setConnection(connection);
+  await screen.findByRole("heading", { level: 1, name: text("security-title", language) });
+  await contactAnswered(environment);
   return within(container).getByRole("main");
 }
 
-describe("Security claims are truthful and provisional", () => {
-  it("makes no certification, audit or attestation claim (AC-30)", async () => {
+describe("/security", () => {
+  it("makes no certification or compliance claim outside the denials", async () => {
     const main = await securityMain();
-
-    // Remove the denial block before scanning: those sentences exist to
-    // deny the very words they contain.
-    const limits = main.querySelector(".pg-public__band--ink");
+    const limits = main.querySelector(".pg-public__band--ink:not(.pg-public__closing)");
     expect(limits).not.toBeNull();
-    const withoutDenials = (main.textContent ?? "").replace(limits!.textContent ?? "", "");
-
-    for (const term of FORBIDDEN_CLAIMS) {
-      expect(withoutDenials.toLowerCase()).not.toContain(term.toLowerCase());
-    }
+    const withoutDenials = (main.textContent ?? "").replace(limits?.textContent ?? "", "");
+    for (const term of FORBIDDEN_CLAIMS) expect(withoutDenials.toLowerCase()).not.toContain(term.toLowerCase());
     expect(withoutDenials).not.toMatch(/\b99\.\d+%|\bSLA\b|\buptime\b/i);
   });
 
-  it("renders the limits block with the same weight as design intent (AC-31)", async () => {
-    const main = await securityMain();
-
-    const limitsHeading = within(main).getByRole("heading", {
-      level: 2,
-      name: "What is not true today",
+  for (const language of LANGUAGES) {
+    it(`keeps true, planned and not-true apart, with the same heading weight, in ${language}`, async () => {
+      const main = await securityMain(language);
+      const headings = ["security-true-title", "security-plan-title", "security-limits-title"].map((id) =>
+        within(main).getByRole("heading", { level: 2, name: text(id, language) }),
+      );
+      expect(new Set(headings.map((heading) => heading.className)).size).toBe(1);
+      for (const id of ["security-limit-hosting", "security-limit-assessment", "security-limit-testing", "security-limit-encryption", "security-limit-availability", "security-limit-processing"]) {
+        expect(main).toHaveTextContent(text(id, language));
+      }
+      await within(main).findByText(text("security-contact", language));
+      for (const id of ["security-separate", "security-audit", "security-two-step", "security-contact"]) {
+        expect(main).toHaveTextContent(text(id, language));
+      }
+      expect(main).toHaveTextContent(text("security-india", language));
     });
-    const intentHeading = within(main).getByRole("heading", {
-      level: 2,
-      name: "How tenancy is intended to work",
+  }
+
+  it("says hosting in India is planned and that no paper's data is hosted yet", async () => {
+    const main = await securityMain();
+    expect(main).toHaveTextContent("Hosting in India is planned");
+    expect(main).toHaveTextContent("No paper's data is hosted yet");
+    expect(main).not.toHaveTextContent(/data (is )?stored in India/i);
+  });
+
+  for (const language of LANGUAGES) {
+    it(`points a security report to the contact form, intent preset, in ${language}`, async () => {
+      const main = await securityMain(language);
+      expect(within(main).getByRole("heading", { level: 2, name: text("security-report-title", language) })).toBeInTheDocument();
+      expect(within(main).getByRole("link", { name: text("cta-report", language) })).toHaveAttribute("href", "/contact?intent=other");
     });
 
-    // Same heading level and same typographic role: neither is fine print.
-    expect(limitsHeading.className).toBe(intentHeading.className);
+    it(`says nothing of reporting through a form that is not connected, in ${language}`, async () => {
+      const main = await securityMain(language, "notConnected");
+      expect(main).toHaveTextContent(text("security-contact-off", language));
+      expect(main).not.toHaveTextContent(text("security-report-title", language));
+      expect(main).not.toHaveTextContent(text("security-report-body", language));
+      expect(within(main).queryByRole("link", { name: text("cta-report", language) })).toBeNull();
+    });
+  }
 
-    for (const denial of [
-      "No certification, audit, attestation or third-party assessment of any kind.",
-      "No penetration test and no compliance programme.",
-      "No encryption-at-rest claim.",
-      "No availability commitment, no service-level agreement and no incident-response programme.",
-      "No data-processing agreement and no sub-processor list.",
-    ]) {
-      expect(main).toHaveTextContent(denial);
-    }
-  });
-
-  it("states what sign-in sends and keeps, now that it is real (AC-32, L2 plan PR 12)", async () => {
+  it("shows no security-theatre imagery", async () => {
     const main = await securityMain();
-
-    expect(main).toHaveTextContent("Signing in goes to Pageinator's own server");
-    expect(main).toHaveTextContent("cookies that page scripts cannot read");
-    expect(main).toHaveTextContent(
-      "Sign-in gives the same answer for a wrong email address and a wrong password."
-    );
-    // the simulation's old statements are gone, because they are no longer true
-    expect(main).not.toHaveTextContent("This build runs entirely in your browser.");
-    expect(main).not.toHaveTextContent("Nothing is transmitted.");
-    expect(main).not.toHaveTextContent("There is no account, credential or session token.");
-  });
-
-  it("labels the tenancy model as intent rather than an implemented control", async () => {
-    const main = await securityMain();
-    expect(main).toHaveTextContent(
-      "None of it is an implemented control today."
-    );
-  });
-
-  it("renders no security-theatre imagery", async () => {
-    const main = await securityMain();
-    // The page geometry figure belongs to the homepage; the security page
-    // carries no graphic at all, and certainly no badge or shield.
-    expect(main.querySelector("svg")).toBeNull();
-    expect(main.querySelector("img")).toBeNull();
+    expect(main.querySelector("svg, img")).toBeNull();
     expect(main.textContent ?? "").not.toMatch(/🔒|🛡|✅/u);
   });
 });

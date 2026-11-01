@@ -91,3 +91,16 @@ export {
   NotificationsRead,
 } from "./notifications.ts";
 export { BUNDLE_FORMAT, DeskBundleRequest } from "./desk-bundle.ts";
+export {
+  CONTACT_EMAIL,
+  CONTACT_INTENTS,
+  CONTACT_LIMITS,
+  CONTACT_MIN_FILL_MS,
+  CONTACT_PHONE,
+  ContactAccepted,
+  ContactIntent,
+  type ContactMessage,
+  ContactRequest,
+  ContactStatus,
+  hasControlCharacters,
+} from "./contact.ts";

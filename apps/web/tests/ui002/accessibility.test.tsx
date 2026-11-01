@@ -26,7 +26,7 @@ describe("axe — one representative route per shell", () => {
     const { container } = renderAt("/");
     // UI005 replaced the public placeholders; the landing heading is now
     // the real hero title.
-    await screen.findByRole("heading", { level: 1, name: "Newspaper production, end to end" });
+    await screen.findByRole("heading", { level: 1, name: "Newspaper production, built first for Marathi papers" });
     expect(await checkAxe(container)).toHaveLength(0);
   });
 

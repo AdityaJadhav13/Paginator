@@ -1,6 +1,6 @@
 /**
  * DOM order, heading sequence and the region order each surface fixes
- * (UI005 §28 "Reading order" row; AC-53, AC-55).
+ * (UI005 §28 "Reading order" row; AC-53, AC-55; the landing page order is 03 §4.2).
  *
  * jsdom has no layout engine, so *visual* order is verified in a real
  * browser (RB-04). What is verified here is the property that makes the
@@ -11,11 +11,13 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { screen, within } from "../../src/test/render.tsx";
-import { PUBLIC_ROUTES, renderPublic } from "./renderPublic.tsx";
+import { PUBLIC_ROUTES, contactAnswered, renderPublic } from "./renderPublic.tsx";
 
+/** The page's main once the contact form answered (connected): every section is there. */
 async function mainFor(path: string, heading: string) {
-  const { container } = renderPublic(path);
+  const { container, environment } = renderPublic(path);
   await screen.findByRole("heading", { level: 1, name: heading });
+  await contactAnswered(environment);
   return within(container).getByRole("main");
 }
 
@@ -41,48 +43,38 @@ describe("Heading structure (AC-53)", () => {
   }
 });
 
-describe("Region order is fixed (§12, §15 – §18)", () => {
+describe("Region order is fixed (03 §4.2)", () => {
   const EXPECTED: Record<string, string[]> = {
     "/": [
-      "What actually works today",
+      "What has been shown, and where it is recorded",
       "Seven stages, one edition",
-      "A newspaper page is a constraint problem",
+      "Devanagari set the way a Marathi desk sets it",
       "What Pageinator will not be",
-      "Two decisions that are still open",
-      "Look at the build itself",
+      "How a paper's data is kept",
+      "See it lay out an edition",
     ],
     "/features": [
       "Seven stages, one edition",
+      "Being prepared for a pilot",
       "What Pageinator will not be",
-      "What actually works today",
-      "Look at the build itself",
+      "See it lay out an edition",
     ],
-    "/pricing": [
-      "Packaging is an open decision",
-      "Three shapes a subscription might take",
-      "What is not being offered",
-      "Look at the build itself",
-    ],
+    "/pricing": ["What a pilot would include", "What is not on offer yet", "See it lay out an edition"],
     "/security": [
       "What is true today",
-      "How tenancy is intended to work",
+      "What is planned, and not yet true",
       "What is not true today",
-      "Inaccessible context is generic by construction",
-      "Where a security note would go",
-      "Look at the build itself",
+      "Another paper's records stay invisible",
+      "How to report a security problem",
+      "See it lay out an edition",
     ],
-    "/contact": [
-      "Write something and see what happens",
-      "Look at the build itself",
-    ],
+    "/contact": ["Tell us about your paper"],
   };
 
   for (const { path, heading } of PUBLIC_ROUTES) {
     it(`"${path}" renders its sections in the specified order`, async () => {
       const main = await mainFor(path, heading);
-      const order = Array.from(main.querySelectorAll("h2")).map((node) =>
-        node.textContent?.trim()
-      );
+      const order = Array.from(main.querySelectorAll("h2")).map((node) => node.textContent?.trim());
       expect(order).toEqual(EXPECTED[path]);
     });
   }

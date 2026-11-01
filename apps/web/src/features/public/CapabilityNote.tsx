@@ -1,27 +1,19 @@
 /**
- * Renders a workflow stage's availability label (§13.2).
- *
- * This is deliberately NOT UI001's `StatusIndicator`. `PresentationState`
- * is a document/proof lifecycle vocabulary and UI001 §5 forbids reusing it
- * as a lifecycle for anything else; roadmap availability is not a document
- * state. It is also deliberately typographic rather than a coloured badge —
- * a status light would read as a live signal about something that is not
- * running.
- *
- * The label text itself is a governed content record (§19.1); this component
- * receives the already-resolved string and never composes one.
+ * A workflow stage's state today (Working in the Desk · Built for the pilot · Planned), as small type, one line per
+ * state. Deliberately typographic rather than a coloured badge: a status light would read as a live signal.
  */
+import { stateLabelId, type StageState } from "./workflow.ts";
+import { usePublicText } from "./usePublicText.ts";
 
-export interface CapabilityNoteProps {
-  /** The resolved availability label, from `stageView().availabilityLabel`. */
-  readonly label: string;
-  readonly className?: string;
-}
-
-export function CapabilityNote({ label, className }: CapabilityNoteProps) {
+export function CapabilityNote({ states }: { readonly states: readonly StageState[] }) {
+  const { t } = usePublicText();
   return (
-    <p className={["pg-capability", className].filter(Boolean).join(" ")}>
-      {label}
-    </p>
+    <ul className="pg-capability-list">
+      {states.map((state) => (
+        <li key={state} className={`pg-capability pg-capability--${state}`}>
+          {t(stateLabelId(state))}
+        </li>
+      ))}
+    </ul>
   );
 }

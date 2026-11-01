@@ -33,6 +33,7 @@ import type { ServiceEnvironment } from "../services/index.ts";
 import { PlaceholderScreen } from "../demo/ui002/PlaceholderScreen.tsx";
 import { Container } from "../ui/index.ts";
 import { HomePage, FeaturesPage, PricingPage, SecurityPage, ContactPage } from "../features/public/index.ts";
+import { ContactProvider } from "../features/contact/contact-context.tsx";
 import { EditorRouteContent } from "../demo/ui002/EditorRouteContent.tsx";
 import { RELEASE_FIXTURES } from "../demo/ui002/release-fixtures.ts";
 import "../app/shell.css";
@@ -92,6 +93,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
           <PeopleProvider security={activeEnvironment.security} team={activeEnvironment.team}>
           <StoriesProvider stories={activeEnvironment.stories}>
           <MediaProvider media={activeEnvironment.media}>
+          <ContactProvider contact={activeEnvironment.contact}>
           <SessionProvider
             session={activeEnvironment.session}
             access={activeEnvironment.access}
@@ -163,6 +165,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
               <Route path="/org/:orgId/*" element={<ScopedNotFoundShell />} />
             </Routes>
           </SessionProvider>
+          </ContactProvider>
           </MediaProvider>
           </StoriesProvider>
           </PeopleProvider>

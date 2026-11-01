@@ -1,96 +1,41 @@
-/**
- * Pricing honesty (UI005 §28 "Pricing" row; AC-22 – AC-27).
- */
+/** Pricing honesty (03 §4.2 /pricing): pilot pricing by conversation; no price, plan, tier, trial or purchase control. */
 import { describe, it, expect } from "vitest";
 import { screen, within } from "../../src/test/render.tsx";
-import { renderPublic } from "./renderPublic.tsx";
+import { text } from "../../src/features/public/content.ts";
+import { LANGUAGES, renderPublic } from "./renderPublic.tsx";
 
-const HEADING = "Illustrative packaging";
-
-async function pricingMain() {
-  const { container } = renderPublic("/pricing");
-  await screen.findByRole("heading", { level: 1, name: HEADING });
-  return within(container).getByRole("main");
-}
-
-describe("Pricing presents a hypothesis, not an offer", () => {
-  it("renders exactly three tiers, each with the illustrative caption (AC-23)", async () => {
-    const main = await pricingMain();
-    const tiers = main.querySelectorAll(".pg-public__tier");
-
-    expect(tiers).toHaveLength(3);
-    for (const tier of tiers) {
-      expect(tier).toHaveTextContent("Illustrative — not an offer");
-    }
-  });
-
-  it('renders "Not priced" in every tier and no price anywhere (AC-24)', async () => {
-    const main = await pricingMain();
-    const tiers = main.querySelectorAll(".pg-public__tier");
-
-    for (const tier of tiers) {
-      expect(tier).toHaveTextContent("Not priced");
+for (const language of LANGUAGES) {
+  describe(`/pricing in ${language}`, () => {
+    async function pricingMain() {
+      const { container } = renderPublic("/pricing", "signed-out", language);
+      await screen.findByRole("heading", { level: 1, name: text("pricing-title", language) });
+      return within(container).getByRole("main");
     }
 
-    const text = main.textContent ?? "";
-    expect(text).not.toMatch(/[$€£₹¥]/);
-    expect(text).not.toMatch(/%/);
-    expect(text).not.toMatch(/\d/);
-    expect(text).not.toMatch(/\bper (seat|month|year|user|edition)\b/i);
-    // A price prefix, not the ordinary English word: digits and currency
-    // symbols are already banned outright above.
-    expect(text).not.toMatch(/\bfrom\s*[$€£₹¥\d]/i);
-    expect(text).not.toMatch(/\bstarting at\b/i);
-    expect(text.toLowerCase()).not.toContain("free");
-  });
-
-  it("puts the open-decision block before the first tier (AC-22)", async () => {
-    const main = await pricingMain();
-    const openBlock = within(main).getByRole("heading", {
-      level: 2,
-      name: "Packaging is an open decision",
+    it("says it is not for sale, pricing for a pilot is by conversation, and plans come after the pilot", async () => {
+      const main = await pricingMain();
+      expect(main).toHaveTextContent(text("pricing-lead", language));
+      expect(main).toHaveTextContent(text("pricing-later", language));
+      expect(main).toHaveTextContent(text("pricing-excluded-body", language));
     });
-    const firstTier = main.querySelector(".pg-public__tier");
 
-    expect(firstTier).not.toBeNull();
-    expect(
-      openBlock.compareDocumentPosition(firstTier!) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+    it("shows no price, figure, currency or per-unit wording", async () => {
+      const main = await pricingMain();
+      const shown = main.textContent ?? "";
+      expect(shown).not.toMatch(/[$€£₹¥%]|[0-9०-९]/);
+      if (language === "en") {
+        expect(shown).not.toMatch(/\bper (seat|month|year|user|edition)\b|\bfree\b|\btrial\b|starting at/i);
+        expect(shown).not.toMatch(/most popular|recommended|best value/i);
+      }
+    });
+
+    it("offers no purchase, selection or trial control, and no form", async () => {
+      const main = await pricingMain();
+      for (const control of main.querySelectorAll("a, button")) {
+        expect(control.textContent ?? "").not.toMatch(/\b(choose|select|buy|subscribe|upgrade|get started|trial|checkout)\b/i);
+      }
+      expect(main.querySelector("form, input")).toBeNull();
+      expect(main.querySelector(".pg-public__tier")).toBeNull();
+    });
   });
-
-  it("offers no purchase, selection or trial control (AC-25)", async () => {
-    const main = await pricingMain();
-
-    for (const control of main.querySelectorAll("a, button")) {
-      const name = control.textContent ?? "";
-      expect(name).not.toMatch(
-        /\b(choose|select|buy|subscribe|upgrade|get started|start (a )?(free )?trial|checkout)\b/i
-      );
-    }
-    expect(main.querySelector('input[type="number"]')).toBeNull();
-    expect(main.querySelector("form")).toBeNull();
-  });
-
-  it("gives every tier identical treatment, with none elevated (AC-26)", async () => {
-    const main = await pricingMain();
-    const tiers = Array.from(main.querySelectorAll(".pg-public__tier"));
-
-    // Identical class lists: no tier may carry a highlight modifier.
-    const classLists = tiers.map((tier) => tier.className);
-    expect(new Set(classLists).size).toBe(1);
-
-    const text = main.textContent ?? "";
-    expect(text).not.toMatch(/most popular|recommended|best value|popular choice/i);
-  });
-
-  it("states that packaging, buyer and price are open and nothing can be bought (AC-27)", async () => {
-    const main = await pricingMain();
-
-    expect(main).toHaveTextContent("Nothing on this page is purchasable.");
-    expect(main).toHaveTextContent(
-      "Who pays for Pageinator, what a subscription would include and what it would cost are not decided."
-    );
-    expect(main).toHaveTextContent("This build has no payment capability.");
-    expect(main).toHaveTextContent("What is not being offered");
-  });
-});
+}

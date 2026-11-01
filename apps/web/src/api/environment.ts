@@ -4,6 +4,7 @@
  */
 import type { ServiceEnvironment } from "../services/index.ts";
 import { createApiAccountService } from "./account-service.ts";
+import { createApiContactService } from "./contact-service.ts";
 import { createApiClient, type ApiClientOptions } from "./client.ts";
 import { createApiSecurityService } from "./security-service.ts";
 import { createApiSessionService } from "./session-service.ts";
@@ -42,6 +43,7 @@ export function createApiEnvironment(options: Omit<ApiClientOptions, "onSignedOu
     security: createApiSecurityService(client),
     team: createApiTeamService(client),
     stories: createApiStoryService(client),
+    contact: createApiContactService(client),
     media: createApiMediaService(client, { ...(options.fetch ? { fetch: options.fetch } : {}), onSignedOut: signedOut }),
     access: {
       getAccess: (input) => access.getAccess(input),

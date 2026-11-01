@@ -104,11 +104,11 @@ describe("Focus after navigation (AC-16)", () => {
     const primaryNav = within(screen.getByRole("navigation", { name: "Primary" }));
     await user.click(primaryNav.getByRole("link", { name: "Pricing" }));
 
-    const heading = await screen.findByRole("heading", { level: 1, name: "Illustrative packaging" });
+    const heading = await screen.findByRole("heading", { level: 1, name: "Pricing" });
     expect(document.activeElement).toBe(heading);
 
     const liveRegion = screen.getByRole("status");
-    expect(liveRegion).toHaveTextContent("Illustrative packaging");
+    expect(liveRegion).toHaveTextContent("Pricing");
   });
 
   it("stays silent on initial load under the application's StrictMode root, then announces navigation", async () => {
@@ -124,15 +124,15 @@ describe("Focus after navigation (AC-16)", () => {
     const liveRegion = screen.getByRole("status");
     expect(liveRegion).toHaveTextContent("");
     expect(document.activeElement).not.toBe(
-      screen.getByRole("heading", { level: 1, name: "Security posture and current limits" })
+      screen.getByRole("heading", { level: 1, name: "Security, privacy and current limits" })
     );
 
     const user = userEvent.setup();
     const primaryNav = within(screen.getByRole("navigation", { name: "Primary" }));
     await user.click(primaryNav.getByRole("link", { name: "Pricing" }));
-    const heading = await screen.findByRole("heading", { level: 1, name: "Illustrative packaging" });
+    const heading = await screen.findByRole("heading", { level: 1, name: "Pricing" });
     expect(document.activeElement).toBe(heading);
-    expect(liveRegion).toHaveTextContent("Illustrative packaging");
+    expect(liveRegion).toHaveTextContent("Pricing");
   });
 });
 
@@ -147,7 +147,7 @@ describe("Workspace exit navigation (§7.2)", () => {
     await user.keyboard("{Enter}");
 
     expect(window.location.pathname).toBe("/");
-    expect(await screen.findByRole("heading", { level: 1, name: "Newspaper production, end to end" })).toHaveFocus();
+    expect(await screen.findByRole("heading", { level: 1, name: "Newspaper production, built first for Marathi papers" })).toHaveFocus();
   });
 });
 

@@ -20,6 +20,9 @@ export const ERROR_CODES = [
   "request_too_large",
   "not_json",
   "slow_down",
+  "contact_unavailable",
+  "contact_send_failed",
+  "contact_limit",
   "server_error",
 ] as const;
 

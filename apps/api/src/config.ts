@@ -170,6 +170,12 @@ const Env = z
       .string()
       .refine(isSender, { error: "must be an address, or a name and <address>" })
       .default("Pageinator <no-reply@example.test>"),
+    // The public website's contact form (POST /api/v1/contact): the one address its messages go to, chosen by the
+    // owner at deploy and never committed. Unset, the form answers 503 contact_unavailable.
+    PGN_CONTACT_TO: z
+      .string()
+      .refine((text) => text.length <= 254 && PLAIN_ADDRESS.test(text), { error: "must be one plain address" })
+      .optional(),
     ...STORAGE,
     // Better Auth reads these from the environment itself, whatever our settings say: the first two can turn its
     // telemetry on, BETTER_AUTH_SECRETS replaces PGN_AUTH_SECRET, and BETTER_AUTH_TRUSTED_ORIGINS widens the
@@ -239,6 +245,7 @@ const Env = z
         ? { auth: { user: env.PGN_SMTP_USER, pass: env.PGN_SMTP_PASSWORD } }
         : {}),
     },
+    contactTo: env.PGN_CONTACT_TO,
   }));
 
 type StorageEnv = {
