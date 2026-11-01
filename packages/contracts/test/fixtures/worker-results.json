@@ -1,0 +1,198 @@
+[
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "done",
+    "event": {
+      "kind": "media.ready",
+      "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+      "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+      "asset_id": "01890a5d-ac96-774b-bcce-b302099a8059",
+      "sha256": "22e914ed59a49568915a9f418faecfd7df5f1b4552ede599c89b91f53ccb0e65",
+      "bytes": 2172,
+      "mime": "image/jpeg",
+      "width_px": 300,
+      "height_px": 200,
+      "raster": {
+        "width_px": 300,
+        "height_px": 200
+      },
+      "params_hash": "85ca3f1304c7b56f262aaa31e1f62ff0",
+      "renditions": [
+        {
+          "purpose": "preview",
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/assets/01890a5d-ac96-774b-bcce-b302099a8059/r/preview-85ca3f1304c7b56f262aaa31e1f62ff0.jpg",
+          "version_id": "9686c352c603a68378787bea53a0bbdabe3b769556eac55f5906eae0c1cfb721",
+          "sha256": "9686c352c603a68378787bea53a0bbdabe3b769556eac55f5906eae0c1cfb721",
+          "bytes": 2302,
+          "mime": "image/jpeg",
+          "width_px": 300,
+          "height_px": 200
+        },
+        {
+          "purpose": "thumb",
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/assets/01890a5d-ac96-774b-bcce-b302099a8059/r/thumb-85ca3f1304c7b56f262aaa31e1f62ff0.jpg",
+          "version_id": "ca712a696082bc9554c3723c44fe47a661d4666fdc94d693e77531ef7f3ac54d",
+          "sha256": "ca712a696082bc9554c3723c44fe47a661d4666fdc94d693e77531ef7f3ac54d",
+          "bytes": 2291,
+          "mime": "image/jpeg",
+          "width_px": 300,
+          "height_px": 200
+        },
+        {
+          "purpose": "cmyk",
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/assets/01890a5d-ac96-774b-bcce-b302099a8059/r/cmyk-85ca3f1304c7b56f262aaa31e1f62ff0.cmyk.gz",
+          "version_id": "98c2b60099e03757fffff6121c5a867216c69c74a4beb57292382db82ac1da0a",
+          "sha256": "98c2b60099e03757fffff6121c5a867216c69c74a4beb57292382db82ac1da0a",
+          "bytes": 1372,
+          "mime": "application/gzip",
+          "width_px": 300,
+          "height_px": 200
+        }
+      ]
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "done",
+    "event": {
+      "kind": "media.rejected",
+      "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+      "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+      "asset_id": "01890a5d-ac96-774b-bcce-b302099a8059",
+      "sha256": "0b7a16c34f6a5fbed5e23d6218d30f938a9a827bce37e392c77ade5f1a6e5ba4",
+      "code": "m.img.notAPicture",
+      "message": "This file is not a picture the Desk can read. Use a JPEG, PNG or WebP file.",
+      "status": 400
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "failed",
+    "error": {
+      "code": "worker.job",
+      "message": "media.ingest takes exactly org_id, pub_id, asset_id, version_id, sha256"
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "failed",
+    "error": {
+      "code": "worker.config",
+      "message": "the colour profile is not the one this worker was given (its SHA-256 differs)"
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "done",
+    "event": {
+      "kind": "media.rejected",
+      "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+      "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+      "asset_id": "01890a5d-ac96-774b-bcce-b302099a8059",
+      "sha256": "5a040fc4c86db0ca10ebbe4acbd8e69a86fa1615d2ff9bf3bfdd0061ecf72f15",
+      "code": "m.img.tooManyPixels",
+      "message": "This picture has too many pixels for the Desk. Save it smaller and try again.",
+      "status": 413
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "failed",
+    "error": {
+      "code": "worker.key",
+      "message": "asset_id is not an id"
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": null,
+    "outcome": "failed",
+    "error": {
+      "code": "worker.job",
+      "message": "a kind this runner does not take"
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "retry",
+    "error": {
+      "code": "worker.store",
+      "message": "the store refused to read kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "retry",
+    "error": {
+      "code": "worker.memory",
+      "message": "the worker ran out of memory"
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "failed",
+    "error": {
+      "code": "worker.internal",
+      "message": "the worker failed (ValueError)"
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": null,
+    "kind": null,
+    "outcome": "failed",
+    "error": {
+      "code": "worker.internal",
+      "message": "the worker failed"
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "failed",
+    "error": {
+      "code": "worker.missing",
+      "message": "the original's version is not in the store"
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "failed",
+    "error": {
+      "code": "worker.checksum",
+      "message": "the stored original is not the one this job names"
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "job-0001",
+    "kind": "media.ingest",
+    "outcome": "retry",
+    "error": {
+      "code": "worker.profile",
+      "message": "the colour profile cannot be read"
+    }
+  }
+]

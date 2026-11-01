@@ -32,7 +32,7 @@ class KeyGuard:
         """A key under the prefix, from plain parts (each checked)."""
         for part in parts:
             if not isinstance(part, str) or not SEGMENT.fullmatch(part) or part in (".", ".."):
-                raise KeyRefused(f"not a plain key part: {part!r}")
+                raise KeyRefused("a key part is not plain")         # never the part itself: it may be a name
         return self.prefix + "/".join(parts)
 
     def check(self, key: object) -> str:

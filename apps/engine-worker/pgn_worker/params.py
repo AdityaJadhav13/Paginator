@@ -28,6 +28,10 @@ class ProfileError(RuntimeError):
     """The colour profile cannot be read, or is not the one the worker was given: the job fails, nothing is written."""
 
 
+class ProfileMismatch(ProfileError):
+    """The profile file is not the one the worker was given: the worker's settings are wrong (not the job's fault)."""
+
+
 def file_sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -39,7 +43,7 @@ def profile_sha256(expected: str | None = None, path: Path | None = None) -> str
     except OSError:
         raise ProfileError("the colour profile cannot be read") from None
     if expected is not None and got != expected:
-        raise ProfileError("the colour profile is not the one this worker was given (its SHA-256 differs)")
+        raise ProfileMismatch("the colour profile is not the one this worker was given (its SHA-256 differs)")
     return got
 
 
