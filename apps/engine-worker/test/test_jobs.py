@@ -300,16 +300,15 @@ class CommandTests(Case):
 
 
 FIXTURE = WORKER.parents[1] / "packages" / "contracts" / "test" / "fixtures" / "worker-results.json"
-VOLATILE = ("params_hash", "key", "version_id", "sha256", "bytes")    # the runtime's (Pillow, machine) and the store's
+VOLATILE = ("params_hash", "key", "version_id", "sha256", "bytes")    # the machine's (libjpeg, Pillow) and the store's
 
 
 def steady(value):
-    """A result without what changes with the machine or the store: the renditions' and params hash's values."""
+    """A result without what changes with the machine or the store: hashes, sizes in bytes, keys and versions."""
     if isinstance(value, list):
         return [steady(v) for v in value]
     if isinstance(value, dict):
-        return {k: (None if k in VOLATILE and "purpose" in value or k == "params_hash" else steady(v))
-                for k, v in value.items()}
+        return {k: None if k in VOLATILE else steady(v) for k, v in value.items()}
     return value
 
 

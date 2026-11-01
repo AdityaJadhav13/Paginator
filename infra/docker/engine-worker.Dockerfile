@@ -56,6 +56,7 @@ CMD ["python", "-B", "-m", "pgn_worker.health"]
 # the worker's tests, run inside the image as its own user (built with --target test; never shipped)
 FROM worker AS test
 COPY --chown=10001:10001 apps/engine-worker/test /opt/pageinator/apps/engine-worker/test
+COPY --chown=10001:10001 packages/contracts/test/fixtures /opt/pageinator/packages/contracts/test/fixtures
 RUN python -B -m unittest discover -s /opt/pageinator/apps/engine-worker/test
 
 FROM worker
