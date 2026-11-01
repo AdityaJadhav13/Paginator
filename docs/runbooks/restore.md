@@ -41,8 +41,30 @@ master user: `pg_restore --exit-on-error --dbname=<new database> /tmp/restore.du
 
 Restore to a new instance (A) or a new database (B), then check: row counts of `app.story`, `identity."user"` and
 `app.asset` against the live database at the restore time; the newest audit entry; a story's text; that the newest
-photos' keys exist in S3 (`verify-restore.ts`, PR 26). Record the date, the source, the time it took and the result.
-Delete the restored instance afterwards.
+photos' keys exist in S3. Record the date, the source, the time it took and the result. Delete the restored instance
+afterwards.
+
+From a dump (B), `apps/api/scripts/verify-restore.ts` does all of it in the backup image: it reads the live database's
+facts, takes a dump as the nightly backup does, checks its SHA-256 against the store's, restores it into a new database
+with `pg_restore --exit-on-error`, and compares row counts of every table, the applied migrations, the RLS policies,
+RLS and FORCE RLS on every table (against the migrations the release carries, too), the newest audit event and story
+text, and the newest photos' originals in S3. It prints PASS, FAIL or SKIP per check (also when it stops part way),
+exits 1 on any FAIL or failure, and drops the restored database (`PGN_RESTORE_KEEP=1` keeps it). It reads the live
+database as `pgn_backup` in read-only sessions; the admin connects to the `postgres` database only, to make the restored
+database under a name of its own (`<live>_restore_<time>_<random>`) and to drop it: it never drops a database it did
+not make. **Each run writes one more dump to the backups bucket**, under the same 35-day GOVERNANCE lock as a nightly
+one (a run that fails after the backup leaves its dump too). It checks a restore from a dump (B) only: it has no mode
+for an already restored point-in-time target (A; 11-fix-before-launch L2-344).
+
+```sh
+c="docker compose -p <project> --profile <profile> --env-file <file> -f infra/docker/compose.pilot.yml"
+$c run --rm -e PGN_RESTORE_ADMIN_PASSWORD=<superuser or RDS master password> -e PGN_S3_WORK_BUCKET=<work bucket> \
+  backup<-local> node scripts/verify-restore.ts
+```
+
+`PGN_RESTORE_ADMIN_USER` names the admin role (postgres by default). The backup's S3 key may not read the work bucket in
+the pilot: leave `PGN_S3_WORK_BUCKET` unset there (that check is then SKIP) or run with a key that may; a bucket the key
+cannot read, or that lacks the originals, makes that check FAIL.
 
 Verified on pilot-local only (PR 25), not yet on RDS and S3: one dump of the scratch database (139 KB) was uploaded under governance lock for
 35 days; a delete of its version was refused (AccessDenied); it was fetched back with the same SHA-256 and restored

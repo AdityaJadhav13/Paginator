@@ -49,6 +49,8 @@ catalog:
   # The engine's queue (apps/engine-queue): Graphile Worker over node-postgres, owner decision 2026-10-24; MIT. Its
   # configuration loader brings argparse 2.0.1 (Python-2.0, reviewed: tools/ts/check-licences.ts).
   graphile-worker: "0.18.0"
+  # The L2.1 phone smoke (apps/web/e2e, plan §7.3), run on a developer's machine; Apache-2.0. 1.64.1 (2026-10-14).
+  "@playwright/test": "1.64.1"
 
 overrides:
   typescript: "npm:@typescript/typescript6@6.0.2"
