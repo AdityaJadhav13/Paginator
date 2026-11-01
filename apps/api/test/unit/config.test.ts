@@ -194,6 +194,30 @@ describe("config: database settings", () => {
   });
 });
 
+describe("config: TLS to the database in production", () => {
+  const rds = { NODE_ENV: "production", PGN_DB_HOST: "pgn-pilot.example.ap-south-1.rds.amazonaws.com" };
+  it("refuses any PGSSLMODE but verify-full or verify-ca, in the API and the migration command", () => {
+    for (const mode of ["disable", "no-verify", "require", "prefer"]) {
+      expect(problems({ ...rds, PGSSLMODE: mode })).toBe(
+        `The API's settings are not right:\n  - PGSSLMODE must be verify-full or verify-ca in production, not ${mode}`,
+      );
+    }
+    expect(problems(rds)).toContain("PGSSLMODE must be verify-full or verify-ca in production, not unset");
+    expect(problems({ ...rds, PGN_MIGRATOR_PASSWORD: "m", PGSSLMODE: "disable" }, loadMigratorConfig)).toContain(
+      "PGSSLMODE must be verify-full",
+    );
+    expect(load({ ...rds, PGSSLMODE: "verify-full" }).database.host).toBe(rds.PGN_DB_HOST);
+    expect(load({ ...rds, PGSSLMODE: "verify-ca" }).database.host).toBe(rds.PGN_DB_HOST);
+  });
+
+  it("lets a database on this machine or pilot-local's scratch one go without TLS, and development anything", () => {
+    for (const host of ["127.0.0.1", "localhost", "db-local"]) {
+      expect(load({ NODE_ENV: "production", PGN_DB_HOST: host, PGSSLMODE: "disable" }).database.host).toBe(host);
+    }
+    expect(load({ PGN_DB_HOST: rds.PGN_DB_HOST, PGSSLMODE: "disable" }).database.host).toBe(rds.PGN_DB_HOST);
+  });
+});
+
 describe("config: sign-in and email settings", () => {
   it("defaults to the first allowed origin, Mailpit, and a sender at example.test", () => {
     const config = load({ PGN_ALLOWED_ORIGINS: "https://app.example.test, http://127.0.0.1:5180" });

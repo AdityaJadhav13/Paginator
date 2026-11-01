@@ -9,6 +9,7 @@ import {
   ListObjectVersionsCommand,
   NotFound,
   S3Client,
+  type CORSRule,
   type LifecycleRule,
   S3ServiceException,
 } from "@aws-sdk/client-s3";
@@ -37,6 +38,26 @@ export const UPLOADS_LIFECYCLE: LifecycleRule[] = [
     Expiration: { ExpiredObjectDeleteMarker: true },
   },
 ];
+
+/** The work bucket's CORS rule (infra/aws/s3-cors.json is the same rule, for the AWS CLI; a test compares them). The
+ * app's origin, and no other, may:
+ *   - POST a presigned upload (plan §6.2): the web sends it by XMLHttpRequest with a progress listener, so the browser
+ *     asks first (a preflight), and the request carries no header outside the safelisted ones;
+ *   - GET an original through the 302 of GET …/assets/{a}/file (plan §6.4): the web follows it with fetch, sending
+ *     no header of its own to the store (a simple request, answered with the CORS headers).
+ * Nothing else: no PUT or DELETE, no request header beyond the safelisted ones, and no response header exposed (no
+ * x-amz-meta-*: the web reads the status and the body only). A browser keeps a preflight's answer for 10 minutes. The
+ * archive and backups buckets have no CORS rule. */
+export function uploadsCors(appOrigin: string): CORSRule[] {
+  return [
+    {
+      ID: "app-uploads-and-originals",
+      AllowedOrigins: [appOrigin],
+      AllowedMethods: ["POST", "GET"],
+      MaxAgeSeconds: 600,
+    },
+  ];
+}
 
 export function s3Client(config: StorageConfig): S3Client {
   return new S3Client({

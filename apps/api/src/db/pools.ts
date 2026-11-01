@@ -3,7 +3,8 @@
 //   - auth (pgn_auth): Better Auth's tables in identity.* (PR 7);
 //   - listen (pgn_listen): one dedicated connection for LISTEN (PR 19), made by listener().
 // Nothing connects until it is used, so the API starts while the database is down, and /readyz reports it.
-// Not set here yet: TLS to the database (the pilot's deploy, PR 25).
+// TLS to the database: node-postgres reads PGSSLMODE from the environment (verify-full in the pilot, with the RDS
+// certificate bundle in NODE_EXTRA_CA_CERTS), and src/config.ts refuses any weaker mode in production.
 import { Client, Pool, type PoolConfig, types } from "pg";
 import { Kysely, PostgresDialect, sql } from "kysely";
 import { type IdentityStore, identityStore } from "./identity.ts";

@@ -76,7 +76,28 @@ const DATABASE = {
   PGN_DB_HOST: z.string().min(1, { error: "must not be empty" }).default("127.0.0.1"),
   PGN_DB_PORT: wholeNumber(1, 65535).default(55432),
   PGN_DB_NAME: z.string().min(1, { error: "must not be empty" }).default("pageinator"),
+  // node-postgres and libpq read PGSSLMODE themselves; it is here so that production can insist on it
+  PGSSLMODE: z.string().optional(),
+  NODE_ENV: z.string().optional(),
 };
+
+/** In production (NODE_ENV=production, which the images set), the connection to the database is TLS with the server's
+ * certificate and name checked: PGSSLMODE verify-full or verify-ca. Anything else (disable, no-verify, require, none)
+ * would send the passwords in clear, or to whoever answers. A database on this machine, and pilot-local's scratch one
+ * (db-local, on Docker's own network), are exempt. */
+function databaseTls(
+  env: { NODE_ENV?: string | undefined; PGSSLMODE?: string | undefined; PGN_DB_HOST: string },
+  context: z.core.$RefinementCtx,
+): void {
+  if (env.NODE_ENV !== "production" || LOOPBACK.has(env.PGN_DB_HOST) || env.PGN_DB_HOST === "db-local") return;
+  if (env.PGSSLMODE !== "verify-full" && env.PGSSLMODE !== "verify-ca") {
+    context.addIssue({
+      code: "custom",
+      path: ["PGSSLMODE"],
+      message: `must be verify-full or verify-ca in production, not ${env.PGSSLMODE ?? "unset"}`,
+    });
+  }
+}
 
 /** An origin as browsers send it in the Origin header: scheme, host and port, nothing more. */
 function isOrigin(value: string): boolean {
@@ -182,6 +203,7 @@ const Env = z
       .optional(),
   })
   .superRefine((env, context) => {
+    databaseTls(env, context);
     if (env.PGN_PUBLIC_ORIGIN !== undefined && !env.PGN_ALLOWED_ORIGINS.includes(env.PGN_PUBLIC_ORIGIN)) {
       context.addIssue({ code: "custom", path: ["PGN_PUBLIC_ORIGIN"], message: "must be one of PGN_ALLOWED_ORIGINS" });
     }
@@ -269,15 +291,53 @@ const StorageOnlyEnv = z.object(STORAGE).transform((env) => storageOf(env));
 
 /** The migration command's settings (pnpm --filter @pageinator/api db:migrate, and db:codegen): it signs in as
  * pgn_migrator. */
-const MigratorEnv = z.object({ ...DATABASE, PGN_MIGRATOR_PASSWORD: password() }).transform((env) => ({
-  host: env.PGN_DB_HOST,
-  port: env.PGN_DB_PORT,
-  name: env.PGN_DB_NAME,
-  password: env.PGN_MIGRATOR_PASSWORD,
-}));
+const MigratorEnv = z
+  .object({ ...DATABASE, PGN_MIGRATOR_PASSWORD: password() })
+  .superRefine(databaseTls)
+  .transform((env) => ({
+    host: env.PGN_DB_HOST,
+    port: env.PGN_DB_PORT,
+    name: env.PGN_DB_NAME,
+    password: env.PGN_MIGRATOR_PASSWORD,
+  }));
+
+/** scripts/db-backup.ts's settings (docs/runbooks/restore.md): it signs in as pgn_backup (read-only, BYPASSRLS) and
+ * writes to the backups bucket, each dump under Object Lock for PGN_BACKUP_RETAIN_DAYS. */
+const BackupEnv = z
+  .object({
+    ...DATABASE,
+    ...STORAGE,
+    PGN_BACKUP_PASSWORD: password(),
+    PGN_S3_BACKUPS_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/, { error: "must be a bucket name" }),
+    PGN_BACKUP_RETAIN_DAYS: wholeNumber(1, 3650).default(35),
+  })
+  .superRefine(databaseTls)
+  .transform((env, context) => {
+    const storage = storageOf(env);
+    if (!storage) {
+      context.addIssue({
+        code: "custom",
+        path: ["PGN_S3_ACCESS_KEY_ID"],
+        message: "and PGN_S3_SECRET_ACCESS_KEY must be set",
+      });
+      return z.NEVER;
+    }
+    return {
+      database: {
+        host: env.PGN_DB_HOST,
+        port: env.PGN_DB_PORT,
+        name: env.PGN_DB_NAME,
+        password: env.PGN_BACKUP_PASSWORD,
+      },
+      storage,
+      bucket: env.PGN_S3_BACKUPS_BUCKET,
+      retainDays: env.PGN_BACKUP_RETAIN_DAYS,
+    };
+  });
 
 export type Config = z.output<typeof Env>;
 export type MigratorConfig = z.output<typeof MigratorEnv>;
+export type BackupConfig = z.output<typeof BackupEnv>;
 
 /** The settings are not right; the message lists every problem, one per line. */
 export class ConfigError extends Error {}
@@ -295,6 +355,10 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
 
 export function loadStorageConfig(env: Readonly<Record<string, string | undefined>>) {
   return parse(StorageOnlyEnv, env, "The object store's");
+}
+
+export function loadBackupConfig(env: Readonly<Record<string, string | undefined>>): BackupConfig {
+  return parse(BackupEnv, env, "The backup command's");
 }
 
 export function loadMigratorConfig(env: Readonly<Record<string, string | undefined>>): MigratorConfig {
