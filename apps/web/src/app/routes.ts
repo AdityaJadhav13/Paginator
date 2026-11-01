@@ -50,6 +50,7 @@ export const PATTERNS = {
   orgBilling: "billing",
   orgStorage: "storage",
   orgTeam: "team",
+  orgAudit: "audit",
 
   // Workspace — publication scoped (relative to workspaceRoot)
   pubOverview: "pub/:pubId/overview",
@@ -99,6 +100,7 @@ export const paths = {
 
   orgHome: (orgId: string) => `/org/${orgId}`,
   orgTeam: (orgId: string) => `/org/${orgId}/team`,
+  orgAudit: (orgId: string) => `/org/${orgId}/audit`,
   orgSettings: (orgId: string) => `/org/${orgId}/settings`,
   orgBilling: (orgId: string) => `/org/${orgId}/billing`,
   orgStorage: (orgId: string) => `/org/${orgId}/storage`,

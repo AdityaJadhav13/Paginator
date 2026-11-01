@@ -10,6 +10,8 @@ import userEvent from "@testing-library/user-event";
 import { act, fireEvent, screen, waitFor, within } from "../../src/test/render.tsx";
 import { createMockApplicationEnvironment, type MockApplicationEnvironment } from "../../src/mocks/index.ts";
 import { renderAuth, resetBrowserState, seriousViolations } from "../auth/helpers.tsx";
+import { notificationLink, notificationText } from "../../src/features/live/Notifications.tsx";
+import { translator } from "../../src/i18n/index.ts";
 
 // autosave waits 1.5 s: under a full parallel run these need more than the default 5 s
 vi.setConfig({ testTimeout: 30_000 });
@@ -19,6 +21,10 @@ const PUB = "pub-demo-pune-daily";
 const STORIES = `/org/${ORG}/pub/${PUB}/stories`;
 const at = (id: string) => `${STORIES}/${id}`;
 const SLOW = { timeout: 10_000 };
+/** The drawer's sentences for the reporter's fictional notifications: the story's headline and where it stands. */
+const COMMENTED = "Sahyadri Demo Editor commented on “घाटात मान्सून लवकर दाखल”. It is now: Filed.";
+const COMMENTED_002 = "Sahyadri Demo Editor commented on “बाजार समितीची निवडणूक रविवारी”. It is now: Draft.";
+const GIVEN = "Sahyadri Demo Editor gave you the story “बाजार समितीची निवडणूक रविवारी”. It is now: Draft.";
 
 afterEach(() => {
   resetBrowserState();
@@ -195,12 +201,12 @@ describe("The notifications drawer", () => {
     await user.click(button);
     const drawer = within(await screen.findByRole("dialog", { name: "Notifications" }));
     const items = await drawer.findAllByRole("listitem");
-    expect(items[0]).toHaveTextContent("Sahyadri Demo Editor commented on a story.");
+    expect(items[0]).toHaveTextContent(COMMENTED);
     expect(items[0]).toHaveTextContent("New");
-    expect(items[1]).toHaveTextContent("Sahyadri Demo Editor gave you a story.");
+    expect(items[1]).toHaveTextContent(GIVEN);
     expect(await seriousViolations(container.ownerDocument.body)).toEqual([]);
 
-    await user.click(drawer.getByRole("button", { name: "Mark as read: Sahyadri Demo Editor commented on a story." }));
+    await user.click(drawer.getByRole("button", { name: `Mark as read: ${COMMENTED}` }));
     expect(await drawer.findByText("Marked read.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Notifications" })).toBeInTheDocument());
     await user.click(drawer.getByLabelText("Show only unread ones"));
@@ -214,7 +220,7 @@ describe("The notifications drawer", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /^Notifications/ }));
     const drawer = within(await screen.findByRole("dialog", { name: "Notifications" }));
-    await user.click(await drawer.findByRole("link", { name: "Sahyadri Demo Editor commented on a story." }));
+    await user.click(await drawer.findByRole("link", { name: COMMENTED }));
     expect(markRead).toHaveBeenCalledWith({ orgId: ORG, ids: ["notification-demo-002"] });
     await waitFor(() => expect(document.getElementById("comment-comment-demo-001")).toHaveFocus());
   });
@@ -229,7 +235,7 @@ describe("The notifications drawer", () => {
 
     await user.click(screen.getByRole("button", { name: /^Notifications/ }));
     const drawer = within(await screen.findByRole("dialog", { name: "Notifications" }));
-    await drawer.findAllByText("Sahyadri Demo Editor commented on a story.");
+    await drawer.findAllByText(COMMENTED);
     await user.click(drawer.getByRole("button", { name: "Mark all as read" }));
     expect(await drawer.findByText("All of them are marked read.")).toBeInTheDocument();
     expect(drawer.queryByText("New")).not.toBeInTheDocument();
@@ -245,7 +251,7 @@ describe("The notifications drawer", () => {
     const drawer = within(await screen.findByRole("dialog", { name: "Notifications" }));
     await waitFor(() => expect(drawer.getAllByRole("listitem")).toHaveLength(20));
     await user.click(drawer.getByRole("button", { name: "Show older ones" }));
-    await waitFor(() => expect(drawer.getAllByRole("listitem")).toHaveLength(22));
+    await waitFor(() => expect(drawer.getAllByRole("listitem")).toHaveLength(23));
     expect(drawer.queryByRole("button", { name: "Show older ones" })).not.toBeInTheDocument();
   });
 
@@ -266,10 +272,10 @@ describe("The notifications drawer", () => {
     await waitFor(() => expect(drawer.getAllByRole("listitem")).toHaveLength(20));
     await user.click(drawer.getByRole("button", { name: "Show older ones" }));
     await theyComment(environment, "story-demo-001", "आणखी एक"); // the first page is fetched again meanwhile
-    await waitFor(() => expect(drawer.getAllByText("Sahyadri Demo Editor commented on a story.")[0]).toBeInTheDocument());
+    await waitFor(() => expect(drawer.getAllByText(COMMENTED)[0]).toBeInTheDocument());
     await new Promise((resolve) => setTimeout(resolve, 50));
     act(() => release());
-    await waitFor(() => expect(drawer.getAllByRole("listitem")).toHaveLength(23));
+    await waitFor(() => expect(drawer.getAllByRole("listitem")).toHaveLength(24));
     expect(drawer.queryByRole("button", { name: /older ones/ })).not.toBeInTheDocument();
   });
 
@@ -280,7 +286,7 @@ describe("The notifications drawer", () => {
     await theyComment(environment, "story-demo-002", "पहिली");
     await user.click(await screen.findByRole("button", { name: "Notifications 2 unread" }));
     let drawer = within(await screen.findByRole("dialog", { name: "Notifications" }));
-    await user.click((await drawer.findAllByRole("link", { name: "Sahyadri Demo Editor commented on a story." }))[0]!);
+    await user.click((await drawer.findAllByRole("link", { name: COMMENTED_002 }))[0]!);
     expect(await screen.findByRole("button", { name: "Notifications 1 unread" })).toBeInTheDocument();
 
     environment.sessionController.setProblem({ kind: "network" }, ["notifications.read"]);
@@ -298,8 +304,98 @@ describe("The notifications drawer", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "सूचना 1 न वाचलेल्या" }));
     const drawer = within(await screen.findByRole("dialog", { name: "सूचना" }));
-    expect(await drawer.findByText("Sahyadri Demo Editor यांनी एका बातमीवर टिप्पणी केली.")).toBeInTheDocument();
+    expect(
+      await drawer.findByText(
+        "Sahyadri Demo Editor यांनी “घाटात मान्सून लवकर दाखल” या बातमीवर टिप्पणी केली. बातमीची स्थिती आता: डेस्ककडे पाठवली.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      drawer.getByText("Sahyadri Demo Editor यांनी एका बातमीवर टिप्पणी केली. ही बातमी आता तुमच्यासाठी इथे नाही."),
+    ).toBeInTheDocument();
     expect(drawer.getByRole("button", { name: "सर्व वाचल्या म्हणून खूण करा" })).toBeInTheDocument();
+    // the mark-one button names its notification in the page's language, the joining colon included
+    expect(
+      drawer.getByRole("button", {
+        name: "वाचली म्हणून खूण करा: Sahyadri Demo Editor यांनी “घाटात मान्सून लवकर दाखल” या बातमीवर टिप्पणी केली. बातमीची स्थिती आता: डेस्ककडे पाठवली.",
+      }),
+    ).toHaveTextContent(/^वाचली म्हणून खूण करा$/);
+    expect(translator("en")("notifications.markOneNamed", { notification: "X" })).toBe("Mark as read: X");
+  });
+
+  it("names a story only while the reader still sees it, and then leads nowhere and shows nothing of it", async () => {
+    renderAuth(STORIES, { preset: "sahyadri-reporter" });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /^Notifications/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Notifications" });
+    const drawer = within(dialog);
+    const items = await drawer.findAllByRole("listitem");
+    const gone = items.at(-1)!;
+    expect(gone).toHaveTextContent("Sahyadri Demo Editor commented on a story. The story is no longer here for you.");
+    expect(within(gone).queryByRole("link")).not.toBeInTheDocument();
+    // the desk's own story, which a Reporter does not see: neither its headline nor its status
+    expect(dialog).not.toHaveTextContent("Ring road work to resume next week");
+    expect(dialog).not.toHaveTextContent("Editing");
+  });
+
+  it("follows the story as it is now: a move by the desk shows in the sentence", async () => {
+    const environment = createMockApplicationEnvironment();
+    renderAuth(STORIES, { preset: "sahyadri-reporter", environment });
+    await act(() =>
+      environment.sessionController.actAs("sahyadri-editor", async () => {
+        const now = await storyOf(environment, "story-demo-001");
+        const moved = await environment.stories.transition({ orgId: ORG, pubId: PUB, storyId: "story-demo-001", to: "editing", baseRevision: now.revision, idempotencyKey: "move-001" });
+        if (!moved.ok) throw new Error("the move failed");
+      }),
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /^Notifications/ }));
+    const drawer = within(await screen.findByRole("dialog", { name: "Notifications" }));
+    expect(
+      await drawer.findByText("Sahyadri Demo Editor commented on “घाटात मान्सून लवकर दाखल”. It is now: Editing."),
+    ).toBeInTheDocument();
+  });
+
+  it("names who accepted an invitation, and leads to the team", async () => {
+    renderAuth(`/org/${ORG}`, { preset: "sahyadri-editor" });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Notifications 1 unread" }));
+    const drawer = within(await screen.findByRole("dialog", { name: "Notifications" }));
+    expect(await drawer.findByRole("link", { name: "Sahyadri Demo Photo Editor accepted your invitation." })).toHaveAttribute(
+      "href",
+      `/org/${ORG}/team`,
+    );
+  });
+});
+
+describe("A notification's sentences", () => {
+  const base = {
+    id: "n",
+    publicationId: "p",
+    storyId: "s",
+    commentId: null,
+    invitationId: null,
+    actor: null,
+    story: { headline: "पाणीपुरवठा बंद", status: "ready" as const },
+    invitee: null,
+    createdAt: "2026-10-22T09:00:00.000Z",
+    readAt: null,
+  };
+  it("say the story and its status without an actor, in both languages, and fall back when it is gone", () => {
+    const en = translator("en");
+    const mr = translator("mr");
+    expect(notificationText({ ...base, kind: "story_filed" }, en)).toBe("“पाणीपुरवठा बंद” was sent to the desk. It is now: Ready.");
+    expect(notificationText({ ...base, kind: "story_sent_back" }, en)).toBe("Your story “पाणीपुरवठा बंद” was sent back to you. It is now: Ready.");
+    expect(notificationText({ ...base, kind: "story_assigned", story: null }, en)).toBe(
+      "A story was given to you. The story is no longer here for you.",
+    );
+    expect(notificationText({ ...base, kind: "comment" }, mr)).toBe(
+      `“पाणीपुरवठा बंद” या बातमीवर नवीन टिप्पणी आली आहे. बातमीची स्थिती आता: ${mr("status.ready")}.`,
+    );
+    expect(notificationText({ ...base, kind: "invitation_accepted", story: null, invitee: { id: "u", name: "Fictional Reporter" } }, mr)).toBe(
+      "Fictional Reporter यांनी तुमचे निमंत्रण स्वीकारले.",
+    );
+    expect(notificationText({ ...base, kind: "invitation_accepted", story: null }, en)).toBe("Your invitation was accepted.");
+    expect(notificationLink({ ...base, kind: "comment", story: null }, "o", true)).toBeNull();
   });
 });
 

@@ -2,8 +2,8 @@ import { forwardRef } from "react";
 import type { InputHTMLAttributes } from "react";
 
 export interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
-  /** Input type — text-like types only. Defaults to "text". */
-  type?: "text" | "email" | "password" | "search" | "tel" | "url" | "number";
+  /** Input type — text-like types only, and the native day picker (the audit log's days). Defaults to "text". */
+  type?: "text" | "email" | "password" | "search" | "tel" | "url" | "number" | "date";
 }
 
 /**

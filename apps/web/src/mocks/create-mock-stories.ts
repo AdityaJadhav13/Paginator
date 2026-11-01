@@ -338,6 +338,8 @@ export function createMockStories(deps: MockStoryDeps): {
   comments: CommentService;
   /** Whether this person would hear the live update (the API's events.ts messageFor, with its confirm). */
   hears(userId: string, orgId: string, event: LiveEventDto): boolean;
+  /** A story's headline and status as this person may see it now (the notifications list's join), or null. */
+  shown(userId: string, orgId: string, storyId: string): { headline: string; status: StoryStatusDto } | null;
   reset(): void;
   all(): readonly Row[];
 } {
@@ -982,6 +984,12 @@ export function createMockStories(deps: MockStoryDeps): {
     return event.type === "story" || reach("comment.read", standing.orgRole, standing.access) !== null;
   }
 
+  function shown(userId: string, orgId: string, storyId: string) {
+    const story = rows.find((candidate) => candidate.id === storyId && candidate.orgId === orgId);
+    const standing = story ? deps.standing(userId, orgId, story.publicationId) : undefined;
+    return story && standing && sees(standing, story, userId) ? { headline: story.headline, status: story.status } : null;
+  }
+
   const media: MediaService = {
     async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey }) {
       const checked = await check<never>("media.presign", orgId, pubId, "media.upload");
@@ -1096,6 +1104,7 @@ export function createMockStories(deps: MockStoryDeps): {
     media,
     comments: commentService,
     hears,
+    shown,
     reset() {
       comments = commentFixtures();
       commentCounter = 0;

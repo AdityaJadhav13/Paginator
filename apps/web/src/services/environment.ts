@@ -1,4 +1,5 @@
 import type { AccountService } from "./account-service.ts";
+import type { AuditService } from "./audit-service.ts";
 import type { ContactService } from "./contact-service.ts";
 import type { SecurityService } from "./security-service.ts";
 import type { SessionService } from "./session-service.ts";
@@ -20,6 +21,8 @@ export interface ServiceEnvironment {
   readonly account: AccountService;
   readonly security: SecurityService;
   readonly team: TeamService;
+  /** The organisation's audit log. */
+  readonly audit: AuditService;
   readonly stories: StoryService;
   readonly media: MediaService;
   /** The public website's contact form. */
