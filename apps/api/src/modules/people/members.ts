@@ -1,15 +1,19 @@
 // The Team endpoints (docs/product/10-l2-newsroom-plan.md §5.2): an organisation's members, a member's organisation
 // role and publication grants, and removing a member (their work stays). The organisation's Owner is made by
-// scripts/bootstrap-org.ts and cannot be changed or removed here (a transfer comes later). Every change is audited.
+// scripts/bootstrap-org.ts and cannot be changed or removed here (a transfer comes later): that refusal is audited
+// (auditRefusals, plugin.ts). Every change is audited in the transaction of its grants and directory row; the
+// membership and its role are Better Auth's, on another pool, so they change last, just before that transaction
+// commits: a failure before leaves everything as it was, and a member removed meanwhile (404) leaves no event.
 import { Member, MemberPatch, type OrgRole, type PublicationGrant } from "@pageinator/contracts";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { recordAudit } from "../../db/audit.ts";
 import type { Database } from "../../db/pools.ts";
 import type { Tenant } from "../../db/tenant.ts";
 import type { Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
-import { accessOf, orgRoleOf } from "../access/access.ts";
-import { audit, displayName } from "./grants.ts";
+import { accessOf, orgRoleOf, refused } from "../access/access.ts";
+import { displayName } from "./grants.ts";
 import type { PeopleOptions } from "./me.ts";
 
 const OrgParams = z.strictObject({ o: z.string() });
@@ -65,7 +69,7 @@ async function target(database: Database, orgId: string, userId: string): Promis
   const membership = await database.identity.membership(orgId, userId);
   const role = membership ? orgRoleOf(membership.role) : null;
   if (!role) throw new ApiError("not_found");
-  if (role === "owner") throw new ApiError("not_allowed");
+  if (role === "owner") throw refused("the Owner is not changed or removed here");
   return role;
 }
 
@@ -90,8 +94,8 @@ export const memberRoutes: FastifyPluginAsyncZod<PeopleOptions> = async (app, { 
       const userId = request.params.userId;
       await target(database, tenant.orgId, userId);
       const { orgRole, publications } = request.body;
-      if (publications !== undefined) {
-        await database.withTenant(tenant, async (tx) => {
+      await database.withTenant(tenant, async (tx) => {
+        if (publications !== undefined) {
           await checkPublications(tx, publications, "body.publications");
           await tx.deleteFrom("app.publication_grant").where("user_id", "=", userId).execute();
           for (const grant of publications) {
@@ -106,10 +110,20 @@ export const memberRoutes: FastifyPluginAsyncZod<PeopleOptions> = async (app, { 
               })
               .execute();
           }
+        }
+        await recordAudit(tx, tenant, {
+          action: "member.update",
+          targetType: "person",
+          targetId: userId,
+          data: { orgRole, publications },
         });
-      }
-      if (orgRole !== undefined) await database.identity.setMemberRole(tenant.orgId, userId, orgRole);
-      await audit(database, tenant, "member.update", userId, { orgRole, publications }, "person");
+        // last (Better Auth's pool): no member any more, as when removed at this very moment, undoes all of the above
+        const still =
+          orgRole !== undefined
+            ? await database.identity.setMemberRole(tenant.orgId, userId, orgRole)
+            : (await database.identity.membership(tenant.orgId, userId)) !== null;
+        if (!still) throw new ApiError("not_found");
+      });
       const [member] = await membersOf(database, tenant, userId);
       if (!member) throw new ApiError("not_found");
       return member;
@@ -125,12 +139,10 @@ export const memberRoutes: FastifyPluginAsyncZod<PeopleOptions> = async (app, { 
       await target(database, tenant.orgId, userId);
       const member = (await database.identity.members(tenant.orgId)).find((m) => m.userId === userId);
       if (!member) throw new ApiError("not_found");
-      // 1. the membership, and the invitations they accepted here closed, in one statement: from now on they reach
-      //    nothing, and no repair (grants.ts) can make the membership again
-      await database.identity.removeMember(tenant.orgId, userId, member.email);
-      // 2. their grants go, and their directory row says removed: a tombstone, made if it was never written
       const removedAt = new Date();
       await database.withTenant(tenant, async (tx) => {
+        // 1. their grants go, and their directory row says removed (a tombstone, made if it was never written), with
+        //    the event
         await tx.deleteFrom("app.publication_grant").where("user_id", "=", userId).execute();
         await tx
           .insertInto("app.person")
@@ -146,8 +158,14 @@ export const memberRoutes: FastifyPluginAsyncZod<PeopleOptions> = async (app, { 
             conflict.columns(["org_id", "user_id"]).doUpdateSet({ status: "removed", removed_at: removedAt }),
           )
           .execute();
+        await recordAudit(tx, tenant, { action: "member.remove", targetType: "person", targetId: userId });
+        // 2. last (Better Auth's pool): the membership, and the invitations they accepted here closed, in one
+        //    statement: from then on they reach nothing, and no repair (grants.ts) can make the membership again.
+        //    Removed meanwhile by someone else: all of the above is undone (404)
+        if (!(await database.identity.removeMember(tenant.orgId, userId, member.email))) {
+          throw new ApiError("not_found");
+        }
       });
-      await audit(database, tenant, "member.remove", userId, {}, "person");
       return reply.status(204).send();
     },
   );

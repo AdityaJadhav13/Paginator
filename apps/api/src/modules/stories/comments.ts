@@ -4,10 +4,11 @@
 //     reply to a thread's first comment (one level deep); the story's reporter and assignee and the thread's writers
 //     are told (src/modules/notifications/notify.ts);
 //   - PATCH /orgs/:o/pubs/:p/comments/:c (comment.write): its author changes its text; the author, the desk or the
-//     story's reporter or assignee resolves or reopens a thread. Each change is in the audit log (ids only).
+//     story's reporter or assignee resolves or reopens a thread. Each comment written, and each change, is in the audit
+//     log (ids only), in its own transaction.
 // A story the person does not see answers 404, as do its comments; an action their role lacks answers 403, audited.
 // Mentions come with L2.2 (plan §1): a body is text only.
-import { Comment, CommentInput, CommentList, CommentPatch } from "@pageinator/contracts";
+import { type AuditAction, Comment, CommentInput, CommentList, CommentPatch } from "@pageinator/contracts";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -18,14 +19,15 @@ import {
   threadAuthors,
   updateComment,
 } from "../../db/comments.ts";
+import { recordAudit } from "../../db/audit.ts";
 import type { Database } from "../../db/pools.ts";
 import { findStory } from "../../db/stories.ts";
 import type { Tenant, Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
-import { type Access, accessOf, actorOf } from "../access/access.ts";
+import { type Access, accessOf, actorOf, auditRefusals, refused } from "../access/access.ts";
 import type { Notifier } from "../notifications/notify.ts";
 import { idempotent } from "../requests/idempotency.ts";
-import { auditRefusals, factsOf, refused } from "./routes.ts";
+import { factsOf } from "./routes.ts";
 import { type StoryFacts, canComment, canEditComment, canReadComments, canResolve } from "./rules.ts";
 import { cleaned } from "./store.ts";
 
@@ -72,22 +74,21 @@ async function storyFor(tx: Tx, access: Access, pub: string, storyId: string, us
   return { row, facts: factsOf(row) };
 }
 
-async function audit(tx: Tx, tenant: Tenant, pub: string, action: string, comment: CommentRow, ip: string) {
-  await tx
-    .insertInto("app.audit_event")
-    .values({
-      org_id: tenant.orgId,
-      publication_id: pub,
-      actor_kind: "user",
-      actor_id: tenant.userId,
-      action,
-      target_type: "comment",
-      target_id: comment.id,
-      data: JSON.stringify({ story: comment.target_id }),
-      ip,
-      request_id: tenant.requestId,
-    })
-    .execute();
+/** A comment's event (ids only: the story, and the thread for a reply), in the change's transaction. */
+async function auditComment(
+  tx: Tx,
+  tenant: Tenant,
+  pub: string,
+  action: AuditAction,
+  comment: { id: string; storyId: string; parentId: string | null },
+) {
+  await recordAudit(tx, tenant, {
+    action,
+    targetType: "comment",
+    targetId: comment.id,
+    publicationId: pub,
+    data: { story: comment.storyId, parent: comment.parentId },
+  });
 }
 
 export const commentRoutes: FastifyPluginAsyncZod<CommentOptions> = async (app, { database, notify }) => {
@@ -141,6 +142,7 @@ export const commentRoutes: FastifyPluginAsyncZod<CommentOptions> = async (app, 
             throw new ApiError("invalid_request", [{ field: "body.body", message: "A comment needs some text." }]);
           }
           const id = await createComment(tx, access.tenant, p, { storyId: s, parentId, body });
+          await auditComment(tx, access.tenant, p, "comment.create", { id, storyId: s, parentId });
           const writers = parentId ? await threadAuthors(tx, p, parentId) : [];
           await notify.commented(tx, access.tenant, p, { ...story.facts, id: s }, { id }, writers);
           const row = (await findComment(tx, p, id)) as CommentRow;
@@ -201,9 +203,10 @@ export const commentRoutes: FastifyPluginAsyncZod<CommentOptions> = async (app, 
             ...(body !== undefined ? { body } : {}),
             ...(resolvedBy !== undefined ? { resolvedBy } : {}),
           });
-          if (body !== undefined) await audit(tx, access.tenant, p, "comment.edit", comment, request.ip);
+          const which = { id: comment.id, storyId: comment.target_id, parentId: comment.parent_id };
+          if (body !== undefined) await auditComment(tx, access.tenant, p, "comment.edit", which);
           if (resolvedBy !== undefined) {
-            await audit(tx, access.tenant, p, resolvedBy ? "comment.resolve" : "comment.reopen", comment, request.ip);
+            await auditComment(tx, access.tenant, p, resolvedBy ? "comment.resolve" : "comment.reopen", which);
           }
         }
         return shown((await findComment(tx, p, c)) as CommentRow, access, p, story.facts, userId);

@@ -54,21 +54,36 @@ export type NotificationRow = {
   read_at: Date | null;
   created_at: Date;
   actor_name: string | null;
+  /** The story it names, when the publication wall lets the reader's transaction see it and it is not deleted; the
+   * caller still applies the story rules (a Reporter sees their own stories only). */
+  story_headline: string | null;
+  story_status: string | null;
+  story_reporter_id: string | null;
+  story_assignee_id: string | null;
 };
 
 /** A notification counts for the person only while they reach its publication (one with none always counts). */
 const reachable = sql<boolean>`(n.data->>'publicationId' is null
   or (n.data->>'publicationId')::uuid = any ((select app.current_pubs())::uuid[]))`;
 
-/** The person's notifications, newest first, after the cursor (created_at, id). */
+/** The person's notifications, newest first, after the cursor (created_at, id), each with its actor's name and its
+ * story's headline and state, in one query: the page is at most 101 rows, each joined by keys to one person and one
+ * story (with its current revision, which holds the headline). */
 export async function listNotifications(
   tx: Tx,
   options: { unread: boolean; limit: number; before?: { createdAt: string; id: string } },
 ): Promise<NotificationRow[]> {
   const { rows } = await sql<NotificationRow>`
-    select n.id, n.kind, n.target_type, n.target_id, n.data, n.read_at, n.created_at, p.display_name as actor_name
+    select n.id, n.kind, n.target_type, n.target_id, n.data, n.read_at, n.created_at, p.display_name as actor_name,
+      r.headline as story_headline, s.status as story_status, s.reporter_id as story_reporter_id,
+      s.assignee_id as story_assignee_id
     from app.notification n
     left join app.person p on p.org_id = n.org_id and p.user_id = (n.data->>'actorId')::uuid
+    left join (app.story s
+      join app.story_revision r
+        on r.org_id = s.org_id and r.publication_id = s.publication_id and r.story_id = s.id and r.rev = s.current_rev)
+      on s.org_id = n.org_id and s.publication_id = (n.data->>'publicationId')::uuid
+        and s.id = (n.data->>'storyId')::uuid and s.deleted_at is null
     where n.user_id = (select app.current_user()) and ${reachable}
       ${options.unread ? sql`and n.read_at is null` : sql``}
       ${options.before ? sql`and (n.created_at, n.id) < (${options.before.createdAt}::timestamptz, ${options.before.id}::uuid)` : sql``}

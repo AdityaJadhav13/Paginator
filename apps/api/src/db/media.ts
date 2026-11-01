@@ -60,14 +60,17 @@ export async function findUpload(tx: Tx, publicationId: string, uploadId: string
   return (lock ? query.forUpdate() : query).executeTakeFirst();
 }
 
-export async function rejectUpload(tx: Tx, publicationId: string, uploadId: string): Promise<void> {
-  await tx
+/** Marks a presigned upload refused; false when it was not presigned (refused or completed already). */
+export async function rejectUpload(tx: Tx, publicationId: string, uploadId: string): Promise<boolean> {
+  const done = await tx
     .updateTable("app.upload")
     .set({ status: "rejected" })
     .where("publication_id", "=", publicationId)
     .where("id", "=", uploadId)
     .where("status", "=", "presigned")
-    .execute();
+    .returning("id")
+    .executeTakeFirst();
+  return done !== undefined;
 }
 
 export async function completeUpload(tx: Tx, publicationId: string, uploadId: string, assetId: string): Promise<void> {

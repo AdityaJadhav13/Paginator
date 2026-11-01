@@ -17,9 +17,10 @@ import { z } from "zod";
 import type { Config } from "../../config.ts";
 import type { Invitation as StoredInvitation } from "../../db/identity.ts";
 import type { Database } from "../../db/pools.ts";
+import { recordAudit } from "../../db/audit.ts";
 import type { Tenant } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
-import { accessOf, actorOf } from "../access/access.ts";
+import { accessOf, actorOf, clientOf } from "../access/access.ts";
 import { invitationEmail } from "../identity/emails.ts";
 import { authHeaders } from "../identity/headers.ts";
 import { type Mailer, RecipientError } from "../notifications/mailer.ts";
@@ -157,6 +158,13 @@ export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async 
               })
               .execute();
           }
+          // with the grants: an invitation cancelled because they failed leaves no event
+          await recordAudit(tx, tenant, {
+            action: "invitation.create",
+            targetType: "invitation",
+            targetId: created.id,
+            data: { orgRole, publications },
+          });
         });
       } catch (error) {
         // an invitation must never be accepted without the grants it was made with
@@ -164,7 +172,6 @@ export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async 
         throw error;
       }
       const invitation = await ofOrg(database, tenant.orgId, created.id);
-      await audit(database, tenant, "invitation.create", invitation.id, { orgRole, publications });
       sendInvitation(invitation, actor.name, rolesOf(orgRole, publications));
       return reply.status(201).send(await view(database, tenant, invitation));
     },
@@ -289,15 +296,39 @@ export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async 
       const actor = actorOf(request);
       const id = request.params.id;
       if (!UUID.test(id)) throw new ApiError("not_found");
+      /** A refused accept is audited in the invitation's organisation, when there is one (a made-up id has none). */
+      const refusedAccept = async (reason: string, answer: ApiError): Promise<never> => {
+        const known = await database.identity.invitation(id);
+        if (known) {
+          const tenant = {
+            orgId: known.orgId,
+            userId: actor.userId,
+            pubIds: [],
+            requestId: request.id,
+            client: clientOf(request),
+          };
+          await database.withTenant(tenant, (tx) =>
+            recordAudit(tx, tenant, {
+              action: "access.denied",
+              targetType: "invitation",
+              targetId: id,
+              data: { reason, method: request.method, route: request.routeOptions.url ?? "" },
+            }),
+          );
+        }
+        throw answer;
+      };
       try {
         await auth.api.acceptInvitation({ headers: authHeaders(request), body: { invitationId: id } });
       } catch (error) {
         const which = code(error);
         if (which === "EMAIL_VERIFICATION_REQUIRED_BEFORE_ACCEPTING_OR_REJECTING_INVITATION") {
-          throw new ApiError("not_allowed");
+          return refusedAccept("email_not_verified", new ApiError("not_allowed"));
         }
-        // not found, expired, already used, or for another email: the same answer
-        if (error instanceof APIError && error.statusCode < 500) throw new ApiError("not_found");
+        // not found, expired, already used, or for another email: the same answer (Better Auth's code says which)
+        if (error instanceof APIError && error.statusCode < 500) {
+          return refusedAccept((which ?? "refused").toLowerCase(), new ApiError("not_found"));
+        }
         throw error;
       }
       const invitation = await database.identity.invitation(id);
@@ -309,16 +340,22 @@ export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async 
       const outbox: Outbox = [];
       const joined = { name: displayName(actor.name, actor.email) };
       try {
-        publications = await applyInvitation(database, invitation, person, request.id, true, (tx, tenant) =>
-          notify.invitationAccepted(tx, tenant, invitation, joined, outbox),
-        );
+        const who = { requestId: request.id, client: clientOf(request) };
+        // the notice and the event are written with the grants and the directory row: all of it, or none
+        publications = await applyInvitation(database, invitation, person, who, true, async (tx, tenant, reached) => {
+          await notify.invitationAccepted(tx, tenant, invitation, joined, outbox);
+          await recordAudit(tx, tenant, {
+            action: "invitation.accept",
+            targetType: "invitation",
+            targetId: invitation.id,
+            data: { publications: reached },
+          });
+        });
       } catch (error) {
         // never a member without their directory row and grants: the accept is undone, and can be tried again
         await database.identity.undoAccept(invitation.orgId, actor.userId, invitation.id);
         throw error;
       }
-      const tenant = { orgId: invitation.orgId, userId: actor.userId, pubIds: [], requestId: request.id };
-      await audit(database, tenant, "invitation.accept", invitation.id, { publications });
       mail(outbox);
       return { orgId: invitation.orgId, publications };
     },

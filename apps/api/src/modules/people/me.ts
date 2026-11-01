@@ -4,16 +4,17 @@
 import { Me, MePatch, type PublicationAccess } from "@pageinator/contracts";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import type { Database } from "../../db/pools.ts";
-import { actorOf, needsTwoStep, orgView } from "../access/access.ts";
+import type { Client } from "../../db/tenant.ts";
+import { actorOf, clientOf, needsTwoStep, orgView } from "../access/access.ts";
 import type { Auth } from "../identity/auth.ts";
 import type { Actor } from "../identity/session.ts";
 import { repairInvitations } from "./grants.ts";
 
 export type PeopleOptions = { auth: Auth; database: Database };
 
-async function me(database: Database, actor: Actor, requestId: string): Promise<Me> {
+async function me(database: Database, actor: Actor, requestId: string, client: Client): Promise<Me> {
   const person = { id: actor.userId, name: actor.name, email: actor.email };
-  await repairInvitations(database, person, requestId);
+  await repairInvitations(database, person, requestId, client);
   const memberships: Me["memberships"] = [];
   for (const membership of await database.identity.memberships(actor.userId)) {
     const view = await orgView(database, actor, membership.orgId, requestId);
@@ -52,7 +53,7 @@ async function me(database: Database, actor: Actor, requestId: string): Promise<
 
 export const meRoutes: FastifyPluginAsyncZod<PeopleOptions> = async (app, { auth, database }) => {
   app.get("/api/v1/me", { config: { access: "signed_in" }, schema: { response: { 200: Me } } }, async (request) =>
-    me(database, actorOf(request), request.id),
+    me(database, actorOf(request), request.id, clientOf(request)),
   );
 
   app.patch(
@@ -83,7 +84,7 @@ export const meRoutes: FastifyPluginAsyncZod<PeopleOptions> = async (app, { auth
         ...(patch.locale !== undefined ? { locale: patch.locale } : {}),
         ...(patch.uiDigits !== undefined ? { uiDigits: patch.uiDigits } : {}),
       };
-      return me(database, updated, request.id);
+      return me(database, updated, request.id, clientOf(request));
     },
   );
 };

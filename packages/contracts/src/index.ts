@@ -1,6 +1,16 @@
 // @pageinator/contracts — the request and response schemas shared by the API and the web app (Zod 4).
 export { ERROR_CODES, ErrorCode, ErrorEnvelope, FieldProblem } from "./errors.ts";
 export {
+  AUDIT_ACTIONS,
+  AUDIT_ACTION_NAMES,
+  AUDIT_ACTION_PATTERN,
+  type AuditAction,
+  AuditEvent,
+  AuditList,
+  AuditQuery,
+  PUBLICATION_AUDIT_ACTIONS,
+} from "./audit.ts";
+export {
   GRANTS,
   GRANT_HOLDERS,
   grantsFit,

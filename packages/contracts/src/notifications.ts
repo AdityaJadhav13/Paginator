@@ -2,6 +2,7 @@
 // strict, and responses are sent through these schemas. Comment text is cleaned as the Desk cleans text by the API;
 // these schemas bound the shapes only.
 import { z } from "zod";
+import { StoryStatus } from "./stories.ts";
 
 const Id = z.uuid();
 const Moment = z.iso.datetime({ offset: true });
@@ -45,7 +46,9 @@ export const NOTIFICATION_KINDS = [
 ] as const;
 export const NotificationKind = z.enum(NOTIFICATION_KINDS);
 
-/** A notification names what happened by ids; the web fetches each through the routes that check access. */
+/** A notification names what happened by ids, with the text to show it by (the story's headline and status, the
+ * invitee's name) resolved under the reader's access when listed; the web fetches more through the routes that check
+ * access. */
 export const Notification = z.strictObject({
   id: Id,
   kind: NotificationKind,
@@ -54,6 +57,11 @@ export const Notification = z.strictObject({
   commentId: Id.nullable(),
   invitationId: Id.nullable(),
   actor: Person.nullable(),
+  /** The story it is about, as the reader may see it now: null when it is gone or out of their reach (and for an
+   * invitation). */
+  story: z.strictObject({ headline: z.string(), status: StoryStatus }).nullable(),
+  /** For invitation_accepted: who joined, by their directory name. */
+  invitee: Person.nullable(),
   createdAt: Moment,
   readAt: Moment.nullable(),
 });

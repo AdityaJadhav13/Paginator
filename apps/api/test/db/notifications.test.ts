@@ -1,8 +1,9 @@
 // Notifications (src/modules/notifications; 06 §11's L2.1 defaults; docs/product/10-l2-newsroom-plan.md §5.2) on a
 // migrated clone, through the API's own routes: who is told of a story filed, sent back or given, of a comment and of
 // an accepted invitation; the two emails, in Marathi and English; the list, its unread count and cursor, marking
-// read; and the walls: a person reads and marks only their own, and only for publications they still reach. Every
-// person, organisation and story is fictional.
+// read; what each shows (its story's headline and state while the reader still sees the story, never after; an
+// accepted invitation's invitee); and the walls: a person reads and marks only their own, and only for publications they
+// still reach. Every person, organisation and story is fictional.
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { freshDatabase } from "./helpers.ts";
@@ -310,5 +311,77 @@ describe("the photo rules' refusals", () => {
       [P("reporter").id],
     );
     expect(rows).toEqual([{ reason: "this story's photo is not theirs to set" }]);
+  });
+});
+
+describe("what a notification shows", () => {
+  type Shown = { kind: string; storyId: string | null; story: unknown; invitee: unknown; actor: unknown };
+  const listOf = async (cookie: string) => (await call("GET", notificationsUrl(), cookie)).json().items as Shown[];
+
+  it("its story's headline and state as they are now, read under the reader's access", async () => {
+    const watcher = await n.member(a, [{ publicationId: a.pubId, roles: ["editor"], grants: [] }], "member", "watcher");
+    const s = await story(P("reporter").cookie);
+    const filed = await move(P("reporter").cookie, s, "filed");
+    const told = (await listOf(watcher.cookie)).find((item) => item.storyId === s.id);
+    expect(told).toMatchObject({
+      kind: "story_filed",
+      story: { headline: "Rain in Kalpaniknagar (fictional)", status: "filed" },
+      invitee: null,
+    });
+    await move(P("sub").cookie, filed, "editing");
+    const now = (await listOf(watcher.cookie)).find((item) => item.storyId === s.id);
+    expect(now?.story).toEqual({ headline: "Rain in Kalpaniknagar (fictional)", status: "editing" });
+  });
+
+  it("an accepted invitation's invitee, by their directory name", async () => {
+    const joined = await n.member(a, [{ publicationId: a.pubId, roles: ["viewer"], grants: [] }], "member", "newcomer");
+    const told = (await listOf(a.ownerCookie)).find(
+      (item) => item.kind === "invitation_accepted" && (item.invitee as { id?: string } | null)?.id === joined.id,
+    );
+    expect(told).toMatchObject({ invitee: { id: joined.id, name: "newcomer (fictional)" }, story: null });
+  });
+
+  it("never the headline to a reader who no longer sees the story: given away, role changed, or deleted", async () => {
+    const headline = "Secret budget leak (fictional)";
+    const made = await change("POST", storiesUrl(), P("editor").cookie, { headline, body: "Text." });
+    expect(made.statusCode).toBe(201);
+    const url = `${storiesUrl()}/${made.json().id}`;
+    // given to a Reporter, who sees it while it is theirs
+    const reporter = await n.member(a, [{ publicationId: a.pubId, roles: ["reporter"], grants: [] }], "member", "r3");
+    const given = await call("POST", `${url}/assignee`, P("editor").cookie, {
+      baseRevision: made.json().revision,
+      userId: reporter.id,
+    });
+    expect(given.statusCode, given.body).toBe(200);
+    const theirs = (await listOf(reporter.cookie)).find((item) => item.storyId === made.json().id);
+    expect(theirs?.story).toEqual({ headline, status: "draft" });
+    // given away: the notice stays, the headline goes
+    const away = await call("POST", `${url}/assignee`, P("editor").cookie, {
+      baseRevision: given.json().revision,
+      userId: P("editor").id,
+    });
+    expect(away.statusCode).toBe(200);
+    const res = await call("GET", notificationsUrl(), reporter.cookie);
+    const gone = (res.json().items as Shown[]).find((item) => item.storyId === made.json().id);
+    expect(gone).toMatchObject({ kind: "story_assigned", story: null });
+    expect(res.body).not.toContain(headline);
+
+    // a Sub-editor told of a filing, then moved to Advertising on the same publication (which sees no story)
+    const desk = await n.member(a, [{ publicationId: a.pubId, roles: ["sub_editor"], grants: [] }], "member", "desk");
+    const s = await story(P("reporter").cookie);
+    await move(P("reporter").cookie, s, "filed");
+    expect((await listOf(desk.cookie)).find((item) => item.storyId === s.id)?.story).not.toBeNull();
+    const moved = await call("PATCH", `/api/v1/orgs/${a.orgId}/members/${desk.id}`, a.ownerCookie, {
+      publications: [{ publicationId: a.pubId, roles: ["advertising"], grants: [] }],
+    });
+    expect(moved.statusCode, moved.body).toBe(200);
+    expect((await listOf(desk.cookie)).find((item) => item.storyId === s.id)?.story).toBeNull();
+
+    // deleted: nobody sees its headline any more
+    const watcher = await n.member(a, [{ publicationId: a.pubId, roles: ["editor"], grants: [] }], "member", "w2");
+    const t = await story(P("reporter").cookie);
+    await move(P("reporter").cookie, t, "filed");
+    expect((await call("DELETE", `${storiesUrl()}/${t.id}`, P("editor").cookie)).statusCode).toBe(204);
+    expect((await listOf(watcher.cookie)).find((item) => item.storyId === t.id)?.story).toBeNull();
   });
 });

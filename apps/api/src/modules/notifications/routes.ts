@@ -3,24 +3,34 @@
 // every organisation route has: a non-member gets 404, and two-step sign-in is required where the organisation asks
 // for it. The permission is publication.view (any role on any publication: a member with none has nothing to hear).
 //   - GET …/notifications?unread=1&cursor=&limit= → {items, unread, nextCursor}: the person's own, newest first, only
-//     those of publications they still reach (and of none, as an invitation's);
+//     those of publications they still reach (and of none, as an invitation's). Each carries the text to show it by,
+//     read in the list's one query: its story's headline and state while the reader still sees the story (the story
+//     rules, as GET …/stories/:s applies them; null once they do not), and an accepted invitation's invitee;
 //   - POST …/notifications/read {ids} | {all: true} → 204;
 //   - GET …/events → text/event-stream (src/modules/notifications/events.ts): story, comment, notification, resync;
 //     a comment line every 25 s; `resync` first when the browser reconnects (Last-Event-ID), and to everyone after the
 //     LISTEN connection was lost. At most STREAMS_PER_PERSON at once (429 slow_down beyond). The streams end in a
 //     preClose hook, so a stop does not wait the grace period for them.
 import { PassThrough } from "node:stream";
-import { NotificationList, NotificationQuery, NotificationsRead, reach } from "@pageinator/contracts";
+import {
+  type Notification,
+  NotificationList,
+  NotificationQuery,
+  NotificationsRead,
+  type StoryStatus,
+  reach,
+} from "@pageinator/contracts";
 import type { FastifyInstance } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { listenAppEvents } from "../../db/events.ts";
-import { cursorOf, listNotifications, markRead, unreadCount } from "../../db/notifications.ts";
+import { type NotificationRow, cursorOf, listNotifications, markRead, unreadCount } from "../../db/notifications.ts";
 import { isStoryOfTheirs } from "../../db/stories.ts";
 import type { Database } from "../../db/pools.ts";
 import { ApiError } from "../../http/errors.ts";
-import { accessOf, actorOf, needsTwoStep, orgView } from "../access/access.ts";
+import { type Access, accessOf, actorOf, needsTwoStep, orgView } from "../access/access.ts";
 import { ABSOLUTE_MS } from "../identity/session.ts";
+import { sees } from "../stories/rules.ts";
 import { type Hub, type Stream, eventHub } from "./events.ts";
 
 const Org = z.strictObject({ o: z.string() });
@@ -38,6 +48,15 @@ export type LiveOptions = {
   /** How often a stream re-checks its person and sends a comment line (tests make it short). */
   heartbeatMs?: number;
 };
+
+/** A notification's story as the reader may see it now (the story rules on top of the publication wall), or null. */
+function storyShown(access: Access, userId: string, row: NotificationRow): Notification["story"] {
+  const pub = row.data.publicationId;
+  if (!pub || row.story_headline === null || row.story_status === null || row.story_reporter_id === null) return null;
+  const status = row.story_status as StoryStatus;
+  const facts = { status, reporterId: row.story_reporter_id, assigneeId: row.story_assignee_id };
+  return sees(access, pub, facts, userId) ? { headline: row.story_headline, status } : null;
+}
 
 function encodeCursor(at: string, id: string): string {
   return Buffer.from(JSON.stringify([at, id])).toString("base64url");
@@ -83,6 +102,7 @@ export const notificationRoutes: FastifyPluginAsyncZod<LiveOptions> = async (app
     },
     async (request) => {
       const access = accessOf(request);
+      const actor = actorOf(request);
       const q = request.query;
       const limit = q.limit ?? 30;
       const before = q.cursor === undefined ? undefined : decodeCursor(q.cursor);
@@ -104,6 +124,11 @@ export const notificationRoutes: FastifyPluginAsyncZod<LiveOptions> = async (app
             commentId: row.data.commentId ?? null,
             invitationId: row.data.invitationId ?? null,
             actor: row.actor_name !== null ? { id: row.data.actorId, name: row.actor_name } : null,
+            story: storyShown(access, actor.userId, row),
+            invitee:
+              row.kind === "invitation_accepted" && row.actor_name !== null
+                ? { id: row.data.actorId, name: row.actor_name }
+                : null,
             createdAt: row.created_at.toISOString(),
             readAt: row.read_at ? row.read_at.toISOString() : null,
           })),

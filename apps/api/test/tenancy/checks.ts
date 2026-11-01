@@ -14,7 +14,9 @@ export const PUB_WALL = "(publication_id = ANY (( SELECT app.current_pubs() AS c
 /** App tables with a publication_id column that only the organisation wall guards, each with its reason. Every other
  * app table with a publication_id column, nullable or not, is a content table and needs the publication wall. */
 export const ORG_ONLY: Readonly<Record<string, string>> = {
-  audit_event: "the organisation's own log: its publication_id only says where an event happened",
+  audit_event:
+    "the organisation's own log: its rows without a publication are read by the organisation's people; a restrictive " +
+    "read wall (pub_read_wall, migration 2026_11_26_0001) hides other publications' events",
   publication_grant: "read to work out which publications a user may reach (plan §3.2)",
   invitation_grant: "read with an invitation, before its person may reach any publication (plan §3.2)",
 };
