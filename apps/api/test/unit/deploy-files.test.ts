@@ -52,6 +52,29 @@ describe("the pilot's deployment files", () => {
     expect(api).toMatch(/init: true|<<: \*hardened/);
     expect(compose).toMatch(/x-hardened: &hardened[\s\S]*?init: true/);
   });
+
+  it("the engine waits out its runner's time limit, runs hardened and gets only its own secrets", () => {
+    const compose = read("infra/docker/compose.pilot.yml");
+    const engine = compose.slice(compose.indexOf("x-engine-environment:"), compose.indexOf("x-caddy:"));
+    const limit = Number(/PGN_RUNNER_TIMEOUT_S: "(\d+)"/.exec(engine)?.[1]);
+    const wait = Number(/stop_grace_period: (\d+)s/.exec(engine)?.[1]);
+    expect(wait).toBeGreaterThan(limit + 5);
+    expect(engine).toMatch(/<<: \*hardened/);
+    expect(engine).toMatch(/mem_limit: \d+[mg]/);
+    const secrets = [...engine.matchAll(/\$\{(PGN_[A-Z0-9_]+)/g)].map((m) => m[1]);
+    for (const name of secrets)
+      expect(name).not.toMatch(/^PGN_(APP|AUTH|LISTEN|MIGRATOR|BACKUP|SMTP|POSTGRES)_|^PGN_AUTH_SECRET$/);
+    expect(secrets).toContain("PGN_ENGINE_PASSWORD");
+    expect(secrets).toContain("PGN_ENGINE_S3_SECRET_ACCESS_KEY");
+    expect(engine).not.toMatch(/PGN_S3_SECRET_ACCESS_KEY: \$\{PGN_S3_SECRET_ACCESS_KEY/); // not the API's key
+    // reads under orgs/, writes only renditions, deletes nothing: a decoder exploit cannot destroy any paper's originals
+    type Policy = { Statement: { Effect: string; Action: string | string[]; Resource: string }[] };
+    const policy = JSON.parse(read("infra/aws/iam-engine-policy.json")) as Policy;
+    expect(policy.Statement.map((st) => [st.Effect, [st.Action].flat().sort(), st.Resource])).toEqual([
+      ["Allow", ["s3:GetObject", "s3:GetObjectVersion"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*"],
+      ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/assets/*/r/*"],
+    ]);
+  });
 });
 
 // infra/deploy/deploy.sh with fake docker, curl, aws, id and flock on PATH: what it starts, in which order, and what

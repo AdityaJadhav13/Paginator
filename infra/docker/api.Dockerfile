@@ -16,6 +16,7 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 CI=1
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/ apps/api/
+COPY apps/engine-queue/ apps/engine-queue/
 COPY packages/contracts/ packages/contracts/
 COPY packages/desk-text/ packages/desk-text/
 # pnpm 11.20.0 (package.json's packageManager), through Corepack. `pnpm deploy --prod` copies the API (its "files":
@@ -25,17 +26,20 @@ COPY packages/desk-text/ packages/desk-text/
 RUN corepack enable pnpm \
   && pnpm --config.inject-workspace-packages=true --filter @pageinator/api deploy --prod --ignore-scripts /app \
   && rm -rf /root/.cache /root/.local/share/pnpm
-# Node strips TypeScript types from no file under node_modules, and @pageinator/contracts and desk-text are TypeScript
-# sources. So each moves to /app/packages/<name> and is linked back where pnpm put it: Node resolves a module by its
-# real path, as in development, and each package gets a node_modules of its own that holds its dependencies.
+# Node strips TypeScript types from no file under node_modules, and @pageinator/contracts, desk-text and engine-queue
+# (the queue's SQL and sweep query, which the migrations and the API use) are TypeScript sources. So each moves to
+# /app/packages/<name> and is linked back where pnpm put it: Node resolves a module by its real path, as in
+# development, and each package gets a node_modules of its own that holds its dependencies (in place of the one pnpm
+# left, which holds only .bin).
 RUN set -eu; cd /app; mkdir packages; \
-  for name in contracts desk-text; do \
+  for name in contracts desk-text engine-queue; do \
     real="$(readlink -f "node_modules/@pageinator/$name")"; \
     mv "$real" "packages/$name"; \
     ln -s "/app/packages/$name" "$real"; \
+    rm -rf "packages/$name/node_modules"; \
     ln -s "$(dirname "$(dirname "$real")")" "packages/$name/node_modules"; \
   done; \
-  node -e 'import("@pageinator/contracts").then(() => import("@pageinator/desk-text"))'
+  node -e 'import("@pageinator/contracts").then(() => import("@pageinator/desk-text")).then(() => import("@pageinator/engine-queue"))'
 
 # The nightly database dump (apps/api/scripts/db-backup.ts, run by infra/backup/backup-loop.sh): pg_dump 18.6 from the
 # Postgres image, Node and the API's files beside it.

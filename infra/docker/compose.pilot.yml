@@ -1,23 +1,27 @@
 # The pilot (docs/product/10-l2-newsroom-plan.md §8.2; PR 25), and a copy of it on one machine (profile pilot-local).
 # infra/deploy/deploy.sh runs it; docs/runbooks/deploy.md says how. Two profiles; one is always named:
-#   pilot        on the EC2 app host: Caddy, the API, the migration step and the nightly backup, against RDS, S3 and
-#                SES. Logs go to CloudWatch (awslogs; the instance role may write them).
+#   pilot        on the EC2 app host: Caddy, the API, the migration step, the nightly backup and the engine's queue
+#                (the worker image), against RDS, S3 and SES. Logs go to CloudWatch (awslogs; the instance role may write them).
 #   pilot-local  the same images and settings on a developer's machine, with a scratch Postgres and SeaweedFS of its
 #                own: Caddy's local CA on app.localhost, local logs. It must run under its own project name
 #                (-p pgn-pilot-local), never the development stack's (pageinator).
 # Every setting comes from one env file (--env-file): in the pilot /etc/pageinator/pilot.env, root-only, which deploy.sh
 # writes from SSM Parameter Store (docs/runbooks/aws-setup.md lists every name). Each service gets only the settings
 # listed under it, and compose refuses to start while one of them is missing or empty. No secret is in an image.
-# Images: ${PGN_REGISTRY}/pageinator-{api,web,backup}:${PGN_IMAGE_TAG}, built from infra/docker/*.Dockerfile (the
+# Images: ${PGN_REGISTRY}/pageinator-{api,web,backup,engine-worker}:${PGN_IMAGE_TAG}, built from infra/docker/*.Dockerfile (the
 # pilot pushes them to ECR; deploy.sh sets the tag). Other images are pinned by digest, with the tag in the comment.
 #
 # Addresses: one network with a fixed subnet (PGN_NET_SUBNET), where Caddy has a fixed address (PGN_CADDY_IP). The
 # API believes X-Forwarded-For from that address only (PGN_TRUST_PROXY). The subnet must not overlap the VPC's.
 # Stopping: the API waits PGN_SHUTDOWN_GRACE_S (10 s) for requests in flight and gives up 5 s after that (src/shutdown.ts),
 # so compose waits 20 s before it kills it. init: true puts tini in front, so a second stop signal still kills it.
-# Memory: every container has a ceiling (mem_limit), so one that grows cannot take the 2 GB host (t3.small) down with
-# it: Caddy 128 MB, the API 640 MB, the backup 256 MB, at most 1 GB together, and the migration step's 384 MB while it
-# runs. pilot-local's scratch database and file store get 512 MB each.
+# Memory: every container has a ceiling (mem_limit), so one that grows cannot take the host down with it: Caddy 128 MB,
+# the API 640 MB, the backup 256 MB, the engine 1 GB (a 100-megapixel photo's conversion), 2 GB together, and the
+# migration step's 384 MB while it runs: the host must be a t3.medium (4 GB) once the engine runs on it (plan §8.1 puts
+# it on an engine host of its own later). pilot-local's scratch database and file store get 512 MB each.
+# The engine (the queue, apps/engine-queue/src/main.ts) stops only after its running jobs end: at most
+# PGN_RUNNER_TIMEOUT_S (180 s), then 5 s, so compose waits 200 s before it kills it (a job killed mid-run stays locked
+# until Graphile Worker's 4-hour lock reset, or the API's sweep on its last attempt).
 
 x-hardened: &hardened
   read_only: true
@@ -130,6 +134,32 @@ x-backup: &backup
   restart: unless-stopped
   stop_grace_period: 5s
 
+# The engine: the queue as pgn_engine, the Python runner it spawns per job, and its own settings only (never the API's
+# or the migrator's secrets): the database as pgn_engine, its own S3 key (orgs/ in the work bucket only:
+# infra/aws/iam-engine-policy.json), and the newsprint colour profile, mounted read only and checked against
+# PGN_ICC_SHA256. The image runs as its own user (10001), the homes on a volume of their own.
+x-engine-environment: &engine-environment
+  <<: *database
+  PGN_ENGINE_PASSWORD: ${PGN_ENGINE_PASSWORD:?}
+  PGN_QUEUE_CONCURRENCY: "1"
+  PGN_RUNNER_TIMEOUT_S: "180"
+  PGN_S3_ENDPOINT: ${PGN_S3_ENDPOINT:?}
+  PGN_S3_REGION: ap-south-1
+  PGN_S3_ACCESS_KEY_ID: ${PGN_ENGINE_S3_ACCESS_KEY_ID:?}
+  PGN_S3_SECRET_ACCESS_KEY: ${PGN_ENGINE_S3_SECRET_ACCESS_KEY:?}
+  PGN_S3_WORK_BUCKET: ${PGN_S3_WORK_BUCKET:?}
+  PGN_ICC_SHA256: ${PGN_ICC_SHA256:?}
+  NODE_EXTRA_CA_CERTS: /etc/pageinator/ca.pem
+
+x-engine: &engine
+  <<: *hardened
+  image: ${PGN_REGISTRY:?}/pageinator-engine-worker:${PGN_IMAGE_TAG:?}
+  platform: linux/amd64
+  environment: *engine-environment
+  mem_limit: 1g
+  stop_grace_period: 200s
+  restart: unless-stopped
+
 x-caddy: &caddy
   <<: *hardened
   image: ${PGN_REGISTRY:?}/pageinator-web:${PGN_IMAGE_TAG:?}
@@ -192,6 +222,16 @@ services:
     volumes:
       - ${PGN_DB_CA_FILE:-/etc/pageinator/rds-ca.pem}:/etc/pageinator/ca.pem:ro
       - backup-work:/work # the dump waits here (on disk, not in memory) until it is uploaded
+    networks: [pilot]
+    logging: *aws-logs
+
+  engine:
+    <<: *engine
+    profiles: [pilot]
+    volumes:
+      - ${PGN_DB_CA_FILE:-/etc/pageinator/rds-ca.pem}:/etc/pageinator/ca.pem:ro
+      - ${PGN_ICC_FILE:?}:/run/pageinator/newsprint.icc:ro
+      - engine-homes:/var/lib/pageinator/homes
     networks: [pilot]
     logging: *aws-logs
 
@@ -309,6 +349,24 @@ services:
     networks: [pilot]
     logging: *local-logs
 
+  engine-local:
+    <<: *engine
+    profiles: [pilot-local]
+    volumes:
+      - local-ca:/etc/pageinator/ca:ro
+      - ${PGN_ICC_FILE:?}:/run/pageinator/newsprint.icc:ro
+      - engine-homes:/var/lib/pageinator/homes
+    environment:
+      <<: *engine-environment
+      NODE_EXTRA_CA_CERTS: /etc/pageinator/ca/root.crt
+      # the runner's S3 client (boto3) trusts Caddy's local CA too (runnerEnv passes AWS_CA_BUNDLE)
+      AWS_CA_BUNDLE: /etc/pageinator/ca/root.crt
+    depends_on:
+      ca-local: { condition: service_completed_successfully }
+      db-local: { condition: service_healthy }
+    networks: [pilot]
+    logging: *local-logs
+
   db-local:
     image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # postgres:18.6-trixie
     profiles: [pilot-local]
@@ -377,5 +435,6 @@ volumes:
   caddy-config:
   backup-work:
   local-ca:
+  engine-homes:
   db-local-data:
   s3-local-data:

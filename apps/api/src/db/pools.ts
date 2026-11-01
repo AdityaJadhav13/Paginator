@@ -9,7 +9,7 @@ import { Client, Pool, type PoolConfig, types } from "pg";
 import { Kysely, PostgresDialect, sql } from "kysely";
 import { type IdentityStore, identityStore } from "./identity.ts";
 import type { DB } from "./schema.gen.ts";
-import { type Tenant, type Tx, withTenant } from "./tenant.ts";
+import { type SystemReader, type SystemTx, type Tenant, type Tx, withSystem, withTenant } from "./tenant.ts";
 import { APP_OPTIONS, APP_TYPES } from "./parsers.ts";
 
 export type DatabaseSettings = {
@@ -23,6 +23,8 @@ export type Role = "app" | "auth" | "listen";
 export type Database = {
   /** Runs fn in one transaction as the tenant: the only way to reach app.* (src/db/tenant.ts). */
   withTenant<T>(tenant: Tenant, fn: (tx: Tx) => Promise<T>): Promise<T>;
+  /** Runs fn in one transaction as a system reader (src/db/tenant.ts): the engine inbox's consumer and sweep only. */
+  withSystem<T>(reader: SystemReader, fn: (tx: SystemTx) => Promise<T>): Promise<T>;
   /** Better Auth's pool (src/db/identity.ts makes its database settings from it). */
   readonly auth: Pool;
   /** Our own identity tables (auth_event, sign_in_failure), on the auth pool. */
@@ -101,6 +103,7 @@ export function openDatabase(settings: DatabaseSettings): Database {
   let closing: Promise<void> | undefined;
   return {
     withTenant: (tenant, fn) => withTenant(app, tenant, fn),
+    withSystem: (reader, fn) => withSystem(app, reader, fn),
     auth: authPool,
     identity: identityStore(authPool),
     listener: () => new Client(settingsFor(settings, "listen")),

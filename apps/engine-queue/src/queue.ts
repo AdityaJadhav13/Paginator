@@ -2,8 +2,9 @@
 // jobs there (ENGINE_GRANTS). The schema is installed and upgraded by the migrator (the API's migrations), never by the
 // worker: Graphile Worker installs only when its tables are missing, and `pgn_engine` cannot create them.
 import { run, type Runner } from "graphile-worker";
-import type pg from "pg";
+import pg from "pg";
 import { healthy, type RunnerSettings } from "./runner.ts";
+import type { Query } from "./schema.ts";
 import { QUEUE_SCHEMA, taskList, type Report } from "./tasks.ts";
 
 export { QUEUE_SCHEMA };
@@ -41,14 +42,20 @@ create policy engine_reads_crontabs on queue._private_known_crontabs for select 
 /** The API's only way to enqueue (plan §2.2 step 1): queue.add_job is not SECURITY DEFINER, and a new function is
  * PUBLIC's to execute, so the migrator (as the owner of `queue`) makes this wrapper in `app`, which only `pgn_app` may
  * run, with its search_path pinned, and takes EXECUTE on every function in `queue` from PUBLIC. It builds the ids-only
- * payload itself; the API's migration adds its tenancy check (the organisation is app.current_org()). */
+ * payload itself, and only for the organisation of the caller's transaction (app.current_org(), which withTenant
+ * sets): another organisation's job is refused (42501), as is a call outside withTenant. */
 export const APP_ENQUEUE = `
 create function app.enqueue_media_ingest(org_id uuid, pub_id uuid, asset_id uuid, version_id text, sha256 text)
-returns bigint language sql security definer set search_path = pg_catalog, pg_temp as $$
-  select (queue.add_job('media.ingest',
+returns bigint language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+begin
+  if org_id is null or org_id is distinct from app.current_org() then
+    raise exception 'a job for another organisation' using errcode = 'insufficient_privilege';
+  end if;
+  return (queue.add_job('media.ingest',
     json_build_object('org_id', org_id, 'pub_id', pub_id, 'asset_id', asset_id, 'version_id', version_id,
                       'sha256', sha256),
-    max_attempts => ${MAX_ATTEMPTS}, job_key => 'asset:' || asset_id)).id
+    max_attempts => ${MAX_ATTEMPTS}, job_key => 'asset:' || asset_id)).id;
+end
 $$;
 revoke execute on function app.enqueue_media_ingest(uuid, uuid, uuid, text, text) from public;
 grant execute on function app.enqueue_media_ingest(uuid, uuid, uuid, text, text) to pgn_app;
@@ -67,10 +74,10 @@ export type ExhaustedJob = {
 
 /** The jobs Graphile Worker will never run again and nobody settled (for the API's sweep, plan §2.2): attempts used
  * up, and not locked, or locked longer ago than `staleMs` (the process died on the last attempt; staleMs must exceed
- * the runner's time limit and the report's retries). Read as the queue's owner; the sweep reports job.failed for
- * each (the inbox drops it when the job had reported) and then removes it. */
-export async function exhaustedJobs(client: pg.ClientBase, staleMs: number): Promise<ExhaustedJob[]> {
-  const { rows } = await client.query<ExhaustedJob>(
+ * the runner's time limit and the report's retries). Read through `query` (the API's sweep, as pgn_app under its
+ * flag); the sweep reports job.failed for each (the inbox drops it when the job had reported) and then removes it. */
+export async function exhaustedJobs(query: Query, staleMs: number): Promise<ExhaustedJob[]> {
+  const { rows } = await query(
     `select j.id::text, t.identifier as task_identifier, j.payload, j.attempts, j.max_attempts, j.last_error, j.locked_at
      from ${QUEUE_SCHEMA}._private_jobs as j join ${QUEUE_SCHEMA}._private_tasks as t on t.id = j.task_id
      where j.attempts >= j.max_attempts
@@ -78,7 +85,31 @@ export async function exhaustedJobs(client: pg.ClientBase, staleMs: number): Pro
      order by j.id`,
     [staleMs],
   );
-  return rows;
+  return rows as ExhaustedJob[];
+}
+
+/** How long past the runner's time limit a lock may last before its process counts as dead: the runner's group is
+ * killed at the limit, its answer waited for at most 2 s, and its report tried 3 times (0.5 s and 2 s apart). */
+export const LOCK_MARGIN_MS = 5 * 60_000;
+/** How often the queue looks for such locks (and once at start-up). */
+export const LOCK_CHECK_MS = 60_000;
+
+/** Unlocks the jobs (and job queues) locked longer than `staleMs` ago: their process was killed (SIGKILL, a reboot, the
+ * out-of-memory killer) without finishing them, which Graphile Worker would only notice after 4 hours. Graphile
+ * Worker's own reset, sooner: the attempt stays spent, and the job runs again at once (or, out of attempts, is the
+ * API's sweep's). Returns how many jobs it released. */
+export async function releaseStaleLocks(query: Query, staleMs: number): Promise<number> {
+  const { rows } = await query(
+    `with jobs as (
+       update ${QUEUE_SCHEMA}._private_jobs set locked_at = null, locked_by = null, run_at = greatest(run_at, now())
+       where locked_at < now() - $1 * interval '1 millisecond' returning 1
+     ), queues as ( -- run though unread: a data-modifying WITH always runs
+       update ${QUEUE_SCHEMA}._private_job_queues set locked_at = null, locked_by = null
+       where locked_at < now() - $1 * interval '1 millisecond' returning 1
+     ) select (select count(*) from jobs)::int as n`,
+    [staleMs],
+  );
+  return Number(rows[0]?.["n"] ?? 0);
 }
 
 export type QueueSettings = {
@@ -100,6 +131,28 @@ export async function startQueue(settings: QueueSettings): Promise<Runner> {
     throw new Error("the runner's time limit must be a positive number");
   if (!(await healthy(settings.runner)))
     throw new Error("the worker is not healthy (pgn_worker.health): the queue does not start");
+  // a lock older than the runner's limit and its margin belongs to a process that is gone: released now and every minute
+  const staleMs = timeoutMs + LOCK_MARGIN_MS;
+  const locks = new pg.Pool({ connectionString: settings.connectionString, max: 1 });
+  locks.on("error", () => {}); // an idle connection's error: the next check reconnects
+  const release = async () => {
+    const n = await releaseStaleLocks((text, values) => locks.query(text, values ? [...values] : undefined), staleMs);
+    if (n > 0) console.warn(`The engine queue released ${n} job(s) locked by a process that is gone.`);
+  };
+  try {
+    await release();
+  } catch (error) {
+    await locks.end();
+    throw error;
+  }
+  const checking = setInterval(() => {
+    release().catch((error: unknown) =>
+      console.warn(
+        `The engine queue could not check for stale locks: ${error instanceof Error ? error.message : error}`,
+      ),
+    );
+  }, LOCK_CHECK_MS);
+  checking.unref();
   let misconfigured = false;
   let runner: Runner | null = null;
   const stopForConfig = () => {
@@ -107,24 +160,35 @@ export async function startQueue(settings: QueueSettings): Promise<Runner> {
     misconfigured = true;
     void runner?.stop("a job found the worker misconfigured (worker.config)");
   };
-  runner = await run({
-    connectionString: settings.connectionString,
-    schema: QUEUE_SCHEMA,
-    concurrency: settings.concurrency,
-    noHandleSignals: settings.noHandleSignals ?? false,
-    taskList: taskList(settings.runner, settings.report, stopForConfig),
-    // no cron item and no crontab file: `crontab: ""` is empty, so Graphile Worker would read ./crontab instead
-    parsedCronItems: [],
-    // running jobs end by themselves (the runner's own time limit) rather than by Graphile Worker's cancel
-    gracefulShutdownAbortTimeout: timeoutMs + 5_000,
-    // Graphile Worker 0.18 does not await an unbatched finish: a shutdown could close the pool first, leaving the job
-    // locked for 4 hours. Batched (with no delay), the finishes are flushed and awaited before the pool closes.
-    preset: { worker: { completeJobBatchDelay: 0, failJobBatchDelay: 0 } },
-  });
+  try {
+    runner = await run({
+      connectionString: settings.connectionString,
+      schema: QUEUE_SCHEMA,
+      concurrency: settings.concurrency,
+      noHandleSignals: settings.noHandleSignals ?? false,
+      taskList: taskList(settings.runner, settings.report, stopForConfig),
+      // no cron item and no crontab file: `crontab: ""` is empty, so Graphile Worker would read ./crontab instead
+      parsedCronItems: [],
+      // running jobs end by themselves (the runner's own time limit) rather than by Graphile Worker's cancel
+      gracefulShutdownAbortTimeout: timeoutMs + 5_000,
+      // Graphile Worker 0.18 does not await an unbatched finish: a shutdown could close the pool first, leaving the job
+      // locked for 4 hours. Batched (with no delay), the finishes are flushed and awaited before the pool closes.
+      preset: { worker: { completeJobBatchDelay: 0, failJobBatchDelay: 0 } },
+    });
+  } catch (error) {
+    clearInterval(checking);
+    await locks.end();
+    throw error;
+  }
   const started = runner;
   return Object.assign(started, {
-    promise: started.promise.then(() => {
-      if (misconfigured) throw new Error("the queue stopped: the worker is misconfigured (worker.config)");
-    }),
+    promise: started.promise
+      .finally(async () => {
+        clearInterval(checking);
+        await locks.end();
+      })
+      .then(() => {
+        if (misconfigured) throw new Error("the queue stopped: the worker is misconfigured (worker.config)");
+      }),
   });
 }

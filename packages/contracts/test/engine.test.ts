@@ -38,8 +38,16 @@ describe("the engine's contracts", () => {
     for (const change of [
       (r: typeof ready) => (r.event["extra"] = 1),
       (r: typeof ready) => (r.event["org_id"] = ORG.toUpperCase()),
-      (r: typeof ready) => (r.event["org_id"] = "01890a5d-ac96-474b-bcce-b302099a8057"), // version 4
+      (r: typeof ready) => (r.event["pub_id"] = "01890a5d-ac96-474b-bcce-b302099a8057"), // version 4
+      (r: typeof ready) => (r.event["org_id"] = "01890a5d-ac96-074b-bcce-b302099a8057"), // version 0
       (r: typeof ready) => (r.event["renditions"] = []),
+      // what the database would refuse (app.rendition.bytes is an integer) is the contract's to refuse
+      (r: typeof ready) => (r.event["bytes"] = 2 ** 31),
+      (r: typeof ready) =>
+        ((r.event["renditions"] as Record<string, unknown>[])[0] = {
+          ...(r.event["renditions"] as Record<string, unknown>[])[0],
+          bytes: 2 ** 31,
+        }),
       (r: typeof ready) => (r["outcome"] = "retry"),
       (r: typeof ready) => (r["format"] = "pageinator.worker-result/2"),
     ]) {
@@ -49,12 +57,32 @@ describe("the engine's contracts", () => {
     }
   });
 
+  it("refuse a code longer than the database's 120 characters", () => {
+    const rejected = (structuredClone(results[1]) as { event: Record<string, unknown> }).event;
+    expect(EngineEvent.safeParse({ ...rejected, code: `m.${"a".repeat(120)}` }).success).toBe(true);
+    expect(EngineEvent.safeParse({ ...rejected, code: `m.${"a".repeat(121)}` }).success).toBe(false);
+    const failed = {
+      kind: "job.failed",
+      org_id: ORG,
+      pub_id: ORG,
+      job_kind: "media.ingest",
+      target_id: ORG,
+      message: "",
+    };
+    expect(EngineEvent.safeParse({ ...failed, code: `worker.${"a".repeat(120)}` }).success).toBe(true);
+    expect(EngineEvent.safeParse({ ...failed, code: `worker.${"a".repeat(121)}` }).success).toBe(false);
+  });
+
   it("keep a job's payload to ids and the exact bytes' facts", () => {
     const good = { org_id: ORG, pub_id: ORG, asset_id: ORG, version_id: "v1", sha256: "a".repeat(64) };
     expect(MediaIngestPayload.parse(good)).toEqual(good);
     for (const extra of [{ original_key: "orgs/x" }, { filename: "fictional.jpg" }, { headline: "x" }])
       expect(MediaIngestPayload.safeParse({ ...good, ...extra }).success).toBe(false);
     expect(MediaIngestPayload.safeParse({ ...good, sha256: "A".repeat(64) }).success).toBe(false);
+    // an organisation's id is Better Auth's (version 4); the database's ids are version 7 only
+    const v4 = "9b2f4c1e-5d3a-4f6b-8c7d-0e1f2a3b4c5d";
+    expect(MediaIngestPayload.safeParse({ ...good, org_id: v4 }).success).toBe(true);
+    expect(MediaIngestPayload.safeParse({ ...good, pub_id: v4 }).success).toBe(false);
   });
 
   it("give the runner a job it takes: the format, the queue's id, the kind and the payload, nothing more", () => {

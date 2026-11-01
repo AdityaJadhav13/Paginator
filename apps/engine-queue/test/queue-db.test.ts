@@ -19,6 +19,7 @@ import {
   APP_ENQUEUE,
   ENGINE_GRANTS,
   exhaustedJobs,
+  installQueueSchema,
   MAX_ATTEMPTS,
   QUEUE_SCHEMA,
   runnerEnv,
@@ -32,6 +33,7 @@ const WORKER = fileURLToPath(new URL("../../engine-worker/", import.meta.url));
 const ORG = "01890a5d-ac96-774b-bcce-b302099a8057";
 const PUB = "01890a5d-ac96-774b-bcce-b302099a8058";
 const ASSET = "01890a5d-ac96-774b-bcce-b302099a8059";
+const OTHER_ORG = "9b2f4c1e-5d3a-4f6b-8c7d-0e1f2a3b4c5d"; // Better Auth's organisation ids are version 4
 // the stand-in conversion (as test_jobs.py's), then the real command's main
 const STAND_IN =
   "from pgn_worker.desk import images; images.rgb_to_cmyk = lambda img: img.convert('CMYK'); " +
@@ -154,10 +156,14 @@ describe.runIf(ADMIN)("the queue on a database and a store of its own", () => {
     await owner.connect();
     await owner.query(`revoke all on schema public from public; create schema ${QUEUE_SCHEMA}; create schema app`);
     await owner.query(`grant usage on schema app to ${appRole}`);
-    // the owner (the migrator, in the API's migrations) installs Graphile Worker, then grants each role its part
-    const utils = await makeWorkerUtils({ connectionString: url.href, schema: QUEUE_SCHEMA });
-    await utils.migrate();
-    await utils.release();
+    // the tenancy context the wrapper checks (the API's first migration makes the same)
+    await owner.query(`create function app.current_org() returns uuid language sql stable set search_path = pg_catalog
+      return nullif(current_setting('app.org_id', true), '')::uuid`);
+    // the owner (the migrator, in the API's migrations) installs Graphile Worker in its own transaction, then grants
+    // each role its part
+    await owner.query("begin");
+    await installQueueSchema((text, values) => owner.query(text, values ? [...values] : undefined));
+    await owner.query("commit");
     await owner.query(engineGrants);
     await owner.query(APP_ENQUEUE.replaceAll("pgn_app", appRole));
   }, 60_000);
@@ -168,6 +174,39 @@ describe.runIf(ADMIN)("the queue on a database and a store of its own", () => {
     await admin.query(`drop role if exists ${engineRole}`);
     await admin.query(`drop role if exists ${appRole}`);
     await admin.end();
+  });
+
+  it("installs Graphile Worker's schema as its own migrate() does, once", async () => {
+    // Graphile Worker's own migrate(), into a schema of its own, then the two compared through the catalog
+    const utils = await makeWorkerUtils({ connectionString: url.href, schema: "queue_ref" });
+    await utils.migrate();
+    await utils.release();
+    const shape = async (schema: string) => {
+      const { rows } = await owner.query<{ line: string }>(
+        `select 'column ' || table_name || '.' || column_name || ' ' || data_type || ' ' || is_nullable
+           || ' ' || coalesce(column_default, '') as line
+         from information_schema.columns where table_schema = $1
+         union all select 'function ' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ') '
+           || p.prosrc from pg_proc p where p.pronamespace = $1::regnamespace
+         union all select 'index ' || indexdef from pg_indexes where schemaname = $1
+         union all select 'trigger ' || c.relname || '.' || t.tgname from pg_trigger t
+           join pg_class c on c.oid = t.tgrelid where c.relnamespace = $1::regnamespace and not t.tgisinternal
+         union all select 'rls ' || relname || ' ' || relrowsecurity from pg_class
+           where relnamespace = $1::regnamespace and relkind = 'r'`,
+        [schema],
+      );
+      const { rows: migrations } = await owner.query<{ line: string }>(
+        `select 'migration ' || id || ' ' || breaking as line from "${schema}".migrations`,
+      );
+      const named = new RegExp(`(?<![A-Za-z0-9_])"?${schema}"?(?![A-Za-z0-9_])`, "g");
+      return [...rows, ...migrations].map((r) => r.line.replace(named, "S")).sort();
+    };
+    const ours = await shape(QUEUE_SCHEMA);
+    expect(ours.filter((l) => l.startsWith("migration "))).toHaveLength(20);
+    expect(ours).toEqual(await shape("queue_ref"));
+    await owner.query("drop schema queue_ref cascade");
+    // run again, it finds every migration recorded and runs none
+    expect(await installQueueSchema((text, values) => owner.query(text, values ? [...values] : undefined))).toEqual([]);
   });
 
   it("gives the engine role what running jobs needs, and nothing more", async () => {
@@ -205,10 +244,24 @@ describe.runIf(ADMIN)("the queue on a database and a store of its own", () => {
     try {
       await expect(app.query("select queue.add_job('media.ingest', '{}')")).rejects.toThrow(/permission denied/);
       await expect(app.query("select * from queue._private_jobs")).rejects.toThrow(/permission denied/);
-      const { rows } = await app.query<{ id: string }>(
-        "select app.enqueue_media_ingest($1, $2, $3, $4, $5)::text as id",
-        [ORG, PUB, ASSET, "v1", "a".repeat(64)],
-      );
+      const enqueue = (org: string) =>
+        app.query<{ id: string }>("select app.enqueue_media_ingest($1, $2, $3, $4, $5)::text as id", [
+          org,
+          PUB,
+          ASSET,
+          "v1",
+          "a".repeat(64),
+        ]);
+      // only for the organisation of the caller's transaction (withTenant's app.org_id)
+      await expect(enqueue(ORG)).rejects.toMatchObject({ code: "42501" });
+      await app.query("begin");
+      await app.query("select set_config('app.org_id', $1, true)", [ORG]);
+      await expect(enqueue(OTHER_ORG)).rejects.toMatchObject({ code: "42501" });
+      await app.query("rollback");
+      await app.query("begin");
+      await app.query("select set_config('app.org_id', $1, true)", [ORG]);
+      const { rows } = await enqueue(ORG);
+      await app.query("commit");
       const job = await owner.query(
         `select j.payload, j.max_attempts, j.key, t.identifier as task_identifier
          from ${QUEUE_SCHEMA}._private_jobs as j join ${QUEUE_SCHEMA}._private_tasks as t on t.id = j.task_id
@@ -319,6 +372,22 @@ describe.runIf(ADMIN)("the queue on a database and a store of its own", () => {
     expect(await jobs()).toEqual([]);
   }, 60_000);
 
+  it("releases a lock left by a process that is gone (older than the runner's limit and its margin), not a live one", async () => {
+    const [dead, alive] = [await enqueue(3), await enqueue(3)];
+    const set = (sql: string, id: string) => owner.query(`update queue._private_jobs set ${sql} where id = $1`, [id]);
+    // killed (SIGKILL, a reboot) on its first attempt, ten minutes ago: Graphile Worker would wait 4 hours
+    await set("attempts = 1, locked_by = 'killed', locked_at = now() - interval '10 minutes'", dead);
+    await set("attempts = 1, locked_by = 'alive', locked_at = now()", alive);
+    const { reported, report } = collect();
+    const good = await queue(standIn(results[0], 0), report); // a 2 s limit: stale after 2 s + 5 minutes
+    await until(async () => reported.length > 0);
+    await good.stop();
+    await good.promise;
+    expect(reported.map(([e, j]) => [e.kind, j])).toEqual([["media.ready", dead]]);
+    expect(await jobs()).toEqual([expect.objectContaining({ id: alive, attempts: 1, locked_by: "alive" })]);
+    await owner.query("delete from queue._private_jobs");
+  }, 30_000);
+
   it("finishes a job it reported on its last attempt, though the queue stops at once", async () => {
     const id = await enqueue(1);
     const { reported, report } = collect();
@@ -349,7 +418,10 @@ describe.runIf(ADMIN)("the queue on a database and a store of its own", () => {
     await set("attempts = 2, locked_by = 'pool-gone', locked_at = now() - interval '1 hour'", dead);
     await set("attempts = 1, locked_by = 'pool-alive', locked_at = now()", running);
     await set("attempts = 1", waiting);
-    const found = await exhaustedJobs(owner, 10 * 60_000);
+    const found = await exhaustedJobs(
+      (text, values) => owner.query(text, values ? [...values] : undefined),
+      10 * 60_000,
+    );
     expect(found.map((j) => [j.id, j.task_identifier, j.payload])).toEqual([
       [spent, "media.ingest", READY_PAYLOAD],
       [dead, "media.ingest", READY_PAYLOAD],

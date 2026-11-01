@@ -4,7 +4,7 @@
 // worker (`worker.config`: the operator's fault, not the photo's) give the attempt back, are never reported as a
 // failure, and the latter stops the queue (startQueue). What still cannot settle here (the process dies on the last
 // attempt, or the inbox refuses every report) the API's sweep settles (plan §2.2, exhaustedJobs).
-import { MediaIngestPayload, Uuid7, WORKER_JOB_FORMAT, type EngineEvent } from "@pageinator/contracts";
+import { MediaIngestPayload, OrgId, Uuid7, WORKER_JOB_FORMAT, type EngineEvent } from "@pageinator/contracts";
 import type { JobHelpers, Task, TaskList } from "graphile-worker";
 import { z } from "zod";
 import { runJob, type RunOutcome, type RunnerSettings } from "./runner.ts";
@@ -31,7 +31,7 @@ export class RetryLater extends Error {
 }
 
 /** What a payload that is not ids-only must still name for its asset to settle. */
-const Target = z.object({ org_id: Uuid7, pub_id: Uuid7, asset_id: Uuid7 });
+const Target = z.object({ org_id: OrgId, pub_id: Uuid7, asset_id: Uuid7 });
 type Target = z.infer<typeof Target>;
 
 export function mediaIngest(

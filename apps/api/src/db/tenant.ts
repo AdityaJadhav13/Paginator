@@ -66,3 +66,24 @@ export async function withTenant<T>(db: Kysely<DB>, tenant: Tenant, fn: (tx: Tx)
     return result;
   });
 }
+
+/** The cross-tenant readers (plan §3.2 "System readers"): each sets its one named flag, which a policy of its table
+ * accepts (app.engine_event's engine_consumer accepts 'engine-consumer'; the queue's app_sweeps_jobs, app_reads_tasks
+ * and app_removes_spent_jobs accept 'engine-sweep'). Set here only; a test holds every module to it. */
+export type SystemReader = "engine-consumer" | "engine-sweep";
+
+declare const madeByWithSystem: unique symbol;
+/** A transaction made by withSystem: no organisation, no person, no publication. Repositories that take a Tx refuse it. */
+export type SystemTx = Transaction<DB> & { readonly [madeByWithSystem]: SystemReader };
+
+/** One transaction as a system reader: only the rows its flag's policies open are visible (no organisation's walls). */
+export async function withSystem<T>(
+  db: Kysely<DB>,
+  reader: SystemReader,
+  fn: (tx: SystemTx) => Promise<T>,
+): Promise<T> {
+  return db.transaction().execute(async (trx) => {
+    await sql`select set_config('app.system', ${reader}, true)`.execute(trx);
+    return fn(trx as unknown as SystemTx);
+  });
+}

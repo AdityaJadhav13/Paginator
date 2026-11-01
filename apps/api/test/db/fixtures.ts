@@ -255,6 +255,35 @@ export const FIXTURES: Fixture[] = [
       data: JSON.stringify({ publicationId: org.pubs[0].id, storyId: childId(org.pubs[0], 3), actorId: org.user }),
     }),
   },
+  // the engine (migration 2026_11_27_0001): a rendition of each publication's asset, and an inbox row per organisation
+  {
+    table: "rendition",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      asset_id: childId(pub, 5),
+      purpose: "preview",
+      params_hash: "0".repeat(32),
+      key: `orgs/${org.id}/pubs/${pub.id}/assets/${childId(pub, 5)}/r/preview-${"0".repeat(32)}.jpg`,
+      version_id: "v1",
+      sha256: "2".repeat(64),
+      bytes: 10,
+      mime: "image/jpeg",
+      width_px: 10,
+      height_px: 10,
+    }),
+  },
+  {
+    table: "engine_event",
+    per: "org",
+    row: (org) => ({
+      org_id: org.id,
+      job_id: `job-${org.id}`,
+      kind: "job.failed",
+      asset_id: childId(org.pubs[0], 5),
+      payload: JSON.stringify({ kind: "job.failed" }),
+    }),
+  },
   {
     table: "idempotency_key",
     per: "org",

@@ -176,10 +176,20 @@ describe("the queue's runner", () => {
       PGN_QUEUE_DATABASE_URL: "postgres://pgn_engine:fictional@db/pageinator",
       DATABASE_URL: "postgres://x",
       PGN_ENGINE_PASSWORD: "fictional",
+      PGN_DB_HOST: "db",
       NODE_OPTIONS: "--require x",
+      NODE_EXTRA_CA_CERTS: "/etc/pageinator/ca.pem",
+      AWS_CA_BUNDLE: "/etc/pageinator/ca/root.crt", // pilot-local's store, behind Caddy's local CA
     });
     expect(Object.keys(env).sort()).toEqual(
-      ["PAGEINATOR_ICC", "PATH", "PGN_ICC_SHA256", "PGN_S3_SECRET_ACCESS_KEY", "PGN_S3_WORK_BUCKET"].sort(),
+      [
+        "AWS_CA_BUNDLE",
+        "PAGEINATOR_ICC",
+        "PATH",
+        "PGN_ICC_SHA256",
+        "PGN_S3_SECRET_ACCESS_KEY",
+        "PGN_S3_WORK_BUCKET",
+      ].sort(),
     );
   });
 });

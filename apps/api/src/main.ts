@@ -32,7 +32,7 @@ function listenProblem(error: unknown): string {
 
 const config = settings();
 const database = openDatabase(config.database); // connects on first use
-const app = await buildApp({ config, database, checks: { database: () => database.ping() } });
+const app = await buildApp({ config, database, checks: { database: () => database.ping() }, engineInbox: true });
 stopOnSignals(app, config.shutdownGraceSeconds);
 
 try {

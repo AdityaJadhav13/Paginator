@@ -5,15 +5,22 @@ import { z } from "zod";
 
 /** The database's ids: uuidv7, as PostgreSQL writes them (lowercase, the RFC 9562 variant). */
 export const Uuid7 = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+/** An organisation's id: Better Auth's (gen_random_uuid(), version 4), so any RFC 9562 version, lowercase. */
+export const OrgId = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 const Sha256 = z.string().regex(/^[0-9a-f]{64}$/);
 const VersionId = z.string().min(1).max(1024);
-const Count = z.number().int().min(0);
+/** A count the database keeps as an integer (app.rendition.bytes): a larger one is refused as the contract's. */
+const Count = z
+  .number()
+  .int()
+  .min(0)
+  .max(2 ** 31 - 1);
 const Pixels = z.number().int().min(1).max(100_000);
 
 /** media.ingest's payload in the queue: ids, and the facts that pin the exact bytes (never a name, a text or a key:
  * the original's key is made from the ids, as the database makes it). */
 export const MediaIngestPayload = z.strictObject({
-  org_id: Uuid7,
+  org_id: OrgId,
   pub_id: Uuid7,
   asset_id: Uuid7,
   version_id: VersionId,
@@ -21,7 +28,7 @@ export const MediaIngestPayload = z.strictObject({
 });
 export type MediaIngestPayload = z.infer<typeof MediaIngestPayload>;
 
-const EventBase = { org_id: Uuid7, pub_id: Uuid7, asset_id: Uuid7, sha256: Sha256 };
+const EventBase = { org_id: OrgId, pub_id: Uuid7, asset_id: Uuid7, sha256: Sha256 };
 
 export const Rendition = z.strictObject({
   purpose: z.enum(["preview", "thumb", "cmyk"]),
@@ -50,9 +57,10 @@ export const MediaReady = z.strictObject({
 export const MediaRejected = z.strictObject({
   kind: z.literal("media.rejected"),
   ...EventBase,
+  // as app.asset.problem takes it: at most 120 characters after "m."
   code: z
     .string()
-    .regex(/^m\.[A-Za-z0-9.]+$/)
+    .regex(/^m\.[A-Za-z0-9.]{1,120}$/)
     .nullable(),
   message: z.string().min(1).max(2000),
   status: z.number().int().min(400).max(499),
@@ -61,11 +69,11 @@ export const MediaRejected = z.strictObject({
 /** A job that cannot finish (the queue writes it: a final failure, or a retry out of attempts). */
 export const JobFailed = z.strictObject({
   kind: z.literal("job.failed"),
-  org_id: Uuid7,
+  org_id: OrgId,
   pub_id: Uuid7,
   job_kind: z.literal("media.ingest"),
   target_id: Uuid7,
-  code: z.string().regex(/^worker\.[a-z]+$/),
+  code: z.string().regex(/^worker\.[a-z]{1,120}$/),
   message: z.string().max(2000),
 });
 

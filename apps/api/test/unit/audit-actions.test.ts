@@ -91,10 +91,10 @@ describe("AUDIT_ACTIONS", () => {
     expect(AUDIT_ACTION_NAMES.filter((action) => !AUDIT_ACTION_PATTERN.test(action))).toEqual([]);
     // the people, invitations and the organisation are the organisation's; a Chief Editor sees only the rest
     expect([...PUBLICATION_AUDIT_ACTIONS].sort()).toEqual(
-      AUDIT_ACTION_NAMES.filter((action) => !/^(invitation|member|org)\./.test(action)).sort(),
+      AUDIT_ACTION_NAMES.filter((action) => !/^(engine|invitation|member|org)\./.test(action)).sort(),
     );
     // the counts docs/product/10-l2-newsroom-plan.md §5.2 states
-    expect([AUDIT_ACTION_NAMES.length, PUBLICATION_AUDIT_ACTIONS.length]).toEqual([36, 27]);
+    expect([AUDIT_ACTION_NAMES.length, PUBLICATION_AUDIT_ACTIONS.length]).toEqual([41, 30]);
   });
 
   it("catches the table named in any form outside the writer, and a member call's action", () => {

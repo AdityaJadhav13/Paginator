@@ -124,6 +124,7 @@ export function view(row: StoryRow, access: Access, userId: string): Story {
             caption: row.photo_caption ?? "",
             credit: row.photo_credit ?? "",
             status: row.photo_status,
+            problem: row.photo_problem,
             widthPx: row.photo_width,
             heightPx: row.photo_height,
             previewUrl: null, // previews come with renditions (L2.2)

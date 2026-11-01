@@ -100,6 +100,9 @@ put PGN_APP_PASSWORD SecureString "$(openssl rand -hex 32)"
 | `PGN_AUTH_SECRET` | SecureString | random hex, 64 characters |
 | `PGN_S3_ACCESS_KEY_ID`, `PGN_S3_SECRET_ACCESS_KEY` | SecureString | the `pgn-pilot-api` IAM user's key (step 3) |
 | `PGN_BACKUP_S3_ACCESS_KEY_ID`, `PGN_BACKUP_S3_SECRET_ACCESS_KEY` | SecureString | the `pgn-pilot-backup` IAM user's key (step 3) |
+| `PGN_ENGINE_S3_ACCESS_KEY_ID`, `PGN_ENGINE_S3_SECRET_ACCESS_KEY` | SecureString | the `pgn-pilot-engine` IAM user's key (step 3) |
+| `PGN_ICC_SHA256` | String | the SHA-256 of the newsprint colour profile the engine is given (`sha256sum`; the file itself is never in SSM or an image: copy it to `PGN_ICC_FILE` on the host, root-owned, mode 0444) |
+| `PGN_ICC_FILE` | String | `/etc/pageinator/newsprint.icc` |
 | `PGN_SMTP_USER`, `PGN_SMTP_PASSWORD` | SecureString | the SES SMTP credentials (step 7) |
 
 Why static keys for S3: the API's settings require a key pair (`PGN_S3_ACCESS_KEY_ID`, `apps/api/src/config.ts`), so it
@@ -113,6 +116,10 @@ then each key belongs to an IAM user that may do only what the policy below says
   write the `/pageinator/pilot` log group). Replace `${AWS_ACCOUNT_ID}` first.
 - [ ] IAM user `pgn-pilot-api` (no console), policy `infra/aws/iam-api-policy.json` (the work bucket only); one access
   key, into SSM.
+- [ ] IAM user `pgn-pilot-engine` (no console), policy `infra/aws/iam-engine-policy.json`: read a named version
+  only under `orgs/` in the work bucket, write only an asset's renditions (`orgs/*/pubs/*/assets/*/r/*`) and delete
+  nothing (never `uploads/`, never another bucket), so a key guard bug or a decoder exploit in the worker still cannot
+  overwrite or delete a paper's originals, nor reach the quarantine or the archive. One access key, into SSM.
 - [ ] IAM user `pgn-pilot-backup` (no console), policy `infra/aws/iam-backup-policy.json`: write dumps and their
   retention under `postgres/` in the backups bucket, and read them back (`s3:GetObject`, `s3:GetObjectRetention`: the
   backup checks each dump's checksum and lock after the upload); no list, no delete, no

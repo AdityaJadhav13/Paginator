@@ -66,6 +66,7 @@ export {
 } from "./stories.ts";
 export {
   Asset,
+  AssetStatus,
   CompletedUpload,
   FileQuery,
   MAX_PICTURE_BYTES,
@@ -110,6 +111,7 @@ export {
   MediaIngestPayload,
   MediaReady,
   MediaRejected,
+  OrgId,
   Rendition,
   Uuid7,
   WORKER_JOB_FORMAT,

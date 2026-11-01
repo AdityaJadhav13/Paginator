@@ -7,6 +7,7 @@
 !pnpm-workspace.yaml
 !tsconfig.base.json
 !apps/api/
+!apps/engine-queue/
 !apps/web/
 !packages/contracts/
 !packages/desk-text/

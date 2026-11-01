@@ -13,7 +13,8 @@
 # - Node 24.22.0 (its binary only, from the official image pinned by its amd64 manifest's digest) and the queue
 #   (apps/engine-queue: Graphile Worker, W6) with its production packages from pnpm-lock.yaml, hoisted into
 #   /opt/pageinator/node_modules; its own code and packages/contracts at the repository's paths (Node runs the
-#   TypeScript as it is). The queue's process (the inbox it reports to) arrives with the API part of W6.
+#   TypeScript as it is). The container runs the queue's process (src/main.ts: as pgn_engine, reporting to the API's
+#   inbox, app.engine_event); its health check is the worker's own (pgn_worker.health).
 # The engine's own environment (the frozen oracle lock) comes with L2.3.
 
 # the queue's packages: the lock's, for apps/engine-queue only, production only, hoisted (pnpm deploy). The copy of
@@ -80,8 +81,9 @@ USER 10001:10001
 WORKDIR /opt/pageinator
 VOLUME ["/var/lib/pageinator/homes"]
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 CMD ["python", "-B", "-m", "pgn_worker.health"]
-# until the queue arrives (W6), the container checks itself once and says so
-CMD ["python", "-B", "-m", "pgn_worker.health"]
+# the queue (apps/engine-queue/src/main.ts): Node is the process, so a stop signal reaches it once; running jobs finish
+# first (the deployment's stop grace period must exceed PGN_RUNNER_TIMEOUT_S + 5 s). Settings: its header.
+CMD ["node", "/opt/pageinator/apps/engine-queue/src/main.ts"]
 
 # the worker's tests, run inside the image as its own user (built with --target test; never shipped)
 FROM worker AS test

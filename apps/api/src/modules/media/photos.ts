@@ -5,11 +5,14 @@
 //     story, on its version (baseRevision; 409 story_changed), and the caption and credit are cleaned as the Desk
 //     cleans text.
 //   - GET …/assets/:a/file: a 302 to a 5-minute download link tied to the picture's version, with its type from its
-//     bytes and a file name from its Desk id (never the uploader's). The preview comes with renditions (L2.2): 404
-//     until then.
+//     bytes and a file name from its Desk id (never the uploader's). ?variant=preview gives the engine's preview (a JPEG
+//     of at most 2000 px, media.ready's rendition) the same way, inline; 404 until the picture is ready. A rejected or
+//     failed picture no longer holds its bytes (the same bytes sent again make a new asset): it is neither attached nor
+//     downloaded (404).
 import { FileQuery, Story, StoryPhotoInput, StoryPhotoPatch } from "@pageinator/contracts";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { renditionOf } from "../../db/engine-events.ts";
 import { type AssetRow, findAsset, uploadedBy } from "../../db/media.ts";
 import { findStory, isPhotoOfTheirs, removePhoto, setPhoto, updatePhoto } from "../../db/stories.ts";
 import type { Tx } from "../../db/tenant.ts";
@@ -27,12 +30,14 @@ const Base = z.strictObject({ baseRevision: z.coerce.number().int().min(1).max(2
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PHOTO = "/api/v1/orgs/:o/pubs/:p/stories/:s/photo";
 export const DOWNLOAD_SECONDS = 5 * 60;
+/** A picture the engine refused or could not prepare: no longer one to attach or download. */
+const settledBad = (asset: AssetRow) => asset.status === "rejected" || asset.status === "failed";
 
 /** Whether the person may download this picture (and so attach it): all of the publication's with a full media.view;
  * with a Reporter's ◐, the ones theirs: uploaded by them (first, or again: the same bytes are one asset), or the photo
  * of one of their stories. */
 export async function maySee(tx: Tx, access: Access, publicationId: string, asset: AssetRow, userId: string) {
-  if (asset.status === "rejected") return false;
+  if (settledBad(asset)) return false;
   const scope = mediaScope(access, publicationId);
   if (scope === "all") return true;
   if (scope !== "own") return false;
@@ -62,10 +67,10 @@ export const photoRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { da
         if (!canAttachPhoto(access, p, story.facts, userId)) throw refused("this story's photo is not theirs to set");
         const asset = await findAsset(tx, p, input.assetId);
         // a picture they may not download is not theirs to attach either: the same answer as none (F4)
-        if (asset && asset.status !== "rejected" && !(await maySee(tx, access, p, asset, userId))) {
+        if (asset && !settledBad(asset) && !(await maySee(tx, access, p, asset, userId))) {
           throw new ApiError("not_found");
         }
-        if (!asset || asset.status === "rejected") {
+        if (!asset || settledBad(asset)) {
           throw new ApiError("invalid_request", [
             { field: "body.assetId", message: "is not a picture of this publication" },
           ]);
@@ -129,13 +134,25 @@ export const photoRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { da
       const access = accessOf(request);
       const userId = actorOf(request).userId;
       const { p, a } = request.params;
-      const asset = await database.withTenant(access.tenant, async (tx) => {
+      const preview = request.query.variant === "preview";
+      const { asset, rendition } = await database.withTenant(access.tenant, async (tx) => {
         const found = UUID.test(a) ? await findAsset(tx, p, a) : undefined;
-        return found && (await maySee(tx, access, p, found, userId)) ? found : undefined;
+        if (!found || !(await maySee(tx, access, p, found, userId))) return { asset: undefined, rendition: undefined };
+        return { asset: found, rendition: preview ? await renditionOf(tx, p, found.id, "preview") : undefined };
       });
       // version_id is set in the transaction that makes the asset: an asset without one has no file to give
       if (!asset?.version_id) throw new ApiError("not_found");
-      if (request.query.variant === "preview") throw new ApiError("not_found"); // renditions come in L2.2
+      if (preview) {
+        if (!rendition) throw new ApiError("not_found");
+        const link = await store.presignGet({
+          key: rendition.key,
+          versionId: rendition.version_id,
+          contentType: rendition.mime,
+          disposition: `inline; filename="${asset.desk_key}-preview.jpg"`,
+          expiresSeconds: DOWNLOAD_SECONDS,
+        });
+        return reply.header("cache-control", "no-store").redirect(link, 302);
+      }
       const url = await store.presignGet({
         key: asset.original_key,
         versionId: asset.version_id,
