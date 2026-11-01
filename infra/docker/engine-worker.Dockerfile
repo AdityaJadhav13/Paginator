@@ -10,7 +10,30 @@
 # - a user that is not root; run with a read-only root (`--read-only`), the homes on a volume and /tmp on a tmpfs:
 #   docker run --read-only --tmpfs /tmp -v pgn-homes:/var/lib/pageinator/homes \
 #     -v /path/to/newsprint.icc:/run/pageinator/newsprint.icc:ro -e PGN_ICC_SHA256=… pageinator-engine-worker
-# The engine's own environment (the frozen oracle lock) and the queue come with L2.3 and W6.
+# - Node 24.22.0 (its binary only, from the official image pinned by its amd64 manifest's digest) and the queue
+#   (apps/engine-queue: Graphile Worker, W6) with its production packages from pnpm-lock.yaml, hoisted into
+#   /opt/pageinator/node_modules; its own code and packages/contracts at the repository's paths (Node runs the
+#   TypeScript as it is). The queue's process (the inbox it reports to) arrives with the API part of W6.
+# The engine's own environment (the frozen oracle lock) comes with L2.3.
+
+# the queue's packages: the lock's, for apps/engine-queue only, production only, hoisted (pnpm deploy). The copy of
+# packages/contracts it makes becomes a link to the repository's path, where Node strips its types (never in node_modules).
+# The TypeScript compiler (cosmiconfig's optional peer, for TypeScript config files the queue never has) is left out.
+# corepack fetches the pnpm that package.json names, checked against its SHA-512 there
+FROM --platform=linux/amd64 node:24.22.0-bookworm-slim@sha256:a8efdaa8f2458a83ad61c9b8e957c94c2312a9e60604d5b9b093cf89ad9f5984 AS queue
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+WORKDIR /build
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/engine-queue/package.json apps/engine-queue/package.json
+COPY apps/engine-queue/src apps/engine-queue/src
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/contracts/src packages/contracts/src
+RUN corepack enable pnpm \
+ && pnpm --filter @pageinator/engine-queue deploy --prod --legacy --frozen-lockfile --ignore-scripts \
+      --config.node-linker=hoisted /out \
+ && rm -r /out/node_modules/@pageinator/contracts /out/node_modules/.bin /out/node_modules/typescript \
+      /out/node_modules/@typescript \
+ && ln -s ../../packages/contracts /out/node_modules/@pageinator/contracts
 
 FROM --platform=linux/amd64 python:3.11.14-slim-bookworm@sha256:83f339c1be6340ae1096010fdccf6552ac932d8f410d45d206014916bdf37e48 AS worker
 
@@ -33,7 +56,14 @@ RUN python -m venv /opt/pageinator/venv \
  && /opt/pageinator/venv/bin/python -m pip check \
  && /opt/pageinator/venv/bin/python -m pip uninstall --yes pip setuptools
 
-# the repository's code the worker runs, at its paths (pgn_worker finds the Desk through them)
+# Node and the queue's packages (above), then the repository's code the worker runs, at its paths (pgn_worker finds the
+# Desk through them; the queue finds @pageinator/contracts through node_modules' link to packages/contracts)
+COPY --from=queue /usr/local/bin/node /usr/local/bin/node
+COPY --from=queue /out/node_modules /opt/pageinator/node_modules
+COPY apps/engine-queue/package.json /opt/pageinator/apps/engine-queue/package.json
+COPY apps/engine-queue/src /opt/pageinator/apps/engine-queue/src
+COPY packages/contracts/package.json /opt/pageinator/packages/contracts/package.json
+COPY packages/contracts/src /opt/pageinator/packages/contracts/src
 COPY tools/desk/deskserver /opt/pageinator/tools/desk/deskserver
 COPY tools/desk/engine /opt/pageinator/tools/desk/engine
 COPY apps/engine-worker/pgn_worker /opt/pageinator/apps/engine-worker/pgn_worker
@@ -56,6 +86,10 @@ CMD ["python", "-B", "-m", "pgn_worker.health"]
 # the worker's tests, run inside the image as its own user (built with --target test; never shipped)
 FROM worker AS test
 COPY --chown=10001:10001 apps/engine-worker/test /opt/pageinator/apps/engine-worker/test
-RUN python -B -m unittest discover -s /opt/pageinator/apps/engine-worker/test
+COPY --chown=10001:10001 packages/contracts/test/fixtures /opt/pageinator/packages/contracts/test/fixtures
+RUN python -B -m unittest discover -s /opt/pageinator/apps/engine-worker/test \
+ && node --version | grep -qx v24.22.0 \
+ && ! find /opt/pageinator/node_modules -name typescript -o -name '@typescript' | grep -q . \
+ && node -e 'import("/opt/pageinator/apps/engine-queue/src/index.ts").then((q) => { if (typeof q.startQueue !== "function") process.exit(1); })'
 
 FROM worker

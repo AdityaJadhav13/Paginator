@@ -34,6 +34,10 @@ export default defineConfig({
           exclude: [...configDefaults.exclude, ...DB_TESTS],
         },
       },
+      {
+        // the engine's queue; its database test runs only with PGN_QUEUE_DB_URL (and then fails, never skips)
+        test: { name: "engine-queue", environment: "node", include: ["apps/engine-queue/test/**/*.test.ts"] },
+      },
       ...(dbRun
         ? [
             {

@@ -28,13 +28,18 @@ class ImageFilesTests(unittest.TestCase):
         cls.repo = check.tracked()
         cls.good = [check.Entry("usr/bin/python3", "file", b"\x7fELF"), check.Entry("opt/pageinator", "dir"),
                     check.Entry("opt/pageinator/venv/bin/python", "link"),
-                    check.Entry("opt/pageinator/venv/lib/python3.11/site-packages/x.py", "file", b"import os")]
+                    check.Entry("opt/pageinator/venv/lib/python3.11/site-packages/x.py", "file", b"import os"),
+                    check.Entry("opt/pageinator/node_modules", "dir"),
+                    check.Entry("opt/pageinator/node_modules/@pageinator/contracts", "link"),
+                    check.Entry("opt/pageinator/node_modules/pg/lib/index.js", "file", b"'use strict'")]
         cls.good += [check.Entry(check.ROOT + rel, "file", (REPO / rel).read_bytes()[:64], sha)
                      for rel, sha in cls.repo.items()]
 
     def test_the_image_as_built_passes(self):
         self.assertEqual(len([p for p in self.repo if check.FONT.search(p)]), 22)
         self.assertIn("apps/engine-worker/requirements.lock", self.repo)
+        self.assertIn("apps/engine-queue/src/index.ts", self.repo)
+        self.assertIn("packages/contracts/src/engine.ts", self.repo)
         self.assertEqual(check.problems(self.good, self.repo), [])
 
     def test_anything_else_is_refused(self):
@@ -55,6 +60,11 @@ class ImageFilesTests(unittest.TestCase):
                 ("a .env", check.Entry(check.ROOT + ".env", "file", b"PGN_S3=x", "0" * 64), "private"),
                 ("a git folder", check.Entry(".git/config", "file", b"[core]"), "private"),
                 ("a link among the files", check.Entry(check.ROOT + "tools/desk/engine/x", "link"), "link"),
+                ("node_modules elsewhere", check.Entry(check.ROOT + "apps/engine-queue/node_modules/x/index.js", "file",
+                                                       b"x", "0" * 64), "node_modules outside"),
+                ("node_modules at the root", check.Entry("node_modules/x/index.js", "file", b"x"), "node_modules outside"),
+                ("a contracts test", check.Entry(check.ROOT + "packages/contracts/test/engine.test.ts", "file", b"x", "0"),
+                 "not a file of the repository"),
                 ("a dataset", check.Entry("var/lib/pageinator/homes/o/p/datasets/a/page.json", "file", b"{}"), "private")):
             with self.subTest(name):
                 found = check.problems([*self.good, extra], self.repo)

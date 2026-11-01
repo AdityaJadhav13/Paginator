@@ -97,7 +97,7 @@ class Case(unittest.TestCase):
     def upload(self, data: bytes, asset: str = ASSET) -> dict:
         key = self.guard.asset_original(asset)
         version = self.store.put(key, data, "application/octet-stream")
-        return {"org_id": ORG, "pub_id": PUB, "asset_id": asset, "original_key": key, "version_id": version,
+        return {"org_id": ORG, "pub_id": PUB, "asset_id": asset, "version_id": version,
                 "sha256": hashlib.sha256(data).hexdigest()}
 
     def keys_stored(self) -> list[str]:
@@ -250,10 +250,9 @@ class IngestTests(Case):
     def test_a_job_names_only_its_own_asset_and_its_exact_bytes(self):
         args = self.upload(picture())
         stored = self.keys_stored()
-        other = keys.KeyGuard(OTHER_ORG, PUB).asset_original(ASSET)
-        for bad, error in (({"original_key": other}, keys.KeyRefused),                       # another organisation's
-                           ({"original_key": self.guard.key("assets", ASSET, "r", "x")}, keys.KeyRefused),
-                           ({"original_key": f"orgs/{ORG}/pubs/{PUB}/../{OTHER_ORG}/x"}, keys.KeyRefused),
+        for bad, error in (({"org_id": OTHER_ORG}, MissingObject),       # the key is made from the ids: another
+                           ({"asset_id": "../" + ASSET}, keys.KeyRefused),  # organisation's original is not reached
+                           ({"original_key": self.guard.asset_original(ASSET)}, ValueError),     # ids only
                            ({"org_id": ORG.upper()}, keys.KeyRefused),
                            ({"sha256": "0" * 64}, media.Mismatch),                           # not the stored bytes
                            ({"version_id": "f" * 64}, MissingObject),

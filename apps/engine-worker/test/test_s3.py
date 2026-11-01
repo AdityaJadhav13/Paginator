@@ -217,7 +217,7 @@ class StoreTests(Case):
         """The original as the API leaves it: copied to orgs/<o>/pubs/<p>/assets/<a>/original, versioned."""
         put = self.client.put_object(Bucket=self.bucket, Key=KEY, Body=data, ContentType="image/jpeg",
                                      Metadata={"sha256": hashlib.sha256(data).hexdigest()})
-        return {"org_id": ORG, "pub_id": PUB, "asset_id": ASSET, "original_key": KEY, "version_id": put["VersionId"],
+        return {"org_id": ORG, "pub_id": PUB, "asset_id": ASSET, "version_id": put["VersionId"],
                 "sha256": hashlib.sha256(data).hexdigest()}
 
     def test_an_ingest_round_trip_with_the_libraries_at_debug_logs_no_credential(self):

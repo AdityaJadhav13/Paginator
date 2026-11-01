@@ -19,11 +19,12 @@ import io
 from PIL import Image
 
 from .desk import images, util
-from .keys import KeyGuard, KeyRefused, uuid
+from .keys import KeyGuard, uuid
 from .params import THUMB_MAX_PX, ProfileError, params_hash
 from .storage import Storage
 
-ARGS = ("org_id", "pub_id", "asset_id", "original_key", "version_id", "sha256")
+ARGS = ("org_id", "pub_id", "asset_id", "version_id", "sha256")     # ids only: the original's key is made from them
+MAX_SIDE_PX = 100_000         # the contract's widest side (packages/contracts engine.ts Pixels): wider is refused
 MIME = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
 SWAPS = (5, 6, 7, 8)          # EXIF orientations that turn the picture a quarter: width and height change places
 
@@ -32,7 +33,7 @@ class Mismatch(ValueError):
     """The stored original is not the one the job names (its SHA-256 differs): the job stops, nothing is written."""
 
 
-def _args(args: dict) -> dict:
+def check_args(args: dict) -> dict:
     if not isinstance(args, dict) or set(args) != set(ARGS):
         raise ValueError(f"media.ingest takes exactly {', '.join(ARGS)}")
     for key in ("version_id", "sha256"):
@@ -73,13 +74,12 @@ def ingest(storage: Storage, args: dict, icc_sha256: str) -> dict:
     """→ the event for the API: `media.ready` with the renditions, or `media.rejected` with the Desk's reason.
     `icc_sha256` is the profile the worker was given: the file `images.icc_path()` loads must be exactly that one,
     before and after the conversion (ProfileError otherwise). A profile that cannot be used (ProfileError, the Desk's
-    500s) raises: the job fails and is tried again, and nothing is rejected or written."""
-    args = _args(args)
+    500s) raises and nothing is rejected or written: the runner tries the job again, except for a profile file that is not
+    the given one (ProfileMismatch: the worker's settings, final)."""
+    args = check_args(args)
     guard = KeyGuard(args["org_id"], args["pub_id"])
     asset = uuid(args["asset_id"], "asset_id")
-    if guard.check(args["original_key"]) != guard.asset_original(asset):
-        raise KeyRefused("original_key is not this asset's original")
-    data = storage.get(args["original_key"], args["version_id"])
+    data = storage.get(guard.asset_original(asset), args["version_id"])
     if hashlib.sha256(data).hexdigest() != args["sha256"]:
         raise Mismatch("the stored original is not the one this job names")
     base = {"org_id": guard.org_id, "pub_id": guard.pub_id, "asset_id": asset, "sha256": args["sha256"]}
@@ -91,6 +91,8 @@ def ingest(storage: Storage, args: dict, icc_sha256: str) -> dict:
             raise
         return {"kind": "media.rejected", **base, **_refusal(e)}
     width, height = oriented_size(data)
+    if max(width, height) > MAX_SIDE_PX:                        # a strip the Desk takes, but no page can use
+        return {"kind": "media.rejected", **base, **_refusal(util.DeskError(413, images.TOO_MANY_PIXELS))}
     thumb, tw, th = thumbnail(conv.preview)
     if params_hash(icc_sha256) != ph:                           # the profile file changed while it was converting
         raise ProfileError("the colour profile changed during the conversion")

@@ -1,6 +1,7 @@
 // Licence check for every npm package of the workspace (the launch plan, docs/product/09-launch-plan.md §1):
 // permissive licences only. Other licences pass only for listed packages after review (MPL-2.0, file-level copyleft,
-// for build and test tools; two more permissive licences used by common tools). It fails closed:
+// for build and test tools; BlueOak-1.0.0 and CC0-1.0 for common tools; the PSF licence for argparse 2.0.1 alone).
+// It fails closed:
 // - every package in pnpm-lock.yaml must be installed and checked here, except builds of a reviewed package for
 //   other platforms;
 // - pnpm-lock.yaml is read only in the shapes pnpm writes it, and a folder dependency (link:, file:) only as an
@@ -17,13 +18,23 @@ import { INVENTORY, pythonProblems, readPython } from "./python-licences.ts";
 export const ALLOWED = new Set(["MIT", "MIT-0", "ISC", "0BSD", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0"]);
 /** "<licence> WITH <exception>" forms that keep the licence permissive. */
 export const EXCEPTIONS = new Set(["Apache-2.0 WITH LLVM-exception"]);
-/** Reviewed exceptions: package name → the licence it was reviewed under, and why it is acceptable. */
-export const REVIEWED: Record<string, { licence: string; why: string }> = {
+/** Reviewed exceptions: package name → the licence it was reviewed under (and the version, when the review was of one
+ * version only), and why it is acceptable. */
+export const REVIEWED: Record<string, { licence: string; version?: string; why: string }> = {
   lightningcss: { licence: "MPL-2.0", why: "build tool only (CSS); never shipped modified" },
   "axe-core": { licence: "MPL-2.0", why: "test tool only (accessibility checks); never shipped" },
   "lru-cache": { licence: "BlueOak-1.0.0", why: "permissive (like MIT, with a patent grant); a tool dependency" },
   minimatch: { licence: "BlueOak-1.0.0", why: "permissive (like MIT, with a patent grant); a tool dependency" },
   "mdn-data": { licence: "CC0-1.0", why: "public-domain data for the CSS tools" },
+  // Owner decision 2026-10-24 (docs/product/09-launch-plan.md §1): the PSF licence (SPDX "Python-2.0", the Python
+  // Software Foundation licence stack argparse carries) for argparse only, used unmodified (graphile-worker's
+  // cosmiconfig → js-yaml), version 2.0.1 as reviewed. Any other package under it, argparse under another licence, or
+  // another version of argparse, still fails.
+  argparse: {
+    licence: "Python-2.0",
+    version: "2.0.1",
+    why: "permissive (the PSF licence); unmodified, through graphile-worker's config",
+  },
 };
 /** A build's platform in its package name: operating system, processor, and an optional C library or ABI. */
 const PLATFORM =
@@ -326,7 +337,7 @@ export function licenceProblems(pkgs: Pkg[], lock?: Lockfile, unreadable: string
     }
     if (licenceOk(p.licence)) continue;
     const reviewed = Object.hasOwn(REVIEWED, p.name) ? REVIEWED[p.name] : undefined;
-    if (reviewed && reviewed.licence === p.licence) continue;
+    if (reviewed && reviewed.licence === p.licence && (reviewed.version ?? p.version) === p.version) continue;
     problems.push(`${p.name}@${p.version}: licence ${p.licence || "(none given)"} is not allowed`);
   }
   if (lock) {

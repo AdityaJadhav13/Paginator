@@ -1,11 +1,12 @@
 """The engine worker image's files, checked (W4; fail closed). Reads the image as `docker export` writes it (a tar on
 stdin) and refuses:
-- under /opt/pageinator (the venv aside): any file that is not a file of the repository with exactly the bytes of its
+- under /opt/pageinator (the venv and the queue's node_modules aside): any file that is not a file of the repository with exactly the bytes of its
   blob in git's index (in CI, the commit), and any such file of what the image takes that is missing; links there;
 - any font, by its name or by its content (TrueType, OpenType, collections, WOFF, WOFF2), but the repository's 22 OFL
   stand-ins at their repository paths, and any colour profile, by its name or by its content (`acsp` at byte 36): a
   profile or a font renamed `house.bin` is still found;
-- anything that looks private or like the dataset (PageinatorPrivate, published1, datasets/, .env, .git, node_modules).
+- anything that looks private or like the dataset (PageinatorPrivate, published1, datasets/, .env, .git), and any
+  node_modules but the queue's own (/opt/pageinator/node_modules, from pnpm-lock.yaml: tools/ts/check-licences.ts).
 
     git add …   # the index must hold what the image was built from (CI: the commit)
     docker export "$(docker create IMAGE)" | python3 -B infra/docker/check_image_files.py"""
@@ -21,14 +22,16 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 FONT_DIRS = ("experiments/phase0/compose2/fonts", "tools/oracle/v0/assets/fonts")
-TAKEN = ("tools/desk/deskserver/", "tools/desk/engine/", "apps/engine-worker/pgn_worker/", *(d + "/" for d in FONT_DIRS))
-TAKEN_FILES = ("apps/engine-worker/requirements.lock",)
+TAKEN = ("tools/desk/deskserver/", "tools/desk/engine/", "apps/engine-worker/pgn_worker/", "apps/engine-queue/src/",
+         "packages/contracts/src/", *(d + "/" for d in FONT_DIRS))
+TAKEN_FILES = ("apps/engine-worker/requirements.lock", "apps/engine-queue/package.json", "packages/contracts/package.json")
 ROOT = "opt/pageinator/"
 VENV = ROOT + "venv/"
+NODE_MODULES = ROOT + "node_modules/"           # the queue's packages, hoisted (and its one link to packages/contracts)
+INSTALLED = (VENV, NODE_MODULES)
 FONT = re.compile(r"\.(ttf|otf|ttc|woff2?|pfb|pfa|dfont)$", re.IGNORECASE)
 PROFILE = re.compile(r"\.(icc|icm)$", re.IGNORECASE)
-PRIVATE = re.compile(r"PageinatorPrivate|published1|(^|/)datasets?/|(^|/)\.env|(^|/)\.git(/|$)|node_modules",
-                     re.IGNORECASE)
+PRIVATE = re.compile(r"PageinatorPrivate|published1|(^|/)datasets?/|(^|/)\.env|(^|/)\.git(/|$)", re.IGNORECASE)
 FONT_MAGIC = (b"\x00\x01\x00\x00", b"OTTO", b"ttcf", b"wOFF", b"wOF2")
 EXCLUDED = re.compile(r"(^|/)(__pycache__/|[^/]*\.pyc$|\.DS_Store$)")      # what the build's ignore file leaves out
 
@@ -69,7 +72,7 @@ def entries(tar: tarfile.TarFile) -> list[Entry]:
         name = m.name.removeprefix("./").lstrip("/")
         if m.isfile():
             f = tar.extractfile(m)
-            if name.startswith(ROOT) and not name.startswith(VENV):
+            if name.startswith(ROOT) and not name.startswith(INSTALLED):
                 data = f.read()
                 out.append(Entry(name, "file", data[:64], hashlib.sha256(data).hexdigest()))
             else:
@@ -90,12 +93,14 @@ def problems(found: list[Entry], repo_files: dict[str, str]) -> list[str]:
             out.append(f"a colour profile built into the image: /{n}")
         if PRIVATE.search(n):
             out.append(f"a path that looks private or like the dataset: /{n}")
+        if "node_modules" in n.lower() and not (n + "/").startswith(NODE_MODULES):
+            out.append(f"node_modules outside the queue's: /{n}")
         if e.kind == "file":
             if e.head[36:40] == b"acsp":
                 out.append(f"a colour profile (by its content) in the image: /{n}")
             if e.head[:4] in FONT_MAGIC and n not in fonts:
                 out.append(f"a font (by its content) that is not one of the stand-ins: /{n}")
-        if n.startswith(ROOT) and not n.startswith(VENV) and n + "/" != VENV:
+        if n.startswith(ROOT) and not (n + "/").startswith(INSTALLED):
             rel = n[len(ROOT):]
             if e.kind == "file":
                 seen.add(rel)

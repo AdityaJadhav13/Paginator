@@ -71,6 +71,7 @@ export default defineConfig(
       "**/node_modules/**",
       "**/dist/**",
       "**/.tsbuild/**",
+      "**/.venv/**", // Python environments (apps/engine-worker/.venv, as CI makes it)
       "apps/web/**",
       "experiments/**",
       "fixtures/**",
