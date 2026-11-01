@@ -1,5 +1,6 @@
 // Email (src/modules/notifications/mailer.ts, src/modules/identity/emails.ts): the recipient check, sending in the
 // background, failures reported without the message, and the sign-in emails' text.
+import addressparser from "nodemailer/lib/addressparser";
 import { describe, expect, it } from "vitest";
 import { newSignInEmail, resetEmail, verificationEmail } from "../../src/modules/identity/emails.ts";
 import { type Transport, PLAIN_ADDRESS, RecipientError, openMailer } from "../../src/modules/notifications/mailer.ts";
@@ -36,6 +37,16 @@ describe("recipients", () => {
     "a@[192.0.2.1]",
     "",
   ])("refuses %j", (address) => expect(PLAIN_ADDRESS.test(address)).toBe(false));
+
+  // The parser itself is fixed too (>= 10.1.4, L2-248): on 10.1.1 these gave "b@evil.example.test)", ["",
+  // "b@evil.example.test"] and "\"b" (checked 2026-11-02).
+  it.each([
+    ["a@example.test (x (y) b@evil.example.test)", "a@example.test"], // a nested comment ends early
+    ['g: "x;b@evil.example.test" <a@example.test>;', "a@example.test"], // ";" inside a quoted string
+    ['<"b>c"@example.test>', '"b>c"@example.test'], // ">" inside a quoted local part
+  ])("nodemailer's address parser reads %j as the one address %j", (header, address) => {
+    expect(addressparser(header, { flatten: true }).map((entry) => entry.address)).toEqual([address]);
+  });
 });
 
 describe("the mailer", () => {
