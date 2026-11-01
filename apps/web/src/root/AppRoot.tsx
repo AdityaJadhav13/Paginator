@@ -30,6 +30,8 @@ import { MediaProvider } from "../features/stories/media-context.tsx";
 import { NewsroomProvider } from "../features/live/live-context.tsx";
 import { StoriesScreen } from "../features/stories/StoriesScreen.tsx";
 import { StoryEditor } from "../features/stories/StoryEditor.tsx";
+import { EditionsProvider } from "../features/editions/editions-context.tsx";
+import { EditionsScreen } from "../features/editions/EditionsScreen.tsx";
 import { I18nProvider } from "../i18n/index.ts";
 import type { ServiceEnvironment } from "../services/index.ts";
 import { PlaceholderScreen } from "../demo/ui002/PlaceholderScreen.tsx";
@@ -94,6 +96,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
         <AccountProvider account={activeEnvironment.account}>
           <PeopleProvider security={activeEnvironment.security} team={activeEnvironment.team} audit={activeEnvironment.audit}>
           <StoriesProvider stories={activeEnvironment.stories}>
+          <EditionsProvider editions={activeEnvironment.editions}>
           <MediaProvider media={activeEnvironment.media}>
           <ContactProvider contact={activeEnvironment.contact}>
           <NewsroomProvider
@@ -134,13 +137,13 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                 <Route path={PATTERNS.orgAudit} element={<AuditScreen />} />
                 <Route path={PATTERNS.pubStories} element={<StoriesScreen />} />
                 <Route path={PATTERNS.pubStory} element={<StoryEditor />} />
+                <Route path={PATTERNS.pubEditions} element={<EditionsScreen />} />
                 {DEVELOPMENT && (
                   <>
                     <Route path={PATTERNS.orgSettings} element={placeholder("orgSettings")} />
                     <Route path={PATTERNS.orgBilling} element={placeholder("orgBilling")} />
                     <Route path={PATTERNS.orgStorage} element={placeholder("orgStorage")} />
                     <Route path={PATTERNS.pubOverview} element={placeholder("pubOverview")} />
-                    <Route path={PATTERNS.pubEditions} element={placeholder("pubEditions")} />
                     <Route path={PATTERNS.pubMedia} element={placeholder("pubMedia")} />
                     <Route path={PATTERNS.pubAds} element={placeholder("pubAds")} />
                     <Route path={PATTERNS.pubTemplates} element={placeholder("pubTemplates")} />
@@ -176,6 +179,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
           </NewsroomProvider>
           </ContactProvider>
           </MediaProvider>
+          </EditionsProvider>
           </StoriesProvider>
           </PeopleProvider>
         </AccountProvider>

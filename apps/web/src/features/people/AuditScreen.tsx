@@ -33,6 +33,7 @@ export const AUDIT_ACTION_KEYS = [
   "auditLog.action.comment.reopen",
   "auditLog.action.comment.resolve",
   "auditLog.action.desk.export",
+  "auditLog.action.edition.create",
   "auditLog.action.engine.event_ignore",
   "auditLog.action.engine.event_refuse",
   "auditLog.action.invitation.accept",

@@ -10,6 +10,7 @@ import type {
   ServiceEnvironment,
   SessionService,
   StoryService,
+  EditionService,
   MediaService,
   CommentService,
   NotificationService,
@@ -34,6 +35,7 @@ export interface MockApplicationEnvironment extends ServiceEnvironment {
   readonly team: TeamService;
   readonly audit: AuditService;
   readonly stories: StoryService;
+  readonly editions: EditionService;
   readonly media: MediaService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;

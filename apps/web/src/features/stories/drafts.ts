@@ -21,6 +21,8 @@ export interface StoryFields {
   readonly body: string;
   readonly priority: number;
   readonly pagePin: number | null;
+  /** The edition the story is in (the desk's), or none. */
+  readonly editionId: string | null;
   readonly deskNote: string;
   /** The photo's caption and credit (empty while the story has no photo). */
   readonly caption: string;
@@ -60,7 +62,8 @@ const disabled = new Set<string>();
 
 const FIELD_KEYS = ["headline", "kicker", "deck", "byline", "body", "priority", "pagePin", "deskNote"] as const;
 
-/** A draft's fields; caption and credit came with photos (L2-J), so a draft written before has them empty. */
+/** A draft's fields; caption and credit came with photos (L2-J), and the edition with editions (L2.1), so a draft
+ * written before has them empty. */
 function isFields(value: unknown): value is StoryFields {
   if (typeof value !== "object" || value === null) return false;
   const fields = value as Record<string, unknown>;
@@ -69,11 +72,17 @@ function isFields(value: unknown): value is StoryFields {
     ["headline", "kicker", "deck", "byline", "body", "deskNote"].every((key) => typeof fields[key] === "string") &&
     ["caption", "credit"].every((key) => fields[key] === undefined || typeof fields[key] === "string") &&
     typeof fields["priority"] === "number" &&
-    (fields["pagePin"] === null || typeof fields["pagePin"] === "number")
+    (fields["pagePin"] === null || typeof fields["pagePin"] === "number") &&
+    (fields["editionId"] === undefined || fields["editionId"] === null || typeof fields["editionId"] === "string")
   );
 }
 
-const withPhotoFields = (fields: StoryFields): StoryFields => ({ ...fields, caption: fields.caption ?? "", credit: fields.credit ?? "" });
+const withPhotoFields = (fields: StoryFields): StoryFields => ({
+  ...fields,
+  editionId: fields.editionId ?? null,
+  caption: fields.caption ?? "",
+  credit: fields.credit ?? "",
+});
 
 function isDraft(value: unknown): value is StoryDraft {
   if (typeof value !== "object" || value === null) return false;

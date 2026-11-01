@@ -21,6 +21,7 @@ import type {
   SessionService,
   SessionSnapshot,
   StoryService,
+  EditionService,
   MediaService,
   CommentService,
   LiveEventDto,
@@ -157,6 +158,7 @@ export interface MockSessionEnvironment {
   readonly team: TeamService;
   readonly audit: AuditService;
   readonly stories: StoryService;
+  readonly editions: EditionService;
   readonly media: MediaService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
@@ -1066,6 +1068,7 @@ export function createMockSessionEnvironment(
     team,
     audit: auditDouble.audit,
     stories: storyDouble.stories,
+    editions: storyDouble.editions,
     media: storyDouble.media,
     comments: storyDouble.comments,
     notifications: notificationDouble.notifications,

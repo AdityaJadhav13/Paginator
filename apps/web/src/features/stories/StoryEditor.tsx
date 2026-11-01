@@ -24,7 +24,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { Button, Checkbox, Cluster, Dialog, Field, InlineMessage, ProgressIndicator, Select, Stack, TextArea, TextInput } from "../../ui/index.ts";
 import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { randomUuid } from "../../api/client.ts";
-import { formatDateTime } from "../../i18n/dates.ts";
+import { formatDate, formatDateTime } from "../../i18n/dates.ts";
 import { useI18n, type PlainKey, type Translate } from "../../i18n/index.ts";
 import type { ApiProblem, MemberDto, StoryDto, TransitionTargetDto } from "../../services/index.ts";
 import { OfflineNotice, useOnline } from "../auth/connection.tsx";
@@ -39,11 +39,12 @@ import { currentStory } from "./conflict.ts";
 import { draftKey, dropDraft, readDraft, writeDraft, type PendingCreate, type StoryDraft, type StoryFields } from "./drafts.ts";
 import { moveKey, StatusChip, statusKey } from "./StatusChip.tsx";
 import { useStories } from "./stories-context.tsx";
+import { usePublicationEditions } from "../editions/editions-context.tsx";
 import "./stories.css";
 
 const AUTOSAVE_MS = 1500;
 const TEXT_KEYS = ["headline", "kicker", "deck", "byline", "body"] as const;
-const DESK_KEYS = ["priority", "pagePin", "deskNote"] as const;
+const DESK_KEYS = ["priority", "pagePin", "editionId", "deskNote"] as const;
 /** The photo's own fields: sent with PATCH …/photo, not with the story's PATCH. */
 const PHOTO_KEYS = ["caption", "credit"] as const;
 const ALL_KEYS = [...TEXT_KEYS, ...DESK_KEYS, ...PHOTO_KEYS] as const;
@@ -64,6 +65,7 @@ const FIELD_LABELS: Readonly<Record<FieldKey, PlainKey>> = {
   body: "glossary.bodyText",
   priority: "editor.priority",
   pagePin: "editor.pagePin",
+  editionId: "glossary.edition.issue",
   deskNote: "editor.deskNote",
   caption: "glossary.caption",
   credit: "glossary.photoCredit",
@@ -77,6 +79,7 @@ const EMPTY: StoryFields = {
   body: "",
   priority: 3,
   pagePin: null,
+  editionId: null,
   deskNote: "",
   caption: "",
   credit: "",
@@ -91,6 +94,7 @@ function fieldsOf(story: StoryDto): StoryFields {
     body: story.body,
     priority: story.priority,
     pagePin: story.pagePin,
+    editionId: story.edition?.id ?? null,
     deskNote: story.deskNote,
     caption: story.photo?.caption ?? "",
     credit: story.photo?.credit ?? "",
@@ -268,9 +272,16 @@ function EditorContent({
   const stories = useStories();
   const navigate = useNavigate();
   const { t, language } = useI18n();
+  /** The publication's editions for the desk's Edition picker, with the story's own (it may not be listed yet). */
+  const listedEditions = usePublicationEditions(orgId, pubId, desk);
   const online = useOnline();
   const [loaded, setLoaded] = useState<Loaded>(storyId ? { status: "loading" } : { status: "ready" });
   const [story, setStory] = useState<StoryDto | null>(null);
+  const editionDates = useMemo(() => {
+    const dates = new Map((listedEditions ?? []).map((edition) => [edition.id, edition.date]));
+    if (story?.edition && !dates.has(story.edition.id)) dates.set(story.edition.id, story.edition.date);
+    return dates;
+  }, [listedEditions, story?.edition]);
   /** What the boxes show: only the person's typing changes it (and opening, the conflict choice, restoring). */
   const [fields, setFields] = useState<StoryFields>(EMPTY);
   /** What was last sent and accepted (or opened): the base of the next change. Never the server's cleaned text. */
@@ -335,6 +346,9 @@ function EditorContent({
   const dirty = !same(fields, saved);
   /** The boxes take no typing while a question is open or a move is being made (nothing typed can then be lost). */
   const locked = !editable || conflict !== null || offered !== null || moving || gone;
+  /** The chosen edition's page count, when it is listed; a page pin past it is refused by the API (400). */
+  const editionPages = listedEditions?.find((edition) => edition.id === fields.editionId)?.pages ?? null;
+  const pinPast = fields.pagePin !== null && editionPages !== null && fields.pagePin > editionPages;
   /** A box being composed in, or the one typed in when the story was taken away, is never made read only under them. */
   const boxLocked = (field: FieldKey) => locked && !composingNow && typingOn !== field;
   /** Text typed that can no longer be saved here (the story was moved out of the person's hands): kept, and said so. */
@@ -904,7 +918,7 @@ function EditorContent({
         )}
 
         {conflict && (
-          <ConflictPanel conflict={conflict} mine={fields} lang={textLang} onKeepMine={keepMine} onTakeTheirs={takeTheirs} />
+          <ConflictPanel conflict={conflict} mine={fields} lang={textLang} editionDates={editionDates} onKeepMine={keepMine} onTakeTheirs={takeTheirs} />
         )}
 
         <form
@@ -1003,16 +1017,34 @@ function EditorContent({
                         ))}
                       </Select>
                     </Field>
-                    <Field label={t("editor.pagePin")}>
+                    <Field
+                      label={t("editor.pagePin")}
+                      {...(pinPast && editionPages !== null ? { errors: [t("editor.pagePin.pastEdition", { pages: editionPages })] } : {})}
+                    >
                       <Select
                         value={fields.pagePin === null ? "" : String(fields.pagePin)}
                         disabled={locked}
                         onChange={(event) => change("pagePin")(event.target.value === "" ? null : Number(event.target.value))}
                       >
                         <option value="">{t("editor.pagePin.any")}</option>
-                        {Array.from({ length: 16 }, (_, index) => index + 1).map((page) => (
+                        {/* the edition's pages (the API refuses a page past them); a pin already past them stays shown */}
+                        {[...Array.from({ length: editionPages ?? 16 }, (_, index) => index + 1), ...(pinPast && fields.pagePin !== null ? [fields.pagePin] : [])].map((page) => (
                           <option key={page} value={page}>
                             {t("editor.pagePin.page", { page })}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label={t("glossary.edition.issue")}>
+                      <Select
+                        value={fields.editionId ?? ""}
+                        disabled={locked}
+                        onChange={(event) => change("editionId")(event.target.value || null)}
+                      >
+                        <option value="">{t("stories.noEdition")}</option>
+                        {[...editionDates].sort((a, b) => b[1].localeCompare(a[1])).map(([id, date]) => (
+                          <option key={id} value={id}>
+                            {formatDate(date, language)}
                           </option>
                         ))}
                       </Select>
@@ -1074,12 +1106,13 @@ function EditorContent({
   );
 }
 
-function valueText(key: FieldKey, fields: StoryFields, t: Translate): string {
+function valueText(key: FieldKey, fields: StoryFields, t: Translate, editionName: (id: string) => string): string {
   if (key === "priority") {
     const label = PRIORITIES.find(([level]) => level === fields.priority)?.[1];
     return label ? t(label) : String(fields.priority);
   }
   if (key === "pagePin") return fields.pagePin === null ? t("editor.pagePin.any") : t("editor.pagePin.page", { page: fields.pagePin });
+  if (key === "editionId") return fields.editionId === null ? t("stories.noEdition") : editionName(fields.editionId);
   return fields[key];
 }
 
@@ -1088,18 +1121,25 @@ function ConflictPanel({
   conflict,
   mine,
   lang,
+  editionDates,
   onKeepMine,
   onTakeTheirs,
 }: {
   readonly conflict: Conflict;
   readonly mine: StoryFields;
   readonly lang: string | undefined;
+  /** The publication's editions (id → date), to name the edition each version is in. */
+  readonly editionDates: ReadonlyMap<string, string>;
   readonly onKeepMine: (putCaption: boolean) => void;
   readonly onTakeTheirs: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [putCaption, setPutCaption] = useState(false);
   const theirStory = conflict.theirs;
+  const editionName = (id: string) => {
+    const date = editionDates.get(id) ?? (theirStory.edition?.id === id ? theirStory.edition.date : undefined);
+    return date ? formatDate(date, language) : id;
+  };
   const theirs = fieldsOf(theirStory);
   const name = theirStory.updatedBy.name;
   const theirAsset = theirStory.photo?.assetId ?? null;
@@ -1162,11 +1202,11 @@ function ConflictPanel({
             <div className="pg-editor__versions">
               <div className="pg-editor__version">
                 <p className="pg-type-body-small">{t("editor.conflict.theirs")}</p>
-                <p lang={textual(key) ? lang : undefined}>{valueText(key, theirs, t)}</p>
+                <p lang={textual(key) ? lang : undefined}>{valueText(key, theirs, t, editionName)}</p>
               </div>
               <div className="pg-editor__version">
                 <p className="pg-type-body-small">{t("editor.conflict.mine")}</p>
-                <p lang={textual(key) ? lang : undefined}>{valueText(key, mine, t)}</p>
+                <p lang={textual(key) ? lang : undefined}>{valueText(key, mine, t, editionName)}</p>
               </div>
             </div>
           </div>

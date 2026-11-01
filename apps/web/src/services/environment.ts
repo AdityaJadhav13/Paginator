@@ -8,6 +8,7 @@ import type { LiveService } from "./live-service.ts";
 import type { MediaService } from "./media-service.ts";
 import type { NotificationService } from "./notification-service.ts";
 import type { StoryService } from "./story-service.ts";
+import type { EditionService } from "./edition-service.ts";
 import type { TeamService } from "./team-service.ts";
 import type { WorkspaceAccessService } from "./workspace-access.ts";
 import type { WorkspaceQueryService } from "./workspace-query-service.ts";
@@ -24,6 +25,7 @@ export interface ServiceEnvironment {
   /** The organisation's audit log. */
   readonly audit: AuditService;
   readonly stories: StoryService;
+  readonly editions: EditionService;
   readonly media: MediaService;
   /** The public website's contact form. */
   readonly contact: ContactService;

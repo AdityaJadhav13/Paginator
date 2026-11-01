@@ -24,6 +24,7 @@ import { notifier, type Outbox, sendAll } from "./modules/notifications/notify.t
 import { notificationRoutes, startLive } from "./modules/notifications/routes.ts";
 import { commentRoutes } from "./modules/stories/comments.ts";
 import { deskBundleRoutes } from "./modules/stories/desk-bundle.ts";
+import { editionRoutes } from "./modules/stories/editions.ts";
 import { peopleRoutes } from "./modules/people/plugin.ts";
 import { storyRoutes } from "./modules/stories/routes.ts";
 import { photoRoutes } from "./modules/media/photos.ts";
@@ -178,6 +179,7 @@ export async function buildApp(deps: AppDeps) {
     await app.register(peopleRoutes, { ...people, config });
     await app.register(storyRoutes, { database: people.database, notify: people.notify, mail: people.mail });
     await app.register(commentRoutes, { database: people.database, notify: people.notify });
+    await app.register(editionRoutes, { database: people.database });
     await app.register(auditRoutes, { database: people.database });
     if (live) {
       await app.register(notificationRoutes, {

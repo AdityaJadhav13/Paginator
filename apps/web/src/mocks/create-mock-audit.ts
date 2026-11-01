@@ -74,7 +74,7 @@ function fixtures(): Row[] {
     event(10, "2026-10-21T06:30:00.000Z", { action: "story.assign", actor: EDITOR, target: story("story-demo-003"), publicationId: URDU }),
     event(11, "2026-10-21T07:00:00.000Z", { action: "photo.attach", actor: SUBEDITOR, target: story("story-demo-004"), data: { asset: "asset-demo-001" } }),
     // an action of a newer API than this screen knows: shown by its code
-    event(12, "2026-10-21T07:30:00.000Z", { action: "edition.create", target: { type: "edition", id: "edition-demo-2026-10-24" } }),
+    event(12, "2026-10-21T07:30:00.000Z", { action: "edition.release", target: { type: "edition", id: "edition-demo-2026-10-24" } }),
     event(13, "2026-10-21T08:00:00.000Z", { action: "desk.export", target: { type: "edition", id: "edition-demo-2026-10-23" }, data: { stories: 2, photos: 1 } }),
   ];
   for (let n = 0; n < 48; n += 1) {

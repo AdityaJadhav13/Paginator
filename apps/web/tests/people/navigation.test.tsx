@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { screen } from "../../src/test/render.tsx";
 import { navigation } from "../../src/features/people/navigation.ts";
+import { mayCreateEdition, mayExport } from "../../src/features/stories/access.ts";
 import type { OrgAccessDto } from "../../src/services/index.ts";
 import { renderAuth, resetBrowserState, seriousViolations } from "../auth/helpers.tsx";
 
@@ -50,10 +51,23 @@ describe("Navigation from permissions", () => {
     expect(reporter).toContain("glossary.stories /org/o/pub/p/stories");
     expect(reporter).not.toContain("nav.brand /org/o/pub/p/brand");
     expect(reporter).not.toContain("glossary.team /org/o/team");
-    // in the deployed app a Reporter has their stories, and nothing else of the publication yet
+    // in the deployed app a Reporter has their stories, and nothing else of the publication yet (no edition.view)
     expect(labels(navigation(org("member", ["reporter"]), "p", false))).toEqual(["glossary.stories /org/o/pub/p/stories"]);
-    expect(labels(navigation(org("member", ["advertising"]), "p", false))).toEqual([]); // the ads desk is L2.6
-    expect(labels(navigation(org("member", ["photo_editor"]), "p", false))).toEqual(["glossary.stories /org/o/pub/p/stories"]);
+    // Editions (L2.1) for whoever has edition.view, a ◐ one too; the ads desk is L2.6
+    expect(labels(navigation(org("member", ["advertising"]), "p", false))).toEqual(["nav.editions /org/o/pub/p/editions"]);
+    expect(labels(navigation(org("member", ["photo_editor"]), "p", false))).toEqual([
+      "nav.editions /org/o/pub/p/editions",
+      "glossary.stories /org/o/pub/p/stories",
+    ]);
+    expect(labels(navigation(org("member", ["sub_editor"]), "p", false))).toContain("nav.editions /org/o/pub/p/editions");
+    // making an edition and sending it to the Desk need a full cell: Advertising's and Prepress's ◐ are refused
+    const full = (role: OrgAccessDto["publications"][number]["roles"][number]) => [mayCreateEdition(org("member", [role]), "p"), mayExport(org("member", [role]), "p")];
+    expect(full("editor")).toEqual([true, true]);
+    expect(full("chief_editor")).toEqual([true, true]);
+    expect(full("sub_editor")).toEqual([false, false]);
+    expect(full("advertising")).toEqual([false, false]);
+    expect(full("prepress")).toEqual([false, false]);
+    expect([mayCreateEdition(org("admin", []), "p"), mayExport(org("owner", []), "p")]).toEqual([true, true]);
   });
 
   it("offers the audit log (audit.view) to Owner, Admin and a Chief Editor only, under the publication too", () => {

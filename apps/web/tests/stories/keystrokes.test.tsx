@@ -194,7 +194,7 @@ describe("7. Restoring a draft applies only its changes", () => {
   it("merges a current draft onto newer fields, and sends a stale one through the conflict screen", async () => {
     const environment = createMockApplicationEnvironment();
     const opened = await storyOf(environment, "story-demo-002");
-    const base = { headline: opened.headline, kicker: "", deck: "", byline: opened.byline, body: opened.body, priority: 3, pagePin: null, deskNote: "", caption: "", credit: "" };
+    const base = { headline: opened.headline, kicker: "", deck: "", byline: opened.byline, body: opened.body, priority: 3, pagePin: null, editionId: null, deskNote: "", caption: "", credit: "" };
     // the draft changed only the body, on version 1; the server then got a new kicker (version 2)
     await environment.stories.update({ orgId: ORG, pubId: PUB, storyId: opened.id, patch: { baseRevision: 1, kicker: "Newer kicker" } });
     writeDraft(REPORTER, opened.id, { fields: { ...base, body: "Draft body." }, base, baseRevision: 1, savedAt: "2026-10-22T05:00:00.000Z" });
@@ -215,7 +215,7 @@ describe("7b. A tab closed while a change was on its way", () => {
     const environment = createMockApplicationEnvironment();
     environment.sessionController.setPreset("sahyadri-reporter");
     const opened = await storyOf(environment, "story-demo-002");
-    const base = { headline: opened.headline, kicker: "", deck: "", byline: opened.byline, body: opened.body, priority: 3, pagePin: null, deskNote: "", caption: "", credit: "" };
+    const base = { headline: opened.headline, kicker: "", deck: "", byline: opened.byline, body: opened.body, priority: 3, pagePin: null, editionId: null, deskNote: "", caption: "", credit: "" };
     const sending = { ...base, body: "closing the tab " };
     // the change arrived (version 2, cleaned), the tab was closed before its answer, with more typed after it
     await environment.stories.update({ orgId: ORG, pubId: PUB, storyId: opened.id, patch: { baseRevision: 1, body: sending.body } });
@@ -321,8 +321,8 @@ describe("11. Sign-out and the drafts on this device", () => {
   it("asks first when stories have unsaved text, and deletes it only after the sign-out succeeded", async () => {
     const environment = createMockApplicationEnvironment();
     writeDraft(REPORTER, "story-demo-002", {
-      fields: { headline: "x", kicker: "", deck: "", byline: "", body: "Unsaved.", priority: 3, pagePin: null, deskNote: "", caption: "", credit: "" },
-      base: { headline: "x", kicker: "", deck: "", byline: "", body: "", priority: 3, pagePin: null, deskNote: "", caption: "", credit: "" },
+      fields: { headline: "x", kicker: "", deck: "", byline: "", body: "Unsaved.", priority: 3, pagePin: null, editionId: null, deskNote: "", caption: "", credit: "" },
+      base: { headline: "x", kicker: "", deck: "", byline: "", body: "", priority: 3, pagePin: null, editionId: null, deskNote: "", caption: "", credit: "" },
       baseRevision: 1,
       savedAt: "2026-10-22T05:00:00.000Z",
     });

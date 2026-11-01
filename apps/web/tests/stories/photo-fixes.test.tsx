@@ -207,7 +207,7 @@ describe("P1. Leaving sends the caption with keepalive", () => {
 });
 
 describe("P2 and P13. Drafts", () => {
-  const base: StoryFields = { headline: "गुरुवारी पाणीपुरवठा बंद", kicker: "", deck: "", byline: "Sahyadri Demo Sub-editor", body: "", priority: 3, pagePin: null, deskNote: "", caption: "", credit: "" };
+  const base: StoryFields = { headline: "गुरुवारी पाणीपुरवठा बंद", kicker: "", deck: "", byline: "Sahyadri Demo Sub-editor", body: "", priority: 3, pagePin: null, editionId: "edition-demo-2026-10-24", deskNote: "", caption: "", credit: "" };
 
   it("knows its own change that took two versions (caption, then text), and restores the rest without a conflict", async () => {
     const environment = createMockApplicationEnvironment();
@@ -276,7 +276,7 @@ describe("P3. A caption that may not be saved now", () => {
     })();
     const ready = await storyOf(environment, "story-demo-001");
     const fields: StoryFields = {
-      headline: ready.headline, kicker: "", deck: "", byline: ready.byline, body: ready.body, priority: 3, pagePin: null, deskNote: "", caption: "", credit: "",
+      headline: ready.headline, kicker: "", deck: "", byline: ready.byline, body: ready.body, priority: 3, pagePin: null, editionId: "edition-demo-2026-10-23", deskNote: "", caption: "", credit: "",
     };
     writeDraft("user-demo-sahyadri-reporter", ready.id, {
       fields: { ...fields, caption: "Reporter's caption" },

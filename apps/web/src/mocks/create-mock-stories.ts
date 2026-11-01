@@ -20,11 +20,18 @@
  * Who is told (notify.ts): the desk's Editors and Sub-editors of a filed story, the reporter of one sent back, the
  * person given a story, and of a comment the story's reporter and assignee and the thread's writers; never the one
  * acting, and only members who would see the story (and read its comments). Each change is a live update (`emit`).
+ * Editions (plan §1 L2.1) as the API's src/modules/editions: listed for edition.view, newest first, with their stories
+ * counted; made by a full edition.create (one a date: 409 edition_exists with it as `current`; an Idempotency-Key
+ * replaying its first answer); a story put in or taken out by its PATCH (`editionId`, the desk's); and "Send to the
+ * Desk" (a full desk.export) answering a fictional ZIP of the edition's Ready stories, never a spiked one.
  * Fictional data only; deterministic (no clock, no randomness).
  */
 import type {
   CommentDto,
   CommentService,
+  DeskBundleDto,
+  EditionService,
+  PubEditionDto,
   LiveEventDto,
   ApiProblem,
   AssetDto,
@@ -54,7 +61,10 @@ export type MockStoryOperation =
   | "media.load"
   | "comments.list"
   | "comments.create"
-  | "comments.update";
+  | "comments.update"
+  | "editions.list"
+  | "editions.create"
+  | "editions.deskBundle";
 
 /** The person's standing on a publication, as the API's access check finds it. */
 export interface MockStanding {
@@ -187,6 +197,24 @@ const SUBEDITOR = { id: "user-demo-sahyadri-subeditor", name: "Sahyadri Demo Sub
 const REPORTER = { id: "user-demo-sahyadri-reporter", name: "Sahyadri Demo Reporter" };
 const EDITION_A = { id: "edition-demo-2026-10-23", date: "2026-10-23" };
 const EDITION_B = { id: "edition-demo-2026-10-24", date: "2026-10-24" };
+
+type EditionRow = Omit<PubEditionDto, "counts"> & { readonly orgId: string; readonly publicationId: string };
+
+/** The Pune Daily Ledger's two fictional editions, the ones its stories are in. */
+function editionFixtures(): EditionRow[] {
+  const edition = (fields: { id: string; date: string }, issue: string): EditionRow => ({
+    ...fields,
+    orgId: SAHYADRI,
+    publicationId: PUNE,
+    pages: 8,
+    backPageAds: true,
+    volume: "12",
+    issue,
+    price: "₹5",
+    status: "planning",
+  });
+  return [edition(EDITION_A, "301"), edition(EDITION_B, "302")];
+}
 
 const words = (body: string) => body.split(/\s+/).filter((word) => word !== "").length;
 
@@ -335,6 +363,7 @@ function sniff(head: Uint8Array): { mime: AssetDto["mime"]; widthPx: number; hei
 
 export function createMockStories(deps: MockStoryDeps): {
   stories: StoryService;
+  editions: EditionService;
   media: MediaService;
   comments: CommentService;
   /** Whether this person would hear the live update (the API's events.ts messageFor, with its confirm). */
@@ -345,6 +374,8 @@ export function createMockStories(deps: MockStoryDeps): {
   all(): readonly Row[];
 } {
   let rows = fixtures();
+  let editionRows = editionFixtures();
+  let editionCounter = 0;
   let comments = commentFixtures();
   let commentCounter = 0;
   let counter = 0;
@@ -518,7 +549,10 @@ export function createMockStories(deps: MockStoryDeps): {
       | "media.upload"
       | "media.view"
       | "comment.read"
-      | "comment.write",
+      | "comment.write"
+      | "edition.view"
+      | "edition.create"
+      | "desk.export",
   ): Promise<ServiceResult<T, ApiProblem> | { person: { userId: string; name: string }; s: MockStanding }> {
     const problem = await deps.gate(operation);
     if (problem) return failure(problem);
@@ -534,6 +568,12 @@ export function createMockStories(deps: MockStoryDeps): {
 
   function find(orgId: string, pubId: string, storyId: string): Row | undefined {
     return rows.find((story) => story.id === storyId && story.orgId === orgId && story.publicationId === pubId);
+  }
+  /** A story's edition from its `editionId`: one of this publication's, or none (null); undefined when unknown. */
+  function placement(orgId: string, pubId: string, editionId: string | null): Row["edition"] | undefined {
+    if (editionId === null) return null;
+    const edition = editionRows.find((candidate) => candidate.id === editionId && candidate.orgId === orgId && candidate.publicationId === pubId);
+    return edition ? { id: edition.id, date: edition.date } : undefined;
   }
   function touch(story: Row, by: { userId: string; name: string }, changes: Partial<Row>, text: boolean): Row {
     clock += 1;
@@ -608,6 +648,8 @@ export function createMockStories(deps: MockStoryDeps): {
       if (!isDesk(s) && desk.some((field) => input[field] !== undefined)) return failure(NOT_ALLOWED);
       const headline = cleanText(input.headline);
       if (headline === "") return failure(invalid("body.headline", "Every story needs a headline."));
+      const edition = placement(orgId, pubId, input.editionId ?? null);
+      if (edition === undefined) return failure(invalid("body.editionId", "is not an edition of this publication"));
       counter += 1;
       clock += 1;
       const made = row(0, {
@@ -619,6 +661,8 @@ export function createMockStories(deps: MockStoryDeps): {
         body: cleanText(input.body),
         language: input.language ?? "mr",
         priority: input.priority ?? 3,
+        pagePin: input.pagePin ?? null,
+        edition,
         deskNote: input.deskNote ?? "",
         status: "draft",
         reporter: { id: person.userId, name: person.name },
@@ -656,6 +700,18 @@ export function createMockStories(deps: MockStoryDeps): {
       ) as Partial<Row>;
       if (cleaned.headline !== undefined && cleaned.headline === "") {
         return failure(invalid("body.headline", "Every story needs a headline."));
+      }
+      if (patch.editionId !== undefined) {
+        const edition = placement(orgId, pubId, patch.editionId);
+        if (edition === undefined) return failure(invalid("body.editionId", "is not an edition of this publication"));
+        cleaned.edition = edition;
+      }
+      // as the API's checkPlacement: a page pin past the edition's last page is refused, nothing saved
+      const pin = cleaned.pagePin === undefined ? story.pagePin : cleaned.pagePin;
+      const placedIn = cleaned.edition === undefined ? story.edition : cleaned.edition;
+      const pages = placedIn ? editionRows.find((candidate) => candidate.id === placedIn.id)?.pages : undefined;
+      if (pin !== null && pages !== undefined && pin > pages) {
+        return failure(invalid("body.pagePin", `is past the edition's last page (${pages})`));
       }
       const text = textKeys.some((key) => cleaned[key] !== undefined && cleaned[key] !== story[key]);
       const changes = cleaned;
@@ -746,7 +802,7 @@ export function createMockStories(deps: MockStoryDeps): {
         const made = await stories.create({
           orgId,
           pubId,
-          input: { headline: first.trim(), byline, body },
+          input: { headline: first.trim(), byline, body, ...(editionId ? { editionId } : {}) },
           idempotencyKey: `${idempotencyKey}:${created.length}`,
         });
         if (made.ok) created.push(made.value);
@@ -980,6 +1036,10 @@ export function createMockStories(deps: MockStoryDeps): {
   /** The API's messageFor: a story's update to whoever sees it; a comment's also needs comment.read. */
   function hears(userId: string, orgId: string, event: LiveEventDto): boolean {
     if (event.type === "resync" || event.type === "notification") return true;
+    if (event.type === "edition") {
+      const standing = deps.standing(userId, orgId, event.publicationId);
+      return standing !== undefined && reach("edition.view", standing.orgRole, standing.access) !== null;
+    }
     const story = rows.find((candidate) => candidate.id === event.storyId && candidate.orgId === orgId);
     const standing = story ? deps.standing(userId, orgId, story.publicationId) : undefined;
     if (!story || !standing || story.publicationId !== event.publicationId || !sees(standing, story, userId)) return false;
@@ -991,6 +1051,76 @@ export function createMockStories(deps: MockStoryDeps): {
     const standing = story ? deps.standing(userId, orgId, story.publicationId) : undefined;
     return story && standing && sees(standing, story, userId) ? { headline: story.headline, status: story.status } : null;
   }
+
+  function editionView(edition: EditionRow, s?: MockStanding): PubEditionDto {
+    const { orgId: _org, publicationId: _pub, ...fields } = edition;
+    // as the API: a role that sees no stories (Advertising) is not told how many there are
+    if (s && scopeOf(s) === "none") return { ...fields, counts: null };
+    const its = rows.filter((story) => story.orgId === edition.orgId && story.edition?.id === edition.id);
+    return {
+      ...fields,
+      counts: {
+        stories: its.length,
+        ready: its.filter((story) => story.status === "ready").length,
+        spiked: its.filter((story) => story.status === "spiked").length,
+      },
+    };
+  }
+
+  const editions: EditionService = {
+    async list({ orgId, pubId }) {
+      const checked = await check<readonly PubEditionDto[]>("editions.list", orgId, pubId, "edition.view");
+      if (refused(checked)) return checked;
+      const here = editionRows.filter((edition) => edition.orgId === orgId && edition.publicationId === pubId);
+      return success([...here].sort((a, b) => b.date.localeCompare(a.date)).map((edition) => editionView(edition, checked.s)));
+    },
+
+    async create({ orgId, pubId, input, idempotencyKey }) {
+      const checked = await check<PubEditionDto>("editions.create", orgId, pubId, "edition.create");
+      if (refused(checked)) return checked;
+      // a scoped ◐ (Advertising, Prepress) is refused: making an edition is the desk's
+      if (reach("edition.create", checked.s.orgRole, checked.s.access) !== "full") return failure(NOT_ALLOWED);
+      const replayed = replay<string>(idempotencyKey, "edition", input);
+      if (replayed && isReused(replayed)) return failure(replayed);
+      if (replayed) {
+        const made = editionRows.find((edition) => edition.id === replayed.value);
+        return made ? success(editionView(made)) : failure(NOT_FOUND);
+      }
+      const existing = editionRows.find((edition) => edition.orgId === orgId && edition.publicationId === pubId && edition.date === input.date);
+      if (existing) {
+        return failure({ ...answer(409, "edition_exists", "There is already an edition for that date."), current: editionView(existing) });
+      }
+      editionCounter += 1;
+      const made: EditionRow = {
+        id: `edition-new-${String(editionCounter).padStart(3, "0")}`,
+        orgId,
+        publicationId: pubId,
+        date: input.date,
+        pages: input.pages,
+        backPageAds: input.backPageAds ?? true,
+        volume: input.volume ?? "",
+        issue: input.issue ?? "",
+        price: input.price ?? "",
+        status: "planning",
+      };
+      editionRows = [...editionRows, made];
+      keep(idempotencyKey, "edition", input, made.id);
+      deps.emit?.(orgId, { type: "edition", publicationId: pubId, editionId: made.id });
+      return success(editionView(made));
+    },
+
+    async deskBundle({ orgId, pubId, editionId }) {
+      const checked = await check<DeskBundleDto>("editions.deskBundle", orgId, pubId, "desk.export");
+      if (refused(checked)) return checked;
+      if (reach("desk.export", checked.s.orgRole, checked.s.access) !== "full") return failure(NOT_ALLOWED);
+      const edition = editionRows.find((candidate) => candidate.id === editionId && candidate.orgId === orgId && candidate.publicationId === pubId);
+      if (!edition) return failure(NOT_FOUND);
+      const ready = rows.filter((story) => story.orgId === orgId && story.edition?.id === editionId && story.status === "ready");
+      // a fictional ZIP: its first bytes, then the stories' ids
+      const file = new Blob(["PK\u0003\u0004", ready.map((story) => story.id).join("\n")], { type: "application/zip" });
+      return success({ file, filename: `pageinator-stories-${edition.date}.zip`, stories: ready.length });
+    },
+  };
 
   const media: MediaService = {
     async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey }) {
@@ -1103,6 +1233,7 @@ export function createMockStories(deps: MockStoryDeps): {
 
   return {
     stories: withPhotos,
+    editions,
     media,
     comments: commentService,
     hears,
@@ -1116,6 +1247,8 @@ export function createMockStories(deps: MockStoryDeps): {
       orgBytes = new Map();
       assetCounter = 0;
       rows = fixtures();
+      editionRows = editionFixtures();
+      editionCounter = 0;
       counter = 0;
       clock = 0;
       before = new Map([["story-demo-005", "editing"]]);

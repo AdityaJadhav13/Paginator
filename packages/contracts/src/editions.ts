@@ -1,0 +1,49 @@
+// Editions (docs/product/10-l2-newsroom-plan.md §1 L2.1 "minimal editions", §5.2): one a publication and date, made
+// by the desk (edition.create), listed for whoever has edition.view. A story is put in an edition, or taken out, by the
+// story's own PATCH (editionId). Objects are strict, and responses are sent through these schemas.
+import { z } from "zod";
+
+/** A calendar date, YYYY-MM-DD, in the years the database takes. */
+const EditionDate = z.iso
+  .date()
+  .refine((date) => date >= "2000-01-01" && date <= "2999-12-31", { error: "is not between 2000 and 2999" });
+const Short = z.string().max(200);
+
+export const EDITION_PAGES = [4, 8, 16] as const;
+
+/** POST …/editions: the date is fixed once made, as in the Desk. */
+export const EditionInput = z.strictObject({
+  date: EditionDate,
+  pages: z.union([z.literal(4), z.literal(8), z.literal(16)]),
+  backPageAds: z.boolean().optional(),
+  volume: Short.optional(),
+  issue: Short.optional(),
+  price: Short.optional(),
+});
+export type EditionInput = z.infer<typeof EditionInput>;
+
+export const Edition = z.strictObject({
+  id: z.uuid(),
+  date: z.iso.date(),
+  pages: z.number().int(),
+  backPageAds: z.boolean(),
+  volume: z.string(),
+  issue: z.string(),
+  price: z.string(),
+  status: z.enum(["planning", "in_production", "preflight", "released", "archived"]),
+  /** Its stories (not deleted): all, Ready (what "Send to the Desk" sends), and Spiked (never sent); null for a role
+   * that sees none of the publication's stories (Advertising). */
+  counts: z
+    .strictObject({
+      stories: z.number().int().min(0),
+      ready: z.number().int().min(0),
+      spiked: z.number().int().min(0),
+    })
+    .nullable(),
+});
+export type Edition = z.infer<typeof Edition>;
+
+/** GET …/editions?from&to (both inclusive): newest first, at most 400. */
+export const EditionQuery = z.strictObject({ from: EditionDate.optional(), to: EditionDate.optional() });
+export const EditionList = z.strictObject({ items: z.array(Edition) });
+export type EditionList = z.infer<typeof EditionList>;

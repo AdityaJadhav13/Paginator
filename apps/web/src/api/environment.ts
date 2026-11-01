@@ -13,6 +13,7 @@ import { createApiNotificationService } from "./notification-service.ts";
 import { createApiSecurityService } from "./security-service.ts";
 import { createApiSessionService } from "./session-service.ts";
 import { createApiStoryService } from "./story-service.ts";
+import { createApiEditionService } from "./edition-service.ts";
 import { createApiMediaService } from "./media-service.ts";
 import { createApiTeamService } from "./team-service.ts";
 import { createApiWorkspace } from "./workspace.ts";
@@ -59,6 +60,7 @@ export function createApiEnvironment(
     team: createApiTeamService(client),
     audit: createApiAuditService(client),
     stories: createApiStoryService(client),
+    editions: createApiEditionService(client),
     contact: createApiContactService(client),
     media: createApiMediaService(client, { ...(options.fetch ? { fetch: options.fetch } : {}), onSignedOut: signedOut }),
     comments: createApiCommentService(client),
