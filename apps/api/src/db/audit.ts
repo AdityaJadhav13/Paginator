@@ -8,6 +8,7 @@
 // reach the database as parameters only: an action prefix is compared with starts_with(), never with LIKE.
 import type { AuditAction } from "@pageinator/contracts";
 import { type RawBuilder, sql } from "kysely";
+import type { Client } from "pg";
 import type { Tenant, Tx } from "./tenant.ts";
 
 /** What the reader may see: every event of the organisation, or those of some publications with some actions. */
@@ -132,4 +133,19 @@ export function auditStory(
   data: AuditEntry["data"] = {},
 ): Promise<void> {
   return recordAudit(tx, tenant, { action, targetType: "story", targetId: storyId, publicationId, data });
+}
+
+/** The restore drill's marker (src/db/restore-drill.ts): one event's id and the md5 of its whole row, the newest or the
+ * one named. It runs outside withTenant, as pgn_backup, which reads every row (BYPASSRLS) and writes none. */
+export async function auditMarker(
+  client: Pick<Client, "query">,
+  id?: string,
+): Promise<{ id: string; hash: string } | undefined> {
+  const { rows } = await client.query<{ id: string; hash: string }>(
+    id === undefined
+      ? "select id, md5(a::text) as hash from app.audit_event a order by at desc, id desc limit 1"
+      : "select id, md5(a::text) as hash from app.audit_event a where id = $1",
+    id === undefined ? [] : [id],
+  );
+  return rows[0];
 }

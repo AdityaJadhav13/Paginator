@@ -1104,7 +1104,7 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 | Contract: routes vs Zod/OpenAPI (@fastify/swagger 9.9.2, development only) | Vitest | `apps/api/test/contract` | CI |
 | Worker: tasks with the Desk's fake engine (moved to a shared fixture); conversion with the stub transform; SeaweedFS and Postgres from compose | unittest (as the Desk) | `apps/engine-worker/test` | CI (in the image) |
 | Desk regression (bundle import and existing tests) | unittest | `tools/desk/test` | CI from PR 3 |
-| End-to-end smoke: sign in → file a story at a phone viewport → desk marks Ready → bundle | Playwright 1.64.1 | `apps/web/e2e` | CI at the end of L2.1 |
+| End-to-end smoke: sign in → file a story at a phone viewport → desk marks Ready → bundle | Playwright 1.64.1 | `apps/web/e2e` | On a developer's machine (`pnpm --filter @pageinator/web e2e`); CI once the owner decides on the browser licences (11-fix-before-launch L2-341) |
 | Private, attested in the PR (O-d): real engine on the real dataset; hosted vs Mac parity; CMYK parity | local scripts | `~/PageinatorPrivate` | Locally |
 
 ### 7.4 CI additions (`.github/workflows/ci.yml`)

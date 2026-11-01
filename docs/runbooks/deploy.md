@@ -96,6 +96,8 @@ docker build --platform linux/amd64 -f infra/docker/engine-worker.Dockerfile -t 
 # key, so PGN_BACKUP_S3_ACCESS_KEY_ID and PGN_BACKUP_S3_SECRET_ACCESS_KEY, and PGN_ENGINE_S3_ACCESS_KEY_ID and
 # PGN_ENGINE_S3_SECRET_ACCESS_KEY, must be the same two values; PGN_ICC_FILE=<a CMYK printer profile on this machine>
 # and PGN_ICC_SHA256=<its sha256sum> (a fictional or public profile: the newsprint one stays in ~/PageinatorPrivate).
+# Docker Desktop mounts only shared folders: a profile under /System/Library (macOS's Generic CMYK) fails with "mounts
+# denied"; copy it into a shared folder (your home, for example) and name the copy.
 export PGN_IMAGE_TAG=local-1   # compose needs a tag for every command; deploy.sh sets its own
 c="docker compose -p pgn-pilot-local --profile pilot-local --env-file <file> -f infra/docker/compose.pilot.yml"
 $c up -d --wait db-local s3-local caddy-local
