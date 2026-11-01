@@ -1,0 +1,87 @@
+/* Comments, notifications and live updates (plan §10 PR 23): tokens only, logical properties only. */
+
+.pg-badge {
+  display: inline-block;
+  min-inline-size: var(--pg-space-5);
+  padding-inline: var(--pg-space-1);
+  border-radius: var(--pg-radius-pill);
+  background-color: var(--pg-color-action);
+  color: var(--pg-color-on-action);
+  text-align: center;
+  font-size: var(--pg-font-size-200);
+  line-height: var(--pg-line-height-200);
+}
+
+/* the notifications drawer: a side sheet at the inline end, the whole height, never wider than the screen */
+.pg-dialog.pg-drawer {
+  margin-block: 0;
+  margin-inline: auto 0;
+  block-size: 100%;
+  max-block-size: 100%;
+  inline-size: 100%;
+  max-inline-size: min(100%, var(--pg-account-measure));
+  padding: var(--pg-space-5);
+  border-radius: 0;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.pg-notifications,
+.pg-comments,
+.pg-comment__replies {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-notification {
+  padding-block-end: var(--pg-space-3);
+  border-block-end: var(--pg-border-width) solid var(--pg-color-border-subtle);
+}
+
+.pg-notification__text {
+  margin: 0;
+}
+
+.pg-notification--unread .pg-notification__text {
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-notification__when {
+  color: var(--pg-color-text-muted);
+}
+
+.pg-comment {
+  padding: var(--pg-space-3);
+  border: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  border-radius: var(--pg-radius-md);
+  overflow-wrap: anywhere;
+}
+
+.pg-comment > * + * {
+  margin-block-start: var(--pg-space-2);
+}
+
+.pg-comment--resolved {
+  background-color: var(--pg-color-surface-subtle);
+}
+
+.pg-comment__replies {
+  padding-inline-start: var(--pg-space-4);
+  border-inline-start: var(--pg-border-width) solid var(--pg-color-border);
+}
+
+.pg-comment__meta {
+  color: var(--pg-color-text-muted);
+}
+
+.pg-comment__body {
+  white-space: pre-wrap;
+}
+
+.pg-comments__resolved > summary {
+  cursor: pointer;
+}

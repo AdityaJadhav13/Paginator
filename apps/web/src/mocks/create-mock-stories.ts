@@ -13,9 +13,19 @@
  * file to the "store" (its size must be the declared one), complete (its type from its first bytes, else 422
  * not_a_picture), the story's photo set, changed or taken off on the story's version by whoever edits the story or a
  * Photo Editor, and the original only for whoever may see it.
+ * Comments (plan §5.2) as the API's src/modules/stories/comments.ts: threads one level deep, oldest first; whoever sees
+ * the story reads them (a Reporter their own stories'); whoever may comment writes one or a reply to a thread's first
+ * comment (an Idempotency-Key replaying its first answer); its author changes its text; the author, the desk or the
+ * story's reporter or assignee resolves or reopens a thread; a send-back's comment is a thread of the desk's.
+ * Who is told (notify.ts): the desk's Editors and Sub-editors of a filed story, the reporter of one sent back, the
+ * person given a story, and of a comment the story's reporter and assignee and the thread's writers; never the one
+ * acting, and only members who would see the story (and read its comments). Each change is a live update (`emit`).
  * Fictional data only; deterministic (no clock, no randomness).
  */
 import type {
+  CommentDto,
+  CommentService,
+  LiveEventDto,
   ApiProblem,
   AssetDto,
   MediaService,
@@ -41,7 +51,10 @@ export type MockStoryOperation =
   | "media.presign"
   | "media.send"
   | "media.complete"
-  | "media.load";
+  | "media.load"
+  | "comments.list"
+  | "comments.create"
+  | "comments.update";
 
 /** The person's standing on a publication, as the API's access check finds it. */
 export interface MockStanding {
@@ -58,6 +71,75 @@ export interface MockStoryDeps {
   gate(operation: MockStoryOperation): Promise<ApiProblem | undefined>;
   signedOut<T>(): ServiceResult<T, ApiProblem>;
   nameOf(userId: string): string | undefined;
+  /** The organisation's active members (who may be told of a change). */
+  members?(orgId: string): readonly string[];
+  /** Someone is told of a change (the notifications double). */
+  notify?(orgId: string, userId: string, notice: MockStoryNotice): void;
+  /** A change the API would send as a live update (the session double decides who hears it). */
+  emit?(orgId: string, event: LiveEventDto): void;
+}
+
+/** What a story's change tells someone of (create-mock-notifications.ts MockNotice). */
+export interface MockStoryNotice {
+  readonly kind: "story_filed" | "story_sent_back" | "story_assigned" | "comment";
+  readonly publicationId: string;
+  readonly storyId: string;
+  readonly commentId?: string;
+  readonly actor: { readonly id: string; readonly name: string };
+}
+
+interface CommentRow {
+  readonly id: string;
+  readonly orgId: string;
+  readonly pubId: string;
+  readonly storyId: string;
+  readonly parentId: string | null;
+  readonly author: { readonly id: string; readonly name: string };
+  body: string;
+  readonly createdAt: string;
+  updatedAt: string;
+  resolved: { readonly at: string; readonly by: { readonly id: string; readonly name: string } } | null;
+  readonly order: number;
+}
+
+/** Fictional comments: a thread with a reply on the filed story, and a resolved one. */
+function commentFixtures(): CommentRow[] {
+  const on = { orgId: SAHYADRI, pubId: PUNE, storyId: "story-demo-001" };
+  return [
+    {
+      ...on,
+      id: "comment-demo-001",
+      parentId: null,
+      author: EDITOR,
+      body: "पहिल्या पावसाची तारीख तपासा.",
+      createdAt: "2026-10-22T09:00:00.000Z",
+      updatedAt: "2026-10-22T09:00:00.000Z",
+      resolved: null,
+      order: 1,
+    },
+    {
+      ...on,
+      id: "comment-demo-002",
+      parentId: "comment-demo-001",
+      author: REPORTER,
+      body: "तपासतो, संध्याकाळपर्यंत कळवतो.",
+      createdAt: "2026-10-22T09:10:00.000Z",
+      updatedAt: "2026-10-22T09:10:00.000Z",
+      resolved: null,
+      order: 2,
+    },
+    {
+      ...on,
+      id: "comment-demo-003",
+      parentId: null,
+      author: SUBEDITOR,
+      body: "Headline fits two columns.",
+      createdAt: "2026-10-22T08:00:00.000Z",
+      updatedAt: "2026-10-22T08:05:00.000Z",
+      resolved: { at: "2026-10-22T08:20:00.000Z", by: EDITOR },
+      order: 0,
+    },
+  ];
 }
 
 type Row = Omit<StoryDto, "can" | "commentCount"> & { readonly orgId: string; readonly order: number };
@@ -253,10 +335,15 @@ function sniff(head: Uint8Array): { mime: AssetDto["mime"]; widthPx: number; hei
 export function createMockStories(deps: MockStoryDeps): {
   stories: StoryService;
   media: MediaService;
+  comments: CommentService;
+  /** Whether this person would hear the live update (the API's events.ts messageFor, with its confirm). */
+  hears(userId: string, orgId: string, event: LiveEventDto): boolean;
   reset(): void;
   all(): readonly Row[];
 } {
   let rows = fixtures();
+  let comments = commentFixtures();
+  let commentCounter = 0;
   let counter = 0;
   let clock = 0;
   /** Where a held or spiked story came from. */
@@ -342,10 +429,40 @@ export function createMockStories(deps: MockStoryDeps): {
     return out;
   }
   const canAssign = (s: MockStanding) => reach("story.assign", s.orgRole, s.access) !== null;
+  /** canComment: whoever sees the story with comment.write (a Reporter's ◐: their own; a Viewer never). */
   const canComment = (s: MockStanding, story: Row, userId: string) => {
+    if (!sees(s, story, userId)) return false;
     const here = reach("comment.write", s.orgRole, s.access);
     return here === "full" || (here === "scoped" && theirs(story, userId));
   };
+  /** canReadComments: whoever sees the story with comment.read (a Reporter's ◐: their own). */
+  const canReadComments = (s: MockStanding, story: Row, userId: string) => {
+    if (!sees(s, story, userId)) return false;
+    const here = reach("comment.read", s.orgRole, s.access);
+    return here === "full" || (here === "scoped" && theirs(story, userId));
+  };
+  const canEditComment = (s: MockStanding, story: Row, comment: CommentRow, userId: string) =>
+    comment.author.id === userId && canComment(s, story, userId);
+  const canResolve = (s: MockStanding, story: Row, comment: CommentRow, userId: string) =>
+    comment.parentId === null &&
+    canComment(s, story, userId) &&
+    (comment.author.id === userId || isDesk(s) || theirs(story, userId));
+
+  /** Who among these, other than the one acting, is a member who sees the story (and may read its comments). */
+  function audience(story: Row, candidates: readonly (string | null | undefined)[], actorId: string, comments = false): string[] {
+    const members = new Set(deps.members?.(story.orgId) ?? []);
+    const ids = [...new Set(candidates.filter((id): id is string => Boolean(id)))].filter((id) => id !== actorId && members.has(id));
+    return ids.filter((id) => {
+      const standing = deps.standing(id, story.orgId, story.publicationId);
+      if (!standing || !sees(standing, story, id)) return false;
+      return !comments || reach("comment.read", standing.orgRole, standing.access) !== null;
+    });
+  }
+  function tell(story: Row, people: readonly string[], notice: Omit<MockStoryNotice, "publicationId" | "storyId">) {
+    for (const userId of people) {
+      deps.notify?.(story.orgId, userId, { ...notice, publicationId: story.publicationId, storyId: story.id });
+    }
+  }
 
   function view(story: Row, s: MockStanding, userId: string): StoryDto {
     const { orgId: _org, order: _order, ...fields } = story;
@@ -356,7 +473,7 @@ export function createMockStories(deps: MockStoryDeps): {
       edition: story.edition ? { ...story.edition } : null,
       updatedBy: { ...story.updatedBy },
       photo: story.photo ? { ...story.photo } : null,
-      commentCount: 0,
+      commentCount: comments.filter((comment) => comment.storyId === story.id && comment.orgId === story.orgId).length,
       can: {
         edit: canEdit(s, story, userId),
         transitions: transitions(s, story, userId),
@@ -390,7 +507,15 @@ export function createMockStories(deps: MockStoryDeps): {
     operation: MockStoryOperation,
     orgId: string,
     pubId: string,
-    permission: "story.view" | "story.create" | "story.edit_own" | "story.assign" | "media.upload" | "media.view",
+    permission:
+      | "story.view"
+      | "story.create"
+      | "story.edit_own"
+      | "story.assign"
+      | "media.upload"
+      | "media.view"
+      | "comment.read"
+      | "comment.write",
   ): Promise<ServiceResult<T, ApiProblem> | { person: { userId: string; name: string }; s: MockStanding }> {
     const problem = await deps.gate(operation);
     if (problem) return failure(problem);
@@ -420,6 +545,7 @@ export function createMockStories(deps: MockStoryDeps): {
     const brief = (row: Row) => !row.photo && words(row.body) > 0 && words(row.body) <= 60;
     const withCounts = changes.body !== undefined || "photo" in changes ? { ...next, words: words(next.body), isBrief: brief(next) } : next;
     rows = rows.map((candidate) => (candidate.id === story.id ? withCounts : candidate));
+    deps.emit?.(story.orgId, { type: "story", publicationId: story.publicationId, storyId: story.id });
     return withCounts;
   }
   /** The first answer for this key and this body; KEY_REUSED for another body; undefined for a new key. */
@@ -499,6 +625,7 @@ export function createMockStories(deps: MockStoryDeps): {
         publicationId: pubId,
       });
       rows = [...rows, { ...made, order: 100 + counter }];
+      deps.emit?.(orgId, { type: "story", publicationId: pubId, storyId: made.id });
       keep(idempotencyKey, "create", input, made.id);
       return success(view(made, s, person.userId));
     },
@@ -552,7 +679,22 @@ export function createMockStories(deps: MockStoryDeps): {
       }
       const target: StoryStatusDto = to === "restore" ? (before.get(story.id) ?? "draft") : to;
       if (to === "held" || to === "spiked") before = new Map(before).set(story.id, story.status);
-      const moved = view(touch(story, person, { status: target }, false), s, person.userId);
+      const after = touch(story, person, { status: target }, false);
+      // a move's comment is a thread of the mover's on the story (a send-back's always has one)
+      const note = cleanText(comment);
+      const noteId = note === "" ? null : addComment(after, person, null, note).id;
+      const actor = { id: person.userId, name: person.name };
+      if (to === "filed") {
+        const desk = (deps.members?.(orgId) ?? []).filter((id) => {
+          const standing = deps.standing(id, orgId, pubId);
+          return standing ? has(standing, "editor", "sub_editor") : false;
+        });
+        tell(after, audience(after, desk, person.userId), { kind: "story_filed", actor });
+      }
+      if (to === "draft" && noteId) {
+        tell(after, audience(after, [after.reporter.id], person.userId), { kind: "story_sent_back", commentId: noteId, actor });
+      }
+      const moved = view(rows.find((candidate) => candidate.id === after.id) ?? after, s, person.userId);
       keep(idempotencyKey, "transition", { storyId, to, baseRevision, comment }, moved);
       return success(moved);
     },
@@ -570,7 +712,11 @@ export function createMockStories(deps: MockStoryDeps): {
         return failure(invalid("body.userId", "is not a member who reaches this publication"));
       }
       const assignee = userId === null ? null : { id: userId, name: deps.nameOf(userId) ?? userId };
-      return success(view(touch(story, person, { assignee }, false), s, person.userId));
+      const after = touch(story, person, { assignee }, false);
+      if (assignee && assignee.id !== story.assignee?.id) {
+        tell(after, audience(after, [assignee.id], person.userId), { kind: "story_assigned", actor: { id: person.userId, name: person.name } });
+      }
+      return success(view(after, s, person.userId));
     },
 
     async paste({ orgId, pubId, text, editionId, idempotencyKey }) {
@@ -689,6 +835,153 @@ export function createMockStories(deps: MockStoryDeps): {
   };
   const withPhotos: StoryService = { ...stories, ...photoOps };
 
+  /** A new comment (or reply) on the story, and its live update; who is told is the caller's to decide. */
+  function addComment(story: Row, by: { userId: string; name: string }, parentId: string | null, body: string): CommentRow {
+    commentCounter += 1;
+    clock += 1;
+    const at = `2026-10-22T10:${String(clock).padStart(2, "0")}:00.000Z`;
+    const made: CommentRow = {
+      id: `comment-new-${String(commentCounter).padStart(3, "0")}`,
+      orgId: story.orgId,
+      pubId: story.publicationId,
+      storyId: story.id,
+      parentId,
+      author: { id: by.userId, name: by.name },
+      body,
+      createdAt: at,
+      updatedAt: at,
+      resolved: null,
+      order: 100 + commentCounter,
+    };
+    comments = [...comments, made];
+    deps.emit?.(story.orgId, { type: "comment", publicationId: story.publicationId, storyId: story.id, commentId: made.id });
+    return made;
+  }
+  const COMMENT_LIMIT = 10_000;
+  /** cleanText for a comment: the Desk's cleaning, at most 10,000 characters, never empty. */
+  function commentBody(body: string): { ok: true; body: string } | { ok: false; problem: Answer } {
+    const text = cleanText(body);
+    if (text === "") return { ok: false, problem: invalid("body.body", "A comment needs some text.") };
+    const n = [...text].length;
+    if (n > COMMENT_LIMIT) {
+      return { ok: false, problem: invalid("body.body", `The comment is too long (${n} characters; the most is ${COMMENT_LIMIT}).`) };
+    }
+    return { ok: true, body: text };
+  }
+  const commentView = (comment: CommentRow, s: MockStanding, story: Row, userId: string): CommentDto => ({
+    id: comment.id,
+    storyId: comment.storyId,
+    parentId: comment.parentId,
+    author: { ...comment.author },
+    body: comment.body,
+    createdAt: comment.createdAt,
+    updatedAt: comment.updatedAt,
+    edited: comment.updatedAt > comment.createdAt,
+    resolved: comment.resolved ? { at: comment.resolved.at, by: { ...comment.resolved.by } } : null,
+    can: { edit: canEditComment(s, story, comment, userId), resolve: canResolve(s, story, comment, userId) },
+  });
+
+  const commentService: CommentService = {
+    async list({ orgId, pubId, storyId }) {
+      const checked = await check<CommentDto[]>("comments.list", orgId, pubId, "comment.read");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const story = find(orgId, pubId, storyId);
+      if (!story || !canReadComments(s, story, person.userId)) return failure(NOT_FOUND);
+      return success(
+        comments
+          .filter((comment) => comment.storyId === storyId && comment.orgId === orgId && comment.pubId === pubId)
+          .sort((a, b) => a.order - b.order)
+          .map((comment) => commentView(comment, s, story, person.userId)),
+      );
+    },
+
+    async create({ orgId, pubId, storyId, body, parentId, idempotencyKey }) {
+      const checked = await check<CommentDto>("comments.create", orgId, pubId, "comment.write");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const input = { storyId, body, ...(parentId ? { parentId } : {}) };
+      const replayed = replay<string>(idempotencyKey, "comment", input);
+      if (replayed && isReused(replayed)) return failure(replayed);
+      if (replayed) {
+        // a replay shows the comment again, if the person still reads the story's comments
+        const kept = comments.find((comment) => comment.id === replayed.value);
+        const story = kept ? find(orgId, pubId, kept.storyId) : undefined;
+        if (!kept || !story || !canReadComments(s, story, person.userId)) return failure(NOT_FOUND);
+        return success(commentView(kept, s, story, person.userId));
+      }
+      const story = find(orgId, pubId, storyId);
+      if (!story || !canReadComments(s, story, person.userId)) return failure(NOT_FOUND);
+      if (!canComment(s, story, person.userId)) return failure(NOT_ALLOWED);
+      let parent: CommentRow | undefined;
+      if (parentId !== undefined) {
+        parent = comments.find((comment) => comment.id === parentId && comment.pubId === pubId);
+        if (!parent || parent.storyId !== storyId || parent.parentId !== null) {
+          return failure(invalid("body.parentId", "is not the first comment of a thread on this story"));
+        }
+      }
+      const text = commentBody(body);
+      if (!text.ok) return failure(text.problem);
+      const made = addComment(story, person, parent?.id ?? null, text.body);
+      const writers = parent ? comments.filter((comment) => comment.id === parent.id || comment.parentId === parent.id).map((comment) => comment.author.id) : [];
+      tell(story, audience(story, [story.reporter.id, story.assignee?.id, ...writers], person.userId, true), {
+        kind: "comment",
+        commentId: made.id,
+        actor: { id: person.userId, name: person.name },
+      });
+      keep(idempotencyKey, "comment", input, made.id);
+      return success(commentView(made, s, story, person.userId));
+    },
+
+    async update({ orgId, pubId, commentId, patch }) {
+      const checked = await check<CommentDto>("comments.update", orgId, pubId, "comment.write");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const comment = comments.find((candidate) => candidate.id === commentId && candidate.orgId === orgId && candidate.pubId === pubId);
+      if (!comment) return failure(NOT_FOUND);
+      const story = find(orgId, pubId, comment.storyId);
+      if (!story || !canReadComments(s, story, person.userId)) return failure(NOT_FOUND);
+      if (patch.body === undefined && patch.resolved === undefined) {
+        return failure(invalid("body", "change the body, or resolve or reopen the thread"));
+      }
+      let body: string | undefined;
+      if (patch.body !== undefined) {
+        if (!canEditComment(s, story, comment, person.userId)) return failure(NOT_ALLOWED);
+        const text = commentBody(patch.body);
+        if (!text.ok) return failure(text.problem);
+        if (text.body !== comment.body) body = text.body;
+      }
+      let resolve: boolean | undefined;
+      if (patch.resolved !== undefined) {
+        if (comment.parentId !== null) {
+          return failure(invalid("body.resolved", "A reply is resolved with its thread's first comment."));
+        }
+        if (!canResolve(s, story, comment, person.userId)) return failure(NOT_ALLOWED);
+        if (patch.resolved !== (comment.resolved !== null)) resolve = patch.resolved;
+      }
+      if (body !== undefined || resolve !== undefined) {
+        clock += 1;
+        const at = `2026-10-22T10:${String(clock).padStart(2, "0")}:00.000Z`;
+        if (body !== undefined) {
+          comment.body = body;
+          comment.updatedAt = at;
+        }
+        if (resolve !== undefined) comment.resolved = resolve ? { at, by: { id: person.userId, name: person.name } } : null;
+        deps.emit?.(orgId, { type: "comment", publicationId: pubId, storyId: story.id, commentId: comment.id });
+      }
+      return success(commentView(comment, s, story, person.userId));
+    },
+  };
+
+  /** The API's messageFor: a story's update to whoever sees it; a comment's also needs comment.read. */
+  function hears(userId: string, orgId: string, event: LiveEventDto): boolean {
+    if (event.type === "resync" || event.type === "notification") return true;
+    const story = rows.find((candidate) => candidate.id === event.storyId && candidate.orgId === orgId);
+    const standing = story ? deps.standing(userId, orgId, story.publicationId) : undefined;
+    if (!story || !standing || story.publicationId !== event.publicationId || !sees(standing, story, userId)) return false;
+    return event.type === "story" || reach("comment.read", standing.orgRole, standing.access) !== null;
+  }
+
   const media: MediaService = {
     async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey }) {
       const checked = await check<never>("media.presign", orgId, pubId, "media.upload");
@@ -801,7 +1094,11 @@ export function createMockStories(deps: MockStoryDeps): {
   return {
     stories: withPhotos,
     media,
+    comments: commentService,
+    hears,
     reset() {
+      comments = commentFixtures();
+      commentCounter = 0;
       assets = fixtureAssets();
       uploads = new Map();
       uploadCount = new Map();

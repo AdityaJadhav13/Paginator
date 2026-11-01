@@ -137,6 +137,7 @@ describe("B2. A conflict over the photo keeps the typed caption", () => {
 
   it("attach meets another photo: the panel says a different photo is attached, and the typed caption survives", async () => {
     const environment = createMockApplicationEnvironment();
+    environment.liveController.drop(true); // no live update reaches this screen: its next save meets their version
     renderAuth(at("story-demo-001"), { preset: "sahyadri-editor", environment });
     const user = userEvent.setup();
     const complete = environment.media.complete.bind(environment.media);
@@ -249,9 +250,12 @@ describe("P2 and P13. Drafts", () => {
     const caption = (await screen.findByLabelText("Caption")) as HTMLTextAreaElement;
     fireEvent.compositionStart(caption);
     fireEvent.change(caption, { target: { value: "क़ा " } }); // still composing, with a space the API will strip
-    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), SLOW);
-    expect(caption.value).toBe("क़ा "); // the box keeps the composition as it is
+    const before = (await storyOf(environment, "story-demo-004")).photo?.caption;
+    await new Promise((resolve) => setTimeout(resolve, 2_000)); // past the autosave's pause: nothing half-composed is sent
+    expect((await storyOf(environment, "story-demo-004")).photo?.caption).toBe(before);
     fireEvent.compositionEnd(caption);
+    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), SLOW);
+    expect(caption.value).toBe("क़ा "); // the box keeps the text as it is, the API's cleaning is not put back in it
     expect((await storyOf(environment, "story-demo-004")).photo?.caption).toBe("क़ा".normalize("NFC"));
   });
 });

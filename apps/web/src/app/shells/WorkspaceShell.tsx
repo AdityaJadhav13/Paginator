@@ -15,7 +15,9 @@ import { useWorkspaceRouteContext } from "../contracts/route-context.ts";
 import { ProtectedRouteState } from "../../features/auth/ProtectedRouteState.tsx";
 import { SignedInSessionControls } from "../../features/auth/SessionStatus.tsx";
 import { useSession } from "../../features/auth/SessionProvider.tsx";
-import { navigation } from "../../features/people/navigation.ts";
+import { may, navigation } from "../../features/people/navigation.ts";
+import { OrgLive } from "../../features/live/live-context.tsx";
+import { NotificationsButton } from "../../features/live/Notifications.tsx";
 import { TwoStepNeeded } from "../../features/people/TwoStepNeeded.tsx";
 import { LanguageSwitch, useI18n, type PlainKey } from "../../i18n/index.ts";
 
@@ -52,7 +54,9 @@ export function WorkspaceShell() {
 
   if (state.status !== "allowed") {
     const invalidPublication = state.status === "invalid-context" ? state.invalid.publication : undefined;
+    // the same root as below, so the shell (and the skip link's focus) is not remounted once the route resolves
     return (
+      <OrgLive orgId={null}>
       <div
         className="pg-shell pg-shell--workspace"
         dir={invalidPublication?.direction ?? "ltr"}
@@ -65,6 +69,7 @@ export function WorkspaceShell() {
           </Container>
         </main>
       </div>
+      </OrgLive>
     );
   }
 
@@ -77,6 +82,8 @@ export function WorkspaceShell() {
   const entries = access ? navigation(access, publication?.id, DEVELOPMENT) : [];
   const blocked = access ? access.twoStep.required && !access.twoStep.satisfied : false;
   const section = publication ? t("shell.publication") : t("shell.organization");
+  /** Live updates and notifications: for whoever reaches a publication here (the API's publication.view). */
+  const hears = Boolean(access && !blocked && may(access, "publication.view"));
 
   const breadcrumbItems: BreadcrumbItem[] = [{ label: organization.name, to: paths.orgHome(organization.id) }];
   // a publication's built page is its Stories; its overview is a development placeholder
@@ -103,6 +110,7 @@ export function WorkspaceShell() {
   }
 
   return (
+    <OrgLive orgId={hears ? organization.id : null}>
     <div
       className="pg-shell pg-shell--workspace"
       dir={publication?.direction ?? "ltr"}
@@ -119,6 +127,9 @@ export function WorkspaceShell() {
               <Link to={paths.home()}>{t("shell.backToPublic")}</Link>
               <Link to={paths.accountSecurity()}>{t("shell.accountSecurity")}</Link>
               <Cluster gap="3" justify="end">
+                {hears && access && (
+                  <NotificationsButton orgId={organization.id} mayViewTeam={may(access, "members.view")} />
+                )}
                 <LanguageSwitch />
                 {DEVELOPMENT && (
                   <span lang="en">
@@ -199,5 +210,6 @@ export function WorkspaceShell() {
         </Container>
       </main>
     </div>
+    </OrgLive>
   );
 }

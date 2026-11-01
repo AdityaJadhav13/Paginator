@@ -11,6 +11,9 @@ import type {
   SessionService,
   StoryService,
   MediaService,
+  CommentService,
+  NotificationService,
+  LiveService,
   TeamService,
   UserQueryService,
   WorkspaceAccessService,
@@ -18,6 +21,7 @@ import type {
 } from "../services/index.ts";
 import type { MockScenarioController } from "./scenarios.ts";
 import { createMockContact, type MockContactController } from "./create-mock-contact.ts";
+import type { MockLiveController } from "./create-mock-live.ts";
 
 /** The whole app on test doubles: the placeholder workspace's fictional data and the session double. */
 export interface MockApplicationEnvironment extends ServiceEnvironment {
@@ -29,6 +33,10 @@ export interface MockApplicationEnvironment extends ServiceEnvironment {
   readonly team: TeamService;
   readonly stories: StoryService;
   readonly media: MediaService;
+  readonly comments: CommentService;
+  readonly notifications: NotificationService;
+  readonly live: LiveService;
+  readonly liveController: MockLiveController;
   readonly access: WorkspaceAccessService;
   readonly scenarios: MockScenarioController;
   readonly sessionController: MockSessionController;

@@ -429,10 +429,10 @@ export function PhotoPanel({
           photo && (
             <>
               <Field label={t("glossary.caption")}>
-                <TextArea lang={lang} rows={2} value={caption} readOnly={locked} onChange={(event) => onCaption(event.target.value)} onBlur={onLeave} />
+                <TextArea data-field="caption" lang={lang} rows={2} value={caption} readOnly={locked} onChange={(event) => onCaption(event.target.value)} onBlur={onLeave} />
               </Field>
               <Field label={t("glossary.photoCredit")}>
-                <TextInput value={credit} readOnly={locked} onChange={(event) => onCredit(event.target.value)} onBlur={onLeave} />
+                <TextInput data-field="credit" value={credit} readOnly={locked} onChange={(event) => onCredit(event.target.value)} onBlur={onLeave} />
               </Field>
             </>
           )

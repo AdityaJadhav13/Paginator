@@ -144,6 +144,7 @@ describe("Two people at once", () => {
 
   it("takes theirs when asked", async () => {
     const environment = createMockApplicationEnvironment();
+    environment.liveController.drop(true); // no live update reaches this screen: its next save meets their version
     renderAuth(at("story-demo-003"), { preset: "sahyadri-editor", environment });
     const user = userEvent.setup();
     const body = await screen.findByLabelText("Body text");

@@ -165,6 +165,7 @@ describe("4. Creating a story keeps the screen, the boxes and the focus", () => 
 describe("5–6. The conflict: a three-way merge, chosen without a race", () => {
   it("shows every field that differs, and keeps their fields while putting mine on top on the first click", async () => {
     const environment = createMockApplicationEnvironment();
+    environment.liveController.drop(true); // no live update reaches this screen: its next save meets their version
     renderAuth(at("story-demo-003"), { preset: "sahyadri-editor", environment });
     const user = userEvent.setup();
     const box = await screen.findByLabelText("Body text");
