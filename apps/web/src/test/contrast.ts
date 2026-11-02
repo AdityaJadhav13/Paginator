@@ -101,3 +101,33 @@ export const TOKEN_CONTRAST_PAIRS: Array<{
   // Using the non-text component threshold (3:1) as a reasonable perceivability standard.
   { fg: "#6B7280", bg: "#E5E7EB", minimum: WCAG_AA_COMPONENT, label: "disabled-text on disabled-bg" },
 ];
+
+/**
+ * The signed-in app's pairs (src/ui/app-tokens.css, under `.pg-app`): `fgToken`/`bgToken` name the tokens, and the
+ * test checks the hex values here are the file's own.
+ */
+export const APP_CONTRAST_PAIRS: Array<{
+  fg: string;
+  bg: string;
+  fgToken: string;
+  bgToken: string;
+  minimum: number;
+  label: string;
+}> = [
+  { fg: "#17202A", bg: "#F3F4F6", fgToken: "--pg-app-text", bgToken: "--pg-app-canvas", minimum: WCAG_AA_NORMAL, label: "app text on canvas" },
+  { fg: "#4B5563", bg: "#F3F4F6", fgToken: "--pg-app-text-secondary", bgToken: "--pg-app-canvas", minimum: WCAG_AA_NORMAL, label: "secondary text on canvas" },
+  { fg: "#4B5563", bg: "#FFFFFF", fgToken: "--pg-app-text-secondary", bgToken: "--pg-app-surface", minimum: WCAG_AA_NORMAL, label: "secondary text on surface" },
+  { fg: "#4B5563", bg: "#FAFAFB", fgToken: "--pg-app-text-secondary", bgToken: "--pg-app-sidebar-bg", minimum: WCAG_AA_NORMAL, label: "secondary text on sidebar" },
+  { fg: "#17202A", bg: "#F1F3F5", fgToken: "--pg-app-text", bgToken: "--pg-app-surface-hover", minimum: WCAG_AA_NORMAL, label: "text on hover" },
+  { fg: "#17202A", bg: "#E5E8EC", fgToken: "--pg-app-text", bgToken: "--pg-app-surface-pressed", minimum: WCAG_AA_NORMAL, label: "text on pressed" },
+  { fg: "#1E40AF", bg: "#E8EEFB", fgToken: "--pg-app-selected-text", bgToken: "--pg-app-selected-bg", minimum: WCAG_AA_NORMAL, label: "selected text on selected" },
+  { fg: "#1D4ED8", bg: "#E8EEFB", fgToken: "--pg-app-accent", bgToken: "--pg-app-selected-bg", minimum: WCAG_AA_COMPONENT, label: "accent bar on selected" },
+  { fg: "#7D8590", bg: "#FFFFFF", fgToken: "--pg-app-border-strong", bgToken: "--pg-app-surface", minimum: WCAG_AA_COMPONENT, label: "control edge on surface" },
+  { fg: "#7D8590", bg: "#F3F4F6", fgToken: "--pg-app-border-strong", bgToken: "--pg-app-canvas", minimum: WCAG_AA_COMPONENT, label: "control edge on canvas" },
+  { fg: "#374151", bg: "#EEF0F3", fgToken: "--pg-app-tone-neutral-text", bgToken: "--pg-app-tone-neutral-bg", minimum: WCAG_AA_NORMAL, label: "neutral chip" },
+  { fg: "#1E40AF", bg: "#E6EEFC", fgToken: "--pg-app-tone-info-text", bgToken: "--pg-app-tone-info-bg", minimum: WCAG_AA_NORMAL, label: "info chip" },
+  { fg: "#166534", bg: "#E6F4EA", fgToken: "--pg-app-tone-success-text", bgToken: "--pg-app-tone-success-bg", minimum: WCAG_AA_NORMAL, label: "success chip" },
+  { fg: "#854D0E", bg: "#FDF2DE", fgToken: "--pg-app-tone-warning-text", bgToken: "--pg-app-tone-warning-bg", minimum: WCAG_AA_NORMAL, label: "warning chip" },
+  { fg: "#B91C1C", bg: "#FDECEC", fgToken: "--pg-app-tone-danger-text", bgToken: "--pg-app-tone-danger-bg", minimum: WCAG_AA_NORMAL, label: "danger chip" },
+  { fg: "#5B21B6", bg: "#F0EAFD", fgToken: "--pg-app-tone-accent-text", bgToken: "--pg-app-tone-accent-bg", minimum: WCAG_AA_NORMAL, label: "accent chip" },
+];

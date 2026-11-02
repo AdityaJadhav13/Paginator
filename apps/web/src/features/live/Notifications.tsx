@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Button, Checkbox, Cluster, Dialog, ProgressIndicator, Stack, VisuallyHidden } from "../../ui/index.ts";
+import { Button, Checkbox, Drawer, EmptyState, Icon, ProgressIndicator, Stack, VisuallyHidden, type IconName } from "../../ui/index.ts";
 import { paths } from "../../app/routes.ts";
 import { formatDateTime } from "../../i18n/dates.ts";
 import { useI18n, type Translate } from "../../i18n/index.ts";
@@ -82,6 +82,15 @@ export function notificationLink(item: NotificationDto, orgId: string, mayViewTe
   return item.commentId ? `${story}#comment-${item.commentId}` : story;
 }
 
+/** Each kind's icon (02 §3.6): decorative, the sentence says what happened. */
+const KIND_ICON: Record<NotificationDto["kind"], IconName> = {
+  story_filed: "send",
+  story_sent_back: "arrow-left",
+  story_assigned: "file-text",
+  comment: "message-square",
+  invitation_accepted: "users",
+};
+
 type List =
   | { readonly status: "loading" }
   | { readonly status: "failed"; readonly problem: ApiProblem }
@@ -123,15 +132,18 @@ export function NotificationsButton({ orgId, mayViewTeam }: { readonly orgId: st
   return (
     <>
       <Button
-        variant="secondary"
+        variant="quiet"
         size="sm"
+        className="pg-notifications-button"
+        title={t("notifications.open")}
         onClick={() => {
           setMarkFailed(false);
           setOpen(true);
         }}
         aria-haspopup="dialog"
       >
-        {t("notifications.open")}
+        <Icon name="bell" size={20} />
+        <VisuallyHidden>{t("notifications.open")}</VisuallyHidden>
         {unread !== null && unread > 0 && (
           <>
             {" "}
@@ -273,13 +285,13 @@ function NotificationsDrawer({
 
   const unreadShown = list.status === "ready" && list.items.some((item) => item.readAt === null);
   return (
-    <Dialog open onClose={onClose} title={t("notifications.title")} closeLabel={t("shell.closeDialog")} className="pg-drawer">
+    <Drawer open onClose={onClose} title={t("notifications.title")} closeLabel={t("shell.closeDialog")}>
       <Stack gap="4">
         <OfflineNotice />
-        <Cluster gap="3">
+        <div className="pg-notifications__bar">
           <Checkbox label={t("notifications.onlyUnread")} checked={onlyUnread} onChange={(event) => setOnlyUnread(event.target.checked)} />
           <Button
-            variant="secondary"
+            variant="quiet"
             size="sm"
             disabled={!unreadShown || marking.pending}
             aria-busy={marking.pending}
@@ -287,9 +299,10 @@ function NotificationsDrawer({
               if (await markRead({ all: true })) setSaid(t("notifications.allRead"));
             }}
           >
+            <Icon name="circle-check" size={16} />
             {t("notifications.markAll")}
           </Button>
-        </Cluster>
+        </div>
         <div aria-live="polite" className="pg-type-body-small">
           {said}
         </div>
@@ -306,7 +319,7 @@ function NotificationsDrawer({
           </Stack>
         )}
         {list.status === "ready" && list.items.length === 0 && (
-          <p>{onlyUnread ? t("notifications.noneUnread") : t("notifications.none")}</p>
+          <EmptyState icon="bell" heading={onlyUnread ? t("notifications.noneUnread") : t("notifications.none")} headingLevel={3} />
         )}
         {list.status === "ready" && list.items.length > 0 && (
           <ul className="pg-notifications" aria-label={t("notifications.title")}>
@@ -316,41 +329,47 @@ function NotificationsDrawer({
               const fresh = item.readAt === null;
               return (
                 <li key={item.id} className={fresh ? "pg-notification pg-notification--unread" : "pg-notification"}>
-                  <p className="pg-notification__text">
-                    {fresh && <span className="pg-chip pg-notification__new">{t("notifications.new")}</span>}{" "}
-                    {to ? (
-                      <Link
-                        to={to}
-                        onClick={(event) => {
-                          if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
-                          event.preventDefault();
-                          open(item, to);
-                        }}
-                      >
-                        {text}
-                      </Link>
-                    ) : (
-                      text
-                    )}
-                  </p>
-                  <Cluster gap="3">
-                    <span className="pg-type-body-small pg-notification__when">
-                      <time dateTime={item.createdAt}>{formatDateTime(item.createdAt, language)}</time>
-                    </span>
-                    {fresh && (
-                      <Button
-                        variant="quiet"
-                        size="sm"
-                        disabled={marking.pending}
-                        aria-label={t("notifications.markOneNamed", { notification: text })}
-                        onClick={async () => {
-                          if (await markRead({ ids: [item.id] })) setSaid(t("notifications.oneRead"));
-                        }}
-                      >
-                        {t("notifications.markOne")}
-                      </Button>
-                    )}
-                  </Cluster>
+                  <span className="pg-notification__icon">
+                    <Icon name={KIND_ICON[item.kind]} size={16} />
+                  </span>
+                  <div className="pg-notification__main">
+                    <p className="pg-notification__text">
+                      {fresh && <VisuallyHidden>{`${t("notifications.new")} `}</VisuallyHidden>}
+                      {to ? (
+                        <Link
+                          to={to}
+                          onClick={(event) => {
+                            if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                            event.preventDefault();
+                            open(item, to);
+                          }}
+                        >
+                          {text}
+                        </Link>
+                      ) : (
+                        text
+                      )}
+                    </p>
+                    <div className="pg-notification__foot">
+                      <span className="pg-type-body-small pg-notification__when">
+                        <time dateTime={item.createdAt}>{formatDateTime(item.createdAt, language)}</time>
+                      </span>
+                      {fresh && (
+                        <Button
+                          variant="quiet"
+                          size="sm"
+                          disabled={marking.pending}
+                          aria-label={t("notifications.markOneNamed", { notification: text })}
+                          onClick={async () => {
+                            if (await markRead({ ids: [item.id] })) setSaid(t("notifications.oneRead"));
+                          }}
+                        >
+                          {t("notifications.markOne")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {fresh && <span className="pg-notification__dot" aria-hidden="true" />}
                 </li>
               );
             })}
@@ -367,6 +386,6 @@ function NotificationsDrawer({
           </Stack>
         )}
       </Stack>
-    </Dialog>
+    </Drawer>
   );
 }

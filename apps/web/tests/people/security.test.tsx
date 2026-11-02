@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "../../src/test/render.tsx";
+import { screen, waitFor, within } from "../../src/test/render.tsx";
 import { createMockApplicationEnvironment } from "../../src/mocks/index.ts";
 import { currentLocation, renderAuth, resetBrowserState, seriousViolations } from "../auth/helpers.tsx";
 
@@ -62,6 +62,26 @@ describe("Account security", () => {
     expect(screen.getByText("No other device is signed in.")).toBeInTheDocument();
     expect(screen.getByText("FICTD-44444")).toBeInTheDocument(); // the codes stay on screen until the person leaves
     expect(environment.sessionController.twoStepState().sessionTwoStep).toBe(true);
+  });
+
+  it("shows the state as a badge, and the set-up as three numbered steps", async () => {
+    renderAuth("/account/security", { preset: "sahyadri-editor" });
+    const user = userEvent.setup();
+    const twoStep = await screen.findByRole("region", { name: "Two-step sign-in" });
+    expect(within(twoStep).getByText("Off")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Signed-in devices" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Turn on two-step sign-in" }));
+    await typePassword(user, editor.password, "Continue");
+    await screen.findByRole("img", { name: "QR code for your authenticator app" });
+    const steps = Array.from(document.querySelectorAll("ol > li"), (step) => within(step as HTMLElement).getAllByRole("heading", { level: 3 })[0]!.textContent);
+    expect(steps).toEqual([
+      "Scan this code with your authenticator app",
+      "Your backup codes",
+      "Enter the code the app shows",
+    ]);
+    await user.type(screen.getByLabelText("Code from the app"), fixtures.totpCode);
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+    expect(await within(twoStep).findByText("On")).toBeInTheDocument();
   });
 
   it("asks for a 6-digit code before sending it", async () => {

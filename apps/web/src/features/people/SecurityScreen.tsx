@@ -7,14 +7,26 @@
  *   - the browsers where the account is signed in, each with its own Sign out, and Sign out on every other device.
  * Each change asks for the password again.
  */
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Navigate } from "react-router";
-import { Button, Cluster, Container, Field, InlineMessage, ProgressIndicator, Stack, TextInput } from "../../ui/index.ts";
-import { paths } from "../../app/routes.ts";
+import {
+  Badge,
+  Button,
+  Cluster,
+  Container,
+  Field,
+  Icon,
+  InlineMessage,
+  PageHeader,
+  Panel,
+  ProgressIndicator,
+  Stack,
+  TextInput,
+} from "../../ui/index.ts";
+import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { formatDateTime } from "../../i18n/dates.ts";
 import { useI18n } from "../../i18n/index.ts";
 import type { ApiProblem, DeviceDto } from "../../services/index.ts";
-import { AuthCard } from "../auth/AuthCard.tsx";
 import { OfflineNotice } from "../auth/connection.tsx";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useSession } from "../auth/SessionProvider.tsx";
@@ -22,6 +34,8 @@ import { SessionFailure } from "../auth/SessionStatus.tsx";
 import { describeDevice } from "./devices.ts";
 import { QrCode, totpKey } from "./QrCode.tsx";
 import { useSecurity } from "./services-context.tsx";
+import "../auth/auth.css";
+import "./people.css";
 
 type Answer = { readonly problem: ApiProblem } | null;
 
@@ -103,9 +117,9 @@ function BackupCodes({ codes }: { readonly codes: readonly string[] }) {
   const { t } = useI18n();
   return (
     <Stack gap="3">
-      <h3 className="pg-type-body">{t("security.backup.heading")}</h3>
-      <p>{t("security.backup.body")}</p>
-      <ul className="pg-codes" lang="en">
+      <h3 className="pg-people-step__title">{t("security.backup.heading")}</h3>
+      <p className="pg-people-muted">{t("security.backup.body")}</p>
+      <ul className="pg-people-codes" lang="en">
         {codes.map((code) => (
           <li key={code}>
             <code className="pg-type-code">{code}</code>
@@ -174,11 +188,21 @@ function TwoStepSection({
   };
 
   return (
-    <section aria-labelledby="pg-security-two-step">
+    <Panel
+      title={t("security.twoStep.heading")}
+      actions={
+        enabled ? (
+          <Badge tone="success" icon="shield-check">
+            {t("security.twoStep.badgeOn")}
+          </Badge>
+        ) : (
+          <Badge tone="warning" icon="triangle-alert">
+            {t("security.twoStep.badgeOff")}
+          </Badge>
+        )
+      }
+    >
       <Stack gap="4">
-        <h2 id="pg-security-two-step" className="pg-type-section-title">
-          {t("security.twoStep.heading")}
-        </h2>
         <div aria-live="polite">
           {mode.step === "idle" && mode.notice === "on" && (
             <InlineMessage variant="success" heading={t("security.on.done")} iconLabel={t("message.success")} />
@@ -190,7 +214,7 @@ function TwoStepSection({
             <InlineMessage variant="success" heading={t("security.newCodes.done")} iconLabel={t("message.success")} />
           )}
         </div>
-        <p>{enabled ? t("security.twoStep.on") : t("security.twoStep.off")}</p>
+        <p className="pg-people-muted">{enabled ? t("security.twoStep.on") : t("security.twoStep.off")}</p>
         {required && !enabled && (
           <InlineMessage
             variant="warning"
@@ -233,33 +257,44 @@ function TwoStepSection({
         {mode.step === "setup" && (
           <Stack gap="4">
             <InlineMessage variant="warning" heading={t("security.turnOn.warning")} iconLabel={t("message.warning")} />
-            <h3 className="pg-type-body">{t("security.scan.heading")}</h3>
-            <QrCode text={mode.totpUri} label={t("security.scan.qr")} />
-            <p>{t("security.scan.key", { key: totpKey(mode.totpUri) })}</p>
-            <BackupCodes codes={mode.codes} />
-            {problem && <ProblemMessage problem={problem} />}
-            <form noValidate onSubmit={confirm} aria-busy={pending}>
-              <Stack gap="4">
-                <Field label={t("mfa.code")} errors={codeError ? [t(codeError)] : []}>
-                  <TextInput
-                    ref={codeField}
-                    name="code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    value={code}
-                    onChange={(event) => setCode(event.target.value)}
-                  />
-                </Field>
-                <Cluster gap="3">
-                  <Button type="submit">
-                    {pending ? t("security.confirm.submitting") : t("security.confirm.submit")}
-                  </Button>
-                  <Button variant="secondary" onClick={() => setMode({ step: "idle" })}>
-                    {t("security.cancel")}
-                  </Button>
-                </Cluster>
-              </Stack>
-            </form>
+            <ol className="pg-people-steps">
+              <li className="pg-people-step">
+                <h3 className="pg-people-step__title">{t("security.scan.heading")}</h3>
+                <div className="pg-people-scan">
+                  <QrCode text={mode.totpUri} label={t("security.scan.qr")} />
+                  <p className="pg-people-muted">{t("security.scan.key", { key: totpKey(mode.totpUri) })}</p>
+                </div>
+              </li>
+              <li className="pg-people-step">
+                <BackupCodes codes={mode.codes} />
+              </li>
+              <li className="pg-people-step">
+                <h3 className="pg-people-step__title">{t("security.step.confirm")}</h3>
+                {problem && <ProblemMessage problem={problem} />}
+                <form noValidate onSubmit={confirm} aria-busy={pending}>
+                  <Stack gap="4">
+                    <Field label={t("mfa.code")} errors={codeError ? [t(codeError)] : []} className="pg-people-code-field">
+                      <TextInput
+                        ref={codeField}
+                        name="code"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        value={code}
+                        onChange={(event) => setCode(event.target.value)}
+                      />
+                    </Field>
+                    <Cluster gap="3">
+                      <Button type="submit">
+                        {pending ? t("security.confirm.submitting") : t("security.confirm.submit")}
+                      </Button>
+                      <Button variant="secondary" onClick={() => setMode({ step: "idle" })}>
+                        {t("security.cancel")}
+                      </Button>
+                    </Cluster>
+                  </Stack>
+                </form>
+              </li>
+            </ol>
           </Stack>
         )}
 
@@ -295,7 +330,7 @@ function TwoStepSection({
           />
         )}
       </Stack>
-    </section>
+    </Panel>
   );
 }
 
@@ -349,62 +384,77 @@ function DevicesSection({ revision }: { readonly revision: number }) {
 
   const others = devices?.filter((device) => !device.current) ?? [];
   return (
-    <section aria-labelledby="pg-security-devices">
-      <Stack gap="4">
-        <h2 id="pg-security-devices" className="pg-type-section-title">
-          {t("security.devices.heading")}
-        </h2>
-        <div aria-live="polite">{notice && <p>{notice}</p>}</div>
-        {problem && <ProblemMessage problem={problem.problem} live={problem.live} />}
-        {problem && !devices && (
-          <div>
-            <Button variant="secondary" onClick={() => void load(true)}>
-              {t("form.retry")}
-            </Button>
+    <Panel
+      title={t("security.devices.heading")}
+      flush
+      actions={
+        others.length > 0 ? (
+          <Button variant="danger" size="sm" onClick={() => void signOut("others")}>
+            {t("security.devices.signOutOthers")}
+          </Button>
+        ) : undefined
+      }
+    >
+      <div aria-live="polite">
+        {notice && (
+          <div className="pg-people-panel-pad">
+            <InlineMessage variant="success" heading={notice} iconLabel={t("message.success")} />
           </div>
         )}
-        {!devices && !problem && <ProgressIndicator role="status" label={t("security.devices.loading")} />}
-        {devices && (
-          <ul className="pg-list">
-            {devices.map((device) => {
-              const name = deviceName(device, t);
-              return (
-                <li key={device.id} className="pg-list__item">
-                  <p className="pg-type-body">
-                    <strong>{name}</strong>{" "}
-                    {device.current && <span className="pg-badge pg-type-body-small">{t("security.devices.thisDevice")}</span>}
+      </div>
+      {problem && (
+        <Stack gap="3" className="pg-people-panel-pad">
+          <ProblemMessage problem={problem.problem} live={problem.live} />
+          {!devices && (
+            <div>
+              <Button variant="secondary" onClick={() => void load(true)}>
+                {t("form.retry")}
+              </Button>
+            </div>
+          )}
+        </Stack>
+      )}
+      {!devices && !problem && (
+        <div className="pg-people-panel-pad">
+          <ProgressIndicator role="status" label={t("security.devices.loading")} />
+        </div>
+      )}
+      {devices && (
+        <ul className="pg-people-devices">
+          {devices.map((device) => {
+            const name = deviceName(device, t);
+            return (
+              <li key={device.id} className="pg-people-device">
+                <span className="pg-people-device__icon">
+                  <Icon name="globe" size={20} />
+                </span>
+                <div className="pg-people-device__text">
+                  <p className="pg-people-device__name">
+                    <strong>{name}</strong>
+                    {device.current && (
+                      <Badge tone="success" icon="circle-check">
+                        {t("security.devices.thisDevice")}
+                      </Badge>
+                    )}
                   </p>
-                  <p className="pg-type-body-small">
-                    {t("security.devices.signedInAt", { date: formatDateTime(device.signedInAt, language) })}
+                  <p className="pg-people-device__meta">
+                    <span>{t("security.devices.signedInAt", { date: formatDateTime(device.signedInAt, language) })}</span>
+                    <span>{t("security.devices.lastActive", { date: formatDateTime(device.lastActiveAt, language) })}</span>
+                    {device.ipAddress && <span>{t("security.devices.address", { address: device.ipAddress })}</span>}
                   </p>
-                  <p className="pg-type-body-small">
-                    {t("security.devices.lastActive", { date: formatDateTime(device.lastActiveAt, language) })}
-                  </p>
-                  {device.ipAddress && (
-                    <p className="pg-type-body-small">{t("security.devices.address", { address: device.ipAddress })}</p>
-                  )}
-                  {!device.current && (
-                    <div>
-                      <Button variant="secondary" size="sm" onClick={() => void signOut(device)}>
-                        {t("security.devices.signOut", { device: name })}
-                      </Button>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {devices && others.length === 0 && <p>{t("security.devices.none")}</p>}
-        {others.length > 0 && (
-          <div>
-            <Button variant="danger" onClick={() => void signOut("others")}>
-              {t("security.devices.signOutOthers")}
-            </Button>
-          </div>
-        )}
-      </Stack>
-    </section>
+                </div>
+                {!device.current && (
+                  <Button variant="secondary" size="sm" onClick={() => void signOut(device)}>
+                    {t("security.devices.signOut", { device: name })}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {devices && others.length === 0 && <p className="pg-people-panel-foot pg-people-muted">{t("security.devices.none")}</p>}
+    </Panel>
   );
 }
 
@@ -425,15 +475,15 @@ export function SecurityScreen() {
   }
   if (state.status !== "ready") {
     return (
-      <AuthCard title={t("security.title")} wide>
+      <SecurityPage>
         <ProgressIndicator role="status" label={t("security.loading")} />
-      </AuthCard>
+      </SecurityPage>
     );
   }
   const requiredBy =
     state.workspace?.organizations.filter((org) => org.twoStep.required).map((org) => org.org.name) ?? [];
   return (
-    <AuthCard title={t("security.title")} wide>
+    <SecurityPage>
       <OfflineNotice />
       <TwoStepSection
         enabled={state.session.user.twoFactorEnabled}
@@ -441,6 +491,17 @@ export function SecurityScreen() {
         onEnrolled={() => setDevicesRevision((count) => count + 1)}
       />
       <DevicesSection revision={devicesRevision} />
-    </AuthCard>
+    </SecurityPage>
+  );
+}
+
+/** The account's settings in one column (720–880 px), under the page header. */
+function SecurityPage({ children }: { readonly children: ReactNode }) {
+  const { t } = useI18n();
+  return (
+    <Stack gap="5" className="pg-people pg-people-account">
+      <PageHeader title={t("security.title")} headingId={ROUTE_HEADING_ID} subtitle={t("security.subtitle")} />
+      {children}
+    </Stack>
   );
 }

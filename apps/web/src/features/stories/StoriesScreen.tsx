@@ -13,7 +13,24 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { Button, Checkbox, Cluster, Field, InlineMessage, ProgressIndicator, Select, Stack, TextInput } from "../../ui/index.ts";
+import {
+  Avatar,
+  Button,
+  Checkbox,
+  EmptyState,
+  Field,
+  Icon,
+  InlineMessage,
+  PageHeader,
+  Panel,
+  ProgressIndicator,
+  Select,
+  Stack,
+  Table,
+  TableCell,
+  TableHeader,
+  TextInput,
+} from "../../ui/index.ts";
 import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { useIsPhoneViewport } from "../../app/useViewport.ts";
 import { formatDate, formatDateTime } from "../../i18n/dates.ts";
@@ -55,16 +72,22 @@ export function StoriesScreen() {
   const org = state.status === "ready" ? state.workspace?.organizations.find((candidate) => candidate.org.id === orgId) : undefined;
   const publication = org?.publications.find((candidate) => candidate.id === pubId);
   const scope = org ? storyScope(org, pubId) : "none";
+  const header = <PageHeader title={t("glossary.stories")} headingId={ROUTE_HEADING_ID} />;
   return (
     <Stack gap="5">
-      <h1 id={ROUTE_HEADING_ID} className="pg-type-page-title" tabIndex={-1}>
-        {t("glossary.stories")}
-      </h1>
-      <OfflineNotice />
-      {!org || (org.twoStep.required && !org.twoStep.satisfied) ? null : scope === "none" ? (
-        <InlineMessage variant="info" heading={t("stories.noAccess.heading")} iconLabel={t("message.info")}>
-          {t("stories.noAccess.body")}
-        </InlineMessage>
+      {!org || (org.twoStep.required && !org.twoStep.satisfied) ? (
+        <>
+          {header}
+          <OfflineNotice />
+        </>
+      ) : scope === "none" ? (
+        <>
+          {header}
+          <OfflineNotice />
+          <InlineMessage variant="info" heading={t("stories.noAccess.heading")} iconLabel={t("message.info")}>
+            {t("stories.noAccess.body")}
+          </InlineMessage>
+        </>
       ) : (
         <StoriesContent
           orgId={orgId}
@@ -181,26 +204,44 @@ function StoriesContent({
     setFilter("q", search.trim() || null);
   };
   const filtered = Object.keys(filter).length > 0;
+  const clearFilters = () => setParams(new URLSearchParams(), { replace: true });
 
   const editionName = (item: StoryListItemDto) => (item.edition ? formatDate(item.edition.date, language) : t("stories.noEdition"));
-  const assigneeName = (item: StoryListItemDto) => (item.assignee ? item.assignee.name : t("stories.unassigned"));
+  const person = (name: string) => (
+    <span className="pg-stories__person">
+      <Avatar name={name} size="sm" decorative />
+      <span>{name}</span>
+    </span>
+  );
+  const newStory = (
+    <Link className="pg-button pg-button--primary pg-button--md pg-stories__new" to={paths.pubStoryNew(orgId, pubId)}>
+      <Icon name="plus" size={16} />
+      {t("stories.new")}
+    </Link>
+  );
 
   return (
-    <Stack gap="5">
-      {own && <p>{t("stories.ownOnly")}</p>}
-      {readOnly && <p>{t("stories.readOnly")}</p>}
-      {create && (
-        <Cluster gap="3">
-          <Link className="pg-button pg-button--primary pg-button--md" to={paths.pubStoryNew(orgId, pubId)}>
-            {t("stories.new")}
-          </Link>
-          <Button variant="secondary" onClick={() => setPasting(true)}>
-            {t("stories.paste")}
-          </Button>
-        </Cluster>
-      )}
+    <Stack gap="5" className="pg-stories">
+      <PageHeader
+        title={t("glossary.stories")}
+        headingId={ROUTE_HEADING_ID}
+        subtitle={own ? t("stories.ownOnly") : readOnly ? t("stories.readOnly") : publicationName || undefined}
+        actions={
+          create && (
+            <>
+              <Button variant="secondary" onClick={() => setPasting(true)}>
+                <Icon name="copy" size={16} />
+                {t("stories.paste")}
+              </Button>
+              {newStory}
+            </>
+          )
+        }
+      />
+      <OfflineNotice />
 
-      <section aria-label={t("stories.filters")}>
+      <Panel flush className="pg-stories__panel">
+      <section aria-label={t("stories.filters")} className="pg-stories__filter-bar">
         <form className="pg-stories__filters" onSubmit={applySearch} role="search">
           <Field label={t("stories.filter.status")}>
             <Select value={filter.status ?? ""} onChange={(event) => setFilter("status", event.target.value || null)}>
@@ -239,21 +280,25 @@ function StoriesContent({
             checked={filter.assignee === "me"}
             onChange={(event) => setFilter("assignee", event.target.checked ? "me" : null)}
           />
-          <Field label={t("stories.filter.search")}>
-            <TextInput type="search" name="q" value={search} onChange={(event) => setSearch(event.target.value)} />
-          </Field>
+          <div className="pg-stories__search">
+            <Field label={t("stories.filter.search")}>
+              <TextInput type="search" name="q" value={search} onChange={(event) => setSearch(event.target.value)} />
+            </Field>
+            <Icon name="search" size={16} className="pg-stories__search-icon" />
+          </div>
           <Button type="submit" variant="secondary">
             {t("stories.filter.apply")}
           </Button>
           {filtered && (
-            <Button variant="quiet" onClick={() => setParams(new URLSearchParams(), { replace: true })}>
+            <Button variant="quiet" onClick={clearFilters}>
+              <Icon name="x" size={16} />
               {t("stories.filter.clear")}
             </Button>
           )}
         </form>
       </section>
 
-      <div aria-live="polite">
+      <div aria-live="polite" className={changed && load.status === "ready" ? "pg-stories__pad" : undefined}>
         {changed && load.status === "ready" && (
           <InlineMessage variant="info" heading={t("stories.live.changed")} iconLabel={t("message.info")}>
             <Button
@@ -269,9 +314,13 @@ function StoriesContent({
           </InlineMessage>
         )}
       </div>
-      {load.status === "loading" && <ProgressIndicator role="status" label={t("stories.loading")} />}
+      {load.status === "loading" && (
+        <div className="pg-stories__pad">
+          <ProgressIndicator role="status" label={t("stories.loading")} />
+        </div>
+      )}
       {load.status === "failed" && (
-        <Stack gap="3">
+        <Stack gap="3" className="pg-stories__pad">
           <ProblemMessage problem={load.problem} live={load.live} />
           <div>
             <Button variant="secondary" onClick={() => void fetchFirst(true)}>
@@ -280,7 +329,23 @@ function StoriesContent({
           </div>
         </Stack>
       )}
-      {load.status === "ready" && load.items.length === 0 && <p>{filtered ? t("stories.noMatch") : t("stories.none")}</p>}
+      {load.status === "ready" && load.items.length === 0 && (
+        <EmptyState
+          icon={filtered ? "list-filter" : "file-text"}
+          heading={filtered ? t("stories.empty.noMatchHeading") : t("stories.empty.heading")}
+          action={
+            filtered ? (
+              <Button variant="secondary" onClick={clearFilters}>
+                {t("stories.filter.clear")}
+              </Button>
+            ) : (
+              create && newStory
+            )
+          }
+        >
+          {filtered ? t("stories.noMatch") : t("stories.none")}
+        </EmptyState>
+      )}
       {load.status === "ready" && load.items.length > 0 && phone && (
         <ul className="pg-stories__list" aria-label={t("stories.table", { publication: publicationName })}>
           {load.items.map((item) => (
@@ -290,7 +355,7 @@ function StoriesContent({
                   <strong>{item.headline}</strong>
                 </Link>
               </p>
-              <p className="pg-type-body-small">
+              <p className="pg-type-body-small pg-stories__card-line">
                 <StatusChip status={item.status} /> {t("stories.words", { count: item.words })}
                 {item.isBrief && <> · {t("stories.brief")}</>}
               </p>
@@ -306,47 +371,46 @@ function StoriesContent({
         </ul>
       )}
       {load.status === "ready" && load.items.length > 0 && !phone && (
-        <div className="pg-stories__table-wrap">
-          <table className="pg-stories__table pg-type-body-small">
-            <caption className="pg-visually-hidden">{t("stories.table", { publication: publicationName })}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("stories.col.headline")}</th>
-                <th scope="col">{t("stories.col.status")}</th>
-                <th scope="col">{t("stories.col.words")}</th>
-                <th scope="col">{t("stories.col.reporter")}</th>
-                <th scope="col">{t("stories.col.assignee")}</th>
-                <th scope="col">{t("stories.col.edition")}</th>
-                <th scope="col">{t("stories.col.updated")}</th>
+        <Table caption={t("stories.table", { publication: publicationName })} className="pg-stories__table">
+          <thead>
+            <tr>
+              <TableHeader>{t("stories.col.headline")}</TableHeader>
+              <TableHeader>{t("stories.col.status")}</TableHeader>
+              <TableHeader numeric>{t("stories.col.words")}</TableHeader>
+              <TableHeader>{t("stories.col.reporter")}</TableHeader>
+              <TableHeader>{t("stories.col.assignee")}</TableHeader>
+              <TableHeader>{t("stories.col.edition")}</TableHeader>
+              <TableHeader>{t("stories.col.updated")}</TableHeader>
+            </tr>
+          </thead>
+          <tbody>
+            {load.items.map((item) => (
+              <tr key={item.id}>
+                <th scope="row" className="pg-stories__headline">
+                  <Link to={paths.pubStory(orgId, pubId, item.id)} lang={item.language || undefined}>
+                    {item.headline}
+                  </Link>
+                </th>
+                <TableCell>
+                  <StatusChip status={item.status} />
+                </TableCell>
+                <TableCell numeric>
+                  {item.isBrief && <span className="pg-stories__brief">{t("stories.brief")} · </span>}
+                  {item.words}
+                </TableCell>
+                <TableCell>{person(item.reporter.name)}</TableCell>
+                <TableCell>
+                  {item.assignee ? person(item.assignee.name) : <span className="pg-stories__muted">{t("stories.unassigned")}</span>}
+                </TableCell>
+                <TableCell className={item.edition ? undefined : "pg-stories__muted"}>{editionName(item)}</TableCell>
+                <TableCell className="pg-stories__nowrap">{formatDateTime(item.updatedAt, language)}</TableCell>
               </tr>
-            </thead>
-            <tbody>
-              {load.items.map((item) => (
-                <tr key={item.id}>
-                  <th scope="row" className="pg-type-body">
-                    <Link to={paths.pubStory(orgId, pubId, item.id)} lang={item.language || undefined}>
-                      {item.headline}
-                    </Link>
-                  </th>
-                  <td>
-                    <StatusChip status={item.status} />
-                  </td>
-                  <td>
-                    {item.words}
-                    {item.isBrief && <> · {t("stories.brief")}</>}
-                  </td>
-                  <td>{item.reporter.name}</td>
-                  <td>{assigneeName(item)}</td>
-                  <td>{editionName(item)}</td>
-                  <td>{formatDateTime(item.updatedAt, language)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </Table>
       )}
       {load.status === "ready" && load.nextCursor && (
-        <Stack gap="3">
+        <Stack gap="3" className="pg-stories__pad">
           {more.problem && <ProblemMessage problem={more.problem} />}
           <div>
             <Button variant="secondary" aria-busy={more.pending} onClick={() => void showMore()}>
@@ -355,6 +419,7 @@ function StoriesContent({
           </div>
         </Stack>
       )}
+      </Panel>
 
       {create && (
         <PasteDialog

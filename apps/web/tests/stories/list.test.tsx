@@ -33,7 +33,10 @@ describe("Stories for the desk", () => {
     const table = await screen.findByRole("table", { name: "Stories of Pune Daily Ledger" });
     expect(within(table).getAllByRole("row")).toHaveLength(6);
     const ring = within(table).getByRole("rowheader", { name: "Ring road work to resume next week" }).closest("tr")!;
-    expect(within(ring).getByText("Editing")).toHaveClass("pg-chip");
+    // the status is a badge: its icon and its word (never colour alone)
+    const chip = within(ring).getByText("Editing").closest(".pg-chip");
+    expect(chip).toHaveClass("pg-badge-chip");
+    expect(chip?.querySelector("svg.pg-icon")).not.toBeNull();
     expect(within(ring).getByText("Sahyadri Demo Sub-editor")).toBeInTheDocument();
     expect(within(ring).getByText("23 October 2026")).toBeInTheDocument();
     expect(within(table).getByRole("link", { name: "घाटात मान्सून लवकर दाखल" })).toHaveAttribute("lang", "mr");
@@ -67,6 +70,13 @@ describe("Stories for the desk", () => {
     await user.click(screen.getByRole("button", { name: "Clear the filters" }));
     await user.click(screen.getByRole("checkbox", { name: "Only the stories given to me" }));
     expect(await screen.findByText("No story matches these filters.")).toBeInTheDocument();
+    // the empty state offers the one way out: clearing the filters
+    expect(screen.getByRole("heading", { name: "Nothing found" })).toBeInTheDocument();
+    const clears = screen.getAllByRole("button", { name: "Clear the filters" });
+    expect(clears).toHaveLength(2);
+    await user.click(clears[1]!);
+    await waitFor(() => expect(rows()).toHaveLength(5));
+    expect(currentLocation(container).search).toBe("");
   });
 
   it("pages with the API's cursor", async () => {

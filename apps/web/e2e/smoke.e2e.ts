@@ -193,9 +193,11 @@ test("L2.1: two-step sign-in, a story with a photo, live updates, send back, rea
 
   // ── The Owner makes the edition (Editions → Create edition) ──
   await desk.goto(`/org/${orgId}/pub/${pubId}/editions`);
-  await desk.getByLabel(/^Date/).fill(EDITION_DATE);
-  await desk.getByLabel("Pages", { exact: true }).selectOption("8");
-  await desk.getByRole("button", { name: "Create edition" }).click();
+  await desk.getByRole("button", { name: "Create edition" }).click(); // the form opens in a side panel
+  const creating = desk.getByRole("dialog");
+  await creating.getByLabel(/^Date/).fill(EDITION_DATE);
+  await creating.getByLabel("Pages", { exact: true }).selectOption("8");
+  await creating.getByRole("button", { name: "Create edition" }).click();
   await expect(desk.getByText(/The edition of .* is created\./)).toBeVisible();
 
   // ── The Owner's list is open while the Reporter writes ──

@@ -183,6 +183,7 @@ describe("Unsaved text on this device", () => {
     // a draft left on this device goes when its person signs out
     window.localStorage.setItem(`${DRAFTS_PREFIX}user-demo-sahyadri-reporter`, JSON.stringify({ x: {} }));
     window.localStorage.setItem(`${DRAFTS_PREFIX}someone-else`, JSON.stringify({ y: {} }));
+    await user.click(await screen.findByRole("button", { name: /^Account:/ })); // Sign out sits in the account menu
     await user.click(screen.getByRole("button", { name: "Sign out" }));
     await screen.findByRole("heading", { level: 1, name: "Sign in" });
     expect(window.localStorage.getItem(`${DRAFTS_PREFIX}user-demo-sahyadri-reporter`)).toBeNull();
@@ -223,6 +224,21 @@ describe("The editor's role rules, states, Marathi and axe", () => {
 
     renderAuth(at("story-demo-003"), { preset: "sahyadri-reporter" });
     expect(await screen.findByText("There is nothing here, or you do not have access to it.")).toBeInTheDocument();
+  });
+
+  it("lays the story out as a document with an inspector, and jumps to the comments", async () => {
+    const { container } = renderAuth(at("story-demo-001"), { preset: "sahyadri-editor" });
+    const user = userEvent.setup();
+    const inspector = await screen.findByRole("complementary", { name: "Story details" });
+    // the headline and the text are the document; the rest sits in the inspector's panels
+    expect(within(inspector).queryByLabelText("Body text")).not.toBeInTheDocument();
+    expect(within(within(inspector).getByRole("region", { name: "Details" })).getByLabelText("Byline")).toBeInTheDocument();
+    expect(within(within(inspector).getByRole("region", { name: "Desk" })).getByRole("combobox", { name: "Priority" })).toBeInTheDocument();
+    expect(within(within(inspector).getByRole("region", { name: "Workflow" })).getByRole("combobox", { name: "Given to" })).toBeInTheDocument();
+    await within(inspector).findByRole("region", { name: /^Comments \(/ });
+    await user.click(screen.getByRole("button", { name: "Go to the comments" }));
+    expect(screen.getByRole("heading", { name: /^Comments \(/ })).toHaveFocus();
+    expect(await seriousViolations(container)).toEqual([]);
   });
 
   it("is in Marathi, and has no serious axe violations", async () => {

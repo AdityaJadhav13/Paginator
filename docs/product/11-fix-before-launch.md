@@ -551,3 +551,13 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | L2-347 | queue and engine tests' temporary folders | `apps/engine-queue/test/queue-db.test.ts` and `apps/api/test/db/engine-e2e.test.ts` leave `$TMPDIR/pgn-queue-*` and `pgn-e2e-*` folders behind (a fictional profile and an empty homes folder each) | Fictional and tiny; the system's temporary folder is cleared |
 | L2-348 | `apps/web/e2e/stack.ts` `EDITION_DATE` | The smoke's edition date is fixed (2026-12-01). The API takes any date from 2000 to 2999, past ones included (`packages/contracts/src/editions.ts`), so it keeps working; if a later rule refuses past dates, the smoke must compute it | Nothing refuses it today |
 | L2-349 | `apps/api/test/unit/deploy-files.test.ts` "a rollback starts the release that ran before it" | It failed once in a full `pnpm run ci` on a busy machine (2026-11-02) and passed alone and in two full runs after; it runs `deploy.sh` under the default test time limit | The rollback rule itself is tested and passes; only the timing under load is in doubt |
+
+## The app's desktop-first frame and kit (L2 design, owner decision 2026-11-02; `apps/web/src/app`, `apps/web/src/ui/kit`)
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| L2-358 | `apps/web/src/ui/kit` `Tabs`, `Toolbar`, `Drawer` with `modal={false}`, the `Table` sort buttons | No screen uses them yet | They are kept for the next screens and tested in `apps/web/tests/app/kit.test.tsx` |
+| L2-359 | `apps/web/src/features/live` notifications | A notification shows the story's status now, not its status when the notification was made | The notification still links to the story, which shows where it is now |
+| L2-360 | `apps/web` Editions, on a phone | Choosing an edition does not scroll to its details, which sit below the list | The details are there one scroll down; staff work on laptops and desktops |
+| L2-361 | `apps/web` story editor | The editor's header (the story's name and its buttons) is not sticky, and the Comments button shows no count | The header is one scroll up; the comments are one click away |
+| L2-362 | `apps/web` Team | The members and pending invitations tables do not keep their header row in sight on a desktop: the scroll box was removed so that the row menus are not cut off | The tables scroll with the page; their header row is one scroll up |

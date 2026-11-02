@@ -9,7 +9,23 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { AUDIT_ACTION_NAMES, PUBLICATION_AUDIT_ACTIONS, reach, type AuditAction } from "@pageinator/contracts";
-import { Button, Field, InlineMessage, ProgressIndicator, Select, Stack, TextInput } from "../../ui/index.ts";
+import {
+  Avatar,
+  Button,
+  EmptyState,
+  Field,
+  Icon,
+  InlineMessage,
+  PageHeader,
+  Panel,
+  ProgressIndicator,
+  Select,
+  Stack,
+  Table,
+  TableCell,
+  TableHeader,
+  TextInput,
+} from "../../ui/index.ts";
 import { ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { formatDateTime } from "../../i18n/dates.ts";
 import { useI18n, type PlainKey, type Translate } from "../../i18n/index.ts";
@@ -20,6 +36,7 @@ import { useSession } from "../auth/SessionProvider.tsx";
 import { may, orgAccess } from "./navigation.ts";
 import { useAudit } from "./services-context.tsx";
 import "../auth/auth.css";
+import "./people.css";
 
 /** Each action of AUDIT_ACTIONS by its plain name, `auditLog.action.<action>` (the compiler checks none is missing,
  * and a test that both languages have every one). */
@@ -170,15 +187,14 @@ export function AuditScreen() {
   const { state } = useSession();
   const { t } = useI18n();
   const org = state.status === "ready" ? state.workspace?.organizations.find((candidate) => candidate.org.id === orgId) : undefined;
+  const allowed = org !== undefined && !(org.twoStep.required && !org.twoStep.satisfied) && may(org, "audit.view");
   return (
-    <Stack gap="5">
-      <h1 id={ROUTE_HEADING_ID} className="pg-type-page-title" tabIndex={-1}>
-        {t("nav.audit")}
-      </h1>
+    <Stack gap="5" className="pg-people">
+      <PageHeader title={t("nav.audit")} headingId={ROUTE_HEADING_ID} subtitle={allowed ? t("auditLog.intro") : undefined} />
       <OfflineNotice />
       {!org ? (
         <NoAccess />
-      ) : org.twoStep.required && !org.twoStep.satisfied ? null /* the shell says why */ : !may(org, "audit.view") ? (
+      ) : org.twoStep.required && !org.twoStep.satisfied ? null /* the shell says why */ : !allowed ? (
         <NoAccess />
       ) : (
         <AuditContent org={org} />
@@ -231,9 +247,13 @@ function AuditContent({ org }: { readonly org: OrgAccessDto }) {
   const filtered = Object.keys(filters).length > 0;
 
   return (
-    <Stack gap="5">
-      <p>{t("auditLog.intro")}</p>
-      {!full && <p>{t("auditLog.scoped")}</p>}
+    <>
+      {!full && (
+        <p className="pg-people-note">
+          <Icon name="info" size={16} />
+          <span>{t("auditLog.scoped")}</span>
+        </p>
+      )}
       <FilterForm
         key={search}
         filters={filters}
@@ -245,84 +265,100 @@ function AuditContent({ org }: { readonly org: OrgAccessDto }) {
       {ignored && (
         <InlineMessage variant="warning" heading={t("auditLog.filter.ignored")} iconLabel={t("message.warning")} />
       )}
-      <section aria-labelledby="pg-audit-events">
-        <Stack gap="4">
-          <h2 id="pg-audit-events" className="pg-type-section-title">
-            {t("auditLog.events")}
-          </h2>
-          {list.status === "loading" && <ProgressIndicator role="status" label={t("auditLog.loading")} />}
-          {list.status === "failed" && (
-            <Stack gap="3">
-              <ProblemMessage problem={list.problem} live={false} />
-              <div>
-                <Button variant="secondary" onClick={() => void first()}>
-                  {t("form.retry")}
-                </Button>
-              </div>
-            </Stack>
-          )}
-          {list.status === "ready" && list.items.length === 0 && <p>{filtered ? t("auditLog.noMatch") : t("auditLog.none")}</p>}
-          {list.status === "ready" && list.items.length > 0 && (
-            <ul className="pg-list" aria-labelledby="pg-audit-events">
+      <Panel title={t("auditLog.events")} flush>
+        {list.status === "loading" && (
+          <div className="pg-people-panel-pad">
+            <ProgressIndicator role="status" label={t("auditLog.loading")} />
+          </div>
+        )}
+        {list.status === "failed" && (
+          <Stack gap="3" className="pg-people-panel-pad">
+            <ProblemMessage problem={list.problem} live={false} />
+            <div>
+              <Button variant="secondary" onClick={() => void first()}>
+                {t("form.retry")}
+              </Button>
+            </div>
+          </Stack>
+        )}
+        {list.status === "ready" && list.items.length === 0 && (
+          <EmptyState icon={filtered ? "list-filter" : "scroll-text"} heading={filtered ? t("auditLog.noMatch") : t("auditLog.none")} headingLevel={3} />
+        )}
+        {list.status === "ready" && list.items.length > 0 && (
+          <Table caption={t("auditLog.events")} className="pg-people-audit">
+            <thead>
+              <tr>
+                <TableHeader>{t("auditLog.when")}</TableHeader>
+                <TableHeader>{t("auditLog.who")}</TableHeader>
+                <TableHeader>{t("auditLog.filter.action")}</TableHeader>
+                <TableHeader>{t("auditLog.about")}</TableHeader>
+                <TableHeader>{t("auditLog.details")}</TableHeader>
+              </tr>
+            </thead>
+            <tbody>
               {list.items.map((event) => {
                 const publication = publicationName(event.publicationId);
+                const who = actorName(event.actor, t);
                 return (
-                  <li key={event.id} className="pg-list__item">
-                    <p className="pg-type-body">
+                  <tr key={event.id}>
+                    <TableCell className="pg-people-table__muted pg-people-audit__when">
+                      <time dateTime={event.at}>{formatDateTime(event.at, language)}</time>
+                    </TableCell>
+                    <TableCell className="pg-people-audit__who">
+                      <span className="pg-people-person">
+                        {event.actor?.kind === "user" ? (
+                          <Avatar name={who} size="sm" decorative />
+                        ) : (
+                          <span className="pg-people-person__system">
+                            <Icon name={event.actor?.kind === "import" ? "upload" : "settings"} size={16} />
+                          </span>
+                        )}
+                        <span>{who}</span>
+                      </span>
+                    </TableCell>
+                    <TableCell className="pg-people-audit__action">
                       <strong>{actionName(event.action, t)}</strong>
-                    </p>
-                    <dl className="pg-facts pg-type-body-small">
-                      <div>
-                        <dt>{t("auditLog.who")}</dt>
-                        <dd>{actorName(event.actor, t)}</dd>
-                      </div>
-                      <div>
-                        <dt>{t("auditLog.when")}</dt>
-                        <dd>
-                          <time dateTime={event.at}>{formatDateTime(event.at, language)}</time>
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>{t("auditLog.about")}</dt>
-                        <dd>{targetText(event.target, t)}</dd>
-                      </div>
-                      {publication && (
-                        <div>
-                          <dt>{t("auditLog.publication")}</dt>
-                          <dd>{publication}</dd>
-                        </div>
+                    </TableCell>
+                    <TableCell className="pg-people-audit__about">
+                      <span className="pg-people-audit__target">{targetText(event.target, t)}</span>
+                      {publication && <span className="pg-people-person__detail">{publication}</span>}
+                    </TableCell>
+                    <TableCell className="pg-people-audit__details">
+                      {(event.ip !== null || event.userAgent !== null) && (
+                        <dl className="pg-facts">
+                          {event.ip !== null && (
+                            <div>
+                              <dt>{t("auditLog.ip")}</dt>
+                              <dd>{event.ip}</dd>
+                            </div>
+                          )}
+                          {event.userAgent !== null && (
+                            <div>
+                              <dt>{t("auditLog.userAgent")}</dt>
+                              <dd title={event.userAgent}>{event.userAgent}</dd>
+                            </div>
+                          )}
+                        </dl>
                       )}
-                      {event.ip !== null && (
-                        <div>
-                          <dt>{t("auditLog.ip")}</dt>
-                          <dd>{event.ip}</dd>
-                        </div>
-                      )}
-                      {event.userAgent !== null && (
-                        <div>
-                          <dt>{t("auditLog.userAgent")}</dt>
-                          <dd>{event.userAgent}</dd>
-                        </div>
-                      )}
-                    </dl>
-                  </li>
+                    </TableCell>
+                  </tr>
                 );
               })}
-            </ul>
-          )}
-          {list.status === "ready" && list.nextCursor && (
-            <Stack gap="3">
-              {more.problem && <ProblemMessage problem={more.problem} />}
-              <div>
-                <Button variant="secondary" disabled={more.pending} aria-busy={more.pending} onClick={() => void showMore()}>
-                  {more.pending ? t("auditLog.loadingMore") : t("auditLog.more")}
-                </Button>
-              </div>
-            </Stack>
-          )}
-        </Stack>
-      </section>
-    </Stack>
+            </tbody>
+          </Table>
+        )}
+        {list.status === "ready" && list.nextCursor && (
+          <Stack gap="3" className="pg-people-panel-foot">
+            {more.problem && <ProblemMessage problem={more.problem} />}
+            <div>
+              <Button variant="secondary" disabled={more.pending} aria-busy={more.pending} onClick={() => void showMore()}>
+                {more.pending ? t("auditLog.loadingMore") : t("auditLog.more")}
+              </Button>
+            </div>
+          </Stack>
+        )}
+      </Panel>
+    </>
   );
 }
 
@@ -356,7 +392,7 @@ function FilterForm({
     onApply({ action, publication, from, to });
   };
   return (
-    <form className="pg-filters" onSubmit={submit} role="search" aria-label={t("auditLog.filters")}>
+    <form className="pg-filters pg-people-filterbar" onSubmit={submit} role="search" aria-label={t("auditLog.filters")}>
       <Field label={t("auditLog.filter.action")}>
         <Select value={action} onChange={(event) => setAction(event.target.value)}>
           <option value="">{t("auditLog.filter.anyAction")}</option>

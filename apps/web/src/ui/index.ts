@@ -51,3 +51,29 @@ export type { InlineMessageProps, InlineMessageVariant } from "./controls/Inline
 export { StatusIndicator } from "./controls/StatusIndicator.tsx";
 export { ProgressIndicator } from "./controls/ProgressIndicator.tsx";
 export type { ProgressIndicatorProps } from "./controls/ProgressIndicator.tsx";
+
+// Icons (02 §3.6)
+export { Icon, ICON_NAMES } from "./icons/Icon.tsx";
+export type { IconName, IconProps } from "./icons/Icon.tsx";
+
+// The app kit (02 §3.5): styled by kit.css, under the signed-in shells' `.pg-app` root
+export { Badge } from "./kit/Badge.tsx";
+export type { BadgeProps, BadgeTone } from "./kit/Badge.tsx";
+export { Avatar, initials } from "./kit/Avatar.tsx";
+export type { AvatarProps } from "./kit/Avatar.tsx";
+export { EmptyState } from "./kit/EmptyState.tsx";
+export type { EmptyStateProps } from "./kit/EmptyState.tsx";
+export { PageHeader } from "./kit/PageHeader.tsx";
+export type { PageHeaderProps } from "./kit/PageHeader.tsx";
+export { Panel } from "./kit/Panel.tsx";
+export type { PanelProps } from "./kit/Panel.tsx";
+export { Table, TableHeader, TableCell } from "./kit/Table.tsx";
+export type { TableProps, TableHeaderProps, TableCellProps, SortDirection } from "./kit/Table.tsx";
+export { MenuButton, MenuItem, MenuSeparator } from "./kit/Menu.tsx";
+export type { MenuButtonProps, MenuItemProps } from "./kit/Menu.tsx";
+export { Drawer } from "./kit/Drawer.tsx";
+export type { DrawerProps } from "./kit/Drawer.tsx";
+export { Tabs } from "./kit/Tabs.tsx";
+export type { TabsProps, TabItem } from "./kit/Tabs.tsx";
+export { Toolbar } from "./kit/Toolbar.tsx";
+export type { ToolbarProps } from "./kit/Toolbar.tsx";

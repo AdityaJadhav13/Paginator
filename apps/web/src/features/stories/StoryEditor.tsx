@@ -21,7 +21,22 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Button, Checkbox, Cluster, Dialog, Field, InlineMessage, ProgressIndicator, Select, Stack, TextArea, TextInput } from "../../ui/index.ts";
+import {
+  Button,
+  Checkbox,
+  Cluster,
+  Dialog,
+  Field,
+  Icon,
+  InlineMessage,
+  PageHeader,
+  Panel,
+  ProgressIndicator,
+  Select,
+  Stack,
+  TextArea,
+  TextInput,
+} from "../../ui/index.ts";
 import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { randomUuid } from "../../api/client.ts";
 import { formatDate, formatDateTime } from "../../i18n/dates.ts";
@@ -217,9 +232,7 @@ export function StoryEditor() {
   if (storyScope(org, pubId) === "none" || (!storyId && !mayCreate(org, pubId))) {
     return (
       <Stack gap="4">
-        <h1 id={ROUTE_HEADING_ID} className="pg-type-page-title" tabIndex={-1}>
-          {t("glossary.story")}
-        </h1>
+        <PageHeader title={t("glossary.story")} headingId={ROUTE_HEADING_ID} />
         <InlineMessage variant="info" heading={t("stories.noAccess.heading")} iconLabel={t("message.info")}>
           {t("stories.noAccess.body")}
         </InlineMessage>
@@ -843,56 +856,119 @@ function EditorContent({
     openConflict(story, draft.base, draft.photoAssetId === undefined ? (story.photo?.assetId ?? null) : draft.photoAssetId);
   };
 
+  const backLink = (
+    <Link className="pg-editor__back" to={paths.pubStories(orgId, pubId)}>
+      <Icon name="arrow-left" size={16} />
+      {t("editor.back")}
+    </Link>
+  );
   if (loaded.status === "loading") return <ProgressIndicator role="status" label={t("editor.loading")} />;
   if (loaded.status === "failed") {
     return (
       <Stack gap="4">
-        <h1 id={ROUTE_HEADING_ID} className="pg-type-page-title" tabIndex={-1}>
-          {t("glossary.story")}
-        </h1>
+        <PageHeader title={t("glossary.story")} headingId={ROUTE_HEADING_ID} breadcrumbs={backLink} />
         <ProblemMessage problem={loaded.problem} live={loaded.live} />
         <Cluster gap="3">
           <Button variant="secondary" onClick={() => void open(true)}>
             {t("form.retry")}
           </Button>
-          <Link to={paths.pubStories(orgId, pubId)}>{t("editor.back")}</Link>
         </Cluster>
       </Stack>
     );
   }
 
   const textLang = story?.language || undefined;
+  /** The handlers every box of the story shares, on both of its forms (the document and the inspector's). */
+  const boxForm = {
+    noValidate: true,
+    onSubmit: (event: FormEvent<HTMLFormElement>) => (event.preventDefault(), void flush()),
+    "aria-busy": moving,
+    onBlur: release,
+    onCompositionStart: () => {
+      composing.current = true;
+      setComposingNow(true);
+    },
+    onCompositionEnd: () => {
+      composing.current = false;
+      setComposingNow(false);
+      // the held live change goes in first (the queue), then autosave sends the composed text on its version
+      release();
+    },
+  };
+  const saveState = <SaveState save={save} dirty={dirty} editable={editable || mayPhoto} onSave={() => void flush()} />;
+  const moves = story && !gone && story.can.transitions.length > 0 && (
+    <section aria-labelledby="pg-editor-moves" className="pg-editor__moves">
+      <h2 id="pg-editor-moves" className="pg-visually-hidden">
+        {t("editor.moves")}
+      </h2>
+      <Cluster gap="2">
+        {story.can.transitions.map((to) => (
+          <Button
+            key={to}
+            variant={to === "spiked" ? "danger" : to === "filed" || to === "ready" ? "primary" : "secondary"}
+            disabled={moving || conflict !== null}
+            aria-busy={moving}
+            onClick={() => (to === "draft" ? setSendingBack(true) : void move(to))}
+          >
+            {t(moveKey(to))}
+          </Button>
+        ))}
+      </Cluster>
+    </section>
+  );
   return (
     <div className="pg-editor">
-      <Stack gap="5">
-        <p>
-          <Link to={paths.pubStories(orgId, pubId)}>{t("editor.back")}</Link>
-        </p>
-        <h1 id={ROUTE_HEADING_ID} className="pg-type-page-title" tabIndex={-1} lang={story ? textLang : undefined}>
-          {story ? story.headline || t("editor.untitled") : t("editor.newTitle")}
-        </h1>
+      <Stack gap="4">
+        <PageHeader
+          breadcrumbs={backLink}
+          headingId={ROUTE_HEADING_ID}
+          title={
+            <span lang={story ? textLang : undefined} className="pg-editor__title">
+              {story ? story.headline || t("editor.untitled") : t("editor.newTitle")}
+            </span>
+          }
+          subtitle={
+            story && (
+              <span className="pg-editor__meta">
+                <StatusChip status={story.status} />
+                <span>{t("editor.reporter", { name: story.reporter.name })}</span>
+                <span>{t("editor.words", { count: dirty ? countWords(fields.body) : story.words })}</span>
+              </span>
+            )
+          }
+          actions={
+            <>
+              {save.state !== "failed" && saveState}
+              {story && !gone && (
+                <Button
+                  variant="quiet"
+                  onClick={() => document.getElementById("pg-comments-heading")?.focus()}
+                >
+                  <Icon name="message-square" size={16} />
+                  {t("editor.goToComments")}
+                </Button>
+              )}
+              {moves}
+            </>
+          }
+        />
+        {moveProblem && <ProblemMessage problem={moveProblem} />}
+        {(moving || saving) && moves && <p className="pg-type-body-small pg-editor__busy">{moving ? t("editor.moving") : t("editor.saving")}</p>}
         <OfflineNotice />
-        {story && (
-          <p className="pg-type-body-small">
-            <StatusChip status={story.status} /> {t("editor.reporter", { name: story.reporter.name })} ·{" "}
-            {t("editor.words", { count: dirty ? countWords(fields.body) : story.words })}
-          </p>
-        )}
-        <SaveState save={save} dirty={dirty} editable={editable || mayPhoto} onSave={() => void flush()} />
+        {save.state === "failed" && saveState}
         <div aria-live="polite">
           {gone && (
             <InlineMessage variant="warning" heading={t("editor.gone.heading")} iconLabel={t("message.warning")}>
               {t("editor.gone.body")}
             </InlineMessage>
           )}
-          {notice && <p>{notice}</p>}
+          {notice && <p className="pg-editor__notice">{notice}</p>}
           {unsavable && story && (
             <InlineMessage variant="warning" heading={t("editor.unsavable.heading")} iconLabel={t("message.warning")}>
               {t("editor.unsavable.body", { status: t(statusKey(story.status)) })}
             </InlineMessage>
           )}
         </div>
-        {!editable && <p>{mayPhoto ? t("editor.photoOnly") : t("editor.readOnly")}</p>}
 
         {offered && (
           <InlineMessage variant="warning" heading={t("editor.draft.heading")} iconLabel={t("message.warning")}>
@@ -921,24 +997,16 @@ function EditorContent({
           <ConflictPanel conflict={conflict} mine={fields} lang={textLang} editionDates={editionDates} onKeepMine={keepMine} onTakeTheirs={takeTheirs} />
         )}
 
-        <form
-          noValidate
-          onSubmit={(event) => (event.preventDefault(), void flush())}
-          aria-busy={moving}
-          onBlur={release}
-          onCompositionStart={() => {
-            composing.current = true;
-            setComposingNow(true);
-          }}
-          onCompositionEnd={() => {
-            composing.current = false;
-            setComposingNow(false);
-            // the held live change goes in first (the queue), then autosave sends the composed text on its version
-            release();
-          }}
-        >
-          <Stack gap="4">
+        <div className="pg-editor__layout">
+          <form {...boxForm} className={locked ? "pg-editor__paper pg-editor__paper--locked" : "pg-editor__paper"}>
+            {!editable && (
+              <p className="pg-editor__readonly">
+                <Icon name="lock" size={16} />
+                <span>{mayPhoto ? t("editor.photoOnly") : t("editor.readOnly")}</span>
+              </p>
+            )}
             <Field
+              className="pg-editor__headline"
               label={t("glossary.headline")}
               description={story ? undefined : t("editor.headlineHint")}
               errors={save.state === "needs-headline" ? [t("editor.headlineMissing")] : []}
@@ -952,8 +1020,7 @@ function EditorContent({
                 onBlur={leaveBox}
               />
             </Field>
-            {/* phone first: the text comes right after the headline */}
-            <Field label={t("glossary.bodyText")}>
+            <Field className="pg-editor__body" label={t("glossary.bodyText")}>
               <TextArea
                 lang={textLang}
                 rows={16}
@@ -964,142 +1031,134 @@ function EditorContent({
                 onBlur={leaveBox}
               />
             </Field>
-            {!story && uploads && <p className="pg-type-body-small">{t("photo.afterHeadline")}</p>}
-            {story && (
-              <PhotoPanel
-                orgId={orgId}
-                pubId={pubId}
-                story={story}
-                may={mayPhoto}
-                mayView={mayView}
-                locked={photoLocked}
-                keptBecause={keptBecause}
-                onDiscardKept={() => {
-                  setFields((typed) => ({ ...typed, caption: latest.current.saved.caption, credit: latest.current.saved.credit }));
-                  setPhotoGoneBy(null);
-                }}
-                caption={fields.caption}
-                credit={fields.credit}
-                lang={textLang}
-                onCaption={(value) => change("caption")(value)}
-                onCredit={(value) => change("credit")(value)}
-                onLeave={() => {
-                  if (!photoLocked && dirty) void flush();
-                }}
-                onAttach={attachPhoto}
-                onRemove={removePhoto}
-              />
-            )}
-            <Field label={t("glossary.byline")}>
-              <TextInput lang={textLang} data-field="byline" value={fields.byline} readOnly={boxLocked("byline")} onChange={(event) => change("byline")(event.target.value)} onBlur={leaveBox} />
-            </Field>
-            <Field label={t("glossary.kicker")}>
-              <TextInput lang={textLang} data-field="kicker" value={fields.kicker} readOnly={boxLocked("kicker")} onChange={(event) => change("kicker")(event.target.value)} onBlur={leaveBox} />
-            </Field>
-            <Field label={t("glossary.deck")}>
-              <TextInput lang={textLang} data-field="deck" value={fields.deck} readOnly={boxLocked("deck")} onChange={(event) => change("deck")(event.target.value)} onBlur={leaveBox} />
-            </Field>
-            {desk && (
-              <fieldset className="pg-radio-group">
-                <legend className="pg-radio-group__legend">{t("editor.desk")}</legend>
-                <Stack gap="3">
-                  <Cluster gap="4">
-                    <Field label={t("editor.priority")}>
-                      <Select
-                        value={String(fields.priority)}
-                        disabled={locked}
-                        onChange={(event) => change("priority")(Number(event.target.value))}
-                      >
-                        {PRIORITIES.map(([level, label]) => (
-                          <option key={level} value={level}>
-                            {t(label)}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Field
-                      label={t("editor.pagePin")}
-                      {...(pinPast && editionPages !== null ? { errors: [t("editor.pagePin.pastEdition", { pages: editionPages })] } : {})}
-                    >
-                      <Select
-                        value={fields.pagePin === null ? "" : String(fields.pagePin)}
-                        disabled={locked}
-                        onChange={(event) => change("pagePin")(event.target.value === "" ? null : Number(event.target.value))}
-                      >
-                        <option value="">{t("editor.pagePin.any")}</option>
-                        {/* the edition's pages (the API refuses a page past them); a pin already past them stays shown */}
-                        {[...Array.from({ length: editionPages ?? 16 }, (_, index) => index + 1), ...(pinPast && fields.pagePin !== null ? [fields.pagePin] : [])].map((page) => (
-                          <option key={page} value={page}>
-                            {t("editor.pagePin.page", { page })}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Field label={t("glossary.edition.issue")}>
-                      <Select
-                        value={fields.editionId ?? ""}
-                        disabled={locked}
-                        onChange={(event) => change("editionId")(event.target.value || null)}
-                      >
-                        <option value="">{t("stories.noEdition")}</option>
-                        {[...editionDates].sort((a, b) => b[1].localeCompare(a[1])).map(([id, date]) => (
-                          <option key={id} value={id}>
-                            {formatDate(date, language)}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                  </Cluster>
-                  <Field label={t("editor.deskNote")} description={t("editor.deskNoteHint")}>
-                    <TextInput data-field="deskNote" value={fields.deskNote} readOnly={boxLocked("deskNote")} onChange={(event) => change("deskNote")(event.target.value)} onBlur={leaveBox} />
+          </form>
+
+          <aside className="pg-editor__inspector" aria-label={t("editor.inspector")}>
+            <form {...boxForm} className="pg-editor__inspector-form">
+              <Panel title={t("editor.panel.details")}>
+                <Stack gap="4">
+                  <Field label={t("glossary.byline")}>
+                    <TextInput lang={textLang} data-field="byline" value={fields.byline} readOnly={boxLocked("byline")} onChange={(event) => change("byline")(event.target.value)} onBlur={leaveBox} />
+                  </Field>
+                  <Field label={t("glossary.kicker")}>
+                    <TextInput lang={textLang} data-field="kicker" value={fields.kicker} readOnly={boxLocked("kicker")} onChange={(event) => change("kicker")(event.target.value)} onBlur={leaveBox} />
+                  </Field>
+                  <Field label={t("glossary.deck")}>
+                    <TextInput lang={textLang} data-field="deck" value={fields.deck} readOnly={boxLocked("deck")} onChange={(event) => change("deck")(event.target.value)} onBlur={leaveBox} />
                   </Field>
                 </Stack>
-              </fieldset>
+              </Panel>
+              {!story && uploads && (
+                <Panel title={t("glossary.photo")}>
+                  <p className="pg-type-body-small">{t("photo.afterHeadline")}</p>
+                </Panel>
+              )}
+              {story && (
+                <PhotoPanel
+                  orgId={orgId}
+                  pubId={pubId}
+                  story={story}
+                  may={mayPhoto}
+                  mayView={mayView}
+                  locked={photoLocked}
+                  keptBecause={keptBecause}
+                  onDiscardKept={() => {
+                    setFields((typed) => ({ ...typed, caption: latest.current.saved.caption, credit: latest.current.saved.credit }));
+                    setPhotoGoneBy(null);
+                  }}
+                  caption={fields.caption}
+                  credit={fields.credit}
+                  lang={textLang}
+                  onCaption={(value) => change("caption")(value)}
+                  onCredit={(value) => change("credit")(value)}
+                  onLeave={() => {
+                    if (!photoLocked && dirty) void flush();
+                  }}
+                  onAttach={attachPhoto}
+                  onRemove={removePhoto}
+                />
+              )}
+              {desk && (
+                <Panel title={t("editor.panel.desk")}>
+                  <fieldset className="pg-editor__desk">
+                    <legend className="pg-visually-hidden">{t("editor.desk")}</legend>
+                    <Stack gap="4">
+                      <div className="pg-editor__desk-row">
+                        <Field label={t("editor.priority")}>
+                          <Select
+                            value={String(fields.priority)}
+                            disabled={locked}
+                            onChange={(event) => change("priority")(Number(event.target.value))}
+                          >
+                            {PRIORITIES.map(([level, label]) => (
+                              <option key={level} value={level}>
+                                {t(label)}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                        <Field
+                          label={t("editor.pagePin")}
+                          {...(pinPast && editionPages !== null ? { errors: [t("editor.pagePin.pastEdition", { pages: editionPages })] } : {})}
+                        >
+                          <Select
+                            value={fields.pagePin === null ? "" : String(fields.pagePin)}
+                            disabled={locked}
+                            onChange={(event) => change("pagePin")(event.target.value === "" ? null : Number(event.target.value))}
+                          >
+                            <option value="">{t("editor.pagePin.any")}</option>
+                            {/* the edition's pages (the API refuses a page past them); a pin already past them stays shown */}
+                            {[...Array.from({ length: editionPages ?? 16 }, (_, index) => index + 1), ...(pinPast && fields.pagePin !== null ? [fields.pagePin] : [])].map((page) => (
+                              <option key={page} value={page}>
+                                {t("editor.pagePin.page", { page })}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                      </div>
+                      <Field label={t("glossary.edition.issue")}>
+                        <Select
+                          value={fields.editionId ?? ""}
+                          disabled={locked}
+                          onChange={(event) => change("editionId")(event.target.value || null)}
+                        >
+                          <option value="">{t("stories.noEdition")}</option>
+                          {[...editionDates].sort((a, b) => b[1].localeCompare(a[1])).map(([id, date]) => (
+                            <option key={id} value={id}>
+                              {formatDate(date, language)}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={t("editor.deskNote")} description={t("editor.deskNoteHint")}>
+                        <TextInput data-field="deskNote" value={fields.deskNote} readOnly={boxLocked("deskNote")} onChange={(event) => change("deskNote")(event.target.value)} onBlur={leaveBox} />
+                      </Field>
+                    </Stack>
+                  </fieldset>
+                </Panel>
+              )}
+            </form>
+
+            {story && !gone && story.can.assign && (
+              <Panel title={t("editor.panel.workflow")}>
+                <Assignment orgId={orgId} pubId={pubId} story={story} onChanged={(next, text) => (setStory(next), setNotice(text))} onConflict={(theirs) => openConflict(theirs, latest.current.saved)} />
+              </Panel>
             )}
-          </Stack>
-        </form>
 
-        {story && !gone && story.can.transitions.length > 0 && (
-          <section aria-labelledby="pg-editor-moves">
-            <Stack gap="3">
-              <h2 id="pg-editor-moves" className="pg-type-section-title">
-                {t("editor.moves")}
-              </h2>
-              {moveProblem && <ProblemMessage problem={moveProblem} />}
-              <Cluster gap="3">
-                {story.can.transitions.map((to) => (
-                  <Button
-                    key={to}
-                    variant={to === "spiked" ? "danger" : to === "filed" || to === "ready" ? "primary" : "secondary"}
-                    disabled={moving || conflict !== null}
-                    aria-busy={moving}
-                    onClick={() => (to === "draft" ? setSendingBack(true) : void move(to))}
-                  >
-                    {t(moveKey(to))}
-                  </Button>
-                ))}
-              </Cluster>
-              {(moving || saving) && <p className="pg-type-body-small">{moving ? t("editor.moving") : t("editor.saving")}</p>}
-            </Stack>
-          </section>
-        )}
-
-        {story && !gone && story.can.assign && (
-          <Assignment orgId={orgId} pubId={pubId} story={story} onChanged={(next, text) => (setStory(next), setNotice(text))} onConflict={(theirs) => openConflict(theirs, latest.current.saved)} />
-        )}
-
-        {story && !gone && <CommentsPanel orgId={orgId} pubId={pubId} storyId={story.id} mayComment={story.can.comment} />}
+            {story && !gone && <CommentsPanel orgId={orgId} pubId={pubId} storyId={story.id} mayComment={story.can.comment} />}
+          </aside>
+        </div>
 
         {sendingBack && (
-        <SendBackDialog
-          open={sendingBack}
-          onClose={() => setSendingBack(false)}
-          onSend={async (comment) => {
-            const moved = await move("draft", comment);
-            if (moved) setSendingBack(false);
-            return moved;
-          }}
-        />
+          <SendBackDialog
+            open={sendingBack}
+            onClose={() => setSendingBack(false)}
+            onSend={async (comment) => {
+              const moved = await move("draft", comment);
+              if (moved) setSendingBack(false);
+              return moved;
+            }}
+          />
         )}
       </Stack>
     </div>
@@ -1249,9 +1308,11 @@ function SaveState({
     );
   }
   const text = save.state === "saving" ? t("editor.saving") : dirty ? t("editor.unsaved") : t("editor.saved");
+  const icon = save.state === "saving" ? "loader-circle" : dirty ? "pencil" : "circle-check";
   return (
-    <p className="pg-type-body-small" role="status">
-      {text}
+    <p className="pg-editor__save" role="status">
+      <Icon name={icon} size={16} />
+      <span>{text}</span>
     </p>
   );
 }

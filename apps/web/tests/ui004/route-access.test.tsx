@@ -162,7 +162,8 @@ describe("UI004 protected access", () => {
     const organization = await screen.findByRole("combobox", { name: "Organization" });
     await userEvent.setup().selectOptions(organization, "org-demo-konkan");
     await waitFor(() => expect(container).toHaveTextContent("Sahyadri Demo Editor · Viewer"));
-    expect(screen.getByRole("heading", { level: 1, name: "Konkan Coastal Press" })).toBeInTheDocument();
+    // the account menu shows the new role while the new organization's page still loads
+    expect(await screen.findByRole("heading", { level: 1, name: "Konkan Coastal Press" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/org/org-demo-konkan");
     expect(await environment.access.getAccess({ userId: "user-demo-sahyadri-editor" })).toMatchObject({ ok: true, value: { activeOrganizationId: "org-demo-konkan", activePublicationId: "pub-demo-ratnagiri-tide" } });
   });
@@ -170,17 +171,20 @@ describe("UI004 protected access", () => {
   it("signing in as another person switches the options, role and route together", async () => {
     const { container } = renderUi004(PUNE);
     const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /^Account:/ })); // Sign out sits in the account menu
     await user.click(await screen.findByRole("button", { name: "Sign out" }));
     await signInWithForm(user, accounts.reviewer);
     await waitFor(() => expect(window.location.pathname).toBe("/org/org-demo-konkan"));
     await waitFor(() => expect(container).toHaveTextContent("Konkan Demo Reviewer · Viewer"));
-    expect(screen.getByRole("combobox", { name: "Organization" }).querySelectorAll("option")).toHaveLength(1);
+    // the new frame shows the account button's name before the switcher has its options
+    expect((await screen.findByRole("combobox", { name: "Organization" })).querySelectorAll("option")).toHaveLength(1);
     expect(container).not.toHaveTextContent("Sahyadri Media Cooperative");
   });
 
   it("logs out from protected content without preserving returnTo", async () => {
     renderUi004(PUNE);
     const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /^Account:/ })); // Sign out sits in the account menu
     await user.click(await screen.findByRole("button", { name: "Sign out" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Sign in" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/login");

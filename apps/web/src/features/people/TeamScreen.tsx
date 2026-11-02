@@ -5,7 +5,7 @@
  * change a member's roles, remove a member. The Chief Editor sees the members only. The API decides every one of
  * these again; this page only leaves out what it would refuse.
  */
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useParams } from "react-router";
 import {
   GRANT_HOLDERS,
@@ -15,16 +15,28 @@ import {
   type PublicationRole,
 } from "@pageinator/contracts";
 import {
+  Avatar,
+  Badge,
   Button,
   Checkbox,
   Cluster,
   Dialog,
+  EmptyState,
   Field,
   InlineMessage,
+  MenuButton,
+  MenuItem,
+  MenuSeparator,
+  PageHeader,
+  Panel,
   ProgressIndicator,
   RadioGroup,
   Stack,
+  Table,
+  TableCell,
+  TableHeader,
   TextInput,
+  type BadgeTone,
 } from "../../ui/index.ts";
 import { ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { randomUuid } from "../../api/client.ts";
@@ -45,6 +57,7 @@ import { grantName, roleName, rolesAndGrants } from "./roles.ts";
 import { useTeam } from "./services-context.tsx";
 import { TwoStepNeeded } from "./TwoStepNeeded.tsx";
 import "../auth/auth.css";
+import "./people.css";
 
 type Grants = MemberDto["publications"];
 type OrgChoice = "admin" | "member";
@@ -118,9 +131,9 @@ function RoleEditor({
         const current = choice.publications[publication.id] ?? { roles: [], grants: [] };
         const grants = GRANTS.filter((grant) => grantAllowed(grant, current.roles));
         return (
-          <fieldset key={publication.id} className="pg-radio-group">
+          <fieldset key={publication.id} className="pg-radio-group pg-people-roles">
             <legend className="pg-radio-group__legend">{t("team.publication.legend", { publication: publication.name })}</legend>
-            <div className="pg-codes">
+            <div className="pg-people-roles__grid">
               {PUBLICATION_ROLES.map((role) => (
                 <Checkbox
                   key={role}
@@ -135,7 +148,7 @@ function RoleEditor({
                 <p id={`${grantsHint}-${publication.id}`} className="pg-type-body-small pg-auth__hint">
                   {t("team.grants.hint")}
                 </p>
-                <div className="pg-codes">
+                <div className="pg-people-roles__grid">
                   {grants.map((grant) => (
                     <Checkbox
                       key={grant}
@@ -259,8 +272,17 @@ function InviteDialog({
           {roleError && (
             <InlineMessage variant="error" heading={t("team.invite.needRole")} live iconLabel={t("message.error")} />
           )}
-          <Cluster gap="3">
+          <Cluster gap="3" className="pg-people-dialog__footer">
             <Button type="submit">{pending ? t("team.invite.sending") : t("team.invite.submit")}</Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                reset();
+                onClose();
+              }}
+            >
+              {t("security.cancel")}
+            </Button>
           </Cluster>
         </Stack>
       </form>
@@ -326,7 +348,7 @@ function RolesDialog({
             {roleError && (
               <InlineMessage variant="error" heading={t("team.invite.needRole")} live iconLabel={t("message.error")} />
             )}
-            <Cluster gap="3">
+            <Cluster gap="3" className="pg-people-dialog__footer">
               <Button type="submit">{pending ? t("team.saving") : t("team.save")}</Button>
               <Button variant="secondary" onClick={onClose}>
                 {t("security.cancel")}
@@ -376,7 +398,7 @@ function RemoveDialog({
         <Stack gap="4">
           <p>{t("team.remove.body", { name: member.name, organization: org.org.name })}</p>
           {problem && <ProblemMessage problem={problem} />}
-          <Cluster gap="3">
+          <Cluster gap="3" className="pg-people-dialog__footer">
             <Button variant="danger" onClick={() => void remove()}>
               {t("team.remove.confirm")}
             </Button>
@@ -396,7 +418,7 @@ function PublicationRoles({ org, grants }: { readonly org: OrgAccessDto; readonl
   const names = new Map(org.publications.map((publication) => [publication.id, publication.name]));
   if (grants.length === 0) return null;
   return (
-    <ul className="pg-type-body-small">
+    <ul className="pg-people-pubroles">
       {grants.map((grant) => (
         <li key={grant.publicationId}>
           {t("orgHome.publicationRoles", {
@@ -430,6 +452,7 @@ function TeamContent({ org }: { readonly org: OrgAccessDto }) {
   const [editing, setEditing] = useState<MemberDto | null>(null);
   const [removing, setRemoving] = useState<MemberDto | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const focusHeading = useRef(false);
   const me = state.status === "ready" ? state.session.user.id : "";
   const orgId = org.org.id;
 
@@ -453,6 +476,13 @@ function TeamContent({ org }: { readonly org: OrgAccessDto }) {
     setLoad({ status: "loading" });
     void fetchAll(false);
   }, [fetchAll]);
+
+  // After a removal the row and its menu button are gone: put focus on the page heading once the list is back.
+  useEffect(() => {
+    if (!focusHeading.current) return;
+    focusHeading.current = false;
+    document.getElementById(ROUTE_HEADING_ID)?.focus();
+  }, [load]);
 
   const said = (text: string) => {
     setActionProblem(null);
@@ -478,118 +508,168 @@ function TeamContent({ org }: { readonly org: OrgAccessDto }) {
     );
   };
 
-  if (load.status === "loading") return <ProgressIndicator role="status" label={t("team.loading")} />;
+  const header = (
+    <>
+      <TeamHeader
+        actions={
+          manage && load.status === "ready" ? (
+            <Button onClick={() => setInviting(true)}>{t("team.invite")}</Button>
+          ) : undefined
+        }
+      />
+      <OfflineNotice />
+    </>
+  );
+
+  if (load.status === "loading")
+    return (
+      <>
+        {header}
+        <ProgressIndicator role="status" label={t("team.loading")} />
+      </>
+    );
   if (load.status === "failed") {
     const { problem } = load;
     const code = problem.kind === "answer" ? problem.code : "";
-    if (code === "two_step_required") return <TwoStepNeeded org={org} />;
-    if (code === "not_allowed" || code === "not_found") return <NoAccess />;
     return (
-      <Stack gap="4">
-        <ProblemMessage problem={problem} live={load.live} />
-        <div>
-          <Button variant="secondary" onClick={() => void fetchAll(true)}>
-            {t("form.retry")}
-          </Button>
-        </div>
-      </Stack>
+      <>
+        {header}
+        {code === "two_step_required" ? (
+          <TwoStepNeeded org={org} />
+        ) : code === "not_allowed" || code === "not_found" ? (
+          <NoAccess />
+        ) : (
+          <Stack gap="4">
+            <ProblemMessage problem={problem} live={load.live} />
+            <div>
+              <Button variant="secondary" onClick={() => void fetchAll(true)}>
+                {t("form.retry")}
+              </Button>
+            </div>
+          </Stack>
+        )}
+      </>
     );
   }
 
   return (
-    <Stack gap="6">
-      <div aria-live="polite">{notice && <p>{notice}</p>}</div>
+    <>
+      {header}
+      <div aria-live="polite">{notice && <InlineMessage variant="success" heading={notice} iconLabel={t("message.success")} />}</div>
       {actionProblem && <ProblemMessage problem={actionProblem} />}
-      {manage && (
-        <div>
-          <Button onClick={() => setInviting(true)}>{t("team.invite")}</Button>
-        </div>
-      )}
 
-      <section aria-labelledby="pg-team-members">
-        <Stack gap="4">
-          <h2 id="pg-team-members" className="pg-type-section-title">
-            {t("team.members.heading")}
-          </h2>
-          <ul className="pg-list">
+      <Panel title={t("team.members.heading")} flush>
+        <Table caption={t("team.members.heading")} className="pg-people-menu-table">
+          <thead>
+            <tr>
+              <TableHeader>{t("team.col.name")}</TableHeader>
+              <TableHeader>{t("team.orgRole.legend")}</TableHeader>
+              <TableHeader>{t("team.col.publications")}</TableHeader>
+              <TableHeader>{t("team.col.lastActive")}</TableHeader>
+              {manage && (
+                <TableHeader className="pg-people-table__actions">
+                  <span className="pg-visually-hidden">{t("team.col.actions")}</span>
+                </TableHeader>
+              )}
+            </tr>
+          </thead>
+          <tbody>
             {load.members.map((member) => {
               const changeable = manage && member.orgRole !== "owner" && member.userId !== me;
               return (
-                <li key={member.userId} className="pg-list__item">
-                  <p className="pg-type-body">
-                    <strong>{member.name}</strong>
-                  </p>
-                  <p className="pg-type-body-small">{member.email}</p>
-                  <p className="pg-type-body-small">{t("team.member.orgRole", { role: roleName(member.orgRole, t) })}</p>
-                  <PublicationRoles org={org} grants={member.publications} />
-                  <p className="pg-type-body-small">
-                    {member.lastActiveAt
-                      ? t("team.member.lastActive", { date: formatDateTime(member.lastActiveAt, language) })
-                      : t("team.member.neverActive")}
-                  </p>
-                  {member.userId === me && <p className="pg-type-body-small">{t("team.member.you")}</p>}
-                  {changeable && (
-                    <Cluster gap="3">
-                      <Button variant="secondary" size="sm" onClick={() => setEditing(member)}>
-                        {t("team.changeRoles", { name: member.name })}
-                      </Button>
-                      <Button variant="danger" size="sm" onClick={() => setRemoving(member)}>
-                        {t("team.remove", { name: member.name })}
-                      </Button>
-                    </Cluster>
+                <tr key={member.userId}>
+                  <TableCell>
+                    <Person name={member.name} detail={member.email} you={member.userId === me} />
+                  </TableCell>
+                  <TableCell>
+                    <OrgRoleBadge role={member.orgRole} />
+                  </TableCell>
+                  <TableCell>
+                    <PublicationRoles org={org} grants={member.publications} />
+                  </TableCell>
+                  <TableCell className="pg-people-table__muted">
+                    {member.lastActiveAt ? formatDateTime(member.lastActiveAt, language) : t("team.member.neverActive")}
+                  </TableCell>
+                  {manage && (
+                    <TableCell className="pg-people-table__actions">
+                      {changeable && (
+                        <MenuButton label={t("team.row.actions", { name: member.name })} icon="ellipsis" iconOnly align="end">
+                          <MenuItem icon="pencil" onSelect={() => setEditing(member)}>
+                            {t("team.row.changeRoles")}
+                          </MenuItem>
+                          <MenuSeparator />
+                          <MenuItem icon="x" danger onSelect={() => setRemoving(member)}>
+                            {t("team.remove.confirm")}
+                          </MenuItem>
+                        </MenuButton>
+                      )}
+                    </TableCell>
                   )}
-                </li>
+                </tr>
               );
             })}
-          </ul>
-        </Stack>
-      </section>
+          </tbody>
+        </Table>
+      </Panel>
 
       {manage && (
-        <section aria-labelledby="pg-team-pending">
-          <Stack gap="4">
-            <h2 id="pg-team-pending" className="pg-type-section-title">
-              {t("team.pending.heading")}
-            </h2>
-            {load.invitations.length === 0 && <p>{t("team.pending.none")}</p>}
-            {load.invitations.length > 0 && (
-              <ul className="pg-list">
+        <Panel title={t("team.pending.heading")} flush>
+          {load.invitations.length === 0 ? (
+            <EmptyState icon="send" heading={t("team.pending.none")} headingLevel={3} />
+          ) : (
+            <Table caption={t("team.pending.heading")} className="pg-people-menu-table">
+              <thead>
+                <tr>
+                  <TableHeader>{t("form.email")}</TableHeader>
+                  <TableHeader>{t("team.orgRole.legend")}</TableHeader>
+                  <TableHeader>{t("team.col.publications")}</TableHeader>
+                  <TableHeader className="pg-people-table__actions">
+                    <span className="pg-visually-hidden">{t("team.col.actions")}</span>
+                  </TableHeader>
+                </tr>
+              </thead>
+              <tbody>
                 {load.invitations.map((invitation) => (
-                  <li key={invitation.id} className="pg-list__item">
-                    <p className="pg-type-body">
-                      <strong>{invitation.email}</strong>
-                    </p>
-                    <p className="pg-type-body-small">
-                      {t("team.member.orgRole", { role: roleName(invitation.orgRole, t) })}
-                    </p>
-                    <PublicationRoles org={org} grants={invitation.publications} />
-                    <p className="pg-type-body-small">
-                      {t("team.pending.expires", { date: formatDate(invitation.expiresAt, language) })}
-                    </p>
-                    <Cluster gap="3">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        aria-busy={busy === invitation.id}
-                        onClick={() => void pendingAction(invitation, "resend")}
+                  <tr key={invitation.id} aria-busy={busy === invitation.id || undefined}>
+                    <TableCell>
+                      <Person
+                        name={invitation.email}
+                        detail={t("team.pending.expires", { date: formatDate(invitation.expiresAt, language) })}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <OrgRoleBadge role={invitation.orgRole} />
+                    </TableCell>
+                    <TableCell>
+                      <PublicationRoles org={org} grants={invitation.publications} />
+                    </TableCell>
+                    <TableCell className="pg-people-table__actions">
+                      <MenuButton
+                        label={t("team.pending.row.actions", { email: invitation.email })}
+                        icon="ellipsis"
+                        iconOnly
+                        align="end"
                       >
-                        {t("team.pending.resend", { email: invitation.email })}
-                      </Button>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        aria-busy={busy === invitation.id}
-                        onClick={() => void pendingAction(invitation, "cancel")}
-                      >
-                        {t("team.pending.cancel", { email: invitation.email })}
-                      </Button>
-                    </Cluster>
-                  </li>
+                        <MenuItem icon="send" disabled={busy !== null} onSelect={() => void pendingAction(invitation, "resend")}>
+                          {t("team.pending.row.resend")}
+                        </MenuItem>
+                        <MenuSeparator />
+                        <MenuItem
+                          icon="x"
+                          danger
+                          disabled={busy !== null}
+                          onSelect={() => void pendingAction(invitation, "cancel")}
+                        >
+                          {t("team.pending.row.cancel")}
+                        </MenuItem>
+                      </MenuButton>
+                    </TableCell>
+                  </tr>
                 ))}
-              </ul>
-            )}
-          </Stack>
-        </section>
+              </tbody>
+            </Table>
+          )}
+        </Panel>
       )}
 
       {manage && (
@@ -618,13 +698,43 @@ function TeamContent({ org }: { readonly org: OrgAccessDto }) {
             onClose={() => setRemoving(null)}
             onRemoved={(member) => {
               setRemoving(null);
+              focusHeading.current = true;
               said(t("team.removed", { name: member.name }));
             }}
           />
         </>
       )}
-    </Stack>
+    </>
   );
+}
+
+/** A person (or an invited address) as the first cell: initials, the name in bold, a second line. */
+function Person({ name, detail, you = false }: { readonly name: string; readonly detail?: string; readonly you?: boolean }) {
+  const { t } = useI18n();
+  return (
+    <div className="pg-people-person">
+      <Avatar name={name} size="sm" decorative />
+      <div className="pg-people-person__text">
+        <span className="pg-people-person__name">
+          <strong>{name}</strong>
+          {you && <Badge tone="info">{t("team.member.youBadge")}</Badge>}
+        </span>
+        {detail && <span className="pg-people-person__detail">{detail}</span>}
+      </div>
+    </div>
+  );
+}
+
+const ROLE_TONES: Readonly<Record<string, BadgeTone>> = { owner: "accent", admin: "info" };
+
+function OrgRoleBadge({ role }: { readonly role: string }) {
+  const { t } = useI18n();
+  return <Badge tone={ROLE_TONES[role] ?? "neutral"}>{roleName(role, t)}</Badge>;
+}
+
+function TeamHeader({ actions }: { readonly actions?: ReactNode }) {
+  const { t } = useI18n();
+  return <PageHeader title={t("glossary.team")} headingId={ROUTE_HEADING_ID} actions={actions} />;
 }
 
 function NoAccess() {
@@ -639,20 +749,18 @@ function NoAccess() {
 export function TeamScreen() {
   const { orgId } = useParams<{ orgId: string }>();
   const { state } = useSession();
-  const { t } = useI18n();
   const org = state.status === "ready" ? state.workspace?.organizations.find((candidate) => candidate.org.id === orgId) : undefined;
+  const blocked = org !== undefined && org.twoStep.required && !org.twoStep.satisfied; // the shell says why
   return (
-    <Stack gap="5">
-      <h1 id={ROUTE_HEADING_ID} className="pg-type-page-title" tabIndex={-1}>
-        {t("glossary.team")}
-      </h1>
-      <OfflineNotice />
-      {!org ? (
-        <NoAccess />
-      ) : org.twoStep.required && !org.twoStep.satisfied ? null /* the shell says why */ : !may(org, "members.view") ? (
-        <NoAccess />
-      ) : (
+    <Stack gap="5" className="pg-people">
+      {org && !blocked && may(org, "members.view") ? (
         <TeamContent org={org} />
+      ) : (
+        <>
+          <TeamHeader />
+          <OfflineNotice />
+          {!blocked && <NoAccess />}
+        </>
       )}
     </Stack>
   );

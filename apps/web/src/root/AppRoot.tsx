@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { PublicShell } from "../app/shells/PublicShell.tsx";
 import { WorkspaceShell } from "../app/shells/WorkspaceShell.tsx";
 import { EditorShell } from "../app/shells/EditorShell.tsx";
+import { AccountShell } from "../app/shells/AccountShell.tsx";
 import { ScopedNotFoundShell } from "../app/shells/ScopedNotFoundShell.tsx";
 import { EditionWorkspaceLayout } from "../app/EditionWorkspaceLayout.tsx";
 import { NotFoundPage } from "../app/NotFoundPage.tsx";
@@ -126,9 +127,12 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                 <Route path={PATTERNS.verify} element={<VerifyEmailScreen />} />
                 <Route path={PATTERNS.invitation} element={<InvitationScreen />} />
                 <Route path={PATTERNS.twoStep} element={<TwoStepScreen />} />
-                <Route path={PATTERNS.accountSecurity} element={<SecurityScreen />} />
                 {DEVELOPMENT && <Route path={PATTERNS.onboarding} element={measured(placeholder("onboarding"))} />}
                 <Route path="*" element={measured(<NotFoundPage />)} />
+              </Route>
+
+              <Route element={<AccountShell />}>
+                <Route path={PATTERNS.accountSecurity} element={<SecurityScreen />} />
               </Route>
 
               <Route path={PATTERNS.workspaceRoot} element={<WorkspaceBoundary />}>

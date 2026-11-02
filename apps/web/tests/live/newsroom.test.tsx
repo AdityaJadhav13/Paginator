@@ -213,6 +213,22 @@ describe("The notifications drawer", () => {
     expect(await drawer.findByText("Nothing unread.")).toBeInTheDocument();
   });
 
+  it("is a side pane: its kind's icon and an unread dot on each new one, Esc closes it and the bell has focus again", async () => {
+    renderAuth(STORIES, { preset: "sahyadri-reporter" });
+    const user = userEvent.setup();
+    const bell = await screen.findByRole("button", { name: "Notifications 1 unread" });
+    await user.click(bell);
+    const dialog = await screen.findByRole("dialog", { name: "Notifications" });
+    expect(screen.getByRole("heading", { level: 2, name: "Notifications" })).toHaveFocus();
+    const items = await within(dialog).findAllByRole("listitem");
+    expect(items[0]!.querySelector(".pg-notification__dot")).not.toBeNull();
+    expect(items[0]!.querySelector('[data-icon="message-square"]')).not.toBeNull();
+    expect(items[1]!.querySelector(".pg-notification__dot")).toBeNull();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(bell).toHaveFocus();
+  });
+
   it("opens what a notification is about, at its comment, and marks it read", async () => {
     const environment = createMockApplicationEnvironment();
     const markRead = vi.spyOn(environment.notifications, "markRead");
@@ -587,6 +603,7 @@ describe("Live updates elsewhere", () => {
     const user = userEvent.setup();
     await screen.findByRole("region", { name: "Comments (3)" });
     expect(environment.liveController.streams()).toBe(1);
+    await user.click(await screen.findByRole("button", { name: /^Account:/ })); // Sign out sits in the account menu
     await user.click(screen.getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(environment.liveController.streams()).toBe(0));
     expect(environment.liveController.stops()).toBe(1);

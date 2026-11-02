@@ -4,7 +4,7 @@
  * Also the organisation's home, where sign-in lands. Fictional data only.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { screen } from "../../src/test/render.tsx";
+import { screen, within } from "../../src/test/render.tsx";
 import { navigation } from "../../src/features/people/navigation.ts";
 import { mayCreateEdition, mayExport } from "../../src/features/stories/access.ts";
 import type { OrgAccessDto } from "../../src/services/index.ts";
@@ -96,7 +96,18 @@ describe("The organisation's home", () => {
     const { container } = renderAuth("/org/org-demo-sahyadri", { preset: "sahyadri-editor" });
     expect(await screen.findByRole("heading", { level: 1, name: "Sahyadri Media Cooperative" })).toBeInTheDocument();
     expect(screen.getByText("Your role here: Admin.")).toBeInTheDocument();
-    expect(screen.getByText("Pune Daily Ledger: Editor and Can approve pages")).toBeInTheDocument();
+    const card = screen.getByRole("heading", { level: 3, name: "Pune Daily Ledger" }).closest("li")!;
+    expect(within(card).getByText("Your roles: Editor and Can approve pages")).toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: "Editions of Pune Daily Ledger" })).toHaveAttribute(
+      "href",
+      "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions",
+    );
+    const quick = within(screen.getByRole("region", { name: "Quick links" }));
+    expect(quick.getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+      ["Team", "/org/org-demo-sahyadri/team"],
+      ["Audit log", "/org/org-demo-sahyadri/audit"],
+      ["Account security", "/account/security"],
+    ]);
     expect(screen.getByText("The stories desk is open. The other newsroom screens are still being built.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Stories of Pune Daily Ledger" })).toHaveAttribute(
       "href",
@@ -111,7 +122,9 @@ describe("The organisation's home", () => {
   it("is in Marathi", async () => {
     renderAuth("/org/org-demo-konkan", { preset: "konkan-reviewer", language: "mr" });
     expect(await screen.findByText("इथे तुमची भूमिका: सदस्य.")).toBeInTheDocument();
-    expect(screen.getByText("Ratnagiri Tide मधील भूमिका: वाचक")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "Ratnagiri Tide" })).toBeInTheDocument();
+    expect(screen.getByText("तुमच्या भूमिका: वाचक")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "खाते सुरक्षा" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "टीम" })).not.toBeInTheDocument();
   });
 });

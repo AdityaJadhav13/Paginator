@@ -25,8 +25,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const events = async () => within(await screen.findByRole("list", { name: "Events" })).getAllByRole("listitem");
-const itemOf = (text: string) => screen.getByText(text, { selector: "strong" }).closest("li")!;
+/** The body rows of a table (its header row left out). */
+const bodyRows = (table: HTMLElement) => within(table).getAllByRole("row").filter((row) => row.closest("tbody"));
+const events = async () => bodyRows(await screen.findByRole("table", { name: "Events" }));
+const itemOf = (text: string) => screen.getByText(text, { selector: "strong" }).closest("tr")!;
 
 describe("Plain action names", () => {
   it("name every action of AUDIT_ACTIONS in English and in Marathi, each its own", () => {
@@ -281,7 +283,7 @@ describe("The audit log for a chief editor", () => {
     // org-level events and the other publication's are not theirs
     expect(screen.queryByText("Created the organization", { selector: "strong" })).not.toBeInTheDocument();
     expect(screen.queryByText("Gave a story to someone", { selector: "strong" })).not.toBeInTheDocument();
-    expect(within(screen.getByRole("list", { name: "Events" })).queryByText("Deccan Evening Record")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("table", { name: "Events" })).queryByText("Deccan Evening Record")).not.toBeInTheDocument();
     expect(screen.queryByText("Network address")).not.toBeInTheDocument();
     expect(screen.queryByText("Browser")).not.toBeInTheDocument();
     // the actions offered are the publication ones only; one publication of theirs, so none to choose
@@ -333,9 +335,9 @@ describe("The audit log in Marathi", () => {
   it("names the actions and the facts in Marathi, and has no serious axe violations", async () => {
     const { container } = renderAuth(AUDIT, { preset: "sahyadri-editor", language: "mr" });
     expect(await screen.findByRole("heading", { level: 1, name: "कामकाजाची नोंद" })).toBeInTheDocument();
-    const items = within(await screen.findByRole("list", { name: "नोंदी" })).getAllByRole("listitem");
+    const items = bodyRows(await screen.findByRole("table", { name: "नोंदी" }));
     expect(items[0]).toHaveTextContent("बातमीचा मजकूर जतन केला");
-    expect(items[0]).toHaveTextContent("कोणी");
+    expect(screen.getByRole("columnheader", { name: "कोणी" })).toBeInTheDocument();
     expect(items[0]).toHaveTextContent("बातमी (ओळख story-demo-003)");
     expect(screen.getByRole("button", { name: "जुन्या नोंदी दाखवा" })).toBeInTheDocument();
     expect(await seriousViolations(container)).toEqual([]);

@@ -1,6 +1,6 @@
 import { useI18n, type PlainKey } from "../../i18n/index.ts";
 import type { StoryStatusDto, TransitionTargetDto } from "../../services/index.ts";
-import "./stories.css";
+import { Badge, type BadgeTone, type IconName } from "../../ui/index.ts";
 
 const STATUS: Readonly<Record<StoryStatusDto, PlainKey>> = {
   draft: "status.draft",
@@ -25,8 +25,23 @@ const MOVE: Readonly<Record<TransitionTargetDto, PlainKey>> = {
 export const statusKey = (status: StoryStatusDto): PlainKey => STATUS[status];
 export const moveKey = (to: TransitionTargetDto): PlainKey => MOVE[to];
 
-/** A story's state as a chip: words, never colour alone (the colour only repeats them). */
+const LOOK: Readonly<Record<StoryStatusDto, readonly [BadgeTone, IconName]>> = {
+  draft: ["neutral", "file-text"],
+  filed: ["info", "send"],
+  editing: ["info", "pencil"],
+  ready: ["success", "circle-check"],
+  held: ["warning", "clock"],
+  spiked: ["danger", "circle-x"],
+  placed: ["accent", "layout-template"],
+};
+
+/** A story's state as a badge: icon and words, never colour alone (the colour only repeats them). */
 export function StatusChip({ status }: { readonly status: StoryStatusDto }) {
   const { t } = useI18n();
-  return <span className={`pg-chip pg-chip--${status}`}>{t(STATUS[status])}</span>;
+  const [tone, icon] = LOOK[status];
+  return (
+    <Badge tone={tone} icon={icon} className={`pg-chip pg-chip--${status}`}>
+      {t(STATUS[status])}
+    </Badge>
+  );
 }

@@ -112,13 +112,6 @@
   margin-block-start: var(--pg-space-2);
 }
 
-.pg-badge {
-  display: inline-block;
-  padding-inline: var(--pg-space-3);
-  border: var(--pg-border-width) solid var(--pg-color-border);
-  border-radius: var(--pg-radius-pill);
-}
-
 /* The audit log (plan §10 PR 23): its filters in a row that wraps, and each event's facts as label and value. */
 .pg-filters {
   display: flex;
