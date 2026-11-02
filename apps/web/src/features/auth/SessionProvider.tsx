@@ -161,11 +161,26 @@ export function SessionProvider({
   }, [invalidatePendingMutations, load]);
 
   const expire = useCallback(() => {
-    requestRef.current += 1;
-    invalidatePendingMutations?.();
-    setIntentionalSignOut(false);
-    setState({ status: "signed-out", expired: true });
-  }, [invalidatePendingMutations]);
+    const request = ++requestRef.current;
+    // A request sent just before this browser's session was replaced (turning two-step on swaps it) answers
+    // signed_out too: ask once whether the browser is still signed in before ending the session here (L2-345)
+    const ended = () => {
+      if (!isCurrent(request)) return;
+      invalidatePendingMutations?.();
+      setIntentionalSignOut(false);
+      setState({ status: "signed-out", expired: true });
+    };
+    session.getSession().then((result) => {
+      if (!isCurrent(request)) return;
+      if (!result.ok || result.value.status !== "signed-in") return ended();
+      const current = stateRef.current;
+      // another person signed in on this browser meanwhile: nothing queued for the first may be sent as them
+      if (current.status === "ready" && current.session.user.id !== result.value.session.user.id) {
+        invalidatePendingMutations?.();
+      }
+      return settle(result.value, request, false);
+    }, ended);
+  }, [invalidatePendingMutations, isCurrent, session, settle]);
 
   useEffect(() => onSignedOut?.(expire), [onSignedOut, expire]);
 

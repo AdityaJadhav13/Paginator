@@ -265,6 +265,41 @@ describe("Sign in: loading, error and offline states", () => {
   });
 });
 
+describe("A signed_out answer while the session is still valid", () => {
+  // L2-345: a request sent just before the session was replaced (turning two-step on) answers signed_out
+  it("keeps the person signed in where they are", async () => {
+    const mock = createMockApplicationEnvironment();
+    const listeners = new Set<() => void>();
+    const environment = {
+      ...mock,
+      onSignedOut: (listener: () => void) => (listeners.add(listener), () => void listeners.delete(listener)),
+    };
+    const { pending } = mock.sessionController.fixtures.invitations;
+    const view = renderAuth(`/invite/${pending.id}`, { environment });
+    expect(await screen.findByRole("button", { name: "Join The Sahyadri Daily" })).toBeInTheDocument();
+    act(() => listeners.forEach((listener) => listener()));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(screen.queryByText("Session expired")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Join The Sahyadri Daily" })).toBeInTheDocument();
+    expect(currentLocation(view.container).pathname).toBe(`/invite/${pending.id}`);
+  });
+
+  it("signs the person out when the re-check itself fails", async () => {
+    const mock = createMockApplicationEnvironment();
+    const listeners = new Set<() => void>();
+    const environment = {
+      ...mock,
+      onSignedOut: (listener: () => void) => (listeners.add(listener), () => void listeners.delete(listener)),
+    };
+    const { pending } = mock.sessionController.fixtures.invitations;
+    renderAuth(`/invite/${pending.id}`, { environment });
+    expect(await screen.findByRole("button", { name: "Join The Sahyadri Daily" })).toBeInTheDocument();
+    mock.sessionController.setProblem({ kind: "answer", status: 503, code: "unavailable", message: "" }, ["session.get"]);
+    act(() => listeners.forEach((listener) => listener()));
+    expect(await screen.findByText("Session expired")).toBeInTheDocument();
+  });
+});
+
 describe("After a session the API ended", () => {
   // review F1: the redirect ran on every path change while the session stayed expired, trapping the person on /login
   for (const [name, target] of [

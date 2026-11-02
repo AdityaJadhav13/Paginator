@@ -151,14 +151,12 @@ test("L2.1: two-step sign-in, a story with a photo, live updates, send back, rea
   const used = new Set<string>();
   await desk.getByLabel("Code from the app", { exact: true }).fill(await freshCode(key, used));
   await desk.getByRole("button", { name: "Turn on" }).click();
-  await expect(desk.getByText("Your backup codes")).toBeVisible();
+  // the backup codes show from the setup on; this message, only once the code turned two-step on (and the session
+  // was replaced): a request sent before it may still carry the old session (L2-345)
+  await expect(desk.getByText("Two-step sign-in is on. Every other device has been signed out.")).toBeVisible();
+  expect((await desk.request.get(`/api/v1/orgs/${orgId}/members`)).status()).toBe(200);
 
   // ── Sign out, and in again with the password and a code ──
-  // For a few seconds after two-step is turned on, the session's own requests can answer 401 (11-fix-before-launch
-  // L2-345), and a page opened then shows the sign-in form: wait until the session answers steadily
-  await expect(async () => {
-    for (let i = 0; i < 3; i++) expect((await desk.request.get(`/api/v1/orgs/${orgId}/members`)).status()).toBe(200);
-  }).toPass({ timeout: 20_000 });
   await desk.goto("/login"); // signed in, it says so, with "Sign out"
   await expect(desk.getByText("You are signed in")).toBeVisible();
   await desk.getByRole("button", { name: "Sign out" }).click();
