@@ -109,6 +109,7 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
           }
           if ((await uploadsLastHour(tx, access.tenant.userId)) >= UPLOADS_PER_HOUR) throw new ApiError("slow_down");
           const upload = await createUpload(tx, access.tenant, pub, {
+            purpose: input.purpose,
             type: input.contentType,
             bytes: input.bytes,
             expiresSeconds: POST_SECONDS,

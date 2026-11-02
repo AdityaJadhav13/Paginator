@@ -357,8 +357,9 @@ describe("Reserved edition-planning nav seam (§9.4, BLV2-02)", () => {
 
 describe("Placeholders never imply the feature behind them works", () => {
   it("names the owning future unit and contains no fabricated data", async () => {
-    renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/media");
-    expect(await screen.findByText(/not yet implemented/i)).toHaveTextContent("UI011");
+    // Media is built (L2.2); Ads is still a placeholder
+    renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/ads");
+    expect(await screen.findByText(/not yet implemented/i)).toHaveTextContent("UI012");
     // Scoped to <main>, less the breadcrumb trail at its top: that is a
     // legitimate <ol> (role="list"), not fabricated story data.
     const main = document.querySelector("main")!;

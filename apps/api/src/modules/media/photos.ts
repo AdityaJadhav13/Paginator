@@ -65,7 +65,7 @@ export const photoRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { da
       return database.withTenant(access.tenant, async (tx) => {
         const story = await forChange(tx, access, p, s, userId, input.baseRevision);
         if (!canAttachPhoto(access, p, story.facts, userId)) throw refused("this story's photo is not theirs to set");
-        const asset = await findAsset(tx, p, input.assetId);
+        const asset = await findAsset(tx, p, input.assetId, "share"); // held against the library's delete
         // a picture they may not download is not theirs to attach either: the same answer as none (F4)
         if (asset && !settledBad(asset) && !(await maySee(tx, access, p, asset, userId))) {
           throw new ApiError("not_found");

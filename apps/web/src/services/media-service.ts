@@ -1,10 +1,16 @@
-import type { Asset, PICTURE_TYPES } from "@pageinator/contracts";
+import type { Asset, MediaItem, MediaList, MediaPatch, MediaQuery, PICTURE_TYPES, UploadRequest } from "@pageinator/contracts";
 import type { ApiProblem } from "./problem.ts";
 import type { ServiceResult } from "./result.ts";
 
 /** The API's own shapes (@pageinator/contracts media.ts). */
 export type AssetDto = Asset;
 export type PictureTypeDto = (typeof PICTURE_TYPES)[number];
+/** One picture of the library (L2.2), the page of them, its filters and its own facts' change. */
+export type MediaItemDto = MediaItem;
+export type MediaListDto = MediaList;
+export type MediaQueryDto = MediaQuery;
+export type MediaPatchDto = MediaPatch;
+export type UploadPurposeDto = UploadRequest["purpose"];
 
 /** A presigned POST (plan §6.2): the browser sends `fields`, then the file, to `url`, before `expiresAt`. */
 export interface PresignedUploadDto {
@@ -34,6 +40,8 @@ export interface MediaService {
       readonly contentType: PictureTypeDto;
       readonly bytes: number;
       readonly idempotencyKey: string;
+      /** A story's photo (the default), or a picture straight into the library. */
+      readonly purpose?: UploadPurposeDto;
     },
   ): Promise<ServiceResult<PresignedUploadDto, ApiProblem>>;
   /** The file to the store; `onProgress` gets 0…1; `signal` cancels. */
@@ -51,4 +59,12 @@ export interface MediaService {
    * never kept in the HTTP cache, and held only in memory by the screen that shows it.
    */
   loadOriginal(input: Where & { readonly assetId: string; readonly signal?: AbortSignal }): Promise<ServiceResult<Blob, ApiProblem>>;
+  /** The library (GET …/media): newest first, a page at a time (`cursor` from the last page's `next`). */
+  list(input: Where & { readonly query: MediaQueryDto }): Promise<ServiceResult<MediaListDto, ApiProblem>>;
+  /** One picture (GET …/assets/:a); 404 when it is not theirs to see. */
+  get(input: Where & { readonly assetId: string }): Promise<ServiceResult<MediaItemDto, ApiProblem>>;
+  /** Its caption, credit, photographer (PATCH …/assets/:a): 409 asset_changed keeps the picture now in `current`. */
+  update(input: Where & { readonly assetId: string; readonly patch: MediaPatchDto }): Promise<ServiceResult<MediaItemDto, ApiProblem>>;
+  /** Deletes it (DELETE …/assets/:a): 409 asset_in_use while a story uses it. */
+  remove(input: Where & { readonly assetId: string; readonly baseRevision: number }): Promise<ServiceResult<void, ApiProblem>>;
 }

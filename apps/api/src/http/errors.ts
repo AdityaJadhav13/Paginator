@@ -23,6 +23,11 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     status: 409,
     message: "Someone changed this story after you opened it. Your text is kept; reload to see theirs.",
   },
+  asset_changed: {
+    status: 409,
+    message: "Someone changed this picture after you opened it. Your text is kept; see theirs beside it.",
+  },
+  asset_in_use: { status: 409, message: "This picture is the photo of a story. Take it off the story first." },
   invalid_transition: { status: 409, message: "This story cannot be moved to that state now." },
   edition_exists: { status: 409, message: "There is already an edition for this date. Open it instead." },
   request_in_progress: { status: 409, message: "This request is still being handled. Wait a moment, then check." },

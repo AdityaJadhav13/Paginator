@@ -174,3 +174,10 @@ export function mediaScope(access: Access, publicationId: string): Scope {
   const seen = reach("media.view", access.orgRole, on(access, publicationId));
   return seen === "full" ? "all" : seen === "scoped" ? "own" : "none";
 }
+
+/** Whose pictures' own facts the person may change: all of the publication's with a full media.upload, a Reporter's ◐
+ * the ones they uploaded; none without media.upload. Only "all" deletes a picture. */
+export function uploadScope(access: Access, publicationId: string): Scope {
+  const may = reach("media.upload", access.orgRole, on(access, publicationId));
+  return may === "full" ? "all" : may === "scoped" ? "own" : "none";
+}

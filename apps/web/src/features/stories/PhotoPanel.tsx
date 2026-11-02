@@ -18,17 +18,22 @@
  *   through a fresh 5-minute link each time, held in memory only and let go when the screen goes. Only for whoever
  *   may see the publication's pictures (media.view), and never for a refused or failed photo: it no longer holds its
  *   bytes, so neither Show nor Download is offered.
+ * - Choose from library (L2.2 media library): a picture already in the publication's library, attached the same way;
+ *   its own caption and credit fill the story's where those are empty.
  * - Leaving the screen stops every step: nothing is attached after the person has gone.
  * - A caption and credit typed for a photo that is no longer there (removed by someone, or no longer theirs to
  *   change) are kept, read only, until a photo comes back or the person lets them go.
  */
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, Cluster, Dialog, Field, InlineMessage, ProgressIndicator, Stack, TextArea, TextInput } from "../../ui/index.ts";
-import { randomUuid } from "../../api/client.ts";
-import { useI18n, type PlainKey } from "../../i18n/index.ts";
-import type { ApiProblem, PictureTypeDto, PresignedUploadDto, StoryDto } from "../../services/index.ts";
+import { Button, Cluster, Dialog, Drawer, Field, InlineMessage, ProgressIndicator, Stack, TextArea, TextInput } from "../../ui/index.ts";
+import { useI18n } from "../../i18n/index.ts";
+import type { ApiProblem, StoryDto } from "../../services/index.ts";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
+import { MediaGrid } from "../media/MediaGrid.tsx";
+import { ACCEPT, deskWords, refuseFile, runUpload, UploadFailureMessage, uploadJob, type UploadFailure, type UploadJob, type UploadStep } from "../media/upload.tsx";
 import { useMedia } from "./media-context.tsx";
+
+export { fileName } from "../media/upload.tsx";
 
 export type PhotoOutcome =
   | { readonly ok: true }
@@ -41,101 +46,36 @@ export type PhotoOutcome =
       readonly cancelled?: boolean;
     };
 
-const ACCEPT = "image/jpeg,image/png,image/webp";
-const TYPES: readonly PictureTypeDto[] = ["image/jpeg", "image/png", "image/webp"];
-const MAX_BYTES = 41_943_040;
-/** The API counts a file name's length in UTF-16 units (at most 255). */
-const NAME_UNITS = 255;
+/** A library picture's own caption and credit, used where the story's are empty. */
+export interface PhotoDefaults {
+  readonly caption: string;
+  readonly credit: string;
+}
 
-type Stage = "presign" | "send" | "complete" | "attach";
-
-type Failure =
-  | "heic"
-  | "type"
-  | "size"
-  | "cancelled"
-  | "conflict"
-  | "conflictPhoto"
-  | "expired"
-  | "denied"
-  | { readonly problem: ApiProblem; readonly stage: Stage };
+type Failure = UploadFailure | "conflict" | "conflictPhoto";
 
 type Phase =
   | { readonly step: "idle" }
-  | { readonly step: "presigning" }
-  | { readonly step: "sending"; readonly fraction: number }
-  | { readonly step: "completing" }
+  | UploadStep
   | { readonly step: "attaching" }
   | { readonly step: "failed"; readonly why: Failure; readonly retry: boolean };
 
-/** The photo being added, and how far it went: each step done is not done again. */
+/** The photo being added: a file to upload (and how far it went), or a picture of the library, then attached. */
 interface Pending {
-  readonly file: File;
-  key: string;
-  readonly request: { readonly filename: string; readonly contentType: PictureTypeDto; readonly bytes: number };
-  /** The policy the key gave. */
-  presigned?: PresignedUploadDto;
-  /** The file arrived in the store under this upload: only complete is left. */
-  arrived?: string;
+  readonly job?: UploadJob;
   assetId?: string;
-  /** A fresh policy was already asked for once after one ran out. */
-  renewed?: boolean;
+  readonly defaults?: PhotoDefaults;
 }
-
-const isHeic = (file: File) => /^image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
-
-/** A name cut to the API's 255 UTF-16 units, at a whole character (never half of a surrogate pair). */
-export function fileName(name: string): string {
-  let out = "";
-  for (const character of name) {
-    if (out.length + character.length > NAME_UNITS) break;
-    out += character;
-  }
-  return out || "photo";
-}
-
-/** A refusal the person can do nothing about but choose another file. */
-const final = (problem: ApiProblem) =>
-  problem.kind === "answer" &&
-  (problem.code === "not_a_picture" || problem.code === "file_too_large" || problem.code === "upload_size_mismatch");
-
-const WORDED: Readonly<Record<string, PlainKey>> = {
-  upload_refused: "photo.refused",
-  upload_size_mismatch: "photo.sizeChanged",
-};
 
 function FailureMessage({ why }: { readonly why: Failure }) {
   const { t } = useI18n();
-  if (why === "heic") return <InlineMessage variant="warning" heading={t("photo.heic")} live iconLabel={t("message.warning")} />;
-  if (why === "type") return <InlineMessage variant="error" heading={t("photo.wrongType")} live iconLabel={t("message.error")} />;
-  if (why === "size") return <InlineMessage variant="error" heading={t("error.file_too_large")} live iconLabel={t("message.error")} />;
-  if (why === "cancelled") return <p role="status">{t("photo.cancelled")}</p>;
   if (why === "conflict") return <InlineMessage variant="warning" heading={t("photo.conflict")} live iconLabel={t("message.warning")} />;
   if (why === "conflictPhoto") {
     return <InlineMessage variant="warning" heading={t("photo.conflictPhoto")} live iconLabel={t("message.warning")} />;
   }
-  if (why === "expired") return <InlineMessage variant="error" heading={t("photo.expired")} live iconLabel={t("message.error")} />;
-  if (why === "denied") return <InlineMessage variant="error" heading={t("photo.denied")} live iconLabel={t("message.error")} />;
-  const { problem, stage } = why;
-  const code = problem.kind === "answer" ? problem.code : "";
-  // the quotas are the presign's: a 429 anywhere else is only "too many tries"
-  if (stage === "presign" && problem.kind === "answer" && (problem.status === 429 || code === "slow_down")) {
-    return <InlineMessage variant="error" heading={t("photo.slowDown")} live iconLabel={t("message.error")} />;
-  }
-  const worded = WORDED[code];
-  if (worded) return <InlineMessage variant="error" heading={t(worded)} live iconLabel={t("message.error")} />;
-  return <ProblemMessage problem={problem} />;
+  return <UploadFailureMessage why={why} />;
 }
 
-/** The Desk's own words for a photo it refused (media.rejected's code), when the Desk's message has a code we carry. */
-const DESK_WORDS: Readonly<Record<string, PlainKey>> = {
-  "m.img.tooManyPixels": "photo.rejected.m.img.tooManyPixels",
-  "m.img.notAPicture": "photo.rejected.m.img.notAPicture",
-  "m.img.format": "photo.rejected.m.img.format",
-  "m.img.damaged": "photo.rejected.m.img.damaged",
-  "m.img.tooLarge": "photo.rejected.m.img.tooLarge",
-};
-const deskWords = (code: string | null): PlainKey | undefined => (code ? DESK_WORDS[code] : undefined);
 
 /** The original, loaded only when asked, from a fresh link each time; held in memory and let go. */
 function PhotoView({ orgId, pubId, story }: { readonly orgId: string; readonly pubId: string; readonly story: StoryDto }) {
@@ -318,7 +258,7 @@ export function PhotoPanel({
   readonly onCredit: (value: string) => void;
   readonly onLeave: () => void;
   readonly onDiscardKept: () => void;
-  readonly onAttach: (assetId: string, signal: AbortSignal) => Promise<PhotoOutcome>;
+  readonly onAttach: (assetId: string, signal: AbortSignal, defaults?: PhotoDefaults) => Promise<PhotoOutcome>;
   readonly onRemove: () => Promise<PhotoOutcome>;
 }) {
   const media = useMedia();
@@ -327,6 +267,7 @@ export function PhotoPanel({
   const [phase, setPhase] = useState<Phase>({ step: "idle" });
   const [notice, setNotice] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [picking, setPicking] = useState(false);
   const pending = useRef<Pending | null>(null);
   const abort = useRef<AbortController | null>(null);
   const camera = useRef<HTMLInputElement>(null);
@@ -345,64 +286,23 @@ export function PhotoPanel({
 
   /** From where it stopped: the presign, the upload's complete, or attaching the same picture. */
   const run = async () => {
-    const job = pending.current;
-    if (!job) return;
+    const pendingNow = pending.current;
+    if (!pendingNow) return;
     setNotice(null);
     const controller = new AbortController();
     abort.current = controller;
     const stopped = () => controller.signal.aborted || !mounted.current;
     const cancelled = () => failed("cancelled", true);
 
-    if (!job.assetId) {
-      if (!job.arrived) {
-        // a policy whose time is over is not sent: a new one, with a new key
-        if (job.presigned && Date.parse(job.presigned.expiresAt) <= Date.now()) {
-          job.presigned = undefined;
-          job.key = randomUuid();
-        }
-        if (!job.presigned) {
-          set({ step: "presigning" });
-          const presigned = await media.presign({ orgId, pubId, ...job.request, idempotencyKey: job.key });
-          if (stopped()) return cancelled();
-          if (!presigned.ok) return failed({ problem: presigned.error, stage: "presign" }, !final(presigned.error));
-          job.presigned = presigned.value;
-        }
-        set({ step: "sending", fraction: 0 });
-        const sent = await media.send({
-          upload: job.presigned,
-          file: job.file,
-          signal: controller.signal,
-          onProgress: (fraction) => {
-            if (!controller.signal.aborted) set({ step: "sending", fraction });
-          },
-        });
-        if (stopped()) return cancelled();
-        if (!sent.ok) {
-          const code = sent.error.kind === "answer" ? sent.error.code : "";
-          if (code === "upload_cancelled") return cancelled();
-          if (code === "upload_denied") {
-            // ran out: a fresh policy, once; refused while still valid: a condition failed, and trying again cannot help
-            const ranOut = Date.parse(job.presigned.expiresAt) <= Date.now();
-            if (ranOut && !job.renewed) {
-              job.renewed = true;
-              job.presigned = undefined;
-              job.key = randomUuid();
-              return failed("expired", true);
-            }
-            return failed("denied", false);
-          }
-          return failed({ problem: sent.error, stage: "send" }, !final(sent.error));
-        }
-        job.arrived = job.presigned.uploadId;
-      }
-      set({ step: "completing" });
-      const completed = await media.complete({ orgId, pubId, uploadId: job.arrived });
+    if (!pendingNow.assetId && pendingNow.job) {
+      const uploaded = await runUpload(media, { orgId, pubId }, pendingNow.job, controller.signal, set);
       if (stopped()) return cancelled();
-      if (!completed.ok) return failed({ problem: completed.error, stage: "complete" }, !final(completed.error));
-      job.assetId = completed.value.id;
+      if (!uploaded.ok) return failed(uploaded.why, uploaded.retry);
+      pendingNow.assetId = uploaded.asset.id;
     }
+    if (!pendingNow.assetId) return;
     set({ step: "attaching" });
-    const attached = await onAttach(job.assetId, controller.signal);
+    const attached = await onAttach(pendingNow.assetId, controller.signal, pendingNow.defaults);
     if (stopped() || (!attached.ok && attached.cancelled)) return cancelled();
     if (!attached.ok) {
       if (attached.conflict) return failed(attached.photoChanged ? "conflictPhoto" : "conflict", true);
@@ -417,14 +317,9 @@ export function PhotoPanel({
     if (!file) return;
     setNotice(null);
     // checked here first: nothing is sent for a file the API would refuse
-    if (isHeic(file)) return failed("heic", false);
-    if (!(TYPES as readonly string[]).includes(file.type)) return failed("type", false);
-    if (file.size > MAX_BYTES) return failed("size", false);
-    pending.current = {
-      file,
-      key: randomUuid(),
-      request: { filename: fileName(file.name), contentType: file.type as PictureTypeDto, bytes: file.size },
-    };
+    const refusal = refuseFile(file);
+    if (refusal) return failed(refusal, false);
+    pending.current = { job: uploadJob(file, "story_photo") };
     void run();
   };
 
@@ -526,6 +421,11 @@ export function PhotoPanel({
             <Button variant="secondary" disabled={busy || locked} onClick={() => gallery.current?.click()}>
               {photo ? t("photo.replaceChoose") : t("photo.choose")}
             </Button>
+            {mayView && (
+              <Button variant="secondary" disabled={busy || locked} onClick={() => setPicking(true)}>
+                {t("library.choose")}
+              </Button>
+            )}
             {photo && (
               <Button variant="danger" disabled={busy || locked} onClick={() => setRemoving(true)}>
                 {t("photo.remove")}
@@ -534,6 +434,19 @@ export function PhotoPanel({
           </Cluster>
         )}
       </Stack>
+      <Drawer open={picking} onClose={() => setPicking(false)} title={t("library.choose")} closeLabel={t("shell.closeDialog")} size="wide">
+        <MediaGrid
+          orgId={orgId}
+          pubId={pubId}
+          compact
+          picker
+          onChoose={(item) => {
+            setPicking(false);
+            pending.current = { assetId: item.id, defaults: { caption: item.caption, credit: item.credit } };
+            void run();
+          }}
+        />
+      </Drawer>
       {removing && (
         <Dialog open onClose={() => setRemoving(false)} title={t("photo.remove.title")} closeLabel={t("shell.closeDialog")}>
           <Stack gap="4">

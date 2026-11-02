@@ -45,6 +45,13 @@
   font-size: var(--pg-font-size-200);
 }
 
+/* a field to read, not change (no Save beside it): the canvas grey and a quiet edge, not an empty box to type in */
+.pg-app .pg-input[readonly],
+.pg-app .pg-textarea[readonly] {
+  background-color: var(--pg-app-canvas);
+  border-color: var(--pg-app-border);
+}
+
 .pg-app .pg-icon-button {
   min-inline-size: var(--pg-app-control-md);
   min-block-size: var(--pg-app-control-md);
