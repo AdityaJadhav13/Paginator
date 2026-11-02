@@ -77,6 +77,8 @@ Part of the product specification ([index](README.md)). Examples are fictional.
   - a 24 px status bar. The canvas takes the rest.
 - **Minimum editor viewport:** 1280 × 600. That fits a 1366 × 768 laptop, or 1080p at 150% scaling, in a browser tab. Below 1280 × 600 the docks collapse to icon strips; below 1024 wide the editor offers review mode.
 
+Owner decision 2026-11-02: staff work on laptops and desktops, so the app is designed desktop-first. The frame is a 56 px top bar and a 240 px sidebar (56 px collapsed); a phone gets a simpler stacked version, with the sidebar as a sheet. It is implemented in `apps/web/src/app/AppFrame.tsx` and the kit in `apps/web/src/ui/kit/`.
+
 ### 3.5 Components to add to the kit
 The kit **EXISTS** today: Button, IconButton, Field, TextInput, TextArea, Select, Checkbox, RadioGroup, Dialog, InlineMessage, StatusIndicator, ProgressIndicator and the layout primitives.
 

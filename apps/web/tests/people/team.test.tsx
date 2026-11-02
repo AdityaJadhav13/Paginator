@@ -19,8 +19,15 @@ afterEach(() => {
   Object.defineProperty(window.navigator, "onLine", { configurable: true, value: true });
 });
 
+/** A member's (or an invitation's) row of the table. */
 function memberCard(name: string): HTMLElement {
-  return screen.getByText(name, { selector: "strong" }).closest("li")!;
+  return screen.getByText(name, { selector: "strong" }).closest("tr")!;
+}
+
+/** A row's action, from its "more" menu. */
+async function rowAction(user: ReturnType<typeof userEvent.setup>, menu: string, item: string) {
+  await user.click(await screen.findByRole("button", { name: menu }));
+  await user.click(screen.getByRole("menuitem", { name: item }));
 }
 
 async function signedInAs(email: string, password: string) {
@@ -37,19 +44,20 @@ describe("Team for an admin", () => {
     await screen.findByRole("heading", { level: 2, name: "Members" });
 
     const ownerCard = within(memberCard("Sahyadri Demo Owner"));
-    expect(ownerCard.getByText("Organization role: Owner")).toBeInTheDocument();
+    expect(ownerCard.getByText("Owner")).toBeInTheDocument();
+    expect(within(screen.getByRole("table", { name: "Members" })).getByRole("columnheader", { name: "Organization role" })).toBeInTheDocument();
     expect(ownerCard.queryByRole("button")).not.toBeInTheDocument();
 
     const me = within(memberCard("Sahyadri Demo Editor"));
-    expect(me.getByText("This is you.")).toBeInTheDocument();
+    expect(me.getByText("You")).toBeInTheDocument();
     expect(me.getByText("Pune Daily Ledger: Editor and Can approve pages")).toBeInTheDocument();
     expect(me.queryByRole("button")).not.toBeInTheDocument();
 
     const sub = within(memberCard("Sahyadri Demo Sub-editor"));
     expect(sub.getByText("Pune Daily Ledger: Sub-editor")).toBeInTheDocument();
     expect(sub.getByText("Not active yet")).toBeInTheDocument();
-    expect(sub.getByRole("button", { name: "Change roles of Sahyadri Demo Sub-editor" })).toBeInTheDocument();
-    expect(sub.getByRole("button", { name: "Remove Sahyadri Demo Sub-editor" })).toBeInTheDocument();
+    await userEvent.setup().click(sub.getByRole("button", { name: "Actions for Sahyadri Demo Sub-editor" }));
+    expect(sub.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Change roles", "Remove from the team"]);
 
     expect(screen.getByRole("heading", { level: 2, name: "Pending invitations" })).toBeInTheDocument();
     expect(screen.getByText(fixtures.invitations.team.email, { selector: "strong" })).toBeInTheDocument();
@@ -107,10 +115,10 @@ describe("Team for an admin", () => {
     const { environment } = renderAuth(TEAM, { preset: "sahyadri-editor" });
     const user = userEvent.setup();
     const email = fixtures.invitations.team.email;
-    await user.click(await screen.findByRole("button", { name: `Send the invitation to ${email} again` }));
+    await rowAction(user, `Actions for the invitation to ${email}`, "Send again");
     expect(await screen.findByText(`The invitation to ${email} was sent again.`)).toBeInTheDocument();
     expect(environment.sessionController.outbox()).toContainEqual({ kind: "invite", to: email });
-    await user.click(screen.getByRole("button", { name: `Cancel the invitation to ${email}` }));
+    await rowAction(user, `Actions for the invitation to ${email}`, "Cancel invitation");
     expect(await screen.findByText(`The invitation to ${email} was cancelled.`)).toBeInTheDocument();
     expect(await screen.findByText("No invitation is waiting.")).toBeInTheDocument();
   });
@@ -118,7 +126,7 @@ describe("Team for an admin", () => {
   it("changes a member's roles", async () => {
     renderAuth(TEAM, { preset: "sahyadri-editor" });
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Change roles of Sahyadri Demo Sub-editor" }));
+    await rowAction(user, "Actions for Sahyadri Demo Sub-editor", "Change roles");
     const dialog = within(await screen.findByRole("dialog", { name: "Change roles of Sahyadri Demo Sub-editor" }));
     const pune = within(dialog.getByRole("group", { name: "Roles on Pune Daily Ledger" }));
     expect(pune.getByRole("checkbox", { name: "Sub-editor" })).toBeChecked();
@@ -131,12 +139,13 @@ describe("Team for an admin", () => {
   it("removes a member after asking", async () => {
     renderAuth(TEAM, { preset: "sahyadri-editor" });
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Remove Sahyadri Demo Sub-editor" }));
+    await rowAction(user, "Actions for Sahyadri Demo Sub-editor", "Remove from the team");
     const dialog = within(await screen.findByRole("dialog", { name: "Remove Sahyadri Demo Sub-editor?" }));
     expect(dialog.getByText("Sahyadri Demo Sub-editor will lose access to everything in Sahyadri Media Cooperative. Their work stays.")).toBeInTheDocument();
     await user.click(dialog.getByRole("button", { name: "Remove from the team" }));
     expect(await screen.findByText("Sahyadri Demo Sub-editor was removed from the team.")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Sahyadri Demo Sub-editor", { selector: "strong" })).not.toBeInTheDocument());
+    expect(screen.getByRole("heading", { level: 1, name: "Team" })).toHaveFocus();
   });
 });
 
@@ -154,7 +163,7 @@ describe("Team for other roles", () => {
     expect(await screen.findByText("Sahyadri Demo Owner", { selector: "strong" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Invite someone" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Pending invitations" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Actions for / })).not.toBeInTheDocument();
   });
 
   it("tells anyone else they cannot see it, and the navigation has no Team", async () => {
@@ -205,6 +214,7 @@ describe("Team: loading, error, offline, Marathi, axe", () => {
     const { container } = renderAuth(TEAM, { preset: "sahyadri-editor", language: "mr" });
     expect(await screen.findByRole("heading", { level: 1, name: "टीम" })).toBeInTheDocument();
     expect(container.querySelector(".pg-shell--workspace")).toHaveAttribute("lang", "mr");
+    await userEvent.setup().click(screen.getByRole("button", { name: /^खाते:/ })); // the account menu
     expect(screen.getByRole("link", { name: "खाते सुरक्षा" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "संस्था" })).toBeInTheDocument();
     await userEvent.setup().click(await screen.findByRole("button", { name: "निमंत्रण पाठवा" }));
@@ -222,5 +232,20 @@ describe("Team: loading, error, offline, Marathi, axe", () => {
     const dialog = within(await screen.findByRole("dialog"));
     await user.click(within(dialog.getByRole("group", { name: "Roles on Pune Daily Ledger" })).getByRole("checkbox", { name: "Editor" }));
     expect(await seriousViolations(container)).toEqual([]);
+  });
+
+  it("opens a row's menu from the keyboard, and Escape gives the focus back to its button", async () => {
+    const { container } = renderAuth(TEAM, { preset: "sahyadri-editor" });
+    const user = userEvent.setup();
+    const more = await screen.findByRole("button", { name: "Actions for Sahyadri Demo Sub-editor" });
+    more.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("menuitem", { name: "Change roles" })).toHaveFocus();
+    expect(await seriousViolations(container)).toEqual([]);
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "Remove from the team" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(more).toHaveFocus();
   });
 });

@@ -1,0 +1,448 @@
+/*
+ * Team, Audit log and Account security (02 §3: desk density, app tokens). Logical properties only; no text below
+ * 13 px, so Devanagari stays readable.
+ */
+
+.pg-people {
+  color: var(--pg-app-text);
+}
+
+.pg-people-muted {
+  margin: 0;
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-200);
+}
+
+.pg-people-panel-pad {
+  padding: var(--pg-app-panel-padding);
+}
+
+.pg-people-panel-foot {
+  margin: 0;
+  padding: var(--pg-space-4) var(--pg-app-panel-padding);
+  border-block-start: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+/* ── A person in a table cell ─────────────────────────────────────── */
+
+.pg-people-person {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-4);
+  min-inline-size: 0;
+}
+
+.pg-people-person__text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.pg-people-person__name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-3);
+}
+
+.pg-people-person__name strong,
+.pg-people-device__name strong {
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-people-person__detail {
+  display: block;
+  color: var(--pg-app-text-secondary);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.pg-people-person__system {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: 50%;
+  background-color: var(--pg-app-tone-neutral-bg);
+  color: var(--pg-app-tone-neutral-text);
+}
+
+.pg-people-pubroles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--pg-font-size-200);
+}
+
+.pg-people-table__muted {
+  color: var(--pg-app-text-secondary);
+  white-space: nowrap;
+}
+
+.pg-app .pg-people-table__actions {
+  inline-size: 3rem;
+  text-align: end;
+}
+
+.pg-people-note {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-3);
+  margin: 0;
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-200);
+}
+
+/* ── The invite and roles dialogs ─────────────────────────────────── */
+
+.pg-people-roles {
+  padding: var(--pg-space-5);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+}
+
+.pg-people-roles .pg-radio-group__legend {
+  padding-inline: var(--pg-space-2);
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-people-roles__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--pg-space-3) var(--pg-space-5);
+  margin-block-start: var(--pg-space-3);
+}
+
+.pg-people-dialog__footer {
+  padding-block-start: var(--pg-space-4);
+  border-block-start: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+/* ── The audit log ────────────────────────────────────────────────── */
+
+.pg-people-filterbar {
+  padding: var(--pg-space-4) var(--pg-app-panel-padding);
+  background-color: var(--pg-app-surface);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  box-shadow: var(--pg-app-elevation-1);
+}
+
+.pg-people-filterbar .pg-field {
+  min-inline-size: 10rem;
+}
+
+.pg-people-audit td {
+  vertical-align: top;
+}
+
+.pg-people-audit__when {
+  font-variant-numeric: tabular-nums;
+}
+
+.pg-people-audit__target {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.pg-people-audit__details {
+  min-inline-size: 14rem;
+  color: var(--pg-app-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.pg-people-audit__details .pg-facts dt {
+  font-weight: var(--pg-font-weight-semibold);
+  color: var(--pg-app-text);
+}
+
+/* ── Account security: one column of settings cards ───────────────── */
+
+.pg-people-account {
+  max-inline-size: 55rem;
+}
+
+.pg-people-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: pg-people-step;
+}
+
+.pg-people-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-4);
+  padding-inline-start: 2.75rem;
+  counter-increment: pg-people-step;
+}
+
+.pg-people-step::before {
+  content: counter(pg-people-step);
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: 50%;
+  background-color: var(--pg-app-accent);
+  color: var(--pg-app-surface);
+  font-size: var(--pg-font-size-200);
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+/* the line joining a step to the next */
+.pg-people-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0.8125rem;
+  inset-block: 2.25rem calc(-1 * var(--pg-space-6) + var(--pg-space-3));
+  border-inline-start: 2px solid var(--pg-app-border);
+}
+
+.pg-people-step__title {
+  margin: 0;
+  font-size: var(--pg-font-size-300);
+  line-height: 1.75rem;
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-people-scan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-6);
+}
+
+.pg-people-scan .pg-qr {
+  padding: var(--pg-space-3);
+  background-color: var(--pg-app-surface);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+}
+
+.pg-people-scan .pg-people-muted {
+  flex: 1 1 14rem;
+}
+
+.pg-people-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--pg-space-3);
+  max-inline-size: 40rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-people-codes li {
+  padding: var(--pg-space-3) var(--pg-space-4);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-sm);
+  background-color: var(--pg-app-canvas);
+  text-align: center;
+}
+
+.pg-people-codes code {
+  font-family: var(--pg-font-mono);
+  font-size: var(--pg-font-size-200);
+  letter-spacing: 0.04em;
+}
+
+.pg-people-code-field .pg-input {
+  max-inline-size: 12rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.1em;
+}
+
+.pg-people-devices {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-people-device {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-5);
+  padding: var(--pg-space-5) var(--pg-app-panel-padding);
+}
+
+.pg-people-device + .pg-people-device {
+  border-block-start: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-people-device__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border-radius: var(--pg-app-radius-md);
+  background-color: var(--pg-app-tone-neutral-bg);
+  color: var(--pg-app-tone-neutral-text);
+}
+
+.pg-people-device__text {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.pg-people-device__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-3);
+  margin: 0;
+}
+
+.pg-people-device__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pg-space-1) var(--pg-space-5);
+  margin: var(--pg-space-2) 0 0;
+  color: var(--pg-app-text-secondary);
+  font-size: 0.8125rem;
+}
+
+/* ── The two-step banner (TwoStepNeeded) ──────────────────────────── */
+
+.pg-people-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-5);
+  padding: var(--pg-space-5) var(--pg-app-panel-padding);
+  border: var(--pg-border-width) solid var(--pg-app-tone-warning-text);
+  border-inline-start-width: 4px;
+  border-radius: var(--pg-app-radius-md);
+  background-color: var(--pg-app-tone-warning-bg);
+  color: var(--pg-app-text);
+}
+
+.pg-people-banner__icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--pg-app-tone-warning-text);
+}
+
+.pg-people-banner__body {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.pg-people-banner__heading {
+  margin: 0;
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-people-banner__text {
+  margin: var(--pg-space-2) 0 0;
+  font-size: var(--pg-font-size-200);
+}
+
+.pg-people-banner__action {
+  flex: none;
+}
+
+/* ── Phone: rows stack, actions go under the text ─────────────────── */
+
+@media (max-width: 47.99rem) {
+  .pg-people-banner,
+  .pg-people-device {
+    flex-wrap: wrap;
+  }
+
+  .pg-people-banner__action {
+    inline-size: 100%;
+  }
+
+  .pg-people-device > .pg-button {
+    margin-inline-start: calc(2.5rem + var(--pg-space-5));
+  }
+
+  .pg-people-filterbar .pg-field {
+    flex: 1 1 100%;
+  }
+
+  .pg-people-step {
+    padding-inline-start: 0;
+    padding-block-start: 2.25rem;
+  }
+
+  .pg-people-step:not(:last-child)::after {
+    display: none;
+  }
+}
+
+/* an empty live region (a notice not yet said) takes no gap of its Stack; it stays rendered so it is announced */
+.pg-people .pg-stack > [aria-live]:empty,
+.pg-people.pg-stack > [aria-live]:empty {
+  margin-block-start: calc(-1 * var(--pg-stack-gap, 0));
+}
+
+.pg-people-device > .pg-button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.pg-people-audit__who {
+  white-space: nowrap;
+}
+
+.pg-people-audit__action {
+  min-inline-size: 9rem;
+}
+
+.pg-people-audit__about {
+  min-inline-size: 12rem;
+}
+
+/* a browser's long text on one line; the whole of it in the tooltip */
+.pg-people-audit__details dd {
+  max-inline-size: 24rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* a row's "more" menu must not be clipped by the table's scroll box; on a phone the table scrolls sideways instead */
+@media (min-width: 48rem) {
+  .pg-table-wrap:has(> .pg-people-menu-table) {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 47.99rem) {
+  /* the team's tables scroll sideways: keep each line whole instead of breaking an address letter by letter */
+  .pg-people-menu-table .pg-people-person__name,
+  .pg-people-menu-table .pg-people-person__detail {
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .pg-people-account .pg-panel__header {
+    flex-wrap: wrap;
+    padding-block: var(--pg-space-4);
+  }
+
+  .pg-people-device__icon {
+    display: none;
+  }
+
+  .pg-people-device > .pg-button {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+    white-space: normal;
+  }
+}

@@ -1,7 +1,8 @@
 /**
  * Editions, /org/:orgId/pub/:pubId/editions (plan §1 L2.1, §10 PR 21 and PR 24): the list with its counts and links to
  * the stories, "Create edition" with an Idempotency-Key (the same on a retry) and edition_exists, "Send to the Desk"
- * (nothing Ready, spiked never sent, in progress, done, refused with each story named), the role rules, live updates,
+ * (nothing Ready, spiked never sent, in progress, done, refused with each story named), the master table and the chosen
+ * edition's detail, the Create edition sheet, the role rules, live updates,
  * the story editor's Edition, the Stories filter's real editions, Marathi and axe. On the test double; fictional data.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -43,26 +44,42 @@ function phone() {
     ({ matches: query.includes("767px"), media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false }) as MediaQueryList;
 }
 
-const list = () => screen.findByRole("list", { name: "Editions of Pune Daily Ledger" });
-const item = async (date: string) => (await screen.findByRole("heading", { level: 2, name: date })).closest("li")!;
+const list = () => screen.findByRole("table", { name: "Editions of Pune Daily Ledger" });
+/** Chooses the edition in the table: its detail, a region named by its date. */
+const item = async (date: string) => {
+  await userEvent.click(within(await list()).getByRole("button", { name: date }));
+  return screen.getByRole("region", { name: date });
+};
+/** Opens the "Create edition" sheet from the page header. */
+const createSheet = async () => {
+  await userEvent.click(await screen.findByRole("button", { name: "Create edition" }));
+  return within(await screen.findByRole("dialog", { name: "Create edition" }));
+};
 
 describe("Editions for the desk", () => {
   it("lists the editions newest first, with pages, counts and a link to their stories", async () => {
     renderAuth(EDITIONS, { preset: "sahyadri-editor" });
     expect(await screen.findByRole("heading", { level: 1, name: "Editions" })).toBeInTheDocument();
-    const items = within(await list()).getAllByRole("listitem");
-    expect(items.map((li) => within(li).getByRole("heading").textContent)).toEqual(["24 October 2026", "23 October 2026"]);
-    const newer = within(items[0]!);
+    const rows = within(await list()).getAllByRole("row").slice(1);
+    expect(rows.map((row) => within(row).getByRole("button").textContent)).toEqual(["24 October 2026", "23 October 2026"]);
+    expect(within(rows[0]!).getByText("1 Ready")).toBeInTheDocument();
+    expect(within(rows[1]!).getByText("Nothing Ready")).toBeInTheDocument();
+    // the newest is chosen first
+    expect(within(rows[0]!).getByRole("button")).toHaveAttribute("aria-pressed", "true");
+    const newer = within(screen.getByRole("region", { name: "24 October 2026" }));
     expect(newer.getByText(/8 pages · Ads on the back page · Volume 12 · Issue 302/)).toBeInTheDocument();
     expect(newer.getByText("Stories: 1 · Ready: 1 · Spiked: 0")).toBeInTheDocument();
     expect(newer.getByRole("link", { name: "Stories of 24 October 2026" })).toHaveAttribute("href", `${STORIES}?edition=${B}`);
     expect(newer.getByRole("button", { name: "Send to the Desk" })).toBeEnabled();
     // nothing Ready: no button, a plain line
-    const older = within(items[1]!);
+    const older = within(await item("23 October 2026"));
+    expect(within(rows[1]!).getByRole("button")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("region", { name: "24 October 2026" })).not.toBeInTheDocument();
     expect(older.getByText("Stories: 2 · Ready: 0 · Spiked: 0")).toBeInTheDocument();
     expect(older.queryByRole("button", { name: "Send to the Desk" })).not.toBeInTheDocument();
     expect(older.getByText("Nothing in this edition is Ready yet.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "Create edition" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create edition" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("creates an edition with one Idempotency-Key, the same on a retry after no answer", async () => {
@@ -71,22 +88,26 @@ describe("Editions for the desk", () => {
     renderAuth(EDITIONS, { preset: "sahyadri-editor", environment });
     const user = userEvent.setup();
     await list();
-    const date = screen.getByLabelText(/^Date/);
+    const sheet = await createSheet();
+    const date = sheet.getByLabelText(/^Date/);
     await user.clear(date);
     await user.type(date, "2026-11-05");
-    expect(screen.getByRole("combobox", { name: "Pages" })).toHaveValue("8");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Pages" }), "16");
-    await user.click(screen.getByRole("checkbox", { name: "Ads on the back page" }));
-    await user.type(screen.getByRole("textbox", { name: "Issue number" }), "303");
+    expect(sheet.getByRole("combobox", { name: "Pages" })).toHaveValue("8");
+    await user.selectOptions(sheet.getByRole("combobox", { name: "Pages" }), "16");
+    await user.click(sheet.getByRole("checkbox", { name: "Ads on the back page" }));
+    await user.type(sheet.getByRole("textbox", { name: "Issue number" }), "303");
 
     environment.sessionController.setProblem({ kind: "network" }, ["editions.create"]);
-    await user.click(screen.getByRole("button", { name: "Create edition" }));
-    expect(await screen.findByText("Pageinator cannot be reached")).toBeInTheDocument();
+    await user.click(sheet.getByRole("button", { name: "Create edition" }));
+    expect(await sheet.findByText("Pageinator cannot be reached")).toBeInTheDocument();
     environment.sessionController.setProblem(null, ["editions.create"]);
-    await user.click(screen.getByRole("button", { name: "Create edition" }));
+    await user.click(sheet.getByRole("button", { name: "Create edition" }));
 
     expect(await screen.findByText("The edition of 5 November 2026 is created.")).toBeInTheDocument();
-    const made = await item("5 November 2026");
+    // the sheet closes, focus goes back to its button, and the new edition is the one chosen
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create edition" })).toHaveFocus();
+    const made = await screen.findByRole("region", { name: "5 November 2026" });
     expect(within(made).getByText("16 pages · Issue 303")).toBeInTheDocument();
     expect(create.mock.calls.map(([input]) => input.input)).toEqual([
       { date: "2026-11-05", pages: 16, backPageAds: false, issue: "303" },
@@ -99,14 +120,13 @@ describe("Editions for the desk", () => {
     renderAuth(EDITIONS, { preset: "sahyadri-editor" });
     const user = userEvent.setup();
     await list();
-    const date = screen.getByLabelText(/^Date/);
+    const sheet = await createSheet();
+    const date = sheet.getByLabelText(/^Date/);
     await user.clear(date);
     await user.type(date, "2026-10-23");
-    await user.click(screen.getByRole("button", { name: "Create edition" }));
-    expect(await screen.findByText("There is already an edition for 23 October 2026. Open it instead.")).toBeInTheDocument();
-    const links = screen.getAllByRole("link", { name: "Stories of 23 October 2026" });
-    expect(links).toHaveLength(2); // the list's and the message's
-    expect(links[1]).toHaveAttribute("href", `${STORIES}?edition=${A}`);
+    await user.click(sheet.getByRole("button", { name: "Create edition" }));
+    expect(await sheet.findByText("There is already an edition for 23 October 2026. Open it instead.")).toBeInTheDocument();
+    expect(sheet.getByRole("link", { name: "Stories of 23 October 2026" })).toHaveAttribute("href", `${STORIES}?edition=${A}`);
   });
 
   it("sends an edition's Ready stories to the Desk, as a file, saying how many and that spiked ones never go", async () => {
@@ -173,7 +193,7 @@ describe("Editions for the desk", () => {
     await list();
     const before = listed.mock.calls.length;
     await environment.editions.create({ orgId: ORG, pubId: PUB, input: { date: "2026-11-06", pages: 4 }, idempotencyKey: "live" });
-    expect(await screen.findByRole("heading", { level: 2, name: "6 November 2026" })).toBeInTheDocument();
+    expect(await within(await list()).findByRole("button", { name: "6 November 2026" })).toBeInTheDocument();
     await environment.stories.update({ orgId: ORG, pubId: PUB, storyId: "story-demo-002", patch: { baseRevision: 1, editionId: A } });
     expect(await within(await item("23 October 2026")).findByText("Stories: 3 · Ready: 0 · Spiked: 0")).toBeInTheDocument();
     expect(listed.mock.calls.length).toBeGreaterThan(before);
@@ -182,11 +202,13 @@ describe("Editions for the desk", () => {
   it("names the date of the edition already there in Marathi too", async () => {
     renderAuth(EDITIONS, { preset: "sahyadri-editor", language: "mr" });
     const user = userEvent.setup();
-    await screen.findByRole("list", { name: "Pune Daily Ledger चे अंक" });
-    const date = screen.getByLabelText(/^तारीख/);
+    await screen.findByRole("table", { name: "Pune Daily Ledger चे अंक" });
+    await user.click(screen.getByRole("button", { name: "अंक तयार करा" }));
+    const sheet = within(await screen.findByRole("dialog", { name: "नवीन अंक तयार करा" }));
+    const date = sheet.getByLabelText(/^तारीख/);
     await user.clear(date);
     await user.type(date, "2026-10-23");
-    await user.click(screen.getByRole("button", { name: "अंक तयार करा" }));
+    await user.click(sheet.getByRole("button", { name: "अंक तयार करा" }));
     const message = await screen.findByText(/चा अंक आधीच आहे\. तोच उघडा\.$/);
     expect(message.textContent).not.toBe("त्या तारखेचा अंक आधीच आहे. तोच उघडा.");
     expect(message.textContent).toMatch(/2026/);
@@ -201,12 +223,14 @@ describe("Editions for the desk", () => {
       renderAuth(EDITIONS, { preset: "sahyadri-editor", environment });
       const user = userEvent.setup();
       await list();
-      expect(screen.getByLabelText(/^Date/)).toHaveValue("2026-11-02");
+      await user.click(screen.getByRole("button", { name: "Create edition" }));
+      const sheet = within(await screen.findByRole("dialog", { name: "Create edition" }));
+      expect(sheet.getByLabelText(/^Date/)).toHaveValue("2026-11-02");
       vi.setSystemTime(new Date("2026-11-02T18:40:00Z")); // 00:10 IST, 3 November
-      await user.click(screen.getByRole("combobox", { name: "Pages" }));
-      expect(screen.getByLabelText(/^Date/)).toHaveValue("2026-11-03");
+      await user.click(sheet.getByRole("combobox", { name: "Pages" }));
+      expect(sheet.getByLabelText(/^Date/)).toHaveValue("2026-11-03");
       vi.setSystemTime(new Date("2026-11-03T18:40:00Z")); // a day later again, submitted without focusing the form
-      screen.getByRole("button", { name: "Create edition" }).closest("form")!.requestSubmit();
+      sheet.getByRole("button", { name: "Create edition" }).closest("form")!.requestSubmit();
       await waitFor(() => expect(create).toHaveBeenCalled());
       expect(create.mock.calls[0]![0].input.date).toBe("2026-11-04");
     } finally {
@@ -234,7 +258,8 @@ describe("Editions for the desk", () => {
     environment.sessionController.setProblem(null, ["editions.list"]);
     vi.spyOn(environment.editions, "list").mockResolvedValueOnce({ ok: true, value: [] });
     await userEvent.setup().click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("No editions yet.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No editions yet." })).toBeInTheDocument();
+    expect(screen.getByText("Make the first one with Create edition.")).toBeInTheDocument();
   });
 });
 
@@ -248,6 +273,8 @@ describe("Editions for other roles", () => {
     const newer = within(await item("24 October 2026"));
     expect(newer.getByText(/8 pages/)).toBeInTheDocument();
     expect(newer.queryByText(/^Stories: /)).not.toBeInTheDocument();
+    expect(within(await list()).queryByRole("columnheader", { name: "Status" })).not.toBeInTheDocument();
+    expect(screen.queryByText("1 Ready")).not.toBeInTheDocument();
     expect(newer.queryByRole("button", { name: "Send to the Desk" })).not.toBeInTheDocument();
     expect(newer.getByRole("link", { name: "Stories of 24 October 2026" })).toBeInTheDocument();
   });
@@ -264,7 +291,7 @@ describe("Editions for other roles", () => {
     expect(newer.getByText("Stories: 1 · Ready: 1 · Spiked: 0")).toBeInTheDocument();
     expect(newer.queryByRole("button", { name: "Send to the Desk" })).not.toBeInTheDocument();
     expect(newer.queryByText("Nothing in this edition is Ready yet.")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Create edition" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create edition" })).not.toBeInTheDocument();
   });
 
   it("is in the publication's navigation for whoever may see editions, and not for a Reporter", async () => {
@@ -374,7 +401,7 @@ describe("Editions: Marathi and axe", () => {
   it("is in Marathi", async () => {
     renderAuth(EDITIONS, { preset: "sahyadri-editor", language: "mr" });
     expect(await screen.findByRole("heading", { level: 1, name: "अंक" })).toBeInTheDocument();
-    expect(await screen.findByRole("list", { name: "Pune Daily Ledger चे अंक" })).toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "Pune Daily Ledger चे अंक" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Desk कडे पाठवा" })).toHaveLength(1);
     expect(screen.getByRole("button", { name: "अंक तयार करा" })).toBeInTheDocument();
   });
@@ -388,5 +415,29 @@ describe("Editions: Marathi and axe", () => {
     const small = renderAuth(EDITIONS, { preset: "sahyadri-subeditor" });
     await list();
     expect(await seriousViolations(small.container)).toEqual([]);
+  });
+
+  it("opens Create edition as a sheet that Esc closes, focus back on its button, and has no serious axe violations", async () => {
+    const view = renderAuth(EDITIONS, { preset: "sahyadri-editor" });
+    const user = userEvent.setup();
+    await list();
+    const sheet = await createSheet();
+    expect(sheet.getByRole("heading", { level: 2, name: "Create edition" })).toHaveFocus();
+    expect(await seriousViolations(view.container)).toEqual([]);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create edition" })).toHaveFocus();
+  });
+
+  it("chooses an edition from the keyboard", async () => {
+    renderAuth(EDITIONS, { preset: "sahyadri-editor" });
+    const user = userEvent.setup();
+    const table = within(await list());
+    table.getByRole("button", { name: "24 October 2026" }).focus();
+    await user.tab();
+    expect(table.getByRole("button", { name: "23 October 2026" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(table.getByRole("button", { name: "23 October 2026" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("region", { name: "23 October 2026" })).toBeInTheDocument();
   });
 });

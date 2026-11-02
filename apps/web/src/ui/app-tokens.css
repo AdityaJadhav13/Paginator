@@ -1,0 +1,65 @@
+/*
+ * The signed-in app's tokens (02 §3.2 "App", §3.4): a neutral grey canvas, white surfaces, one accent (the existing
+ * --pg-color-action), 4 px radii, quiet elevation. They exist only under `.pg-app`, the root of the signed-in shells,
+ * so the public website (which uses tokens.css alone) is untouched. tokens.css's own values never change here.
+ * Contrast pairs: src/test/contrast.ts (APP_CONTRAST_PAIRS), tested in tests/app/app-tokens.test.ts.
+ */
+
+.pg-app {
+  /* ── Surfaces ──────────────────────────────────────────────────── */
+  --pg-app-canvas: #F3F4F6;
+  --pg-app-surface: #FFFFFF;
+  --pg-app-surface-hover: #F1F3F5;
+  --pg-app-surface-pressed: #E5E8EC;
+  --pg-app-sidebar-bg: #FAFAFB;
+  --pg-app-topbar-bg: #FFFFFF;
+  --pg-app-selected-bg: #E8EEFB;
+
+  /* ── Lines ─────────────────────────────────────────────────────── */
+  /* dividers between regions: decorative, never a control's only edge */
+  --pg-app-border: #E1E4E8;
+  /* a control's edge: at least 3:1 on the canvas and on a surface */
+  --pg-app-border-strong: #7D8590;
+
+  /* ── Text ──────────────────────────────────────────────────────── */
+  --pg-app-text: #17202A;
+  --pg-app-text-secondary: #4B5563;
+  --pg-app-selected-text: #1E40AF;
+  --pg-app-accent: #1D4ED8;
+
+  /* ── Status chips (Badge): a tint and its text, ≥ 4.5:1 ────────── */
+  --pg-app-tone-neutral-bg: #EEF0F3;
+  --pg-app-tone-neutral-text: #374151;
+  --pg-app-tone-info-bg: #E6EEFC;
+  --pg-app-tone-info-text: #1E40AF;
+  --pg-app-tone-success-bg: #E6F4EA;
+  --pg-app-tone-success-text: #166534;
+  --pg-app-tone-warning-bg: #FDF2DE;
+  --pg-app-tone-warning-text: #854D0E;
+  --pg-app-tone-danger-bg: #FDECEC;
+  --pg-app-tone-danger-text: #B91C1C;
+  --pg-app-tone-accent-bg: #F0EAFD;
+  --pg-app-tone-accent-text: #5B21B6;
+
+  /* ── Elevation (Fluent-like depth: 1 cards, 2 popovers, 3 menus and sheets) ── */
+  --pg-app-elevation-1: 0 1px 2px rgb(15 23 42 / 0.06), 0 0 1px rgb(15 23 42 / 0.08);
+  --pg-app-elevation-2: 0 2px 6px rgb(15 23 42 / 0.10), 0 0 1px rgb(15 23 42 / 0.10);
+  --pg-app-elevation-3: 0 8px 24px rgb(15 23 42 / 0.16), 0 1px 3px rgb(15 23 42 / 0.10);
+
+  /* ── Shape and size ────────────────────────────────────────────── */
+  --pg-app-radius-sm: 0.25rem;
+  --pg-app-radius-md: 0.375rem;
+  --pg-app-control-sm: 2rem;
+  --pg-app-control-md: 2.5rem;
+  --pg-app-topbar-height: 3.5rem;
+  --pg-app-sidebar-width: 15rem;
+  --pg-app-rail-width: 3.5rem;
+  --pg-app-measure: 90rem;
+  --pg-app-gutter: 1.5rem;
+
+  /* ── Density ───────────────────────────────────────────────────── */
+  --pg-app-row-height: 2.5rem;
+  --pg-app-cell-padding-block: 0.5rem;
+  --pg-app-cell-padding-inline: 0.75rem;
+  --pg-app-panel-padding: 1.25rem;
+}

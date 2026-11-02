@@ -140,6 +140,9 @@ describe("Workspace exit navigation (§7.2)", () => {
   it("exposes a keyboard-operable Back to public site link to the public home route", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview");
     const user = userEvent.setup();
+    // the link sits in the account menu, opened from the keyboard too
+    (await screen.findByRole("button", { name: /^Account:/ })).focus();
+    await user.keyboard("{Enter}");
     const link = await screen.findByRole("link", { name: "Back to public site" });
     expect(link).toHaveAttribute("href", "/");
 

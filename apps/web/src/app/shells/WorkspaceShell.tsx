@@ -1,24 +1,22 @@
 /**
- * WorkspaceShell (UI002 §7.2; plan §10 PR 20): the chrome of /org/:orgId/…, in the interface language, with the
- * language switch. Its navigation comes from the person's permissions in /me (07 §12, navigation.ts): an entry shows
+ * WorkspaceShell (UI002 §7.2; plan §10 PR 20): the chrome of /org/:orgId/…, in the interface language, drawn by the
+ * app frame (AppFrame.tsx: top bar, sidebar, content). Its navigation comes from the person's permissions in /me (07 §12, navigation.ts): an entry shows
  * only when they may use it, and, in the deployed app, only when its screen is built. The placeholder screens (and
  * the reserved status surface) show in a development build only (plan §2.6); they are English, marked `lang="en"`.
  */
-import { Outlet, Link, useNavigate, useLocation } from "react-router";
-import { Container, Inline, Cluster, Stack, Field, Select } from "../../ui/index.ts";
-import { SkipLink } from "../SkipLink.tsx";
-import { CollapsibleNav } from "../CollapsibleNav.tsx";
+import { Outlet, useNavigate, useLocation } from "react-router";
+import { Icon, Select } from "../../ui/index.ts";
+import { AppFrame } from "../AppFrame.tsx";
 import { Breadcrumbs, type BreadcrumbItem } from "../Breadcrumbs.tsx";
-import { MAIN_LANDMARK_ID, paths } from "../routes.ts";
+import { paths } from "../routes.ts";
 import { useWorkspaceRouteContext } from "../contracts/route-context.ts";
 import { ProtectedRouteState } from "../../features/auth/ProtectedRouteState.tsx";
-import { SignedInSessionControls } from "../../features/auth/SessionStatus.tsx";
 import { useSession } from "../../features/auth/SessionProvider.tsx";
 import { may, navigation } from "../../features/people/navigation.ts";
 import { OrgLive } from "../../features/live/live-context.tsx";
 import { NotificationsButton } from "../../features/live/Notifications.tsx";
 import { TwoStepNeeded } from "../../features/people/TwoStepNeeded.tsx";
-import { LanguageSwitch, useI18n, type PlainKey } from "../../i18n/index.ts";
+import { useI18n, type PlainKey } from "../../i18n/index.ts";
 
 const SEGMENT_LABEL: Readonly<Record<string, PlainKey>> = {
   team: "glossary.team",
@@ -53,21 +51,12 @@ export function WorkspaceShell() {
 
   if (state.status !== "allowed") {
     const invalidPublication = state.status === "invalid-context" ? state.invalid.publication : undefined;
-    // the same root as below, so the shell (and the skip link's focus) is not remounted once the route resolves
+    // the same frame as below, so the shell (and the skip link's focus) is not remounted once the route resolves
     return (
       <OrgLive orgId={null}>
-      <div
-        className="pg-shell pg-shell--workspace"
-        dir={invalidPublication?.direction ?? "ltr"}
-        lang={invalidPublication?.locale || language}
-      >
-        <SkipLink label={t("shell.skipLink")} />
-        <main id={MAIN_LANDMARK_ID} tabIndex={-1}>
-          <Container>
-            <ProtectedRouteState state={state} retry={retry} />
-          </Container>
-        </main>
-      </div>
+        <AppFrame dir={invalidPublication?.direction ?? "ltr"} lang={invalidPublication?.locale || language}>
+          <ProtectedRouteState state={state} retry={retry} />
+        </AppFrame>
       </OrgLive>
     );
   }
@@ -108,102 +97,74 @@ export function WorkspaceShell() {
     }
   }
 
+  const onPublicationChange = (next: string) => {
+    // the same page of the other publication; a story belongs to one, so its list
+    const parts = location.pathname.split("/").filter(Boolean);
+    const leaf = parts[4];
+    navigate(
+      leaf === "stories"
+        ? paths.pubStories(organization.id, next)
+        : leaf && parts.length === 5
+          ? `/org/${organization.id}/pub/${next}/${leaf}`
+          : publicationHome(next),
+    );
+  };
+
+  const context = (
+    <>
+      <span className="pg-app__switcher">
+        <Icon name="building-2" size={16} />
+        <Select
+          aria-label={t("shell.organization")}
+          value={organization.id}
+          onChange={async (event) => {
+            const result = await session.selectOrganization(event.target.value);
+            if (result.ok) navigate(paths.orgHome(result.value.activeOrganizationId));
+          }}
+        >
+          {resolution.organizations.map((org) => (
+            <option key={org.id} value={org.id}>
+              {org.name}
+            </option>
+          ))}
+        </Select>
+      </span>
+      {publication && (
+        <span className="pg-app__switcher">
+          <Icon name="newspaper" size={16} />
+          <Select
+            aria-label={t("shell.publication")}
+            value={publication.id}
+            onChange={(event) => onPublicationChange(event.target.value)}
+          >
+            {resolution.publications.map((pub) => (
+              <option key={pub.id} value={pub.id}>
+                {pub.name}
+              </option>
+            ))}
+          </Select>
+        </span>
+      )}
+    </>
+  );
+
   return (
     <OrgLive orgId={hears ? organization.id : null}>
-    <div
-      className="pg-shell pg-shell--workspace"
-      dir={publication?.direction ?? "ltr"}
-      lang={publication?.locale || language}
-    >
-      <SkipLink label={t("shell.skipLink")} />
-      <header className="pg-shell__header">
-        <Container>
-          <Stack gap="3">
-            <Inline gap="4" wrap="wrap" align="center">
-              <Link to={paths.home()} className="pg-shell__brand pg-type-section-title" lang="en">
-                Pageinator
-              </Link>
-              <Link to={paths.home()}>{t("shell.backToPublic")}</Link>
-              <Link to={paths.accountSecurity()}>{t("shell.accountSecurity")}</Link>
-              <Cluster gap="3" justify="end">
-                {hears && access && (
-                  <NotificationsButton orgId={organization.id} mayViewTeam={may(access, "members.view")} />
-                )}
-                <LanguageSwitch />
-              </Cluster>
-            </Inline>
-            <CollapsibleNav
-              ariaLabel={section}
-              showLabel={t("shell.showNav", { section })}
-              hideLabel={t("shell.hideNav", { section })}
-            >
-              <Stack gap="3">
-                <Cluster gap="4">
-                  <Field label={t("shell.organization")}>
-                    <Select
-                      value={organization.id}
-                      onChange={async (event) => {
-                        const result = await session.selectOrganization(event.target.value);
-                        if (result.ok) navigate(paths.orgHome(result.value.activeOrganizationId));
-                      }}
-                    >
-                      {resolution.organizations.map((org) => (
-                        <option key={org.id} value={org.id}>
-                          {org.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  {publication && (
-                    <Field label={t("shell.publication")}>
-                      <Select
-                        value={publication.id}
-                        onChange={(event) => {
-                          // the same page of the other publication; a story belongs to one, so its list
-                          const parts = location.pathname.split("/").filter(Boolean);
-                          const leaf = parts[4];
-                          const next = event.target.value;
-                          navigate(
-                            leaf === "stories"
-                              ? paths.pubStories(organization.id, next)
-                              : leaf && parts.length === 5
-                                ? `/org/${organization.id}/pub/${next}/${leaf}`
-                                : publicationHome(next),
-                          );
-                        }}
-                      >
-                        {resolution.publications.map((pub) => (
-                          <option key={pub.id} value={pub.id}>
-                            {pub.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                  )}
-                  <SignedInSessionControls />
-                </Cluster>
-                <Cluster gap="4">
-                  {entries.map((entry) => (
-                    <Link key={entry.to} to={entry.to}>
-                      {t(entry.label)}
-                    </Link>
-                  ))}
-                </Cluster>
-              </Stack>
-            </CollapsibleNav>
-            <Breadcrumbs items={breadcrumbItems} label={t("shell.breadcrumb")} />
-          </Stack>
-        </Container>
-      </header>
-      <main id={MAIN_LANDMARK_ID} tabIndex={-1}>
-        <Container>
-          <Stack gap="5">
-            {blocked && access && <TwoStepNeeded org={access} />}
-            <Outlet />
-          </Stack>
-        </Container>
-      </main>
-    </div>
+      <AppFrame
+        dir={publication?.direction ?? "ltr"}
+        lang={publication?.locale || language}
+        nav={{ label: section, entries, homeTo: paths.orgHome(organization.id) }}
+        context={context}
+        notifications={
+          hears && access ? (
+            <NotificationsButton orgId={organization.id} mayViewTeam={may(access, "members.view")} />
+          ) : undefined
+        }
+        breadcrumbs={<Breadcrumbs items={breadcrumbItems} label={t("shell.breadcrumb")} />}
+      >
+        {blocked && access && <TwoStepNeeded org={access} />}
+        <Outlet />
+      </AppFrame>
     </OrgLive>
   );
 }

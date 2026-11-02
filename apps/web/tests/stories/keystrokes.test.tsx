@@ -328,6 +328,7 @@ describe("11. Sign-out and the drafts on this device", () => {
     });
     renderAuth(STORIES, { preset: "sahyadri-reporter", environment });
     const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /^Account:/ })); // Sign out sits in the account menu
     await user.click(await screen.findByRole("button", { name: "Sign out" }));
     const ask = within(await screen.findByRole("dialog", { name: "Unsaved text on this device" }));
     expect(ask.getByText("Stories with unsaved text on this device: 1. Signing out deletes that text.")).toBeInTheDocument();

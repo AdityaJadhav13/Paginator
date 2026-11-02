@@ -1,0 +1,645 @@
+/*
+ * The signed-in app's frame (AppFrame.tsx; 02 §3.4): top bar 56 px, sidebar 240 px (56 px collapsed), content within
+ * a 1,440 px measure with 24 px gutters on a grey canvas. Phone < 768 px: the sidebar is a sheet. App tokens only
+ * (ui/app-tokens.css); logical properties only.
+ */
+
+.pg-app {
+  min-block-size: 100vh;
+  background-color: var(--pg-app-canvas);
+  color: var(--pg-app-text);
+}
+
+/* ── Top bar ──────────────────────────────────────────────────────── */
+
+.pg-app__topbar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-4);
+  block-size: var(--pg-app-topbar-height);
+  padding-inline: var(--pg-space-4);
+  background-color: var(--pg-app-topbar-bg);
+  border-block-end: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-app__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pg-space-3);
+  flex: none;
+  padding-inline-end: var(--pg-space-3);
+  color: var(--pg-app-text);
+  font-size: var(--pg-font-size-300);
+  font-weight: var(--pg-font-weight-bold);
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.pg-app__brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: var(--pg-app-radius-sm);
+  background-color: var(--pg-app-accent);
+  color: var(--pg-color-on-action);
+  font-family: var(--pg-font-serif);
+  font-size: var(--pg-font-size-300);
+  font-weight: var(--pg-font-weight-bold);
+}
+
+.pg-app__context {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-2);
+  min-inline-size: 0;
+  padding-inline-start: var(--pg-space-4);
+  border-inline-start: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-app__switcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-inline-size: 0;
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-app__switcher + .pg-app__switcher::before {
+  content: "/";
+  margin-inline: var(--pg-space-1) var(--pg-space-3);
+  color: var(--pg-app-border-strong);
+}
+
+.pg-app__switcher .pg-icon {
+  position: absolute;
+  inset-inline-start: var(--pg-space-3);
+  pointer-events: none;
+}
+
+.pg-app__switcher + .pg-app__switcher .pg-icon {
+  inset-inline-start: calc(var(--pg-space-3) + 1.25rem);
+}
+
+.pg-app .pg-app__switcher .pg-select {
+  min-block-size: var(--pg-app-control-sm);
+  max-inline-size: 16rem;
+  padding-block: 0;
+  padding-inline-start: calc(var(--pg-space-3) + 1.5rem);
+  border-color: transparent;
+  background-color: transparent;
+  color: var(--pg-app-text);
+  font-weight: var(--pg-font-weight-semibold);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.pg-app .pg-app__switcher .pg-select:hover {
+  background-color: var(--pg-app-surface-hover);
+  border-color: var(--pg-app-border);
+}
+
+.pg-app__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-2);
+  margin-inline-start: auto;
+}
+
+/* the notifications bell: an icon button with its count on its corner (the bell's count is the only .pg-badge) */
+.pg-app .pg-notifications-button {
+  position: relative;
+  min-inline-size: var(--pg-app-control-md);
+  min-block-size: var(--pg-app-control-md);
+  padding: 0;
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-app .pg-notifications-button .pg-badge {
+  position: absolute;
+  border-radius: var(--pg-radius-pill);
+  background-color: var(--pg-app-accent);
+  color: var(--pg-color-on-action);
+  text-align: center;
+  inset-block-start: 0.25rem;
+  inset-inline-end: 0.125rem;
+  min-inline-size: 1.125rem;
+  block-size: 1.125rem;
+  padding-inline: 0.25rem;
+  font-size: 0.6875rem;
+  line-height: 1.125rem;
+  box-shadow: 0 0 0 2px var(--pg-app-topbar-bg);
+}
+
+/* the language switch as a compact segmented control */
+.pg-app__language .pg-language-switch {
+  gap: 0;
+  padding: 2px;
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-sm);
+}
+
+.pg-app__language .pg-button--sm {
+  min-block-size: 1.75rem;
+  padding-inline: var(--pg-space-3);
+  border: 0;
+  border-radius: 2px;
+  font-size: var(--pg-font-size-100);
+  color: var(--pg-app-text-secondary);
+}
+
+:lang(mr) .pg-app__language .pg-button--sm,
+.pg-app__language .pg-button--sm:lang(mr) {
+  font-size: 0.8125rem;
+}
+
+.pg-app__language .pg-button[aria-pressed="true"] {
+  background-color: var(--pg-app-selected-bg);
+  color: var(--pg-app-selected-text);
+}
+
+.pg-app__menu-toggle {
+  display: none;
+}
+
+/* ── Account menu ─────────────────────────────────────────────────── */
+
+.pg-account {
+  position: relative;
+}
+
+.pg-account__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pg-space-3);
+  min-inline-size: var(--pg-app-control-md);
+  block-size: var(--pg-app-control-md);
+  padding-block: 0;
+  padding-inline: var(--pg-space-1) var(--pg-space-3);
+  border: 0;
+  border-radius: var(--pg-radius-pill);
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pg-account__button:hover,
+.pg-account__button[aria-expanded="true"] {
+  background-color: var(--pg-app-surface-hover);
+}
+
+.pg-account__summary {
+  max-inline-size: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pg-app-text);
+  font-size: var(--pg-font-size-200);
+}
+
+.pg-account__button .pg-avatar--sm {
+  inline-size: 2rem;
+  block-size: 2rem;
+  font-size: var(--pg-font-size-100);
+}
+
+.pg-account__panel {
+  position: absolute;
+  inset-block-start: calc(100% + var(--pg-space-3));
+  inset-inline-end: 0;
+  z-index: 40;
+  inline-size: 18rem;
+  max-inline-size: calc(100vw - 2rem);
+  background-color: var(--pg-app-surface);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  box-shadow: var(--pg-app-elevation-3);
+  overflow: hidden;
+}
+
+.pg-account__panel[hidden] {
+  display: none;
+}
+
+.pg-account__who {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-4);
+  padding: var(--pg-space-5);
+  border-block-end: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-account__names {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.pg-account__name {
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-account__detail {
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-200);
+  overflow-wrap: anywhere;
+}
+
+.pg-account__links {
+  margin: 0;
+  padding: var(--pg-space-2);
+  list-style: none;
+}
+
+.pg-account__link {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-3);
+  min-block-size: var(--pg-app-control-md);
+  padding-inline: var(--pg-space-3);
+  border-radius: var(--pg-app-radius-sm);
+  color: var(--pg-app-text);
+  font-size: var(--pg-font-size-200);
+  text-decoration: none;
+}
+
+.pg-account__link .pg-icon {
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-account__link:hover {
+  background-color: var(--pg-app-surface-hover);
+}
+
+.pg-account__sign-out {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+  padding: var(--pg-space-4) var(--pg-space-5);
+  border-block-start: var(--pg-border-width) solid var(--pg-app-border);
+  background-color: var(--pg-app-sidebar-bg);
+}
+
+/* ── Body: sidebar + main ─────────────────────────────────────────── */
+
+.pg-app__body {
+  display: flex;
+  align-items: stretch;
+  min-block-size: calc(100vh - var(--pg-app-topbar-height));
+}
+
+/* the column runs the page's whole height; the navigation inside it stays in view */
+.pg-app__sidebar-column {
+  flex: none;
+  inline-size: var(--pg-app-sidebar-width);
+  background-color: var(--pg-app-sidebar-bg);
+  border-inline-end: var(--pg-border-width) solid var(--pg-app-border);
+  transition: inline-size var(--pg-duration-default) var(--pg-easing-default);
+}
+
+.pg-app__sidebar {
+  position: sticky;
+  inset-block-start: var(--pg-app-topbar-height);
+  display: flex;
+  flex-direction: column;
+  block-size: calc(100vh - var(--pg-app-topbar-height));
+  background-color: var(--pg-app-sidebar-bg);
+}
+
+.pg-app__nav-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--pg-space-4) var(--pg-space-3);
+}
+
+.pg-app__nav-group + .pg-app__nav-group {
+  margin-block-start: var(--pg-space-5);
+}
+
+.pg-app__nav-group-label {
+  margin: 0 0 var(--pg-space-2);
+  padding-inline: var(--pg-space-3);
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-100);
+  font-weight: var(--pg-font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:lang(mr) .pg-app__nav-group-label {
+  font-size: 0.8125rem;
+  letter-spacing: 0;
+}
+
+.pg-app__nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-app__nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-4);
+  min-block-size: var(--pg-app-control-md);
+  padding-inline: var(--pg-space-3);
+  border-radius: var(--pg-app-radius-sm);
+  color: var(--pg-app-text);
+  font-size: var(--pg-font-size-200);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pg-app__nav-link .pg-icon {
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-app__nav-link:hover {
+  background-color: var(--pg-app-surface-pressed);
+}
+
+.pg-app__nav-link[aria-current="page"] {
+  background-color: var(--pg-app-selected-bg);
+  color: var(--pg-app-selected-text);
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-app__nav-link[aria-current="page"] .pg-icon {
+  color: var(--pg-app-accent);
+}
+
+/* the selected entry's accent bar, at the inline start */
+.pg-app__nav-link[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: 0.5rem;
+  inline-size: 3px;
+  border-radius: 3px;
+  background-color: var(--pg-app-accent);
+}
+
+.pg-app__nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pg-app__nav-footer {
+  padding: var(--pg-space-3);
+  border-block-start: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+/* the phone sheet's own close button (rendered only while it is open) */
+.pg-app__sheet-head {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--pg-space-2);
+  border-block-end: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+/* the phone sheet's backdrop */
+.pg-app__scrim {
+  display: none;
+}
+
+.pg-app__main {
+  flex: 1;
+  min-inline-size: 0;
+  outline: none;
+}
+
+.pg-app__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-5);
+  max-inline-size: var(--pg-app-measure);
+  margin-inline: auto;
+  padding: var(--pg-app-gutter);
+}
+
+/* the screens' own measure gives way to the app's */
+.pg-app__content .pg-container {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
+/* ── Collapsed: the icon rail (desktop and tablet) ────────────────── */
+
+.pg-app--collapsed .pg-app__sidebar-column {
+  inline-size: var(--pg-app-rail-width);
+}
+
+.pg-app--collapsed .pg-app__nav-scroll {
+  padding-inline: var(--pg-space-2);
+}
+
+.pg-app--collapsed .pg-app__nav-link {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.pg-app--collapsed .pg-app__nav-group-label,
+.pg-app--collapsed .pg-app__nav-label {
+  /* hidden from sight, kept as each link's name */
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.pg-app--collapsed .pg-app__nav-group + .pg-app__nav-group {
+  margin-block-start: var(--pg-space-3);
+  padding-block-start: var(--pg-space-3);
+  border-block-start: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-app--collapsed .pg-app__nav-footer {
+  display: flex;
+  justify-content: center;
+  padding-inline: 0;
+}
+
+/* ── Breadcrumbs, small, inside the content ───────────────────────── */
+
+.pg-app .pg-breadcrumbs__list {
+  font-size: var(--pg-font-size-100);
+  color: var(--pg-app-text-secondary);
+}
+
+:lang(mr) .pg-app .pg-breadcrumbs__list {
+  font-size: 0.8125rem;
+}
+
+.pg-app .pg-breadcrumbs__list a {
+  color: var(--pg-app-text-secondary);
+  text-decoration: none;
+}
+
+.pg-app .pg-breadcrumbs__list a:hover {
+  color: var(--pg-app-accent);
+  text-decoration: underline;
+}
+
+.pg-app .pg-breadcrumbs__item:not(:last-child)::after {
+  content: "›";
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-app .pg-breadcrumbs__item [aria-current="page"] {
+  color: var(--pg-app-text);
+}
+
+/* ── Tablet: a narrower top bar ───────────────────────────────────── */
+
+@media (max-width: 1279px) {
+  .pg-app .pg-app__switcher .pg-select {
+    max-inline-size: 11rem;
+  }
+
+  /* the avatar alone; the name and role are in its menu */
+  .pg-account__summary {
+    display: none;
+  }
+
+  .pg-account__button {
+    padding-inline: var(--pg-space-1);
+  }
+}
+
+/* ── Phone (< 768 px): the sidebar is a sheet ─────────────────────── */
+
+@media (max-width: 767px) {
+  .pg-app__topbar {
+    gap: var(--pg-space-2);
+    padding-inline: var(--pg-space-2);
+  }
+
+  .pg-app__menu-toggle {
+    display: inline-flex;
+  }
+
+  .pg-app__brand {
+    padding-inline-end: 0;
+  }
+
+  .pg-app__brand-mark,
+  .pg-account__summary {
+    display: none;
+  }
+
+  .pg-account__button {
+    padding-inline: var(--pg-space-1);
+  }
+
+  /* the switchers and the language switch move below the bar's row: they stay reachable, in one compact line */
+  .pg-app__topbar {
+    flex-wrap: wrap;
+    block-size: auto;
+    min-block-size: var(--pg-app-topbar-height);
+  }
+
+  .pg-app__context {
+    order: 3;
+    flex-basis: 100%;
+    padding-inline-start: 0;
+    padding-block-end: var(--pg-space-2);
+    border-inline-start: 0;
+  }
+
+  .pg-app .pg-app__switcher {
+    flex: 1 1 0;
+  }
+
+  .pg-app .pg-app__switcher .pg-select {
+    inline-size: 100%;
+    max-inline-size: none;
+  }
+
+  .pg-app__language .pg-button--sm {
+    padding-inline: var(--pg-space-2);
+  }
+
+  .pg-app__sidebar-column {
+    display: contents;
+  }
+
+  .pg-app__sidebar {
+    display: none;
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 60;
+    inline-size: min(18rem, 85vw);
+    block-size: 100dvh;
+    box-shadow: var(--pg-app-elevation-3);
+  }
+
+  .pg-app__sidebar--open {
+    display: flex;
+  }
+
+  /* the sheet always shows its labels, whatever the desktop rail's state */
+  .pg-app--collapsed .pg-app__nav-link {
+    justify-content: flex-start;
+    padding-inline: var(--pg-space-3);
+  }
+
+  .pg-app--collapsed .pg-app__nav-group-label,
+  .pg-app--collapsed .pg-app__nav-label {
+    position: static;
+    inline-size: auto;
+    block-size: auto;
+    margin: 0;
+    clip: auto;
+    overflow: hidden;
+  }
+
+  .pg-app--collapsed .pg-app__nav-group-label {
+    margin-block-end: var(--pg-space-2);
+    padding-inline: var(--pg-space-3);
+  }
+
+  .pg-app__nav-footer {
+    display: none;
+  }
+
+  .pg-app__scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background-color: var(--pg-color-backdrop);
+  }
+
+  .pg-app__content {
+    padding: var(--pg-space-5) var(--pg-space-5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-app__sidebar-column {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .pg-app__nav-link[aria-current="page"] {
+    outline: 2px solid Highlight;
+  }
+}

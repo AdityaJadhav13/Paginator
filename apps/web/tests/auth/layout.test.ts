@@ -92,10 +92,15 @@ describe("stories.css (PRs 21–22)", () => {
   });
 
   it("lets the table scroll inside its own box and the editor shrink to 320 px", () => {
-    expect(/\.pg-stories__table-wrap\s*\{([^}]*)\}/.exec(storiesCss)?.[1]).toMatch(/overflow-x:\s*auto/);
+    // the list is the kit's Table, which scrolls inside its own box
+    const kitCss = stripComments(readFileSync(resolve(__dirname, "../../src/ui/kit.css"), "utf8"));
+    expect(/\.pg-table-wrap\s*\{([^}]*)\}/.exec(kitCss)?.[1]).toMatch(/overflow:\s*auto/);
     const editor = /\.pg-editor\s*\{([^}]*)\}/.exec(storiesCss)?.[1] ?? "";
-    expect(editor).toMatch(/max-inline-size:\s*var\(--pg-account-measure\)/);
     expect(editor).toMatch(/overflow-wrap:\s*anywhere/);
+    // the document and the inspector: one column on a phone, and neither column refuses to shrink
+    const layout = /\.pg-editor__layout\s*\{([^}]*)\}/.exec(storiesCss)?.[1] ?? "";
+    expect(layout).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\);/);
+    expect(/\.pg-editor__paper\s*\{([^}]*)\}/.exec(storiesCss)?.[1]).toMatch(/min-inline-size:\s*0/);
     expect(/\.pg-editor__version\s*\{([^}]*)\}/.exec(storiesCss)?.[1]).toMatch(/min-inline-size:\s*0/);
   });
 });
