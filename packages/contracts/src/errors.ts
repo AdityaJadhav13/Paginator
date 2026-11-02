@@ -11,6 +11,8 @@ export const ERROR_CODES = [
   "bad_origin",
   "not_found",
   "story_changed",
+  "asset_changed",
+  "asset_in_use",
   "invalid_transition",
   "edition_exists",
   "request_in_progress",
@@ -40,7 +42,7 @@ export const ErrorEnvelope = z.strictObject({
     message: z.string().min(1),
     details: z.array(FieldProblem).min(1).optional(),
     /** With story_changed: the story as it is now, so the web can show theirs beside the text it keeps; with
-     * edition_exists: the edition that has that date. */
+     * edition_exists: the edition that has that date; with asset_changed: the picture (MediaItem) as it is now. */
     current: z.unknown().optional(),
     requestId: z.string().min(1),
   }),

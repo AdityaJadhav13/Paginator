@@ -33,6 +33,7 @@ import { StoriesScreen } from "../features/stories/StoriesScreen.tsx";
 import { StoryEditor } from "../features/stories/StoryEditor.tsx";
 import { EditionsProvider } from "../features/editions/editions-context.tsx";
 import { EditionsScreen } from "../features/editions/EditionsScreen.tsx";
+import { MediaScreen } from "../features/media/MediaScreen.tsx";
 import { I18nProvider } from "../i18n/index.ts";
 import type { ServiceEnvironment } from "../services/index.ts";
 import { PlaceholderScreen } from "../demo/ui002/PlaceholderScreen.tsx";
@@ -142,13 +143,13 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                 <Route path={PATTERNS.pubStories} element={<StoriesScreen />} />
                 <Route path={PATTERNS.pubStory} element={<StoryEditor />} />
                 <Route path={PATTERNS.pubEditions} element={<EditionsScreen />} />
+                <Route path={PATTERNS.pubMedia} element={<MediaScreen />} />
                 {DEVELOPMENT && (
                   <>
                     <Route path={PATTERNS.orgSettings} element={placeholder("orgSettings")} />
                     <Route path={PATTERNS.orgBilling} element={placeholder("orgBilling")} />
                     <Route path={PATTERNS.orgStorage} element={placeholder("orgStorage")} />
                     <Route path={PATTERNS.pubOverview} element={placeholder("pubOverview")} />
-                    <Route path={PATTERNS.pubMedia} element={placeholder("pubMedia")} />
                     <Route path={PATTERNS.pubAds} element={placeholder("pubAds")} />
                     <Route path={PATTERNS.pubTemplates} element={placeholder("pubTemplates")} />
                     <Route path={PATTERNS.pubNewsroom} element={placeholder("pubNewsroom")} />

@@ -51,13 +51,17 @@ describe("Navigation from permissions", () => {
     expect(reporter).toContain("glossary.stories /org/o/pub/p/stories");
     expect(reporter).not.toContain("nav.brand /org/o/pub/p/brand");
     expect(reporter).not.toContain("glossary.team /org/o/team");
-    // in the deployed app a Reporter has their stories, and nothing else of the publication yet (no edition.view)
-    expect(labels(navigation(org("member", ["reporter"]), "p", false))).toEqual(["glossary.stories /org/o/pub/p/stories"]);
+    // in the deployed app a Reporter has their stories and their own pictures (media.view ◐; no edition.view)
+    expect(labels(navigation(org("member", ["reporter"]), "p", false))).toEqual([
+      "glossary.stories /org/o/pub/p/stories",
+      "nav.media /org/o/pub/p/media",
+    ]);
     // Editions (L2.1) for whoever has edition.view, a ◐ one too; the ads desk is L2.6
     expect(labels(navigation(org("member", ["advertising"]), "p", false))).toEqual(["nav.editions /org/o/pub/p/editions"]);
     expect(labels(navigation(org("member", ["photo_editor"]), "p", false))).toEqual([
       "nav.editions /org/o/pub/p/editions",
       "glossary.stories /org/o/pub/p/stories",
+      "nav.media /org/o/pub/p/media",
     ]);
     expect(labels(navigation(org("member", ["sub_editor"]), "p", false))).toContain("nav.editions /org/o/pub/p/editions");
     // making an edition and sending it to the Desk need a full cell: Advertising's and Prepress's ◐ are refused

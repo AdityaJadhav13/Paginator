@@ -29,6 +29,7 @@ import { peopleRoutes } from "./modules/people/plugin.ts";
 import { storyRoutes } from "./modules/stories/routes.ts";
 import { photoRoutes } from "./modules/media/photos.ts";
 import { startEngineInbox } from "./modules/media/engine-inbox.ts";
+import { libraryRoutes } from "./modules/media/library.ts";
 import { uploadRoutes } from "./modules/media/uploads.ts";
 import { contactRoutes } from "./modules/contact/routes.ts";
 import { closeWhenStopping } from "./shutdown.ts";
@@ -192,6 +193,7 @@ export async function buildApp(deps: AppDeps) {
     if (store) {
       await app.register(uploadRoutes, { database: people.database, store });
       await app.register(photoRoutes, { database: people.database, store });
+      await app.register(libraryRoutes, { database: people.database, store });
       await app.register(deskBundleRoutes, { database: people.database, store });
     }
   }

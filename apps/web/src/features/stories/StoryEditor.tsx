@@ -49,7 +49,7 @@ import { useLiveEvents } from "../live/live-context.tsx";
 import { useTeam } from "../people/services-context.tsx";
 import { isDesk, mayCreate, mayUpload, mayViewMedia, storyScope } from "./access.ts";
 import { CommentsPanel } from "./CommentsPanel.tsx";
-import { PhotoPanel, type PhotoOutcome } from "./PhotoPanel.tsx";
+import { PhotoPanel, type PhotoDefaults, type PhotoOutcome } from "./PhotoPanel.tsx";
 import { currentStory } from "./conflict.ts";
 import { draftKey, dropDraft, readDraft, writeDraft, type PendingCreate, type StoryDraft, type StoryFields } from "./drafts.ts";
 import { moveKey, StatusChip, statusKey } from "./StatusChip.tsx";
@@ -724,13 +724,20 @@ function EditorContent({
       }
       return { ok: false };
     });
-  const attachPhoto = (assetId: string, signal?: AbortSignal) =>
-    photoChange(
+  /** A library picture's own caption and credit fill the story's where those are empty. */
+  const attachPhoto = (assetId: string, signal?: AbortSignal, defaults?: PhotoDefaults) => {
+    const filled = (now: StoryFields): StoryFields => ({
+      ...now,
+      caption: now.caption || (defaults?.caption ?? ""),
+      credit: now.credit || (defaults?.credit ?? ""),
+    });
+    return photoChange(
       (current, now) =>
-        stories.attachPhoto({ orgId, pubId, storyId: current.id, baseRevision: current.revision, assetId, caption: now.caption, credit: now.credit }),
-      { base: (base, sent) => ({ ...base, caption: sent.caption, credit: sent.credit }), boxes: (typed) => typed },
+        stories.attachPhoto({ orgId, pubId, storyId: current.id, baseRevision: current.revision, assetId, caption: filled(now).caption, credit: filled(now).credit }),
+      { base: (base, sent) => ({ ...base, caption: filled(sent).caption, credit: filled(sent).credit }), boxes: filled },
       { ...(signal ? { signal } : {}), done: (theirs) => theirs.photo?.assetId === assetId },
     );
+  };
   const removePhoto = () =>
     photoChange(
       (current) => stories.removePhoto({ orgId, pubId, storyId: current.id, baseRevision: current.revision }),

@@ -7,15 +7,32 @@
  *   - the original (GET …/assets/:a/file): a 302 to a 5-minute link of the store, followed at once and never cached
  *     (`cache: "no-store"`): the screen holds the picture in memory only. Following it from the page needs the store
  *     to allow this origin (CORS), as the presigned POST does.
+ *   - the library (L2.2): GET …/media (its filters as the query), GET, PATCH and DELETE …/assets/:a, each answer read
+ *     with the API's own schema; a 409 asset_changed keeps `current` only as a picture the web can read.
  * The store answers a refused policy with an XML error: AccessDenied (403: an expired policy, or a condition that
  * failed) is `upload_denied`, a size outside the policy's exact one (EntityTooLarge/Small: the file changed while it
  * was sent) `upload_size_mismatch`, anything else `upload_refused`.
  */
-import { CompletedUpload, PresignedUpload } from "@pageinator/contracts";
+import { CompletedUpload, MediaItem, MediaList, PresignedUpload } from "@pageinator/contracts";
 import type { ApiProblem, MediaService, ServiceResult } from "../services/index.ts";
-import type { ApiClient } from "./client.ts";
+import type { ApiClient, ApiResult } from "./client.ts";
 
 const UNEXPECTED: ApiProblem = { kind: "answer", status: 200, code: "unexpected_answer", message: "" };
+
+type Schema<T> = { safeParse(value: unknown): { success: true; data: T } | { success: false } };
+
+/** An answer read with its schema; asset_changed's `current` kept only when it is a picture. */
+function read<T>(schema: Schema<T>, answer: ApiResult<unknown>): ServiceResult<T, ApiProblem> {
+  if (!answer.ok) {
+    const problem = answer.problem;
+    if (problem.kind !== "answer" || problem.current === undefined) return { ok: false, error: problem };
+    const { current, ...rest } = problem;
+    const item = MediaItem.safeParse(current);
+    return { ok: false, error: item.success ? { ...rest, current: item.data } : rest };
+  }
+  const parsed = schema.safeParse(answer.value);
+  return parsed.success ? { ok: true, value: parsed.data } : { ok: false, error: UNEXPECTED };
+}
 
 const pub = (orgId: string, pubId: string) => `/api/v1/orgs/${encodeURIComponent(orgId)}/pubs/${encodeURIComponent(pubId)}`;
 
@@ -42,10 +59,10 @@ export function createApiMediaService(
   const online = options.isOnline ?? (() => typeof navigator === "undefined" || navigator.onLine !== false);
   const makeXhr = options.xhr ?? (() => new XMLHttpRequest());
   return {
-    async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey }) {
+    async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey, purpose = "story_photo" }) {
       const answer = await client.post(
         `${pub(orgId, pubId)}/uploads`,
-        { purpose: "story_photo", filename, contentType, bytes },
+        { purpose, filename, contentType, bytes },
         { idempotencyKey },
       );
       if (!answer.ok) return { ok: false, error: answer.problem };
@@ -123,6 +140,28 @@ export function createApiMediaService(
         if (signal?.aborted) return { ok: false, error: { kind: "answer", status: 0, code: "upload_cancelled", message: "" } };
         return { ok: false, error: online() ? { kind: "network" } : { kind: "offline" } };
       }
+    },
+
+    async list({ orgId, pubId, query }) {
+      const search = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined && value !== "") search.set(key, String(value));
+      }
+      const text = search.toString();
+      return read(MediaList, await client.get(`${pub(orgId, pubId)}/media${text ? `?${text}` : ""}`));
+    },
+
+    async get({ orgId, pubId, assetId }) {
+      return read(MediaItem, await client.get(`${pub(orgId, pubId)}/assets/${encodeURIComponent(assetId)}`));
+    },
+
+    async update({ orgId, pubId, assetId, patch }) {
+      return read(MediaItem, await client.patch(`${pub(orgId, pubId)}/assets/${encodeURIComponent(assetId)}`, patch));
+    },
+
+    async remove({ orgId, pubId, assetId, baseRevision }) {
+      const answer = await client.delete(`${pub(orgId, pubId)}/assets/${encodeURIComponent(assetId)}?baseRevision=${baseRevision}`);
+      return answer.ok ? { ok: true, value: undefined } : { ok: false, error: answer.problem };
     },
   };
 }

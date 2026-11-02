@@ -24,6 +24,10 @@ export const AUDIT_ACTIONS = {
   "comment.resolve": { scope: "publication" },
   /** A picture's print versions, from the engine's inbox (actor: the system): made ({job, paramsHash}), refused by the
    * Desk's rules ({job, code, status}), or not made ({job, code}: the job failed, or the sweep found it lost). */
+  /** A picture deleted from the library ({revision}); its own facts changed ({revision, fields}: which, never what
+   * they say). */
+  "asset.delete": { scope: "publication" },
+  "asset.edit": { scope: "publication" },
   "asset.fail": { scope: "publication" },
   "asset.ready": { scope: "publication" },
   "asset.reject": { scope: "publication" },

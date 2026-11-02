@@ -42,6 +42,8 @@ import "./people.css";
  * and a test that both languages have every one). */
 export const AUDIT_ACTION_KEYS = [
   "auditLog.action.access.denied",
+  "auditLog.action.asset.delete",
+  "auditLog.action.asset.edit",
   "auditLog.action.asset.fail",
   "auditLog.action.asset.ready",
   "auditLog.action.asset.reject",

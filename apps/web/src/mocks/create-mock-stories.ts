@@ -13,6 +13,14 @@
  * file to the "store" (its size must be the declared one), complete (its type from its first bytes, else 422
  * not_a_picture), the story's photo set, changed or taken off on the story's version by whoever edits the story or a
  * Photo Editor, and the original only for whoever may see it.
+ * The media library (L2.2) as the API's: the publication's pictures newest first, 60 a page, filtered (story, missing
+ * caption or credit, too small for N columns, a search of caption, credit and photographer); a Reporter sees their own
+ * (and their stories' photos), a refused or failed picture only its uploader and the full viewers, a deleted one no one;
+ * `usedBy` only the stories the person sees. Its own caption, credit and photographer changed on its revision (409
+ * asset_changed with the picture now; a Reporter only their own); deleted by a full media.upload only while no story
+ * uses it (409 asset_in_use). `prepare` stands in for the engine: the picture is ready, refused or failed, and the
+ * stories it is the photo of hear it live (as the API's trigger does). `sharpUpToCols` is a fixture's, and null for a
+ * new picture (no grid known).
  * Comments (plan §5.2) as the API's src/modules/stories/comments.ts: threads one level deep, oldest first; whoever sees
  * the story reads them (a Reporter their own stories'); whoever may comment writes one or a reply to a thread's first
  * comment (an Idempotency-Key replaying its first answer); its author changes its text; the author, the desk or the
@@ -35,6 +43,7 @@ import type {
   LiveEventDto,
   ApiProblem,
   AssetDto,
+  MediaItemDto,
   MediaService,
   PasteResultDto,
   ServiceResult,
@@ -59,6 +68,10 @@ export type MockStoryOperation =
   | "media.send"
   | "media.complete"
   | "media.load"
+  | "media.list"
+  | "media.get"
+  | "media.update"
+  | "media.remove"
   | "comments.list"
   | "comments.create"
   | "comments.update"
@@ -314,6 +327,41 @@ interface MockAsset {
   readonly heightPx: number;
   readonly data: Blob;
   readonly status: AssetDto["status"];
+  readonly problem: string | null;
+  readonly caption: string;
+  readonly credit: string;
+  readonly photographer: string;
+  readonly sharpUpToCols: number | null;
+  readonly revision: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly deleted: boolean;
+}
+
+/** A fixture picture: the fictional PNG, with its facts. */
+function fixtureAsset(fields: Partial<MockAsset> & Pick<MockAsset, "id" | "uploadedBy" | "createdAt">): [string, MockAsset] {
+  return [
+    fields.id,
+    {
+      orgId: SAHYADRI,
+      pubId: PUNE,
+      mime: "image/png",
+      bytes: FIXTURE_PICTURE.size,
+      widthPx: 1600,
+      heightPx: 1088,
+      data: FIXTURE_PICTURE,
+      status: "ready",
+      problem: null,
+      caption: "",
+      credit: "",
+      photographer: "",
+      sharpUpToCols: null,
+      revision: 1,
+      updatedAt: fields.createdAt,
+      deleted: false,
+      ...fields,
+    },
+  ];
 }
 
 interface MockUpload {
@@ -334,6 +382,7 @@ const FIXTURE_PICTURE = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 
 });
 
 const MAX_BYTES = 41_943_040;
+const MEDIA_PAGE = 60;
 const UPLOADS_PER_HOUR = 60;
 const ORG_BYTES_PER_DAY = 2 * 1024 ** 3;
 const TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -370,6 +419,8 @@ export function createMockStories(deps: MockStoryDeps): {
   hears(userId: string, orgId: string, event: LiveEventDto): boolean;
   /** A story's headline and status as this person may see it now (the notifications list's join), or null. */
   shown(userId: string, orgId: string, storyId: string): { headline: string; status: StoryStatusDto } | null;
+  /** The engine's answer for a picture: ready, refused (with the Desk's code) or failed. */
+  prepare(assetId: string, status: AssetDto["status"], problem?: string | null): void;
   reset(): void;
   all(): readonly Row[];
 } {
@@ -383,23 +434,54 @@ export function createMockStories(deps: MockStoryDeps): {
   /** Where a held or spiked story came from. */
   let before = new Map<string, StoryStatusDto>([["story-demo-005", "editing"]]);
   let keys = new Map<string, unknown>();
+  // fictional pictures: newest first, asset-demo-002 (a Reporter's, no caption or credit), -004 (too small for one
+  // column), -003 (refused), -001 (story-demo-004's photo, still being prepared); and one of the Konkan publication
   const fixtureAssets = (): Map<string, MockAsset> =>
     new Map([
-      [
-        "asset-demo-001",
-        {
-          id: "asset-demo-001",
-          orgId: SAHYADRI,
-          pubId: PUNE,
-          uploadedBy: SUBEDITOR.id,
-          mime: "image/png",
-          bytes: FIXTURE_PICTURE.size,
-          widthPx: 1600,
-          heightPx: 1088,
-          data: FIXTURE_PICTURE,
-          status: "received",
-        },
-      ],
+      fixtureAsset({
+        id: "asset-demo-001",
+        uploadedBy: SUBEDITOR.id,
+        status: "received",
+        caption: "जलवाहिनीच्या दुरुस्तीचे काम",
+        credit: "Fictional Photo Desk",
+        createdAt: "2026-10-22T09:00:00.000Z",
+      }),
+      fixtureAsset({
+        id: "asset-demo-002",
+        uploadedBy: REPORTER.id,
+        photographer: "Fictional Photographer",
+        sharpUpToCols: 2,
+        createdAt: "2026-10-22T09:30:00.000Z",
+      }),
+      fixtureAsset({
+        id: "asset-demo-003",
+        uploadedBy: EDITOR.id,
+        status: "rejected",
+        problem: "m.img.damaged",
+        caption: "Fictional damaged file",
+        credit: "Fictional Photo Desk",
+        createdAt: "2026-10-22T09:10:00.000Z",
+      }),
+      fixtureAsset({
+        id: "asset-demo-004",
+        uploadedBy: EDITOR.id,
+        widthPx: 240,
+        heightPx: 160,
+        caption: "नदीकाठचा फेरफटका",
+        credit: "Fictional Photo Desk",
+        sharpUpToCols: 0,
+        createdAt: "2026-10-22T09:20:00.000Z",
+      }),
+      fixtureAsset({
+        id: "asset-demo-k01",
+        orgId: "org-demo-konkan",
+        pubId: "pub-demo-ratnagiri-tide",
+        uploadedBy: "user-demo-konkan-reviewer",
+        caption: "Fictional harbour at dawn",
+        credit: "Fictional Photo Desk",
+        sharpUpToCols: 3,
+        createdAt: "2026-10-22T08:00:00.000Z",
+      }),
     ]);
   let assets = fixtureAssets();
   let uploads = new Map<string, MockUpload>();
@@ -828,7 +910,7 @@ export function createMockStories(deps: MockStoryDeps): {
     canEdit(s, story, userId) || (story.status !== "spiked" && sees(s, story, userId) && has(s, "photo_editor"));
   /** maySee: all of the publication's pictures with a full media.view; a Reporter's own, or their stories' photos. */
   const maySeeAsset = (s: MockStanding, asset: MockAsset, userId: string) => {
-    if (asset.status === "rejected") return false;
+    if (asset.status === "rejected" || asset.deleted) return false;
     const seen = reach("media.view", s.orgRole, s.access);
     if (seen === "full") return true;
     if (seen !== "scoped") return false;
@@ -847,10 +929,10 @@ export function createMockStories(deps: MockStoryDeps): {
       if (baseRevision !== story.revision) return changed(story, s, person.userId);
       if (!mayPhoto(s, story, person.userId)) return failure<StoryDto>(PHOTO_NOT_THEIRS);
       const asset = assets.get(assetId);
-      if (asset && asset.pubId === pubId && asset.status !== "rejected" && !maySeeAsset(s, asset, person.userId)) {
+      if (asset && asset.pubId === pubId && asset.status !== "rejected" && !asset.deleted && !maySeeAsset(s, asset, person.userId)) {
         return failure<StoryDto>(NOT_FOUND);
       }
-      if (!asset || asset.pubId !== pubId || asset.status === "rejected") {
+      if (!asset || asset.pubId !== pubId || asset.status === "rejected" || asset.deleted) {
         return failure<StoryDto>(invalid("body.assetId", "is not a picture of this publication"));
       }
       const photo = {
@@ -858,7 +940,7 @@ export function createMockStories(deps: MockStoryDeps): {
         caption: cleanText(caption),
         credit: cleanText(credit),
         status: asset.status,
-        problem: null,
+        problem: asset.problem,
         widthPx: asset.widthPx,
         heightPx: asset.heightPx,
         previewUrl: null,
@@ -1211,6 +1293,15 @@ export function createMockStories(deps: MockStoryDeps): {
         bytes: upload.bytes,
         data: upload.file,
         status: "received",
+        problem: null,
+        caption: "",
+        credit: "",
+        photographer: "",
+        sharpUpToCols: null,
+        revision: 1,
+        createdAt: `2026-10-22T11:${String(assetCounter).padStart(2, "0")}:00.000Z`,
+        updatedAt: `2026-10-22T11:${String(assetCounter).padStart(2, "0")}:00.000Z`,
+        deleted: false,
       };
       assets = new Map(assets).set(asset.id, asset);
       upload.status = "completed";
@@ -1229,7 +1320,117 @@ export function createMockStories(deps: MockStoryDeps): {
       if (!asset || asset.pubId !== pubId || !maySeeAsset(checked.s, asset, checked.person.userId)) return failure(NOT_FOUND);
       return success(asset.data);
     },
+
+    async list({ orgId, pubId, query }) {
+      const checked = await check<{ items: MediaItemDto[]; next: string | null }>("media.list", orgId, pubId, "media.view");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const q = query.q?.trim().toLowerCase();
+      const matching = [...assets.values()]
+        .filter((asset) => asset.orgId === orgId && asset.pubId === pubId && listed(s, asset, person.userId))
+        .filter((asset) => !query.story || rows.some((story) => story.id === query.story && story.photo?.assetId === asset.id))
+        .filter((asset) => query.missing !== "caption" || asset.caption === "")
+        .filter((asset) => query.missing !== "credit" || asset.credit === "")
+        .filter((asset) => !query.tooSmallForCols || (asset.sharpUpToCols !== null && asset.sharpUpToCols < query.tooSmallForCols))
+        .filter((asset) => !q || `${asset.caption}\n${asset.credit}\n${asset.photographer}`.toLowerCase().includes(q))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+      const start = query.cursor ? Number(query.cursor.replace("media-cursor-", "")) : 0;
+      const page = matching.slice(start, start + MEDIA_PAGE);
+      const next = start + MEDIA_PAGE < matching.length ? `media-cursor-${start + MEDIA_PAGE}` : null;
+      return success({ items: page.map((asset) => item(asset, s, person.userId)), next });
+    },
+
+    async get({ orgId, pubId, assetId }) {
+      const checked = await check<MediaItemDto>("media.get", orgId, pubId, "media.view");
+      if (refused(checked)) return checked;
+      const asset = assets.get(assetId);
+      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(checked.s, asset, checked.person.userId)) {
+        return failure(NOT_FOUND);
+      }
+      return success(item(asset, checked.s, checked.person.userId));
+    },
+
+    async update({ orgId, pubId, assetId, patch }) {
+      const checked = await check<MediaItemDto>("media.update", orgId, pubId, "media.upload");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const asset = assets.get(assetId);
+      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(s, asset, person.userId)) return failure(NOT_FOUND);
+      if (!mayEditAsset(s, asset, person.userId)) return failure(NOT_ALLOWED);
+      if (patch.baseRevision !== asset.revision) {
+        return failure({ ...answer(409, "asset_changed", "Someone changed this picture."), current: item(asset, s, person.userId) });
+      }
+      clock += 1;
+      const next: MockAsset = {
+        ...asset,
+        ...(patch.caption !== undefined ? { caption: cleanText(patch.caption) } : {}),
+        ...(patch.credit !== undefined ? { credit: cleanText(patch.credit) } : {}),
+        ...(patch.photographer !== undefined ? { photographer: cleanText(patch.photographer) } : {}),
+        revision: asset.revision + 1,
+        updatedAt: `2026-10-22T12:${String(clock).padStart(2, "0")}:00.000Z`,
+      };
+      assets = new Map(assets).set(asset.id, next);
+      return success(item(next, s, person.userId));
+    },
+
+    async remove({ orgId, pubId, assetId, baseRevision }) {
+      const checked = await check<void>("media.remove", orgId, pubId, "media.upload");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const asset = assets.get(assetId);
+      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(s, asset, person.userId)) return failure(NOT_FOUND);
+      if (reach("media.upload", s.orgRole, s.access) !== "full") return failure(NOT_ALLOWED);
+      if (baseRevision !== asset.revision) {
+        return failure({ ...answer(409, "asset_changed", "Someone changed this picture."), current: item(asset, s, person.userId) });
+      }
+      if (rows.some((story) => story.photo?.assetId === asset.id)) {
+        return failure(answer(409, "asset_in_use", "A story uses this picture."));
+      }
+      assets = new Map(assets).set(asset.id, { ...asset, deleted: true });
+      return success(undefined);
+    },
   };
+
+  /** The library's own rule: a refused or failed picture only to its uploader and the full viewers; a deleted one never. */
+  function listed(s: MockStanding, asset: MockAsset, userId: string): boolean {
+    if (asset.deleted) return false;
+    const seen = reach("media.view", s.orgRole, s.access);
+    if (seen === "full") return true;
+    if (seen !== "scoped") return false;
+    if (asset.uploadedBy === userId) return true;
+    return asset.status !== "rejected" && asset.status !== "failed" && maySeeAsset(s, asset, userId);
+  }
+  /** PATCH's rule: a full media.upload any picture; a Reporter's ◐ the ones they uploaded. */
+  function mayEditAsset(s: MockStanding, asset: MockAsset, userId: string): boolean {
+    const may = reach("media.upload", s.orgRole, s.access);
+    return may === "full" || (may === "scoped" && asset.uploadedBy === userId);
+  }
+  function item(asset: MockAsset, s: MockStanding, userId: string): MediaItemDto {
+    return {
+      id: asset.id,
+      status: asset.status,
+      problem: asset.problem,
+      mime: asset.mime,
+      bytes: asset.bytes,
+      widthPx: asset.widthPx,
+      heightPx: asset.heightPx,
+      sha256: `fictional-${asset.id}`,
+      caption: asset.caption,
+      credit: asset.credit,
+      photographer: asset.photographer,
+      sharpUpToCols: asset.sharpUpToCols,
+      uploadedBy: { id: asset.uploadedBy, name: deps.nameOf(asset.uploadedBy) ?? "" },
+      usedBy: rows
+        .filter((story) => story.photo?.assetId === asset.id && sees(s, story, userId))
+        .map((story) => ({ storyId: story.id, headline: story.headline })),
+      inUse: rows.some((story) => story.photo?.assetId === asset.id),
+      mayEdit: mayEditAsset(s, asset, userId),
+      revision: asset.revision,
+      createdAt: asset.createdAt,
+      updatedAt: asset.updatedAt,
+      previewUrl: asset.status === "ready" ? `${media.fileUrl({ orgId: asset.orgId, pubId: asset.pubId, assetId: asset.id })}?variant=preview` : null,
+    };
+  }
 
   return {
     stories: withPhotos,
@@ -1238,6 +1439,15 @@ export function createMockStories(deps: MockStoryDeps): {
     comments: commentService,
     hears,
     shown,
+    prepare(assetId, status, problem = null) {
+      const asset = assets.get(assetId);
+      if (!asset) return;
+      assets = new Map(assets).set(assetId, { ...asset, status, problem });
+      for (const story of rows.filter((candidate) => candidate.photo?.assetId === assetId)) {
+        rows = rows.map((candidate) => (candidate.id === story.id && candidate.photo ? { ...candidate, photo: { ...candidate.photo, status, problem } } : candidate));
+        deps.emit?.(story.orgId, { type: "story", publicationId: story.publicationId, storyId: story.id });
+      }
+    },
     reset() {
       comments = commentFixtures();
       commentCounter = 0;

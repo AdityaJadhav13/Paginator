@@ -167,3 +167,62 @@ describe("The story's photo over the real story service", () => {
     ]);
   });
 });
+
+describe("The real media library service (L2.2)", () => {
+  const ITEM = {
+    id: ASSET,
+    status: "ready",
+    problem: null,
+    mime: "image/png",
+    bytes: 24,
+    widthPx: 800,
+    heightPx: 600,
+    sha256: "0".repeat(64),
+    caption: "",
+    credit: "",
+    photographer: "",
+    sharpUpToCols: null,
+    uploadedBy: { id: STORY_ID, name: "Fictional Reporter" },
+    usedBy: [],
+    inUse: false,
+    mayEdit: true,
+    revision: 2,
+    createdAt: "2026-10-22T10:00:00.000Z",
+    updatedAt: "2026-10-22T10:00:00.000Z",
+    previewUrl: `/api/v1/orgs/${ORG}/pubs/${PUB}/assets/${ASSET}/file?variant=preview`,
+  };
+  const base = `/api/v1/orgs/${ORG}/pubs/${PUB}`;
+
+  it("lists with the filters as the query, reads each answer with the schema, and deletes on the revision", async () => {
+    const { service, calls } = media((call) =>
+      call.method === "DELETE" ? new Response(null, { status: 204 }) : call.method === "PATCH" ? json(200, ITEM) : json(200, { items: [ITEM], next: "c2" }),
+    );
+    const where = { orgId: ORG, pubId: PUB };
+    const listed = await service.list({ ...where, query: { missing: "caption", q: "fair", cursor: "c1" } });
+    expect(listed).toEqual({ ok: true, value: { items: [ITEM], next: "c2" } });
+    expect((await service.update({ ...where, assetId: ASSET, patch: { baseRevision: 1, caption: "A caption" } })).ok).toBe(true);
+    expect(await service.remove({ ...where, assetId: ASSET, baseRevision: 2 })).toEqual({ ok: true, value: undefined });
+    expect(calls.map((call) => [call.method, call.url, call.body])).toEqual([
+      ["GET", `${base}/media?missing=caption&q=fair&cursor=c1`, undefined],
+      ["PATCH", `${base}/assets/${ASSET}`, { baseRevision: 1, caption: "A caption" }],
+      ["DELETE", `${base}/assets/${ASSET}?baseRevision=2`, undefined],
+    ]);
+  });
+
+  it("keeps asset_changed's picture now, and nothing it cannot read", async () => {
+    let current: unknown = ITEM;
+    const { service } = media(() => json(409, { error: { code: "asset_changed", message: "Changed.", requestId: "r", current } }));
+    const patch = { orgId: ORG, pubId: PUB, assetId: ASSET, patch: { baseRevision: 1, credit: "Mine" } };
+    const first = await service.update(patch);
+    expect(!first.ok && first.error).toMatchObject({ code: "asset_changed", current: ITEM });
+    current = { id: "not a picture" };
+    const second = await service.update(patch);
+    expect(!second.ok && second.error.kind === "answer" && "current" in second.error).toBe(false);
+  });
+
+  it("presigns a library upload with its purpose", async () => {
+    const { service, calls } = media(() => json(201, PRESIGNED));
+    await service.presign({ orgId: ORG, pubId: PUB, filename: "a.png", contentType: "image/png", bytes: 24, idempotencyKey: "k", purpose: "library" });
+    expect(calls[0]!.body).toEqual({ purpose: "library", filename: "a.png", contentType: "image/png", bytes: 24 });
+  });
+});

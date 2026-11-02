@@ -35,7 +35,7 @@ export async function createUpload(
   tx: Tx,
   who: Who,
   publicationId: string,
-  upload: { type: string; bytes: number; expiresSeconds: number },
+  upload: { purpose: "story_photo" | "library"; type: string; bytes: number; expiresSeconds: number },
 ) {
   return tx
     .insertInto("app.upload")
@@ -43,7 +43,7 @@ export async function createUpload(
       org_id: who.orgId,
       publication_id: publicationId,
       user_id: who.userId,
-      purpose: "story_photo",
+      purpose: upload.purpose,
       declared_type: upload.type,
       declared_bytes: upload.bytes,
       expires_at: sql`now() + make_interval(secs => ${upload.expiresSeconds})`,
@@ -96,6 +96,7 @@ export type AssetRow = {
   original_key: string;
   version_id: string | null;
   uploaded_by: string;
+  revision: number;
   created_at: Date;
 };
 
@@ -112,17 +113,27 @@ const ASSET = [
   "original_key",
   "version_id",
   "uploaded_by",
+  "revision",
   "created_at",
 ] as const;
 
-export async function findAsset(tx: Tx, publicationId: string, assetId: string): Promise<AssetRow | undefined> {
-  return (await tx
+/** The asset, not deleted; lock "share" holds it against a delete until the transaction ends (a story's photo is
+ * attached under it, so the library's delete, which locks it "update", sees the attachment or the attach sees the
+ * delete). */
+export async function findAsset(
+  tx: Tx,
+  publicationId: string,
+  assetId: string,
+  lock?: "share" | "update",
+): Promise<AssetRow | undefined> {
+  const query = tx
     .selectFrom("app.asset")
     .select(ASSET)
     .where("publication_id", "=", publicationId)
     .where("id", "=", assetId)
-    .where("deleted_at", "is", null)
-    .executeTakeFirst()) as AssetRow | undefined;
+    .where("deleted_at", "is", null);
+  const locked = lock === "share" ? query.forShare() : lock === "update" ? query.forUpdate() : query;
+  return (await locked.executeTakeFirst()) as AssetRow | undefined;
 }
 
 /** The publication's asset with these bytes, if any (one asset per picture and publication; a rejected or failed one is
@@ -186,6 +197,20 @@ export async function uploadedBy(tx: Tx, publicationId: string, assetId: string,
   return row !== undefined;
 }
 
+/** Which of these assets the person uploaded (first, or again: their upload deduplicated to it). */
+export async function uploadedByOf(tx: Tx, publicationId: string, assetIds: readonly string[], userId: string) {
+  if (assetIds.length === 0) return new Set<string>();
+  const rows = await tx
+    .selectFrom("app.upload")
+    .select("asset_id")
+    .where("publication_id", "=", publicationId)
+    .where("asset_id", "in", [...assetIds])
+    .where("user_id", "=", userId)
+    .where("status", "=", "completed")
+    .execute();
+  return new Set(rows.map((row) => row.asset_id as string));
+}
+
 /** Enqueues the asset's print versions (media.ingest: ids only, job_key asset:<id>) in the caller's transaction, through
  * app.enqueue_media_ingest, which refuses another organisation's (migration 2026_11_27_0001): a rollback leaves no job. */
 export async function enqueueMediaIngest(
@@ -201,4 +226,125 @@ export async function enqueueMediaIngest(
   });
   await sql`select app.enqueue_media_ingest(${payload.org_id}::uuid, ${payload.pub_id}::uuid, ${payload.asset_id}::uuid,
     ${payload.version_id}, ${payload.sha256})`.execute(tx);
+}
+
+// The media library (docs/product/10-l2-newsroom-plan.md §5.3; migration 2026_11_29_0001).
+
+export type LibraryRow = AssetRow & {
+  problem: string | null;
+  caption: string;
+  credit: string;
+  photographer: string;
+  updated_at: Date;
+  uploaded_by_name: string;
+  /** created_at to the microsecond (UTC), for the list's cursor */
+  created_cursor: string;
+};
+
+export type LibraryFilter = {
+  publicationId: string;
+  /** one asset only (GET …/assets/:a) */
+  id?: string;
+  /** a Reporter's ◐: the pictures they uploaded (first, or again), and those that are the photo of one of their
+   * stories while not refused or failed */
+  mine?: string;
+  /** the pictures that are this story's photo */
+  story?: string;
+  missing?: "caption" | "credit";
+  q?: string;
+  after?: { createdAt: string; id: string };
+  limit: number;
+};
+
+/** The publication's pictures not deleted, newest first, as the filter narrows them. */
+export async function listLibrary(tx: Tx, f: LibraryFilter): Promise<LibraryRow[]> {
+  const like = f.q ? `%${f.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+  const mine = f.mine ?? null;
+  const story = f.story ?? null;
+  const { rows } = await sql<LibraryRow>`
+    select a.id, a.publication_id, a.status, a.problem, a.mime, a.bytes, a.width_px, a.height_px, a.sha256,
+      a.desk_key, a.original_key, a.version_id, a.uploaded_by, up.display_name as uploaded_by_name, a.caption,
+      a.credit, a.photographer, a.revision, a.created_at, a.updated_at,
+      to_char(a.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as created_cursor
+    from app.asset a
+    join app.person up on up.org_id = a.org_id and up.user_id = a.uploaded_by
+    where a.publication_id = ${f.publicationId} and a.deleted_at is null
+      and (${f.id ?? null}::uuid is null or a.id = ${f.id ?? null}::uuid)
+      and (${mine}::uuid is null or a.uploaded_by = ${mine}::uuid
+        or exists (select 1 from app.upload u
+          where u.org_id = a.org_id and u.publication_id = a.publication_id and u.asset_id = a.id
+            and u.user_id = ${mine}::uuid and u.status = 'completed')
+        or (a.status not in ('rejected', 'failed') and exists (select 1 from app.story_photo sp
+          join app.story s on s.org_id = sp.org_id and s.publication_id = sp.publication_id and s.id = sp.story_id
+          where sp.org_id = a.org_id and sp.publication_id = a.publication_id and sp.asset_id = a.id
+            and s.deleted_at is null and (s.reporter_id = ${mine}::uuid or s.assignee_id = ${mine}::uuid))))
+      and (${story}::uuid is null or exists (select 1 from app.story_photo sp
+        join app.story s on s.org_id = sp.org_id and s.publication_id = sp.publication_id and s.id = sp.story_id
+        where sp.org_id = a.org_id and sp.publication_id = a.publication_id and sp.asset_id = a.id
+          and sp.story_id = ${story}::uuid and s.deleted_at is null))
+      and (${f.missing ?? null}::text is distinct from 'caption' or a.caption = '')
+      and (${f.missing ?? null}::text is distinct from 'credit' or a.credit = '')
+      and (${like}::text is null or a.caption ilike ${like} or a.credit ilike ${like} or a.photographer ilike ${like})
+      and (${f.after?.createdAt ?? null}::timestamptz is null
+        or (a.created_at, a.id) < (${f.after?.createdAt ?? null}::timestamptz, ${f.after?.id ?? null}::uuid))
+    order by a.created_at desc, a.id desc
+    limit ${f.limit}`.execute(tx);
+  return rows;
+}
+
+/** The stories (not deleted) whose photo each asset is, with what decides who may see them. */
+export async function usesOf(tx: Tx, publicationId: string, assetIds: readonly string[]) {
+  if (assetIds.length === 0) return [];
+  const { rows } = await sql<{
+    asset_id: string;
+    story_id: string;
+    headline: string;
+    status: string;
+    reporter_id: string;
+    assignee_id: string | null;
+  }>`
+    select sp.asset_id, s.id as story_id, r.headline, s.status, s.reporter_id, s.assignee_id
+    from app.story_photo sp
+    join app.story s on s.org_id = sp.org_id and s.publication_id = sp.publication_id and s.id = sp.story_id
+    join app.story_revision r
+      on r.org_id = s.org_id and r.publication_id = s.publication_id and r.story_id = s.id and r.rev = s.current_rev
+    where sp.publication_id = ${publicationId} and sp.asset_id = any(${[...assetIds]}::uuid[])
+      and s.deleted_at is null
+    order by s.updated_at desc, s.id`.execute(tx);
+  return rows;
+}
+
+/** Changes the asset's own facts on its version; false when it is not at that version (or is gone). */
+export async function editAsset(
+  tx: Tx,
+  publicationId: string,
+  assetId: string,
+  baseRevision: number,
+  facts: { caption?: string; credit?: string; photographer?: string },
+): Promise<boolean> {
+  const done = await tx
+    .updateTable("app.asset")
+    .set({ ...facts, revision: sql`revision + 1`, updated_at: sql`now()` })
+    .where("publication_id", "=", publicationId)
+    .where("id", "=", assetId)
+    .where("revision", "=", baseRevision)
+    .where("deleted_at", "is", null)
+    .returning("id")
+    .executeTakeFirst();
+  return done !== undefined;
+}
+
+/** Whether a story (not deleted) has the asset as its photo. */
+export async function inUse(tx: Tx, publicationId: string, assetId: string): Promise<boolean> {
+  return (await usesOf(tx, publicationId, [assetId])).length > 0;
+}
+
+/** Deletes the asset (deleted_at; its bytes stay in the store). The caller holds it locked "update". */
+export async function deleteAsset(tx: Tx, publicationId: string, assetId: string): Promise<void> {
+  await tx
+    .updateTable("app.asset")
+    .set({ deleted_at: sql`now()`, updated_at: sql`now()`, revision: sql`revision + 1` })
+    .where("publication_id", "=", publicationId)
+    .where("id", "=", assetId)
+    .execute();
 }

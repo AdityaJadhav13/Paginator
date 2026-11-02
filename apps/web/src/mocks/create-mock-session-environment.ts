@@ -148,6 +148,8 @@ export interface MockSessionController {
    * their changes make reach this browser once it is back, as the API sends them to whoever may hear them.
    */
   actAs<T>(preset: MockSessionPreset, run: () => Promise<T>): Promise<T>;
+  /** The engine's answer for a picture (ready, refused, failed); its stories hear it live. */
+  prepareAsset(assetId: string, status: "received" | "ready" | "rejected" | "failed", problem?: string | null): void;
   readonly fixtures: MockSessionFixtures;
 }
 
@@ -1020,6 +1022,7 @@ export function createMockSessionEnvironment(
       preset = "signed-out";
     },
     twoStepState: () => ({ sessionTwoStep, trustedDevice }),
+    prepareAsset: (assetId, status, problem) => storyDouble.prepare(assetId, status, problem),
     async actAs(other, run) {
       const was = { preset, signedInUserId, sessionTwoStep };
       preset = other;

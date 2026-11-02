@@ -5,7 +5,10 @@ import { type TextKey, editionOf, publicationOf, sectionOf } from "../../db/stor
 import type { Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 
-const LABELS: Record<TextKey | "deskNote" | "comment" | "caption" | "credit", { label: string; limit: number }> = {
+const LABELS: Record<
+  TextKey | "deskNote" | "comment" | "caption" | "credit" | "photographer",
+  { label: string; limit: number }
+> = {
   headline: { label: "headline", limit: LINE_LIMIT },
   kicker: { label: "kicker", limit: LINE_LIMIT },
   deck: { label: "deck", limit: LINE_LIMIT },
@@ -15,6 +18,7 @@ const LABELS: Record<TextKey | "deskNote" | "comment" | "caption" | "credit", { 
   comment: { label: "comment", limit: 10_000 },
   caption: { label: "caption", limit: LINE_LIMIT },
   credit: { label: "credit", limit: LINE_LIMIT },
+  photographer: { label: "photographer", limit: LINE_LIMIT },
 };
 
 /** Text as the Desk stores it (desk-text cleanText), or 400 with the Desk's own words. */

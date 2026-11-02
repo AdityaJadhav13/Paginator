@@ -12,7 +12,8 @@ export const PICTURE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export const PictureType = z.enum(PICTURE_TYPES);
 
 export const UploadRequest = z.strictObject({
-  purpose: z.literal("story_photo"),
+  /** story_photo: for a story's photo; library: straight into the media library (L2.2) */
+  purpose: z.enum(["story_photo", "library"]),
   filename: z.string().min(1).max(255),
   contentType: PictureType,
   bytes: z.number().int().min(1),
@@ -73,3 +74,64 @@ export const StoryPhotoPatch = z.strictObject({
   credit: Line.optional(),
 });
 export const FileQuery = z.strictObject({ variant: z.enum(["original", "preview"]).default("original") });
+
+// The media library (docs/product/10-l2-newsroom-plan.md §5.3, L2.2): the publication's pictures, their facts, and
+// where they are used.
+const Fact = z.string().max(4000); // cleaned to the Desk's 2,000 characters by the API
+
+/** A story that uses the picture as its photo (only the ones the person may see). */
+export const AssetUse = z.strictObject({ storyId: Id, headline: z.string() });
+export type AssetUse = z.infer<typeof AssetUse>;
+
+/** One picture in the library. */
+export const MediaItem = z.strictObject({
+  id: Id,
+  status: AssetStatus,
+  /** why it is rejected or failed (as StoryPhoto.problem), or null */
+  problem: z.string().nullable(),
+  mime: PictureType,
+  bytes: z.number().int().min(1),
+  widthPx: z.number().int().min(1),
+  heightPx: z.number().int().min(1),
+  sha256: z.string(),
+  caption: z.string(),
+  credit: z.string(),
+  photographer: z.string(),
+  /** the widest the picture prints sharp (150 ppi): columns of the publication's grid; null when the grid is not
+   * known; 0 when not even one column */
+  sharpUpToCols: z.number().int().min(0).nullable(),
+  uploadedBy: z.strictObject({ id: Id, name: z.string() }),
+  usedBy: z.array(AssetUse),
+  /** whether any story (not deleted) has it as its photo, whoever may see that story: no picture in use is deleted */
+  inUse: z.boolean(),
+  /** whether this person may change its caption, credit and photographer (PATCH's own rule) */
+  mayEdit: z.boolean(),
+  /** the change counter: PATCH sends it back (409 asset_changed when someone changed it first) */
+  revision: z.number().int().min(1),
+  createdAt: Moment,
+  updatedAt: Moment,
+  /** a preview link once ready (as StoryPhoto.previewUrl), else null */
+  previewUrl: z.string().nullable(),
+});
+export type MediaItem = z.infer<typeof MediaItem>;
+
+/** GET …/media: newest first, at most 60 a page; `cursor` from the last answer's `next`. */
+export const MediaQuery = z.strictObject({
+  story: Id.optional(),
+  missing: z.enum(["caption", "credit"]).optional(),
+  tooSmallForCols: z.coerce.number().int().min(1).max(20).optional(),
+  q: z.string().max(200).optional(),
+  cursor: z.string().max(200).optional(),
+});
+export type MediaQuery = z.infer<typeof MediaQuery>;
+export const MediaList = z.strictObject({ items: z.array(MediaItem), next: z.string().nullable() });
+export type MediaList = z.infer<typeof MediaList>;
+
+/** PATCH …/assets/:a — the picture's own facts (a story's photo keeps its own caption and credit). */
+export const MediaPatch = z.strictObject({
+  baseRevision: z.number().int().min(1),
+  caption: Fact.optional(),
+  credit: Fact.optional(),
+  photographer: Fact.optional(),
+});
+export type MediaPatch = z.infer<typeof MediaPatch>;

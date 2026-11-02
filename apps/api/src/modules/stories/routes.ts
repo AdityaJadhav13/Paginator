@@ -183,7 +183,7 @@ export async function forChange(tx: Tx, access: Access, pub: string, id: string,
 function encodeCursor(row: StoryRow): string {
   return Buffer.from(JSON.stringify([row.updated_cursor, row.id])).toString("base64url");
 }
-function decodeCursor(cursor: string): { updatedAt: string; id: string } {
+export function decodeCursor(cursor: string): { updatedAt: string; id: string } {
   try {
     const [updatedAt, id] = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as [unknown, unknown];
     const real = (t: string) =>

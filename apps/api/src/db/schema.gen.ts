@@ -26,6 +26,7 @@ export interface AppAsset {
   photographer: Generated<string>;
   problem: string | null;
   publication_id: string;
+  revision: Generated<number>;
   sha256: string;
   status: Generated<string>;
   updated_at: Generated<Timestamp>;
