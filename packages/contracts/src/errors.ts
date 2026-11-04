@@ -27,6 +27,12 @@ export const ERROR_CODES = [
   "run_finished",
   "layout_refused",
   "no_profile",
+  "not_editable",
+  "stale",
+  "page_locked",
+  "edit_refused",
+  "run_missing",
+  "editor_unavailable",
   "request_too_large",
   "not_json",
   "slow_down",
@@ -50,7 +56,9 @@ export const ErrorEnvelope = z.strictObject({
     details: z.array(FieldProblem).min(1).optional(),
     /** With story_changed: the story as it is now, so the web can show theirs beside the text it keeps; with
      * edition_exists: the edition that has that date; with asset_changed: the picture (MediaItem) as it is now; with
-     * run_active and run_finished: the run (LayoutRun) as it is now; with layout_refused: the readiness's blockers. */
+     * run_active and run_finished: the run (LayoutRun) as it is now; with layout_refused: the readiness's blockers; with
+     * stale: the page in the editor (EditorPage) as it is now; with page_locked: the page's lock (PageLock); with
+     * edit_refused: the engine's refusal in the Desk's words (DeskText). */
     current: z.unknown().optional(),
     requestId: z.string().min(1),
   }),

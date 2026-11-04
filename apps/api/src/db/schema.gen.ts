@@ -361,6 +361,41 @@ export interface AppOrgSettings {
   session_absolute_days: Generated<number>;
 }
 
+export interface AppPageEdit {
+  author_id: string | null;
+  cause: string;
+  created_at: Generated<Timestamp>;
+  modules: Json;
+  org_id: string;
+  page_no: number;
+  publication_id: string;
+  rev: number;
+  run_id: string;
+}
+
+export interface AppPageLock {
+  asked_at: Timestamp | null;
+  asked_by: string | null;
+  expires_at: Timestamp;
+  heartbeat_at: Generated<Timestamp>;
+  holder_id: string;
+  org_id: string;
+  page_no: number;
+  publication_id: string;
+  run_id: string;
+}
+
+export interface AppPageSave {
+  org_id: string;
+  page_no: number;
+  pdf_sha256: string;
+  publication_id: string;
+  rev: number;
+  run_id: string;
+  saved_at: Generated<Timestamp>;
+  saved_by: string;
+}
+
 export interface AppPdfCheck {
   checker_sha256: string;
   created_at: Generated<Timestamp>;
@@ -425,23 +460,41 @@ export interface AppRunPage {
   checked: Json | null;
   edited: Generated<boolean>;
   edited_unsaved: Generated<boolean>;
+  layout_problems: Json | null;
+  layout_problems_now: Json | null;
   message: Json | null;
   needs_save: Generated<boolean>;
   needs_save_reason: string | null;
+  needs_save_why: Json | null;
   org_id: string;
   page_no: number;
   pdf: Json | null;
+  pdf_rev: Generated<number>;
   pdf_sha256: string | null;
   png: Json | null;
+  printed: Json | null;
   publication_id: string;
   report: Json | null;
+  rev_seen: Generated<number>;
   role: string;
   run_id: string;
+  saved_at: Timestamp | null;
+  saved_by: string | null;
   seconds: number | null;
+  stale: Generated<Json>;
   state: Generated<string>;
   thumb: Json | null;
   updated_at: Generated<Timestamp>;
   warnings: Generated<Json>;
+}
+
+export interface AppRunTextOverride {
+  org_id: string;
+  overrides: Json;
+  publication_id: string;
+  run_id: string;
+  updated_at: Generated<Timestamp>;
+  updated_by: string | null;
 }
 
 export interface AppSection {
@@ -568,12 +621,16 @@ export interface DB {
   "app.news_topic": AppNewsTopic;
   "app.notification": AppNotification;
   "app.org_settings": AppOrgSettings;
+  "app.page_edit": AppPageEdit;
+  "app.page_lock": AppPageLock;
+  "app.page_save": AppPageSave;
   "app.pdf_check": AppPdfCheck;
   "app.person": AppPerson;
   "app.publication": AppPublication;
   "app.publication_grant": AppPublicationGrant;
   "app.rendition": AppRendition;
   "app.run_page": AppRunPage;
+  "app.run_text_override": AppRunTextOverride;
   "app.section": AppSection;
   "app.story": AppStory;
   "app.story_photo": AppStoryPhoto;

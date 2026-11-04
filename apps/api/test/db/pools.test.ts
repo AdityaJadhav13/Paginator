@@ -102,6 +102,29 @@ describe("the API's pools", () => {
     }
   });
 
+  it("withLock: callers of one key take turns, other keys do not wait, and the lock goes with its connection", async () => {
+    const database = open();
+    const order: string[] = [];
+    const step = (name: string, ms: number) => async () => {
+      order.push(`${name} in`);
+      await new Promise((resolve) => setTimeout(resolve, ms));
+      order.push(`${name} out`);
+      return name;
+    };
+    const first = database.withLock("editor:run-1", step("first", 300));
+    await until(() => order.length > 0, "the first holder");
+    const [, second, other] = await Promise.all([
+      first,
+      database.withLock("editor:run-1", step("second", 0)),
+      database.withLock("editor:run-2", step("other", 0)),
+    ]);
+    expect([second, other]).toEqual(["second", "other"]);
+    expect(order.indexOf("other out")).toBeLessThan(order.indexOf("first out"));
+    expect(order.indexOf("second in")).toBeGreaterThan(order.indexOf("first out"));
+    await expect(database.withLock("editor:run-1", () => Promise.reject(new Error("no")))).rejects.toThrow("no");
+    expect(await database.withLock("editor:run-1", async () => "free again")).toBe("free again");
+  });
+
   it("close: once the pools are closed nothing runs, and a second close is harmless", async () => {
     const database = open();
     expect(await database.ping()).toBe(true);

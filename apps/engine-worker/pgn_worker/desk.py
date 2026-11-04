@@ -16,8 +16,11 @@ if str(DESK) not in sys.path:
 from deskserver import docx, engine_client, images, util, ziplimits  # noqa: E402
 from deskserver import jobs as runs  # noqa: E402  (the Desk's run steps: previews, the check, merge, ZIP)
 from deskserver import messages  # noqa: E402
+from deskserver import editing  # noqa: E402  (the page editor's engine service and save steps: gateway.py)
+from deskmsg import MESSAGES  # noqa: E402  (the engine's folder is on the path: deskserver.messages)
 
-__all__ = ["DESK", "REPO", "desk_text", "docx", "engine_client", "images", "messages", "runs", "util", "ziplimits"]
+__all__ = ["DESK", "REPO", "desk_text", "docx", "editing", "engine_client", "images", "messages", "runs", "util",
+           "ziplimits"]
 M = messages
 
 
@@ -35,7 +38,7 @@ def _english(wire: Any) -> Any:
         return str(wire["data"])
     if "parts" in wire:
         return " ".join(str(_english(p)) for p in wire.get("parts") or [])
-    template, params, out = M.MESSAGES.get(str(wire.get("code")), ""), wire.get("params") or {}, []
+    template, params, out = MESSAGES.get(str(wire.get("code")), ""), wire.get("params") or {}, []
     for literal, field, _spec, _conv in _FMT.parse(template):
         out.append(literal)
         if field is not None:

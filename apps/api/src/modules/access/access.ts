@@ -35,6 +35,8 @@ declare module "fastify" {
     permission?: Permission;
     /** Instead of a permission: anyone (rate-limited), or any signed-in person. */
     access?: "public" | "signed_in";
+    /** Its 200 answers may stay in the browser's private cache (they never change: a font's glyphs, a raster). */
+    immutable?: true;
   }
   interface FastifyRequest {
     /** Set by the access check on routes that declare a permission. */

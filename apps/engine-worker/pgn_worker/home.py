@@ -15,10 +15,15 @@ Then it writes:
   editions/<edition>/edition.json, articles.json, photos/<p>.cmyk.gz + index.json, ads/<slot>.cmyk.gz + index.json
   editions/<edition>/runs/<run>/request.json (the Desk's shape, the raster references taken out), in a run folder
   emptied first, so nothing of an earlier attempt (a PDF, a ZIP) can be taken for this one's.
-A photo or ad file of an earlier request that this one does not name is removed (links are left alone). Folders 0700,
+A photo or ad file of an earlier request that this one does not name is removed (links are left alone). write_live
+writes the edition's live edition.json, articles.json and photos the same way (the page editor's gateway), never
+touching a run folder or the ads. Both take the edition's lock (editions/<edition>/.lock, flock) while they write, so a
+layout job and the editor's gateway (other processes) never write one edition's files at once. Folders 0700,
 files 0600. The home holds no previews or originals: the engine reads only the rasters."""
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import gzip
 import hashlib
 import io
@@ -100,12 +105,81 @@ def _sweep(folder: Path, keep: set[str]) -> None:
             util.remove_quietly(f)
 
 
+@contextlib.contextmanager
+def _locked(ed: Path):
+    """The edition's lock, held across processes (released when the file is closed, or the process ends)."""
+    fd = os.open(ed / ".lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, util.FILE_MODE)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
 def _empty(folder: Path) -> None:
     for f in folder.iterdir():
         if f.is_dir() and not f.is_symlink():
             shutil.rmtree(f)
         else:
             f.unlink()
+
+
+def _photos(storage: Storage, guard: KeyGuard, articles: list) -> tuple[list, dict, dict]:
+    """Every article's ids and photo raster checked (one photo id, one raster) → (the articles without their raster
+    references, {photo: raster bytes}, {photo: (width, height)})."""
+    plain, photo_files, photo_index, photo_refs = [], {}, {}, {}
+    for i, a in enumerate(articles):
+        if not isinstance(a, dict):
+            raise BadRequest(f"article {i} is not an object")
+        _id(util.ARTICLE_ID, a.get("id"), f"article {i}")
+        photo = a.get("photo")
+        if photo is not None:
+            if not isinstance(photo, dict):
+                raise BadRequest(f"article {i}: its photo is not an object")
+            pid = _id(util.PHOTO_ID, photo.get("id"), f"article {i}'s photo")
+            w = _size(photo.get("width_px"), f"photo {pid}'s width")
+            h = _size(photo.get("height_px"), f"photo {pid}'s height")
+            ref = photo.get("raster")
+            if pid in photo_refs:
+                if ref != photo_refs[pid] or photo_index[pid][:2] != (w, h):     # one photo id, one raster
+                    raise BadRequest(f"article {i}: photo {pid} is named with another raster")
+            else:
+                photo_files[pid] = _raster(storage, guard, ref, w, h, f"photo {pid}")
+                photo_refs[pid], photo_index[pid] = ref, (w, h)
+            photo = {k: v for k, v in photo.items() if k != "raster"}
+        plain.append({**a, "photo": photo})
+    return plain, photo_files, photo_index
+
+
+def _write_live(ed: Path, pdir: Path, edition: dict, plain: list, photo_files: dict, photo_index: dict) -> None:
+    """The edition's own files: its photos (an earlier request's swept), edition.json and articles.json."""
+    _sweep(pdir, set(photo_files))
+    for pid, data in photo_files.items():
+        util.write_bytes(pdir / f"{pid}.cmyk.gz", data)
+    util.write_json(pdir / "index.json", {"elements": {pid: {"width_px": w, "height_px": h, "ppi": None}
+                                                       for pid, (w, h) in photo_index.items()}})
+    util.write_json(ed / "edition.json", edition)
+    util.write_json(ed / "articles.json", {"schema": ARTICLES_SCHEMA,
+                                           "articles": [{k: v for k, v in a.items() if k not in DERIVED}
+                                                        for a in plain]})
+
+
+def write_live(storage: Storage, homes: Path, org_id: str, pub_id: str, edition_id: str, edition: object,
+               articles: object) -> Path:
+    """The edition's live content (the editor's Update text and save, gateway.py): edition.json, articles.json and
+    their photo rasters, checked as materialise checks them, written WITHOUT touching any run folder or the ads. →
+    the edition's folder."""
+    guard = KeyGuard(org_id, pub_id)
+    eid = _id(EDITION_ID, edition_id, "the edition")
+    if not isinstance(edition, dict) or not isinstance(articles, list):
+        raise BadRequest("the live edition or articles is not of its kind")
+    if edition.get("id") != eid:
+        raise BadRequest("the live content is for another edition")
+    plain, photo_files, photo_index = _photos(storage, guard, articles)
+    ed = _folder(util.ensure_dir(Path(homes)), guard.org_id, guard.pub_id, "editions", eid)
+    with _locked(ed):
+        _write_live(ed, _folder(ed, "photos"), edition, plain, photo_files, photo_index)
+    return ed
 
 
 def materialise(storage: Storage, homes: Path, org_id: str, pub_id: str, edition_id: str, run_key: str | None,
@@ -129,27 +203,7 @@ def materialise(storage: Storage, homes: Path, org_id: str, pub_id: str, edition
     if edition.get("id") != eid:
         raise BadRequest("the request is for another edition than the job's")
 
-    plain, photo_files, photo_index, photo_refs = [], {}, {}, {}   # every check and every raster first, then writes
-    for i, a in enumerate(articles):
-        if not isinstance(a, dict):
-            raise BadRequest(f"article {i} is not an object")
-        _id(util.ARTICLE_ID, a.get("id"), f"article {i}")
-        photo = a.get("photo")
-        if photo is not None:
-            if not isinstance(photo, dict):
-                raise BadRequest(f"article {i}: its photo is not an object")
-            pid = _id(util.PHOTO_ID, photo.get("id"), f"article {i}'s photo")
-            w = _size(photo.get("width_px"), f"photo {pid}'s width")
-            h = _size(photo.get("height_px"), f"photo {pid}'s height")
-            ref = photo.get("raster")
-            if pid in photo_refs:
-                if ref != photo_refs[pid] or photo_index[pid][:2] != (w, h):     # one photo id, one raster
-                    raise BadRequest(f"article {i}: photo {pid} is named with another raster")
-            else:
-                photo_files[pid] = _raster(storage, guard, ref, w, h, f"photo {pid}")
-                photo_refs[pid], photo_index[pid] = ref, (w, h)
-            photo = {k: v for k, v in photo.items() if k != "raster"}
-        plain.append({**a, "photo": photo})
+    plain, photo_files, photo_index = _photos(storage, guard, articles)    # every check and raster first, then writes
     ad_files, ad_index = {}, {}
     for slot, entry in ads.items():
         _id(util.SLOT_ID, slot, "an ad slot")
@@ -162,27 +216,20 @@ def materialise(storage: Storage, homes: Path, org_id: str, pub_id: str, edition
 
     home = _folder(util.ensure_dir(Path(homes)), guard.org_id, guard.pub_id)   # homes: the worker's own setting
     ed = _folder(home, "editions", eid)
-    pdir, adir = _folder(ed, "photos"), _folder(ed, "ads")
-    run = None if rid is None else _folder(ed, "runs", rid)
-    if run is not None:
-        _empty(run)
-    _sweep(pdir, set(photo_files))
-    _sweep(adir, set(ad_files))
-    for pid, data in photo_files.items():
-        util.write_bytes(pdir / f"{pid}.cmyk.gz", data)
-    util.write_json(pdir / "index.json", {"elements": {pid: {"width_px": w, "height_px": h, "ppi": None}
-                                                       for pid, (w, h) in photo_index.items()}})
-    for slot, data in ad_files.items():
-        util.write_bytes(adir / f"{slot}.cmyk.gz", data)
-    util.write_json(adir / "index.json", {"elements": ad_index})
-    util.write_json(ed / "edition.json", edition)
-    util.write_json(ed / "articles.json", {"schema": ARTICLES_SCHEMA,
-                                           "articles": [{k: v for k, v in a.items() if k not in DERIVED}
-                                                        for a in plain]})
-    desk_ads = {slot: {**ad_index[slot], "slot": slot, "w_px": ad_index[slot]["width_px"],
-                       "h_px": ad_index[slot]["height_px"]} for slot in ads}
-    if run is not None:
-        util.write_json(run / "request.json", {"edition": edition, "articles": plain, "ads": desk_ads})
+    with _locked(ed):
+        pdir, adir = _folder(ed, "photos"), _folder(ed, "ads")
+        run = None if rid is None else _folder(ed, "runs", rid)
+        if run is not None:
+            _empty(run)
+        _sweep(adir, set(ad_files))
+        for slot, data in ad_files.items():
+            util.write_bytes(adir / f"{slot}.cmyk.gz", data)
+        util.write_json(adir / "index.json", {"elements": ad_index})
+        _write_live(ed, pdir, edition, plain, photo_files, photo_index)
+        desk_ads = {slot: {**ad_index[slot], "slot": slot, "w_px": ad_index[slot]["width_px"],
+                           "h_px": ad_index[slot]["height_px"]} for slot in ads}
+        if run is not None:
+            util.write_json(run / "request.json", {"edition": edition, "articles": plain, "ads": desk_ads})
     if config is not None:
         util.write_json(home / "config.json", config)
     return ed if run is None else run

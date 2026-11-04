@@ -31,6 +31,9 @@ export type Database = {
   readonly identity: IdentityStore;
   /** A new connection for LISTEN, not yet connected (PR 19). Whoever makes it handles its errors and ends it. */
   listener(): Client;
+  /** Runs fn holding the session advisory lock named `key`, on a connection of its own (pgn_app, outside any
+   * transaction, so it spans fn's own transactions and its calls elsewhere); callers with the same key take turns. */
+  withLock<T>(key: string, fn: () => Promise<T>): Promise<T>;
   /** True when the app and auth roles can both sign in and run a query. */
   ping(): Promise<boolean>;
   /** Closes every pooled connection once the queries in flight are done; a second call waits for the first. */
@@ -107,6 +110,19 @@ export function openDatabase(settings: DatabaseSettings): Database {
     auth: authPool,
     identity: identityStore(authPool),
     listener: () => new Client(settingsFor(settings, "listen")),
+    async withLock(key, fn) {
+      // the wait may last as long as the holder's call to the edit gateway (15 minutes at most)
+      const client = new Client({ ...settingsFor(settings, "app"), statement_timeout: 960_000 });
+      // shortcut: a connection lost while fn runs drops the lock unnoticed; fail fn when the editor needs it strictly
+      client.on("error", (error) => report("app", error));
+      await client.connect();
+      try {
+        await client.query("select pg_advisory_lock(hashtextextended($1, 0))", [key]);
+        return await fn();
+      } finally {
+        await client.end().catch(() => undefined); // ending the session releases the lock
+      }
+    },
     async ping() {
       try {
         await Promise.all([sql`select 1`.execute(app), authPool.query("select 1")]);

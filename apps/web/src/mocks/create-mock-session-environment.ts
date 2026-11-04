@@ -25,6 +25,7 @@ import type {
   MediaService,
   NewsService,
   LayoutService,
+  EditorService,
   NewsSettingsDto,
   CommentService,
   LiveEventDto,
@@ -42,6 +43,7 @@ import { createMockStories, type MockImportOutcome, type MockStoryOperation } fr
 import { createMockLive, type MockLiveController } from "./create-mock-live.ts";
 import { createMockNews, type MockNewsOperation, type MockNewsOutcome } from "./create-mock-news.ts";
 import { createMockLayout, type MockLayoutController, type MockLayoutOperation } from "./create-mock-layout.ts";
+import { createMockEditor } from "./create-mock-editor.ts";
 import { createMockAudit, type MockAuditOperation } from "./create-mock-audit.ts";
 import { createMockNotifications, type MockNotificationOperation, type MockOrgStanding } from "./create-mock-notifications.ts";
 import {
@@ -180,6 +182,7 @@ export interface MockSessionEnvironment {
   readonly media: MediaService;
   readonly news: NewsService;
   readonly layout: LayoutService;
+  readonly editor: EditorService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
   readonly live: LiveService;
@@ -1000,6 +1003,7 @@ export function createMockSessionEnvironment(
     newsPhoto: (input) => storyDouble.newsPhoto(input),
   });
 
+  const editorDouble = createMockEditor();
   const layoutDouble = createMockLayout({
     person: storyDeps.person,
     standing: storyDeps.standing,
@@ -1044,6 +1048,7 @@ export function createMockSessionEnvironment(
       storyDouble.reset();
       newsDouble.reset();
       layoutDouble.reset();
+      editorDouble.reset();
       notificationDouble.reset();
       liveDouble.reset();
       acting = 0;
@@ -1125,6 +1130,7 @@ export function createMockSessionEnvironment(
     media: storyDouble.media,
     news: newsDouble.news,
     layout: layoutDouble.layout,
+    editor: editorDouble.editor,
     comments: storyDouble.comments,
     notifications: notificationDouble.notifications,
     live: liveDouble.live,

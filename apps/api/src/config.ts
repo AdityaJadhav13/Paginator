@@ -209,6 +209,17 @@ const Env = z
       .refine((text) => text.length <= 254 && PLAIN_ADDRESS.test(text), { error: "must be one plain address" })
       .optional(),
     ...STORAGE,
+    // The page editor's edit gateway on the engine host (plan §2.4: its private port, 8790) and the secret both sides
+    // sign with (64 or more hex characters). Plain http only on this machine (the bodies carry the run's content).
+    // Unset, the editor's routes answer 503 editor_unavailable.
+    PGN_GATEWAY_URL: z
+      .string()
+      .refine(isOrigin, { error: "must be an origin such as http://127.0.0.1:8790 (no path)" })
+      .optional(),
+    PGN_GATEWAY_SECRET: z
+      .string()
+      .regex(/^(?:[0-9a-f]{2}){32,}$/, { error: "must be 64 or more lower-case hex characters (an even number)" })
+      .optional(),
     // Better Auth reads these from the environment itself, whatever our settings say: the first two can turn its
     // telemetry on, BETTER_AUTH_SECRETS replaces PGN_AUTH_SECRET, and BETTER_AUTH_TRUSTED_ORIGINS widens the
     // origins and redirect targets it accepts. The API refuses to start with any of them.
@@ -239,6 +250,17 @@ const Env = z
         code: "custom",
         path: ["PGN_S3_ACCESS_KEY_ID"],
         message: "and PGN_S3_SECRET_ACCESS_KEY go together",
+      });
+    }
+    if ((env.PGN_GATEWAY_URL === undefined) !== (env.PGN_GATEWAY_SECRET === undefined)) {
+      context.addIssue({ code: "custom", path: ["PGN_GATEWAY_URL"], message: "and PGN_GATEWAY_SECRET go together" });
+    }
+    const gateway = URL.canParse(env.PGN_GATEWAY_URL ?? "") ? new URL(env.PGN_GATEWAY_URL ?? "") : undefined;
+    if (gateway?.protocol === "http:" && !LOOPBACK.has(gateway.hostname.replace(/^\[|\]$/g, ""))) {
+      context.addIssue({
+        code: "custom",
+        path: ["PGN_GATEWAY_URL"],
+        message: "may be http only for a gateway on this machine",
       });
     }
     const store = new URL(env.PGN_S3_ENDPOINT);
@@ -282,6 +304,10 @@ const Env = z
         : {}),
     },
     contactTo: env.PGN_CONTACT_TO,
+    gateway:
+      env.PGN_GATEWAY_URL !== undefined && env.PGN_GATEWAY_SECRET !== undefined
+        ? { url: env.PGN_GATEWAY_URL, secret: env.PGN_GATEWAY_SECRET }
+        : undefined,
   }));
 
 type StorageEnv = {

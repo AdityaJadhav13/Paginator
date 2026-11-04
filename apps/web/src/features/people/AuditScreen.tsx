@@ -44,6 +44,8 @@ export const AUDIT_ACTION_KEYS = [
   "auditLog.action.access.denied",
   "auditLog.action.ad_slot.clear",
   "auditLog.action.ad_slot.set",
+  "auditLog.action.editor.page_save",
+  "auditLog.action.editor.page_takeover",
   "auditLog.action.desk_import.ad_slot",
   "auditLog.action.desk_import.asset",
   "auditLog.action.desk_import.done",

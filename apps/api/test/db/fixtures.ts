@@ -337,6 +337,47 @@ export const FIXTURES: Fixture[] = [
     row: (org, pub) => ({ ...inPub(org, pub), run_id: childId(pub, 16), page_no: 1, role: "front", state: "done" }),
   },
   {
+    table: "page_edit",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      run_id: childId(pub, 16),
+      page_no: 1,
+      rev: 1,
+      modules: "[]",
+      cause: "set",
+      author_id: org.user,
+    }),
+  },
+  {
+    table: "page_save",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      run_id: childId(pub, 16),
+      page_no: 1,
+      rev: 1,
+      pdf_sha256: "8".repeat(64),
+      saved_by: org.user,
+    }),
+  },
+  {
+    table: "run_text_override",
+    per: "publication",
+    row: (org, pub) => ({ ...inPub(org, pub), run_id: childId(pub, 16), overrides: "{}" }),
+  },
+  {
+    table: "page_lock",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      run_id: childId(pub, 16),
+      page_no: 1,
+      holder_id: org.user,
+      expires_at: "2026-10-21T10:21:15Z",
+    }),
+  },
+  {
     table: "ad_slot_artwork",
     per: "publication",
     row: (org, pub) => ({

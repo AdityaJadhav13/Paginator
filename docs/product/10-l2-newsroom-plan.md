@@ -188,6 +188,15 @@ This milestone deliberately puts the queue, the worker, the event inbox and S3 i
 
 **Release check:** the same as L2.3.
 
+**As built (L2.4), where it differs from this plan:**
+- **No Konva.** The editor keeps the Desk's canvas display-list code, ported to TypeScript (`apps/web/src/features/editor/view.ts`), with the handles and snapping of `editor.js`; no new dependency.
+- **The gateway** is `apps/engine-worker/pgn_worker/gateway.py` (`python -m pgn_worker.gateway`; `PGN_GATEWAY_SECRET`, `PGN_GATEWAY_HOST`, `PGN_GATEWAY_PORT`, plus the worker's own settings; the API's `PGN_GATEWAY_URL` and `PGN_GATEWAY_SECRET`). The signed text also carries a random nonce (`x-pgn-nonce`), and the replay check is on the nonce: two identical calls in one second are both real (found by the verification). The wire is `packages/contracts/src/editor.ts`. The API refuses a plain-http `PGN_GATEWAY_URL` that is not on its own machine: a gateway on another host needs TLS in front of it. The gateway never moves a page's edit file back to an older revision: a file ahead of Postgres (an answer the API never stored) is reported in `edits` and stored, so Postgres catches up. Moves and saves of one run take turns (a Postgres advisory lock), as the Desk's save lock does; layout jobs and the editor take turns writing an edition's files (a file lock per edition).
+- **The run's working files stay on the engine host.** The gateway edits the run folder the layout left in the homes volume (request, plan, manifests, printed record); Postgres rebuilds only the edit files (each page's latest `{rev, modules}`, the run's text overrides). A run whose folder is gone answers `run_missing` ("lay the edition out again"; L2-461).
+- **A save runs the check through the cache**: the gateway exports, makes the previews and merges `edition.pdf` and `press-files.zip`; the API then reads `app.pdf_check` for those bytes, and only when they were never checked asks the gateway's `check`. Each save is also kept in `app.page_save` (the history shows it with its check).
+- **Scoped `layout.edit` (◐) is refused** for page changes (L2-464); the soft lock expires 75 s after the last heartbeat (the web beats every 30 s), and an unanswered take-over ask wins after 30 s (L2-463).
+- **"Unreadable" counts as a placement problem** in the TypeScript `pressFlags`, as `editing.py` says it should (the Desk's `press.py` does not count it).
+- **Screen equals print** is checked at L1 in CI on a fictional page made through the engine's own writer (`apps/engine-worker/test/test_screenprint.py`, which writes the fixture), and at L2 by the web's draw log against that fixture (`apps/web/tests/editor/screen-print.test.ts`). On the real engine (the owner's templates, fictional stories, 2026-11-05) two pages compared equal: 7,287 and 9,308 glyphs.
+
 ### L2.5 Release: preflight, approvals, export, press receipt (about 12 PRs)
 
 **The newsroom uses it for:**

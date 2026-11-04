@@ -72,6 +72,8 @@ export const PATTERNS = {
   /** An edition's layout (L2.3): readiness, ads, runs and the Pages board. Its param is not `editionId`, which the
    * workspace resolves for the placeholder edition workspace below. */
   pubEditionLayout: "pub/:pubId/editions/:edition/layout",
+  /** A page of a done run in the page editor (L2.4). */
+  pubPageEditor: "pub/:pubId/editions/:edition/runs/:runId/pages/:page/edit",
 
   // Edition workspace (relative to workspaceRoot; layout route + children)
   editionLayout: "pub/:pubId/editions/:editionId",
@@ -131,6 +133,8 @@ export const paths = {
   pubEngineProfile: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/engine-profile`,
   pubEditionLayout: (orgId: string, pubId: string, editionId: string) =>
     `/org/${orgId}/pub/${pubId}/editions/${encodeURIComponent(editionId)}/layout`,
+  pubPageEditor: (orgId: string, pubId: string, editionId: string, runId: string, page: number) =>
+    `/org/${orgId}/pub/${pubId}/editions/${encodeURIComponent(editionId)}/runs/${encodeURIComponent(runId)}/pages/${page}/edit`,
 
   edition: (orgId: string, pubId: string, editionId: string) =>
     `/org/${orgId}/pub/${pubId}/editions/${editionId}`,

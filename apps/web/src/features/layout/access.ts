@@ -10,6 +10,8 @@ export interface LayoutAccess {
   readonly view: boolean;
   /** layout.generate: start and cancel a run */
   readonly generate: boolean;
+  /** layout.edit: a done page in the page editor (L2.4) */
+  readonly edit: boolean;
   /** layout.generate or ads.manage: set and clear an ad slot's picture */
   readonly ads: boolean;
   /** proof.view: a page's PDF and the edition PDF */
@@ -28,6 +30,7 @@ export function layoutAccess(org: OrgAccessDto | undefined, pubId: string): Layo
   return {
     view: can("pages.view"),
     generate: can("layout.generate"),
+    edit: can("layout.edit"),
     ads: can("layout.generate") || can("ads.manage"),
     proof: can("proof.view"),
     press: can("export.press"),

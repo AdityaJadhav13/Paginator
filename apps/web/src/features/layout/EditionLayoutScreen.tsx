@@ -899,8 +899,16 @@ function PagesTab({
               <Stack gap="3">
                 <Thumb where={where} runId={run.id} page={page} />
                 {page.state === "done" ? (
-                  <div>
+                  <div className="pg-layout__status">
                     <CheckBadge check={page.check} t={t} />
+                    {access.edit && (
+                      <Link
+                        to={paths.pubPageEditor(where.orgId, where.pubId, where.editionId, run.id, page.page)}
+                        aria-label={t("pageEditor.editPage", { page: page.page })}
+                      >
+                        {t("pageEditor.edit")}
+                      </Link>
+                    )}
                   </div>
                 ) : (
                   <p>

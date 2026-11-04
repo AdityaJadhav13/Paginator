@@ -148,6 +148,8 @@ jobs:
         run: experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py tools/desk/test/test_messages.py tools/desk/test/test_bundle.py
       - name: engine tests
         run: tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py
+      - name: screen equals print, level L1 (a fictional page through the engine's writer; the hosted editor's draw list)
+        run: PGN_ENGINE_PYTHON=tools/oracle/v0/.venv/bin/python experiments/phase0/pdfx1/.venv/bin/python -B -m unittest apps/engine-worker/test/test_screenprint.py
       - name: browser module tests (page editor view, words, paste)
         run: node --test tools/desk/test/*.mjs
 

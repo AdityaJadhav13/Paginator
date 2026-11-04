@@ -14,6 +14,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -215,6 +216,18 @@ class MaterialiseTests(unittest.TestCase):
         self.run_it(good)
         self.assertEqual(target.read_bytes(), b"not the worker's")                    # the sweep left it alone,
         self.assertTrue((pdir / "p-0123456789.cmyk.gz").is_symlink())                 # the link itself too
+
+    def test_write_live_waits_for_the_editions_lock(self):
+        run = self.run_it(self.hosted())
+        edition, articles = self.snapshot["edition"], self.hosted()["articles"]
+        done = threading.Event()
+        with home._locked(run.parent.parent):                                         # a layout job writing
+            t = threading.Thread(target=lambda: (home.write_live(self.bucket, self.homes, ORG, PUB, EID, edition,
+                                                                 articles), done.set()))
+            t.start()
+            self.assertFalse(done.wait(0.3))
+        t.join(10)
+        self.assertTrue(done.is_set())
 
 
 if __name__ == "__main__":

@@ -76,6 +76,15 @@ export type {
   LayoutRunDto,
   LayoutService,
 } from "./layout-service.ts";
+export type {
+  EditChangeDto,
+  EditorPageDto,
+  EditorService,
+  EditorWhere,
+  GlyphOutlinesDto,
+  PageHistoryDto,
+  PageLockDto,
+} from "./editor-service.ts";
 export type { ServiceEnvironment } from "./environment.ts";
 export type { CommentDto, CommentPatchDto, CommentService } from "./comment-service.ts";
 export type {

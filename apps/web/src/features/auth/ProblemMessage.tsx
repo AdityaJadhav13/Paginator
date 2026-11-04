@@ -29,7 +29,8 @@ export function describeProblem(problem: ApiProblem, t: Translate): ProblemText 
   if (code === "unexpected_answer") {
     return { heading: t("problem.unexpected.heading"), body: t("problem.unexpected.body") };
   }
-  if (code === "server_error" || status >= 500) {
+  // editor_unavailable (503) has words of its own: the engine is away for a while, nothing failed
+  if (code === "server_error" || (status >= 500 && code !== "editor_unavailable")) {
     return {
       heading: t("problem.server.heading"),
       body: t("problem.server.body"),

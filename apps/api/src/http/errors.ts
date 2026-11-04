@@ -61,6 +61,19 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     status: 409,
     message: "This paper has no engine profile ready yet. Upload its dataset bundle in Settings first.",
   },
+  // the page editor (L2.4); the first is the Desk's own words (deskserver/api.py _edit_page)
+  not_editable: { status: 409, message: "Pages can be changed once their layout has finished." },
+  stale: {
+    status: 409,
+    message: "This page was changed in another window or tab. It is shown again as it is now.",
+  },
+  page_locked: { status: 409, message: "Someone else is editing this page. Ask to take over, or wait." },
+  edit_refused: { status: 400, message: "The page could not be changed: see why." },
+  run_missing: {
+    status: 409,
+    message: "This layout's files are not on the engine's computer. Lay the edition out again to edit its pages.",
+  },
+  editor_unavailable: { status: 503, message: "The page editor is not available just now. Try again in a minute." },
   request_too_large: { status: 413, message: "This request is too large." },
   not_json: { status: 415, message: "This request must be sent as JSON." },
   slow_down: { status: 429, message: "Too many tries. Wait a minute and try again." },

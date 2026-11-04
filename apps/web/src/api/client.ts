@@ -7,7 +7,7 @@
  *   - an `Idempotency-Key` on a change when the caller gives one (creates and transitions: the same key on every
  *     retry of one action), never on a GET;
  *   - nothing from it kept in the browser's HTTP cache (`cache: "no-store"`): story text must not stay behind on a
- *     shared computer;
+ *     shared computer (a caller may let the cache keep what is not private, the page editor's glyph outlines);
  *   - every failure as an `ApiProblem`: the API's error envelope, Better Auth's `{code, message}`, or none at all;
  *   - a 401 `signed_out` also tells the app (`onSignedOut`), which sends the person to sign in again, keeping their
  *     place.
@@ -29,6 +29,10 @@ export interface RequestOptions {
   readonly headers?: Readonly<Record<string, string>>;
   /** Let the request outlive the page (a save as the page is left); browsers cap such a body at 64 KiB. */
   readonly keepalive?: boolean;
+  /** This request's own time limit (ms), for one the server may take long over (the page editor's engine calls). */
+  readonly timeoutMs?: number;
+  /** "default" lets the browser keep the answer (only for content that is not private text, such as glyph outlines). */
+  readonly cache?: RequestCache;
 }
 
 export interface ApiClient {
@@ -168,7 +172,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       headers[IDEMPOTENCY_HEADER] = requestOptions.idempotencyKey;
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), requestOptions.timeoutMs ?? timeoutMs);
     let response: Response;
     let text: string;
     try {
@@ -176,7 +180,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         method,
         headers,
         credentials: "same-origin",
-        cache: "no-store",
+        cache: requestOptions.cache ?? "no-store",
         ...(requestOptions.keepalive ? { keepalive: true } : {}),
         signal: controller.signal,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

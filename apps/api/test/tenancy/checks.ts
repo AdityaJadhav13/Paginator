@@ -63,6 +63,12 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   edition_measure: ["INSERT", "SELECT", "UPDATE"],
   pdf_check: ["INSERT", "SELECT"],
   ad_slot_artwork: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  // the page editor (migration 2026_12_03_0001): revisions and saves only grow, the text overrides are rewritten, and
+  // a page's soft lock is taken, beaten, handed over and released
+  page_edit: ["INSERT", "SELECT"],
+  page_save: ["INSERT", "SELECT"],
+  run_text_override: ["INSERT", "SELECT", "UPDATE"],
+  page_lock: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   // notifications (migration 2026_11_24_0001): never deleted; only read_at and emailed_at change (COLUMN_RIGHTS)
   notification: ["INSERT", "SELECT"],
   publication_grant: ["DELETE", "INSERT", "SELECT", "UPDATE"],

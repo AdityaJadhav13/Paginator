@@ -39,6 +39,8 @@ import { SourcesScreen } from "../features/news/SourcesScreen.tsx";
 import { LayoutProvider } from "../features/layout/layout-context.tsx";
 import { EditionLayoutScreen } from "../features/layout/EditionLayoutScreen.tsx";
 import { EngineProfileScreen } from "../features/layout/EngineProfileScreen.tsx";
+import { EditorProvider } from "../features/editor/editor-context.tsx";
+import { PageEditorScreen } from "../features/editor/PageEditorScreen.tsx";
 import { I18nProvider } from "../i18n/index.ts";
 import type { ServiceEnvironment } from "../services/index.ts";
 import { PlaceholderScreen } from "../demo/ui002/PlaceholderScreen.tsx";
@@ -107,6 +109,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
           <MediaProvider media={activeEnvironment.media}>
           <NewsProvider news={activeEnvironment.news}>
           <LayoutProvider layout={activeEnvironment.layout}>
+          <EditorProvider editor={activeEnvironment.editor}>
           <ContactProvider contact={activeEnvironment.contact}>
           <NewsroomProvider
             comments={activeEnvironment.comments}
@@ -153,6 +156,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                 <Route path={PATTERNS.pubMedia} element={<MediaScreen />} />
                 <Route path={PATTERNS.pubSources} element={<SourcesScreen />} />
                 <Route path={PATTERNS.pubEditionLayout} element={<EditionLayoutScreen />} />
+                <Route path={PATTERNS.pubPageEditor} element={<PageEditorScreen />} />
                 <Route path={PATTERNS.pubEngineProfile} element={<EngineProfileScreen />} />
                 {DEVELOPMENT && (
                   <>
@@ -192,6 +196,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
           </SessionProvider>
           </NewsroomProvider>
           </ContactProvider>
+          </EditorProvider>
           </LayoutProvider>
           </NewsProvider>
           </MediaProvider>

@@ -112,4 +112,157 @@ if cmd == "generate":
                   not_placed=[{"article": req["articles"][0]["id"], "reason": DM.msg("m.plan.needsText")}])
     write_atomic(run / "engine-status.json", status)
     reply({"pages": 2, "failed": 0})
+if cmd == "edit-service":
+    # deskedit's page sessions, faked (one JSON request per line): each page's modules and revision from its
+    # page-NN.edit.json, else its manifest; every change writes the file. A story "dffffffffff" is one whose articles
+    # are gone: opening its page takes it off (the engine's own change). An edition whose volume is "editfail" never
+    # gets the service started.
+    import hashlib as H, pikepdf, deskprinted as DPR
+    def say(obj):
+        sys.stdout.write(json.dumps(DM.annotate(obj)) + "\n")
+        sys.stdout.flush()
+    def read(path, default=None):
+        return json.loads(path.read_text()) if path.exists() else default
+    if any(read(e / "edition.json", {}).get("volume") == "editfail" for e in (home / "editions").glob("*")):
+        sys.exit(2)
+    say({"id": 0, "ok": True, "result": {"ready": True, "engine": "fake"}})
+    sessions = {}
+    def run_dir(eid, run):
+        return home / "editions" / eid / "runs" / run
+    def page_modules(rd, n):
+        saved = read(rd / ("page-%02d.edit.json" % n), {})
+        if saved.get("page") == n and saved.get("modules") is not None:
+            return saved["modules"], int(saved.get("rev") or 0)
+        man = read(rd / ("page-%02d.manifest.json" % n), {})
+        return [{"story": p["story"], "x": p["x_mm"], "y": p["y_mm"], "w": p["w_cols"], "h": p["h_mm"], "locked": False,
+                 "crop": None} for p in man.get("placed") or []], 0
+    def save_edit(s):
+        write_atomic(s["dir"] / ("page-%02d.edit.json" % s["page"]),
+                     {"schema": "pageinator.desk.page-edit/1", "page": s["page"], "modules": s["modules"], "rev": s["rev"]})
+    def load(eid, run, n):
+        rd = run_dir(eid, run)
+        mods, rev = page_modules(rd, n)
+        s = {"dir": rd, "page": n, "modules": mods, "rev": rev, "key": "%s/%s/%d" % (eid, run, n),
+             "pages": int(read(rd / "request.json")["edition"]["pages"])}
+        if any(m["story"] == "dffffffffff" for m in mods):
+            s["modules"] = [m for m in mods if m["story"] != "dffffffffff"]
+            s["rev"] += 1
+            save_edit(s)
+        return s
+    def others(s, locked):
+        mine, out = {m["story"] for m in s["modules"]}, {}
+        for n in range(1, s["pages"] + 1):
+            if n != s["page"]:
+                for m in page_modules(s["dir"], n)[0]:
+                    if m["story"] in mine and (m.get("locked") or not locked):
+                        out.setdefault(m["story"], n)
+        return out
+    def problems(s):
+        seen = [(m["x"], m["y"]) for m in s["modules"]]
+        return [{"kind": "overlap", "stories": []}] if len(set(seen)) < len(seen) else []
+    def draw(s, items=True):
+        out = {"session": s["key"], "page": s["page"], "role": "front", "rev": s["rev"], "modules": s["modules"],
+               "notes": [], "problems": problems(s), "pool": [], "grid": {}, "also_on_pages": others(s, False),
+               "locked_on_pages": others(s, True)}
+        return {**out, "items": [], "fonts": {}, "fixed_items": 0} if items else out
+    def check_rev(s, base):
+        if base is not None and int(base) != s["rev"]:
+            raise ValueError(DM.msg("m.edit.stale"))
+    def articles_of(s):
+        story_articles = {}
+        for man in s["dir"].glob("page-*.manifest.json"):
+            for p in read(man).get("placed") or []:
+                story_articles[p["story"]] = p.get("articles") or []
+        return [a for m in s["modules"] for a in story_articles.get(m["story"], [])]
+    def changed(s):
+        s["rev"] += 1
+        save_edit(s)
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            break
+        req = json.loads(line)
+        try:
+            c = req["cmd"]
+            if c == "open":
+                key = "%s/%s/%d" % (req["edition"], req["run"], req["page"])
+                if key not in sessions or req.get("reload"):
+                    sessions[key] = load(req["edition"], req["run"], req["page"])
+                with open(home / "fake-engine-calls.txt", "a") as f:
+                    f.write("open %s reload=%s\n" % (key, bool(req.get("reload"))))
+                res = draw(sessions[key])
+            else:
+                s = sessions.get(req["session"])
+                if s is None:
+                    raise ValueError(DM.msg("m.edit.notOpen"))
+                base = req.get("base_rev")
+                if c == "state":
+                    res = draw(s, items=False)
+                elif c == "set":
+                    check_rev(s, base)
+                    s["modules"] = req["modules"]
+                    changed(s)
+                    res = draw(s)
+                elif c == "alternative":
+                    check_rev(s, base)
+                    s["modules"] = list(reversed(s["modules"]))
+                    changed(s)
+                    res = draw(s)
+                elif c == "refresh":
+                    check_rev(s, base)
+                    live = {a["id"]: a for a in read(s["dir"].parent.parent / "articles.json")["articles"]}
+                    laid = read(s["dir"] / "request.json")["articles"]
+                    over = {a["id"]: live.get(a["id"]) for a in laid if live.get(a["id"]) != a}
+                    write_atomic(s["dir"] / "edit-articles.json",
+                                 {"schema": "pageinator.desk.edit-articles/1", "articles": over})
+                    changed(s)
+                    res = draw(s)
+                elif c == "move":
+                    check_rev(s, base)
+                    m = next((x for x in s["modules"] if x["story"] == req["story"]), None)
+                    if m is None:
+                        raise ValueError(DM.msg("m.edit.moveNotHere", name=DM.data(req["story"])))
+                    eid, run, _ = req["session"].split("/")
+                    tkey = "%s/%s/%d" % (eid, run, req["page"])
+                    t = sessions.get(tkey) or load(eid, run, req["page"])
+                    sessions[tkey] = t
+                    t["modules"] = t["modules"] + [{**m, "x": 0, "y": 0}]
+                    changed(t)
+                    s["modules"] = [x for x in s["modules"] if x["story"] != req["story"]]
+                    changed(s)
+                    res = {**draw(s), "moved": {"story": req["story"], "page": req["page"], "rev": t["rev"]}}
+                elif c == "export":
+                    check_rev(s, base)
+                    pdf = pikepdf.new()
+                    pdf.add_blank_page(page_size=(400, 600))
+                    pdf.pages[0].Contents = pdf.make_stream(b"0 0 0 1 k 10 10 100 100 re f")
+                    name = "page-%02d.pdf" % s["page"]
+                    pdf.save(s["dir"] / name, deterministic_id=True)
+                    mine, taken = {m["story"] for m in s["modules"]}, {}
+                    for n in range(1, s["pages"] + 1):
+                        if n == s["page"] or not (s["dir"] / ("page-%02d.manifest.json" % n)).exists():
+                            continue
+                        mods, rev = page_modules(s["dir"], n)
+                        keep = [m for m in mods if m["story"] not in mine]
+                        if len(keep) != len(mods):
+                            o = sessions.get("%s/%d" % (req["session"].rsplit("/", 1)[0], n))
+                            rev = max(rev, o["rev"] if o else 0) + 1
+                            write_atomic(s["dir"] / ("page-%02d.edit.json" % n), {"schema": "pageinator.desk.page-edit/1",
+                                         "page": n, "modules": keep, "rev": rev, "changed_by_page": s["page"]})
+                            if o:
+                                o["modules"], o["rev"] = keep, rev
+                            taken[str(n)] = []
+                    arts = articles_of(s)
+                    over = (read(s["dir"] / "edit-articles.json", {}) or {}).get("articles") or {}
+                    by_id = {a["id"]: over.get(a["id"], a) for a in read(s["dir"] / "request.json")["articles"]}
+                    printed = {"v": DPR.VERSION, "articles": {a: DPR.article_sig(by_id[a], False) for a in arts
+                                                              if by_id.get(a)}, "folio": None, "ads": {}}
+                    res = {"pdf": name, "sha256": H.sha256((s["dir"] / name).read_bytes()).hexdigest(), "rev": s["rev"],
+                           "problems": problems(s), "articles": arts, "pages_changed": taken, "printed": printed}
+                else:
+                    raise ValueError(DM.msg("m.edit.unknownCommand", cmd=c))
+            say({"id": req.get("id"), "ok": True, "result": res})
+        except ValueError as e:
+            say({"id": req.get("id"), "ok": False, "error": e.args[0]})
+    sys.exit(0)
 reply({"error": f"the fake engine has no {cmd}"}, 1)

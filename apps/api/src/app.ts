@@ -33,6 +33,8 @@ import { libraryRoutes } from "./modules/media/library.ts";
 import { uploadRoutes } from "./modules/media/uploads.ts";
 import { importRoutes } from "./modules/media/imports.ts";
 import { startMeasureSchedule } from "./modules/layout/measure.ts";
+import { gatewayClient } from "./modules/editor/gateway.ts";
+import { editorRoutes } from "./modules/editor/routes.ts";
 import { layoutRoutes } from "./modules/layout/routes.ts";
 import { type PhotoFetch, newsRoutes } from "./modules/news/routes.ts";
 import { startNewsSchedule } from "./modules/news/schedule.ts";
@@ -128,7 +130,8 @@ export async function buildApp(deps: AppDeps) {
   // no API answer is kept in a browser's HTTP cache, a refusal or a 404 included (and, through serverFactory and
   // BASELINE_HEADERS, those that Fastify or Node write without the hooks)
   fastify.addHook("onSend", async (request, reply) => {
-    if (isApiPath(request.url)) reply.header("cache-control", "no-store");
+    const kept = reply.statusCode === 200 && request.routeOptions.config.immutable === true;
+    if (isApiPath(request.url) && !kept) reply.header("cache-control", "no-store");
   });
   const { afterSession } = await registerSecurity(fastify, config);
   fastify.setNotFoundHandler(async () => {
@@ -198,6 +201,11 @@ export async function buildApp(deps: AppDeps) {
     await app.register(commentRoutes, { database: people.database, notify: people.notify });
     await app.register(editionRoutes, { database: people.database });
     await app.register(auditRoutes, { database: people.database });
+    // the page editor: through the edit gateway (without its settings, its routes answer 503 editor_unavailable)
+    await app.register(editorRoutes, {
+      database: people.database,
+      gateway: config.gateway ? gatewayClient(config.gateway.url, config.gateway.secret) : undefined,
+    });
     if (live) {
       await app.register(notificationRoutes, {
         database: people.database,

@@ -67,6 +67,10 @@ export const AUDIT_ACTIONS = {
   /** A back-page ad slot given a picture of the media library ({slot, asset}), or emptied ({slot}). */
   "ad_slot.clear": { scope: "publication" },
   "ad_slot.set": { scope: "publication" },
+  /** A page saved in the page editor ({run, page, rev}, recorded with the save itself; its independent check is the
+   * page's history); a page's soft lock taken over by the person who asked for it ({run, page, from}) (L2.4). */
+  "editor.page_save": { scope: "publication" },
+  "editor.page_takeover": { scope: "publication" },
   /** An engine event the inbox would not apply ({event, job, kind, reason}): not the contract's, or for an asset that
    * is not the organisation's and publication's it names, or one that still could not be applied after every try
    * (reason "error"). Only Owner and Admin see it (its publication is unchecked). */

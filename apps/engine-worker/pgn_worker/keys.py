@@ -85,8 +85,9 @@ class KeyGuard:
         return self.key("runs", uuid(run_id, "run_id"), "request.json")
 
     def run_file(self, run_id: object, name: str, page: int | None = None) -> str:
-        """A run's output: `runs/<run>/edition.pdf`, `press-files.zip`, or a page's `runs/<run>/pages/NN/<name>`."""
-        if name not in (RUN_FILES if page is None else PAGE_FILES):
+        """A run's output: `runs/<run>/edition.pdf`, `press-files.zip`, or a page's `runs/<run>/pages/NN/<name>` (the
+        layout's files, or a save's from the page editor: `edit-<rev>.pdf`, `.png`, `.thumb.png`, `.pdfx-check.txt`)."""
+        if name not in (RUN_FILES if page is None else PAGE_FILES) and (page is None or not EDIT_FILE.fullmatch(name)):
             raise KeyRefused("not a file a run writes")
         if page is None:
             return self.key("runs", uuid(run_id, "run_id"), name)
@@ -97,3 +98,4 @@ class KeyGuard:
 
 RUN_FILES = ("edition.pdf", "press-files.zip")
 PAGE_FILES = ("page.pdf", "preview.png", "thumb.png", "pdfx-check.txt")
+EDIT_FILE = re.compile(r"edit-(?:0|[1-9][0-9]{0,9})\.(?:pdf|png|thumb\.png|pdfx-check\.txt)", re.ASCII)
