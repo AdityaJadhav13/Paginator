@@ -3,7 +3,8 @@
 //     picture of the same publication that they may download (or changes the caption or credit, or takes it off): a
 //     Reporter attaches only a picture of theirs, never one they could not see. Each is a change of the
 //     story, on its version (baseRevision; 409 story_changed), and the caption and credit are cleaned as the Desk
-//     cleans text.
+//     cleans text. A found photo labelled Needs permission (the news finder's) is refused until its rights are ticked
+//     (422 rights_needed).
 //   - GET …/assets/:a/file: a 302 to a 5-minute download link tied to the picture's version, with its type from its
 //     bytes and a file name from its Desk id (never the uploader's). ?variant=preview gives the engine's preview (a JPEG
 //     of at most 2000 px, media.ready's rendition) the same way, inline; 404 until the picture is ready. A rejected or
@@ -75,6 +76,9 @@ export const photoRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { da
             { field: "body.assetId", message: "is not a picture of this publication" },
           ]);
         }
+        // a found photo that needs permission prints only once someone ticked "We have the right to print this"
+        if (asset.licence_label === "needs_permission" && !asset.rights_confirmed_at)
+          throw new ApiError("rights_needed");
         await setPhoto(tx, access.tenant, p, s, {
           assetId: asset.id,
           caption: cleaned(input.caption, "caption"),

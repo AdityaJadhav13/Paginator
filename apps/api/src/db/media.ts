@@ -98,6 +98,9 @@ export type AssetRow = {
   uploaded_by: string;
   revision: number;
   created_at: Date;
+  /** a found photo's label (the news finder), else null; a needs_permission one is attached only once ticked */
+  licence_label: "safe" | "needs_permission" | null;
+  rights_confirmed_at: Date | null;
 };
 
 const ASSET = [
@@ -115,6 +118,8 @@ const ASSET = [
   "uploaded_by",
   "revision",
   "created_at",
+  "licence_label",
+  "rights_confirmed_at",
 ] as const;
 
 /** The asset, not deleted; lock "share" holds it against a delete until the transaction ends (a story's photo is
@@ -237,6 +242,11 @@ export type LibraryRow = AssetRow & {
   photographer: string;
   updated_at: Date;
   uploaded_by_name: string;
+  licence_name: string | null;
+  licence_url: string | null;
+  source_url: string | null;
+  rights_confirmed_by: string | null;
+  rights_confirmed_by_name: string | null;
   /** created_at to the microsecond (UTC), for the list's cursor */
   created_cursor: string;
 };
@@ -264,10 +274,12 @@ export async function listLibrary(tx: Tx, f: LibraryFilter): Promise<LibraryRow[
   const { rows } = await sql<LibraryRow>`
     select a.id, a.publication_id, a.status, a.problem, a.mime, a.bytes, a.width_px, a.height_px, a.sha256,
       a.desk_key, a.original_key, a.version_id, a.uploaded_by, up.display_name as uploaded_by_name, a.caption,
-      a.credit, a.photographer, a.revision, a.created_at, a.updated_at,
+      a.credit, a.photographer, a.revision, a.created_at, a.updated_at, a.licence_name, a.licence_url, a.source_url,
+      a.licence_label, a.rights_confirmed_by, rp.display_name as rights_confirmed_by_name, a.rights_confirmed_at,
       to_char(a.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as created_cursor
     from app.asset a
     join app.person up on up.org_id = a.org_id and up.user_id = a.uploaded_by
+    left join app.person rp on rp.org_id = a.org_id and rp.user_id = a.rights_confirmed_by
     where a.publication_id = ${f.publicationId} and a.deleted_at is null
       and (${f.id ?? null}::uuid is null or a.id = ${f.id ?? null}::uuid)
       and (${mine}::uuid is null or a.uploaded_by = ${mine}::uuid
@@ -344,6 +356,46 @@ export async function deleteAsset(tx: Tx, publicationId: string, assetId: string
   await tx
     .updateTable("app.asset")
     .set({ deleted_at: sql`now()`, updated_at: sql`now()`, revision: sql`revision + 1` })
+    .where("publication_id", "=", publicationId)
+    .where("id", "=", assetId)
+    .execute();
+}
+
+/** "We have the right to print this", ticked on a found photo by this person now; false when it was ticked already (or
+ * is not a found photo). */
+export async function confirmRights(tx: Tx, publicationId: string, assetId: string, userId: string): Promise<boolean> {
+  const done = await tx
+    .updateTable("app.asset")
+    .set({ rights_confirmed_by: userId, rights_confirmed_at: sql`now()`, updated_at: sql`now()` })
+    .where("publication_id", "=", publicationId)
+    .where("id", "=", assetId)
+    .where("deleted_at", "is", null)
+    .where("licence_label", "is not", null)
+    .where("rights_confirmed_at", "is", null)
+    .returning("id")
+    .executeTakeFirst();
+  return done !== undefined;
+}
+
+/** A found photo's own facts (the news finder): its caption, credit and photographer, where it came from, its licence
+ * and the label code gave it. */
+export async function setFoundPhoto(
+  tx: Tx,
+  publicationId: string,
+  assetId: string,
+  facts: {
+    caption: string;
+    credit: string;
+    photographer: string;
+    licence_name: string;
+    licence_url: string | null;
+    source_url: string;
+    licence_label: "safe" | "needs_permission";
+  },
+): Promise<void> {
+  await tx
+    .updateTable("app.asset")
+    .set({ ...facts, revision: sql`revision + 1`, updated_at: sql`now()` })
     .where("publication_id", "=", publicationId)
     .where("id", "=", assetId)
     .execute();

@@ -4,13 +4,14 @@ Status: a proposal for the owner to approve, dated 2026-10-20. It builds 09-laun
 
 ## 0. Summary
 
-1. **Six milestones, each used on real work:**
+1. **Seven milestones, each used on real work:**
    - L2.1 People and the story desk;
    - L2.2 Photo desk and the engine worker;
    - L2.3 Editions and layout, hosted;
    - L2.4 The page editor, hosted;
    - L2.5 Release;
-   - L2.6 Ads desk and the edition plan.
+   - L2.6 Ads desk and the edition plan;
+   - L2.7 The news finder (owner request 2026-11-04; 13-news-finder.md).
 2. **One writer.** The Fastify API is the only code that writes application tables. The Python engine worker only computes:
    - it takes Procrastinate jobs;
    - it reads and writes S3;
@@ -223,6 +224,20 @@ This milestone deliberately puts the queue, the worker, the event inbox and S3 i
 1. A real day's ads are booked and placed through the ads desk.
 2. A planted wrong-size artwork is flagged.
 3. The cut-off alert fires.
+
+### L2.7 The news finder (owner request 2026-11-04; the plan is 13-news-finder.md)
+
+**The newsroom uses it for:** the sidebar's Sources screen collects trending news from the paper's own list of feeds every few hours and groups the same event across sources; an editor picks a topic, and Claude drafts a story in the paper's own words and house style (Marathi or English), with print-worthy photos only for big stories, each labelled Safe to print or Needs permission.
+
+**Scope:** sources and house style per publication; collection and grouping on a schedule (engine queue); pick → a Draft story assigned to the picking editor, with its sources and "Made with Claude — check before use"; a deterministic copy check; photo candidates with code-decided licence labels; the rights tick for Needs permission pictures, enforced by the API; AI spend logged per call with a daily cap.
+
+**Done when:**
+1. Collection and grouping run on a schedule against recorded fictional feeds in tests, and real feeds in the demo.
+2. A pick makes a Draft story with its sources that passes the copy check.
+3. For a big story, 3–5 labelled photos are offered, and the chosen one lands in Media with its source, credit and label.
+4. A Needs permission photo cannot be attached without the tick, which is recorded and audited.
+
+**Release check:** D-26–D-29 decided; the first real collections and drafts watched (13-news-finder.md §8).
 
 **Hosting** grows alongside the milestones:
 
@@ -955,7 +970,7 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
   - **Cursor:** newest first by `(at, id)`, base64url as on the stories and notifications lists. A cursor must name an event the reader may see, so another organisation's, or one out of a Chief Editor's view, is refused (400). Indexes on `(org_id, actor_id, at desc)` and `(org_id, publication_id, at desc)` serve the actor filter and a Chief Editor's view or the `publication` filter (migration `2026_11_26_0001`).
   - **Names** come from `app.person` when shown (an erased person's is the replaced name); `data` holds ids only. Sign-in events stay in `identity.auth_event`.
 - **Refusals name their publication:** `access.denied` rows written by `authorize()` and by the service rules (`auditRefusals`) now carry the route's `:p` as `publication_id`, so that publication's Chief Editor sees them; a refusal on an organisation route has none.
-- **`AUDIT_ACTIONS`** in `packages/contracts/src/audit.ts` lists every action the API writes, each with its scope: 47 actions, 36 at publication scope and 11 the organisation's (the unit test pins the counts; L2.2 added asset.ready, asset.reject, asset.fail, engine.event_refuse and engine.event_ignore, and the media library asset.edit and asset.delete; the editions screen added edition.create; the Word import import.create, import.done and import.fail). The log has one writer, `recordAudit()` (`src/db/audit.ts`), whose action is typed `AuditAction`; a unit test (`test/unit/audit-actions.test.ts`) reads the source, so an action without an entry, an entry nothing writes, or the table's name anywhere else (any spelling) fails CI.
+- **`AUDIT_ACTIONS`** in `packages/contracts/src/audit.ts` lists every action the API writes, each with its scope: 57 actions, 46 at publication scope and 11 the organisation's (the unit test pins the counts; L2.2 added asset.ready, asset.reject, asset.fail, engine.event_refuse and engine.event_ignore, and the media library asset.edit and asset.delete; the editions screen added edition.create; the Word import import.create, import.done and import.fail; the news finder (L2.7) news.source_create, news.source_edit, news.source_delete, news.settings_edit, news.collect, news.pick, news.draft_done, news.draft_fail, news.photo_choose and asset.rights_confirm). The log has one writer, `recordAudit()` (`src/db/audit.ts`), whose action is typed `AuditAction`; a unit test (`test/unit/audit-actions.test.ts`) reads the source, so an action without an entry, an entry nothing writes, or the table's name anywhere else (any spelling) fails CI.
 - **What is recorded** (closing L2-210 and L2-211), each event in the transaction of its change, so a refused or failed change leaves none, and a replayed request (the same Idempotency-Key) writes none again. `data` holds ids, numbers and state names, never text a person typed (headline, body, comment, caption, credit, desk note, file name):
   - stories: `story.create` ({rev, origin, edition, section, priority, pagePin}), `story.revise` (one per saved revision: {rev}), `story.status_change` ({from, to, comment}: every move, the desk's pick-up on its first edit included), `story.assign`, `story.unassign`, `story.due_change`, `story.edition_change`, `story.section_change`, `story.priority_change`, `story.page_pin_change`, `story.language_change` (each {from, to}), `story.desk_note_change` (that it changed), `story.delete`;
   - comments: `comment.create`, `comment.edit`, `comment.resolve`, `comment.reopen` ({story, parent});
@@ -1252,6 +1267,7 @@ The costs are 09 §3.1's estimates: one paper, about 20 staff, before GST.
 | **L2.4** | D-15 a straight port of `editor.js` (recommended) or a Konva rewrite · D-16 house fonts, if they have arrived: server use and browser outlines (L2, ADR-019) · D-17 the take-over policy for page locks |
 | **L2.5** | D-18 delivery method (download and send yourself) and file naming · D-19 approval required before export · D-20 archive retention · D-21 G2 press test of a photo + ad page recorded · D-22 light penetration test now or before L4 |
 | **L2.6** | D-23 ads only where the engine supports them, or fund the engine work for inside pages · D-24 artwork formats (images only, or PDF with sandboxed intake) · D-25 booking fields and cut-off time |
+| **L2.7** (before real use, not before building) | D-26 Anthropic API key and monthly budget · D-27 the starting source list · D-28 the house style guide text (examples kept private) · D-29 any paid agency (PTI, ANI, Reuters pictures) to treat as Safe to print |
 
 ---
 

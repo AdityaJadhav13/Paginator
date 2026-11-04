@@ -6,6 +6,7 @@ import type { SessionService } from "./session-service.ts";
 import type { CommentService } from "./comment-service.ts";
 import type { LiveService } from "./live-service.ts";
 import type { MediaService } from "./media-service.ts";
+import type { NewsService } from "./news-service.ts";
 import type { NotificationService } from "./notification-service.ts";
 import type { StoryService } from "./story-service.ts";
 import type { EditionService } from "./edition-service.ts";
@@ -27,6 +28,8 @@ export interface ServiceEnvironment {
   readonly stories: StoryService;
   readonly editions: EditionService;
   readonly media: MediaService;
+  /** The news finder (L2.7): the Sources screen. */
+  readonly news: NewsService;
   /** The public website's contact form. */
   readonly contact: ContactService;
   readonly comments: CommentService;

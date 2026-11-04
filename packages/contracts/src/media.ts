@@ -122,6 +122,18 @@ export const MediaItem = z.strictObject({
   updatedAt: Moment,
   /** a preview link once ready (as StoryPhoto.previewUrl), else null */
   previewUrl: z.string().nullable(),
+  /** a found photo's (the news finder, L2.7): where it came from, its licence and the label code gave it; absent for
+   * the paper's own uploads */
+  licence: z
+    .strictObject({
+      name: z.string(),
+      url: z.string().nullable(),
+      sourceUrl: z.string(),
+      label: z.enum(["safe", "needs_permission"]),
+      /** "We have the right to print this": who ticked it and when (a Needs-permission photo prints only with it) */
+      rightsConfirmed: z.strictObject({ by: z.strictObject({ id: Id, name: z.string() }), at: Moment }).nullable(),
+    })
+    .optional(),
 });
 export type MediaItem = z.infer<typeof MediaItem>;
 

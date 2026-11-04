@@ -7,8 +7,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "catalog:",
     "@pageinator/contracts": "workspace:*",
     "graphile-worker": "catalog:",
+    "htmlparser2": "catalog:",
     "pg": "catalog:",
     "zod": "catalog:"
   },

@@ -18,10 +18,12 @@
 //     stories it is the photo of (migration 2026_11_27_0001's trigger), so an open story editor shows the new state.
 //       import.parsed, import.rejected, and a docx.import's job.failed → the import settled (imports.ts
 //                     applyImportEvent: its stories made, or its failure); the inbox's asset_id is the import's id.
+//       news.collected, news.drafted, news.draft_failed, and a news job's job.failed → the news finder's
+//                     (src/modules/news/inbox.ts applyNewsEvent); the inbox's asset_id is the run's or the draft's id.
 //   - The sweep, at start-up and every 5 minutes, so every asset settles even when the queue cannot: jobs out of
 //     attempts that nobody settled (exhaustedJobs: unlocked, or locked longer than STALE_MS) are written to the inbox as
 //     job.failed worker.lost (dropped when the job had reported), then removed; and an asset (or a Word import) still
-//     waiting after DEADLINE_MS with no job and no waiting event gets the same. It reads and removes jobs as the system reader
+//     waiting after DEADLINE_MS with no job and no waiting event gets the same (a news draft too). It reads and removes jobs as the system reader
 //     'engine-sweep' (plain pgn_app sees no job), and writes under each job's organisation. Two API instances may
 //     sweep at once, and a sweep may stop between a write and a removal: the inbox's unique job id and the
 //     conditional delete make a repeat's writes no-ops. It counts and logs only the failures it wrote.
@@ -52,6 +54,8 @@ import { strandedImports } from "../../db/imports.ts";
 import type { Database } from "../../db/pools.ts";
 import type { SystemTx, Tenant, Tx } from "../../db/tenant.ts";
 import type { ObjectStore } from "../../storage/object-store.ts";
+import { strandedDrafts } from "../../db/news.ts";
+import { applyNewsEvent, isNewsEvent } from "../news/inbox.ts";
 import { applyImportEvent } from "./imports.ts";
 
 /** The system's tenant has no person: the nil UUID (audit events by the system record no actor). */
@@ -122,9 +126,21 @@ async function decide(
   if (!parsed.success || parsed.data.kind !== row.kind) return refuse("contract");
   const event = parsed.data;
   const targetId =
-    event.kind === "job.failed" ? event.target_id : "asset_id" in event ? event.asset_id : event.import_id;
+    event.kind === "job.failed"
+      ? event.target_id
+      : "asset_id" in event
+        ? event.asset_id
+        : "import_id" in event
+          ? event.import_id
+          : "run_id" in event
+            ? event.run_id
+            : event.draft_id;
   if (event.org_id !== tenant.orgId || event.pub_id !== tenant.pubIds[0] || targetId !== row.asset_id)
     return refuse("mismatch");
+  if (isNewsEvent(event)) {
+    const out = await applyNewsEvent(database, tx, tenant, event, row.job_id);
+    return typeof out === "string" ? out : refuse(out.refuse);
+  }
   if (event.kind === "import.parsed" || event.kind === "import.rejected" || event.kind === "job.failed") {
     if (event.kind !== "job.failed" || event.job_kind === "docx.import") {
       const out = await applyImportEvent(database, tx, tenant, event, row.job_id, store, log);
@@ -220,6 +236,13 @@ export async function drainInbox(database: Database, log: FastifyBaseLogger, sto
  * from it). */
 const SpentTarget = z.object({ org_id: OrgId, pub_id: Uuid7, target_id: Uuid7 });
 const JobKind = z.enum(JOB_KINDS);
+/** The payload's field that names each job's target (the inbox's asset_id). */
+const TARGET_FIELD: Record<(typeof JOB_KINDS)[number], string> = {
+  "media.ingest": "asset_id",
+  "docx.import": "import_id",
+  "news.collect": "run_id",
+  "news.draft": "draft_id",
+};
 
 export type SweepLimits = { staleMs: number; deadlineMs: number };
 
@@ -236,7 +259,7 @@ export async function sweep(
     const payload = (job.payload ?? {}) as Record<string, unknown>;
     const target = SpentTarget.safeParse({
       ...payload,
-      target_id: kind === "docx.import" ? payload["import_id"] : payload["asset_id"],
+      target_id: payload[TARGET_FIELD[kind ?? "media.ingest"]],
     }).data;
     if (!kind || !target) {
       log.error({ job: job.id, task: job.task_identifier }, "a spent job names no asset: it is left for an operator");
@@ -281,6 +304,17 @@ export async function sweep(
         });
         if (!wrote) continue;
         log.warn({ import: left.id }, "a Word import with no job left was settled as lost");
+        settled += 1;
+      }
+      for (const left of await strandedDrafts(tx, limits.deadlineMs, withJobs)) {
+        const wrote = await reportToInbox(tx, {
+          orgId,
+          jobId: `lost:${left.id}`,
+          assetId: left.id,
+          payload: lostEvent(orgId, left.publication_id, left.id, "news.draft"),
+        });
+        if (!wrote) continue;
+        log.warn({ draft: left.id }, "a news draft with no job left was settled as lost");
         settled += 1;
       }
     });

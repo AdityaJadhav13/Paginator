@@ -51,6 +51,9 @@ export type StoryRow = {
   photo_problem: string | null;
   photo_width: number | null;
   photo_height: number | null;
+  origin: string;
+  made_with_claude: boolean;
+  news_sources: { title: string; url: string; site: string }[] | null;
 } & Text & { words: number };
 
 const STORY = sql`
@@ -58,7 +61,7 @@ const STORY = sql`
     s.assignee_id, ap.display_name as assignee_name, s.due_at, s.section_id, s.priority, s.page_pin, s.language,
     s.desk_note, s.edition_id, to_char(e.edition_date, 'YYYY-MM-DD') as edition_date, s.updated_at,
     to_char(s.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_cursor,
-    s.updated_by, ub.display_name as updated_by_name,
+    s.updated_by, ub.display_name as updated_by_name, s.origin, s.made_with_claude, s.news_sources,
     r.headline, r.kicker, r.deck, r.byline, r.body, r.words,
     sp.asset_id as photo_asset_id, sp.caption as photo_caption, sp.credit as photo_credit, pa.status as photo_status,
     pa.problem as photo_problem, pa.width_px as photo_width, pa.height_px as photo_height,
@@ -148,7 +151,7 @@ async function touch(
   who: Who,
   publicationId: string,
   storyId: string,
-  set: StoryFields & { status?: StoryStatus; current_rev?: number },
+  set: StoryFields & { status?: StoryStatus; current_rev?: number; made_with_claude?: boolean },
 ) {
   await tx
     .updateTable("app.story")
@@ -170,7 +173,11 @@ export type NewStory = Text & {
   pagePin: number | null;
   editionId: string | null;
   deskNote: string;
-  origin: "typed" | "pasted" | "word";
+  origin: "typed" | "pasted" | "word" | "news";
+  /** the news finder's: given to this person at once (the editor who picked the topic) */
+  assigneeId?: string;
+  /** the news finder's: the draft's sources; the story is "Made with Claude" until a person edits its text */
+  newsSources?: { title: string; url: string; site: string }[];
 };
 
 async function openRevision(tx: Tx, who: Who, publicationId: string, storyId: string, rev: number, text: Text) {
@@ -223,6 +230,8 @@ export async function createStory(tx: Tx, who: Who, publicationId: string, story
         edition_id: story.editionId,
         desk_note: story.deskNote,
         origin: story.origin,
+        ...(story.assigneeId ? { assignee_id: story.assigneeId } : {}),
+        ...(story.newsSources ? { news_sources: JSON.stringify(story.newsSources), made_with_claude: true } : {}),
       })
       .onConflict((conflict) => conflict.columns(["org_id", "publication_id", "desk_key"]).doNothing())
       .returning("id")
@@ -257,7 +266,11 @@ export async function saveChange(
     // one event per saved revision: its number, never its text
     await auditStory(tx, who, publicationId, storyId, "story.revise", { rev: currentRev + 1 });
   }
-  await touch(tx, who, publicationId, storyId, { ...fields, ...(text ? { current_rev: currentRev + 1 } : {}) });
+  // a person's text: no longer as Claude drafted it (a news story's "Made with Claude" mark goes)
+  await touch(tx, who, publicationId, storyId, {
+    ...fields,
+    ...(text ? { current_rev: currentRev + 1, made_with_claude: false } : {}),
+  });
 }
 
 /** Moves the story to a state, recorded with its comment's id; its open revision is closed. */

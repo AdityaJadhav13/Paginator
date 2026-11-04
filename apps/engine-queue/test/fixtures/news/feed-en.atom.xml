@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A fictional English feed for the news finder's tests: no real outlet, no real story. -->
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>The Fictional Gazette</title>
+  <link rel="self" href="https://gazette.example/feed.atom"/>
+  <updated>2026-11-03T09:00:00Z</updated>
+  <entry>
+    <title>Sundarpur dam gates opened after heavy rain</title>
+    <link rel="enclosure" href="https://gazette.example/media/dam.jpg"/>
+    <link rel="alternate" href="https://gazette.example/news/sundarpur-dam"/>
+    <id>urn:fictional:1</id>
+    <published>2026-11-03T01:15:00Z</published>
+    <updated>2026-11-03T02:00:00Z</updated>
+    <summary type="html">&lt;p&gt;Five thousand cusecs released from the &lt;em&gt;Sundarpur&lt;/em&gt; dam.&lt;/p&gt;</summary>
+  </entry>
+  <entry>
+    <title>Navgaon market sees record onion prices</title>
+    <link href="https://gazette.example/news/navgaon-onions"/>
+    <id>urn:fictional:2</id>
+    <updated>2026-11-03T03:00:00Z</updated>
+    <content type="html">Onion prices hit a record as demand rises.</content>
+  </entry>
+</feed>

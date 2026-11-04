@@ -32,6 +32,8 @@ import { startEngineInbox } from "./modules/media/engine-inbox.ts";
 import { libraryRoutes } from "./modules/media/library.ts";
 import { uploadRoutes } from "./modules/media/uploads.ts";
 import { importRoutes } from "./modules/media/imports.ts";
+import { type PhotoFetch, newsRoutes } from "./modules/news/routes.ts";
+import { startNewsSchedule } from "./modules/news/schedule.ts";
 import { contactRoutes } from "./modules/contact/routes.ts";
 import { closeWhenStopping } from "./shutdown.ts";
 import type { ObjectStore } from "./storage/object-store.ts";
@@ -66,6 +68,9 @@ export type AppDeps = {
   /** Runs the engine inbox's consumer and the queue's sweep (src/modules/media/engine-inbox.ts) while the app is open:
    * main.ts does; tests that do not drive them leave it out. */
   engineInbox?: boolean;
+  /** How the news finder downloads a chosen photo: by default through the engine queue's guard (safeFetch); tests give
+   * a fake, so none reaches the network. */
+  fetchPhoto?: PhotoFetch;
 };
 
 export async function buildApp(deps: AppDeps) {
@@ -162,6 +167,9 @@ export async function buildApp(deps: AppDeps) {
   if (database && people && deps.engineInbox) {
     const inbox = startEngineInbox(database, fastify.log, store, config.engineSweep);
     fastify.addHook("preClose", () => inbox.close()); // before the database closes (onClose)
+    // the news finder's collections, on their schedule (as the inbox, in the process that runs it)
+    const schedule = startNewsSchedule(database, fastify.log, config.aiDailyCapInr);
+    fastify.addHook("preClose", () => schedule.close());
   }
 
   const app = fastify.withTypeProvider<ZodTypeProvider>();
@@ -197,6 +205,12 @@ export async function buildApp(deps: AppDeps) {
       await app.register(libraryRoutes, { database: people.database, store });
       await app.register(deskBundleRoutes, { database: people.database, store });
       await app.register(importRoutes, { database: people.database, store });
+      await app.register(newsRoutes, {
+        database: people.database,
+        store,
+        capInr: config.aiDailyCapInr,
+        ...(deps.fetchPhoto ? { fetchPhoto: deps.fetchPhoto } : {}),
+      });
     }
   }
   return app;

@@ -124,7 +124,8 @@ Each phase ends with something the newsroom uses on real work.
 - **Desks:**
   - **story desk:** reporters file from a phone; statuses, assignments, comments and approvals;
   - **photo desk:** captions and credits; CMYK conversion (EXISTS);
-  - **ads desk:** bookings, artwork checks, placement.
+  - **ads desk:** bookings, artwork checks, placement;
+  - **news finder** (owner request 2026-11-04, L2.7): trending news from the paper's own feeds, grouped by event; an editor picks a topic and Claude drafts a story in the paper's style, with licence-labelled photos only for big stories; a Draft for the normal approvals (13-news-finder.md).
 - **Edition plan (flatplan):** pages, colour pages, ad positions, sections.
 - **Release:** preflight, approvals, export, and sending to the press with a receipt.
 - **Hosting:** in India, with backups and monitoring.

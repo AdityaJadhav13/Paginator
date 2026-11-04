@@ -26,8 +26,9 @@
 (spa_headers) {
 	header {
 		# The app's own files only; images it makes from downloaded photos (blob:); requests to the API (self) and
-		# to the work bucket. No inline script or style, no frames, no plugins, no <base>.
-		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; font-src 'self'; connect-src 'self' {$PGN_S3_PUBLIC_ORIGIN}; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+		# to the work bucket; the news finder's photo thumbnails from Wikimedia Commons and Openverse (sent with no
+		# referrer). No inline script or style, no frames, no plugins, no <base>.
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: https://upload.wikimedia.org https://api.openverse.org; font-src 'self'; connect-src 'self' {$PGN_S3_PUBLIC_ORIGIN}; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"

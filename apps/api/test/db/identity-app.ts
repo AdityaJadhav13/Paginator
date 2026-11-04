@@ -7,6 +7,7 @@ import type {} from "../../src/modules/access/access.ts";
 import { type Config, loadConfig } from "../../src/config.ts";
 import { type Database, openDatabase } from "../../src/db/pools.ts";
 import { type Auth, createAuth } from "../../src/modules/identity/auth.ts";
+import type { PhotoFetch } from "../../src/modules/news/routes.ts";
 import { type Transport, openMailer } from "../../src/modules/notifications/mailer.ts";
 import type { ObjectStore } from "../../src/storage/object-store.ts";
 import { s3Store } from "../../src/storage/s3.ts";
@@ -36,6 +37,8 @@ export async function identityApp(
   storeOf?: (store: ObjectStore) => ObjectStore,
   /** How often live-update streams re-check their person (25 s by default) */
   liveHeartbeatMs?: number,
+  /** How the news finder downloads a chosen photo (a fake: no test reaches the network) */
+  fetchPhoto?: PhotoFetch,
 ): Promise<IdentityApp> {
   const run = inject("database");
   const storage = inject("storage");
@@ -72,6 +75,7 @@ export async function identityApp(
     checks: {},
     ...(store ? { store } : {}),
     ...(liveHeartbeatMs ? { liveHeartbeatMs } : {}),
+    ...(fetchPhoto ? { fetchPhoto } : {}),
   });
   const quiet = { warn: () => undefined, error: () => undefined };
   const mailer = openMailer(config.mail, transport, () => undefined);

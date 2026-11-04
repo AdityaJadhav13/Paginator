@@ -26,7 +26,9 @@ describe("config", () => {
       shutdownGraceSeconds: 10,
       logLevel: "info",
       engineSweep: { staleMs: 7_200_000, deadlineMs: 1_800_000 },
+      aiDailyCapInr: 300,
     });
+    expect(load({ PGN_AI_DAILY_CAP_INR: "50" }).aiDailyCapInr).toBe(50);
     expect(load({ PGN_ENGINE_STALE_S: "3600", PGN_ENGINE_DEADLINE_S: "60" }).engineSweep).toEqual({
       staleMs: 3_600_000,
       deadlineMs: 60_000,

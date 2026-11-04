@@ -42,7 +42,7 @@ describe("Plain action names", () => {
       }
       expect(new Set(names).size, language).toBe(AUDIT_ACTION_NAMES.length);
     }
-    expect(AUDIT_ACTION_NAMES).toHaveLength(47);
+    expect(AUDIT_ACTION_NAMES).toHaveLength(57);
     expect(CATALOGUES.mr["auditLog.action.story.status_change"]).not.toBe(CATALOGUES.en["auditLog.action.story.status_change"]);
   });
 

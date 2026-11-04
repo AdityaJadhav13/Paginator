@@ -23,6 +23,8 @@ import type {
   StoryService,
   EditionService,
   MediaService,
+  NewsService,
+  NewsSettingsDto,
   CommentService,
   LiveEventDto,
   LiveService,
@@ -37,6 +39,7 @@ import type { MockOperation } from "./scenarios.ts";
 import { createCanonicalSeed } from "./seed.ts";
 import { createMockStories, type MockImportOutcome, type MockStoryOperation } from "./create-mock-stories.ts";
 import { createMockLive, type MockLiveController } from "./create-mock-live.ts";
+import { createMockNews, type MockNewsOperation, type MockNewsOutcome } from "./create-mock-news.ts";
 import { createMockAudit, type MockAuditOperation } from "./create-mock-audit.ts";
 import { createMockNotifications, type MockNotificationOperation, type MockOrgStanding } from "./create-mock-notifications.ts";
 import {
@@ -88,6 +91,7 @@ export type MockAuthOperation =
   | "team.resendInvitation"
   | "team.cancelInvitation"
   | MockStoryOperation
+  | MockNewsOperation
   | MockNotificationOperation
   | MockAuditOperation;
 
@@ -152,6 +156,10 @@ export interface MockSessionController {
   prepareAsset(assetId: string, status: "received" | "ready" | "rejected" | "failed", problem?: string | null): void;
   /** The engine's answer for a Word import: its stories made, or its failure; the importer hears it live. */
   finishImport(importId: string, outcome?: MockImportOutcome): Promise<void>;
+  /** The engine's answer for a news finder draft: the story made (with photos when asked), or its failure. */
+  finishNews(draftId: string, outcome?: MockNewsOutcome): void;
+  /** The news finder's AI state, as the last run found it. */
+  setNewsAi(state: NewsSettingsDto["ai"]["state"]): void;
   readonly fixtures: MockSessionFixtures;
 }
 
@@ -164,6 +172,7 @@ export interface MockSessionEnvironment {
   readonly stories: StoryService;
   readonly editions: EditionService;
   readonly media: MediaService;
+  readonly news: NewsService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
   readonly live: LiveService;
@@ -945,7 +954,7 @@ export function createMockSessionEnvironment(
     signedOut: () => signedOutAnswer(),
   });
 
-  const storyDouble = createMockStories({
+  const storyDeps: Parameters<typeof createMockStories>[0] = {
     person: () => {
       const account = current();
       return account ? { userId: account.userId, name: account.name } : undefined;
@@ -972,6 +981,15 @@ export function createMockSessionEnvironment(
     members: memberIds,
     notify: (orgId, userId, notice) => notificationDouble.add(orgId, userId, notice),
     emit: (orgId, event) => emitLive(orgId, event),
+  };
+  const storyDouble = createMockStories(storyDeps);
+  const newsDouble = createMockNews({
+    person: storyDeps.person,
+    standing: storyDeps.standing,
+    signedOut: () => signedOutAnswer(),
+    gate: (operation) => gate(operation),
+    newsStory: (input) => storyDouble.newsStory(input),
+    newsPhoto: (input) => storyDouble.newsPhoto(input),
   });
 
   const sessionController: MockSessionController = {
@@ -1000,6 +1018,7 @@ export function createMockSessionEnvironment(
       acceptedKeys = new Set();
       problems = new Map();
       storyDouble.reset();
+      newsDouble.reset();
       notificationDouble.reset();
       liveDouble.reset();
       acting = 0;
@@ -1026,6 +1045,8 @@ export function createMockSessionEnvironment(
     twoStepState: () => ({ sessionTwoStep, trustedDevice }),
     prepareAsset: (assetId, status, problem) => storyDouble.prepare(assetId, status, problem),
     finishImport: (importId, outcome) => storyDouble.finishImport(importId, outcome),
+    finishNews: (draftId, outcome) => newsDouble.finish(draftId, outcome),
+    setNewsAi: (state) => newsDouble.setAi(state),
     async actAs(other, run) {
       const was = { preset, signedInUserId, sessionTwoStep };
       preset = other;
@@ -1076,6 +1097,7 @@ export function createMockSessionEnvironment(
     stories: storyDouble.stories,
     editions: storyDouble.editions,
     media: storyDouble.media,
+    news: newsDouble.news,
     comments: storyDouble.comments,
     notifications: notificationDouble.notifications,
     live: liveDouble.live,

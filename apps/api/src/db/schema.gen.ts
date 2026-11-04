@@ -10,6 +10,20 @@ export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 /** A column the database computes (generated always): read only. */
 export type GeneratedAlways<T> = ColumnType<T, never, never>;
 
+export interface AppAiUsage {
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  cost_inr: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  input_tokens: number;
+  model: string;
+  org_id: string;
+  output_tokens: number;
+  publication_id: string;
+  purpose: string;
+}
+
 export interface AppAsset {
   bytes: number;
   caption: Generated<string>;
@@ -20,6 +34,9 @@ export interface AppAsset {
   height_px: number;
   id: Generated<string>;
   kind: Generated<string>;
+  licence_label: string | null;
+  licence_name: string | null;
+  licence_url: string | null;
   mime: string;
   org_id: string;
   original_key: GeneratedAlways<string>;
@@ -27,7 +44,10 @@ export interface AppAsset {
   problem: string | null;
   publication_id: string;
   revision: Generated<number>;
+  rights_confirmed_at: Timestamp | null;
+  rights_confirmed_by: string | null;
   sha256: string;
+  source_url: string | null;
   status: Generated<string>;
   updated_at: Generated<Timestamp>;
   uploaded_by: string;
@@ -164,6 +184,75 @@ export interface AppInvitationGrant {
   roles: string[];
 }
 
+export interface AppNewsDraftJob {
+  chosen_asset_id: string | null;
+  created_at: Generated<Timestamp>;
+  find_photo: boolean;
+  flagged: Generated<Json>;
+  id: Generated<string>;
+  language: string;
+  length: string;
+  message: string | null;
+  org_id: string;
+  photos: Generated<Json>;
+  problem: string | null;
+  publication_id: string;
+  state: Generated<string>;
+  story_id: string | null;
+  topic_id: string | null;
+  updated_at: Generated<Timestamp>;
+  user_id: string;
+}
+
+export interface AppNewsItem {
+  created_at: Generated<Timestamp>;
+  hash: string;
+  id: Generated<string>;
+  link: string;
+  org_id: string;
+  publication_id: string;
+  published_at: Timestamp | null;
+  source_id: string;
+  summary: string;
+  title: string;
+  topic_id: string | null;
+}
+
+export interface AppNewsSettings {
+  ai_state: string | null;
+  collect_every_h: Generated<number>;
+  collected_at: Timestamp | null;
+  house_style: Generated<string>;
+  org_id: string;
+  publication_id: string;
+  run_id: string | null;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface AppNewsSource {
+  created_at: Generated<Timestamp>;
+  enabled: Generated<boolean>;
+  id: Generated<string>;
+  language: string;
+  last_error: string | null;
+  last_fetch_at: Timestamp | null;
+  name: string;
+  org_id: string;
+  publication_id: string;
+  updated_at: Generated<Timestamp>;
+  url: string;
+}
+
+export interface AppNewsTopic {
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  importance: number;
+  org_id: string;
+  publication_id: string;
+  title_en: string;
+  title_mr: string;
+}
+
 export interface AppNotification {
   created_at: Generated<Timestamp>;
   data: Generated<Json>;
@@ -254,6 +343,8 @@ export interface AppStory {
   edition_id: string | null;
   id: Generated<string>;
   language: string;
+  made_with_claude: Generated<boolean>;
+  news_sources: Json | null;
   org_id: string;
   origin: Generated<string>;
   page_pin: number | null;
@@ -331,6 +422,7 @@ export interface AppUploadQuota {
 }
 
 export interface DB {
+  "app.ai_usage": AppAiUsage;
   "app.asset": AppAsset;
   "app.audit_event": AppAuditEvent;
   "app.comment": AppComment;
@@ -341,6 +433,11 @@ export interface DB {
   "app.idempotency_key": AppIdempotencyKey;
   "app.import_job": AppImportJob;
   "app.invitation_grant": AppInvitationGrant;
+  "app.news_draft_job": AppNewsDraftJob;
+  "app.news_item": AppNewsItem;
+  "app.news_settings": AppNewsSettings;
+  "app.news_source": AppNewsSource;
+  "app.news_topic": AppNewsTopic;
   "app.notification": AppNotification;
   "app.org_settings": AppOrgSettings;
   "app.person": AppPerson;

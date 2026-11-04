@@ -12,6 +12,7 @@ import type {
   StoryService,
   EditionService,
   MediaService,
+  NewsService,
   CommentService,
   NotificationService,
   LiveService,
@@ -37,6 +38,7 @@ export interface MockApplicationEnvironment extends ServiceEnvironment {
   readonly stories: StoryService;
   readonly editions: EditionService;
   readonly media: MediaService;
+  readonly news: NewsService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
   readonly live: LiveService;

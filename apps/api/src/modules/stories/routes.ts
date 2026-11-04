@@ -131,6 +131,7 @@ export function view(row: StoryRow, access: Access, userId: string): Story {
           }
         : null,
     commentCount: row.comment_count,
+    ...(row.origin === "news" ? { madeWithClaude: row.made_with_claude, newsSources: row.news_sources ?? [] } : {}),
     updatedAt: row.updated_at.toISOString(),
     updatedBy: { id: row.updated_by, name: row.updated_by_name },
     can: {

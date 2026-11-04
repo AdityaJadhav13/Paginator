@@ -21,6 +21,7 @@
 - [10-l2-newsroom-plan.md](10-l2-newsroom-plan.md): the L2 "newsroom" plan (proposal, 2026-10-20, awaiting the owner's decisions): accounts and the story desk first, then hosted photos, layout, the page editor, release and ads
 - [11-fix-before-launch.md](11-fix-before-launch.md): the minor findings left for the end, fixed before launch (owner decision 2026-10-21)
 - [12-l2.1-evidence.md](12-l2.1-evidence.md): the L2.1 verification (PR 26, 2026-11-02): what was run, with what result, and what is not yet verified
+- [13-news-finder.md](13-news-finder.md): the news finder, the sidebar's Sources (L2.7, owner request 2026-11-04)
 
 ## 0. Context
 

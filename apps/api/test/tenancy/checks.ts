@@ -47,6 +47,14 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   upload_quota: ["INSERT", "SELECT", "UPDATE"],
   // Word imports (migration 2026_11_30_0001): an import only changes state, never removed
   import_job: ["INSERT", "SELECT", "UPDATE"],
+  // the news finder (migration 2026_12_01_0001): sources are removed, and items and topics purged after three days;
+  // drafts only change state, and the AI spend only grows
+  news_settings: ["INSERT", "SELECT", "UPDATE"],
+  news_source: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  news_topic: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  news_item: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  news_draft_job: ["INSERT", "SELECT", "UPDATE"],
+  ai_usage: ["INSERT", "SELECT"],
   // notifications (migration 2026_11_24_0001): never deleted; only read_at and emailed_at change (COLUMN_RIGHTS)
   notification: ["INSERT", "SELECT"],
   publication_grant: ["DELETE", "INSERT", "SELECT", "UPDATE"],
@@ -83,7 +91,12 @@ export const OPENINGS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /** The SECURITY DEFINER functions there may be, each executable by pgn_app alone: the enqueue wrapper. */
-export const DEFINERS = ["app.enqueue_media_ingest", "app.enqueue_docx_import"];
+export const DEFINERS = [
+  "app.enqueue_media_ingest",
+  "app.enqueue_docx_import",
+  "app.enqueue_news_collect",
+  "app.enqueue_news_draft",
+];
 
 /** The column-level grants allowed, as `schema.table role RIGHT (columns)`: any other is a problem. */
 export const COLUMN_RIGHTS: readonly string[] = [

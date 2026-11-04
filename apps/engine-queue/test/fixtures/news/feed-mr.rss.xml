@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A fictional Marathi feed for the news finder's tests: no real outlet, no real story. -->
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>काल्पनिक वार्ता</title>
+    <link>https://kalpanik.example/</link>
+    <description>चाचणीसाठी काल्पनिक बातम्या</description>
+    <item>
+      <title>सुंदरपूर धरणाचे दरवाजे उघडले</title>
+      <link>https://kalpanik.example/batmya/dharan-darwaje</link>
+      <description><![CDATA[<p>सुंदरपूर धरणातून <b>पाच हजार</b> क्युसेक पाणी सोडण्यात आले.</p><img src="x.jpg">]]></description>
+      <pubDate>Tue, 03 Nov 2026 06:30:00 +0530</pubDate>
+      <guid isPermaLink="false">kalpanik-101</guid>
+    </item>
+    <item>
+      <title>नवगाव बाजार समितीत कांद्याचे भाव वाढले</title>
+      <link>/batmya/kanda-bhav</link>
+      <description>कांद्याला &lt;i&gt;विक्रमी&lt;/i&gt; दर &amp; मागणी वाढली.</description>
+      <dc:date>2026-11-03T08:00:00+05:30</dc:date>
+    </item>
+    <item>
+      <title>शीर्षकाशिवाय दुवा नाही</title>
+      <description>या बातमीला दुवा नाही, म्हणून ती वगळली जाते.</description>
+    </item>
+    <item>
+      <title>सुंदरपूर धरणाचे दरवाजे उघडले</title>
+      <link>https://kalpanik.example/batmya/dharan-darwaje</link>
+      <description>तीच बातमी पुन्हा.</description>
+    </item>
+  </channel>
+</rss>

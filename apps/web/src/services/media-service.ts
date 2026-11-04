@@ -66,6 +66,9 @@ export interface MediaService {
   get(input: Where & { readonly assetId: string }): Promise<ServiceResult<MediaItemDto, ApiProblem>>;
   /** Its caption, credit, photographer (PATCH …/assets/:a): 409 asset_changed keeps the picture now in `current`. */
   update(input: Where & { readonly assetId: string; readonly patch: MediaPatchDto }): Promise<ServiceResult<MediaItemDto, ApiProblem>>;
+  /** "We have the right to print this" for a Needs-permission picture (POST …/assets/:a/rights): who and when are
+   * recorded on it, and the picture comes back with them. */
+  confirmRights(input: Where & { readonly assetId: string }): Promise<ServiceResult<MediaItemDto, ApiProblem>>;
   /** Deletes it (DELETE …/assets/:a): 409 asset_in_use while a story uses it. */
   remove(input: Where & { readonly assetId: string; readonly baseRevision: number }): Promise<ServiceResult<void, ApiProblem>>;
 }

@@ -556,8 +556,10 @@ describe("downloads", () => {
 
 describe("storage tenancy (d): every media route with another tenant's ids answers 404", () => {
   it("walks the route table: another organisation, another publication, another publication's ids", async () => {
+    // the news finder's found-photo route has its own walls' test (news-finder.test.ts)
     const routes = it_.app.apiRoutes.filter(
-      (route) => /\/(uploads|assets|photo)\b/.test(route.url) && route.method !== "HEAD",
+      (route) =>
+        /\/(uploads|assets|photo)\b/.test(route.url) && !route.url.includes("/news/") && route.method !== "HEAD",
     );
     expect(routes.length).toBeGreaterThanOrEqual(6);
     const b = await n.organisation();

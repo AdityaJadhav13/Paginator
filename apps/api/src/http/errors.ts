@@ -39,6 +39,10 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
   },
   // the Desk's own words (deskserver/docx.py NOT_WORD); details say more (too large)
   docx_refused: { status: 422, message: "This is not a Word (.docx) file. Save it as .docx and try again." },
+  rights_needed: {
+    status: 422,
+    message: "This photo needs permission to print. Tick “We have the right to print this” first.",
+  },
   bundle_refused: {
     status: 409,
     message: "Some stories cannot be sent to the Desk as they are. Change them, then send again.",

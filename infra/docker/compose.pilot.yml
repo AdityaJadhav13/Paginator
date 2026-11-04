@@ -137,7 +137,9 @@ x-backup: &backup
 # The engine: the queue as pgn_engine, the Python runner it spawns per job, and its own settings only (never the API's
 # or the migrator's secrets): the database as pgn_engine, its own S3 key (orgs/ in the work bucket only:
 # infra/aws/iam-engine-policy.json), and the newsprint colour profile, mounted read only and checked against
-# PGN_ICC_SHA256. The image runs as its own user (10001), the homes on a volume of their own.
+# PGN_ICC_SHA256. The image runs as its own user (10001), the homes on a volume of their own. The news finder's
+# Claude key is the engine's alone (empty: the AI part is off, collection still works; owner decision D-26); the queue
+# never passes it to the Python runner. The engine needs outbound HTTPS for the feeds, Commons, Openverse and Claude.
 x-engine-environment: &engine-environment
   <<: *database
   PGN_ENGINE_PASSWORD: ${PGN_ENGINE_PASSWORD:?}
@@ -149,6 +151,9 @@ x-engine-environment: &engine-environment
   PGN_S3_SECRET_ACCESS_KEY: ${PGN_ENGINE_S3_SECRET_ACCESS_KEY:?}
   PGN_S3_WORK_BUCKET: ${PGN_S3_WORK_BUCKET:?}
   PGN_ICC_SHA256: ${PGN_ICC_SHA256:?}
+  ANTHROPIC_API_KEY: ${PGN_ANTHROPIC_API_KEY:-}
+  PGN_AI_MODEL: ${PGN_AI_MODEL:-claude-opus-5-5}
+  PGN_AI_INR_PER_USD: ${PGN_AI_INR_PER_USD:-88}
   NODE_EXTRA_CA_CERTS: /etc/pageinator/ca.pem
 
 x-engine: &engine

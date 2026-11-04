@@ -3,6 +3,7 @@
 // Objects are strict, and responses are sent through these schemas.
 import { z } from "zod";
 import { StoryPhoto } from "./media.ts";
+import { NewsSourceLink } from "./news.ts";
 
 const Id = z.uuid();
 const Moment = z.iso.datetime({ offset: true });
@@ -59,6 +60,11 @@ export const Story = z.strictObject({
   updatedAt: Moment,
   updatedBy: Person,
   can: StoryCan,
+  /** the news finder's (L2.7): true while the text is still as Claude drafted it ("Made with Claude — check before
+   * use"), until a person edits it; absent on stories not made by the news finder */
+  madeWithClaude: z.boolean().optional(),
+  /** the news finder's: the sources the draft was written from (the editor sees them; not printed) */
+  newsSources: z.array(NewsSourceLink).optional(),
 });
 export type Story = z.infer<typeof Story>;
 

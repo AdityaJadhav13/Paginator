@@ -8,7 +8,11 @@
 //   PGN_DB_HOST, PGN_DB_PORT (5432), PGN_DB_NAME, PGN_ENGINE_PASSWORD; PGSSLMODE as node-postgres reads it
 //   PGN_QUEUE_CONCURRENCY (1), PGN_RUNNER_TIMEOUT_S (180), PGN_WORKER_PYTHON (python), PGN_WORKER_DIR (the runner's cwd)
 //   and the runner's own settings (PGN_S3_*, PGN_ICC_SHA256, PAGEINATOR_ICC, PGN_WORKER_HOMES: runnerEnv passes only those)
+//   the news finder's Claude: ANTHROPIC_API_KEY (none: the AI part is off, collection still works; never passed to
+//   the Python runner), PGN_AI_MODEL (claude-opus-5-5), PGN_AI_INR_PER_USD (88: the rupee price of a dollar, for the
+//   spend log and the cap)
 import { reportToInbox } from "./inbox.ts";
+import { AnthropicAi } from "./news/ai.ts";
 import { startQueue, type QueueSettings } from "./queue.ts";
 
 export class SettingsError extends Error {}
@@ -34,11 +38,18 @@ export function settingsFrom(env: NodeJS.ProcessEnv): QueueSettings {
   url.username = "pgn_engine";
   url.password = encodeURIComponent(need("PGN_ENGINE_PASSWORD"));
   url.searchParams.set("application_name", "pageinator-engine-queue");
+  const model = env["PGN_AI_MODEL"] || "claude-opus-5-5";
+  if (!/^[a-z0-9][a-z0-9.-]{0,99}$/.test(model)) throw new SettingsError("PGN_AI_MODEL must be a model id");
+  const rate = env["PGN_AI_INR_PER_USD"] || "88";
+  if (!/^[0-9]{1,4}(\.[0-9]{1,4})?$/.test(rate) || Number(rate) <= 0)
+    throw new SettingsError("PGN_AI_INR_PER_USD must be a positive number of rupees");
+  const apiKey = env["ANTHROPIC_API_KEY"];
   return {
     connectionString: url.href,
     concurrency: whole("PGN_QUEUE_CONCURRENCY", "1", 16),
     noHandleSignals: true,
     report: reportToInbox,
+    news: { ai: apiKey ? new AnthropicAi({ apiKey, model, inrPerUsd: Number(rate) }) : null },
     runner: {
       command: env["PGN_WORKER_PYTHON"] || "python",
       args: ["-B", "-m", "pgn_worker.run"],

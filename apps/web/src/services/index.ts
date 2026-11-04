@@ -53,6 +53,17 @@ export type {
   UploadPurposeDto,
 } from "./media-service.ts";
 export type { ContactConnection, ContactOutcome, ContactRequestDto, ContactService } from "./contact-service.ts";
+export type {
+  DraftLengthDto,
+  NewsDraftDto,
+  NewsLanguageDto,
+  NewsPickDto,
+  NewsService,
+  NewsSettingsDto,
+  NewsSourceDto,
+  NewsSourceInputDto,
+  NewsTopicDto,
+} from "./news-service.ts";
 export type { ServiceEnvironment } from "./environment.ts";
 export type { CommentDto, CommentPatchDto, CommentService } from "./comment-service.ts";
 export type {

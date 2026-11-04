@@ -3,10 +3,10 @@
 // events the queue writes to the API's inbox (app.engine_event). Snake case, as the runner writes them.
 import { z } from "zod";
 
-/** The database's ids: uuidv7, as PostgreSQL writes them (lowercase, the RFC 9562 variant). */
-export const Uuid7 = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-/** An organisation's id: Better Auth's (gen_random_uuid(), version 4), so any RFC 9562 version, lowercase. */
-export const OrgId = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+import { OrgId, Uuid7 } from "./ids.ts";
+import { NewsCollected, NewsDrafted, NewsDraftFailed } from "./news.ts";
+
+export { OrgId, Uuid7 };
 const Sha256 = z.string().regex(/^[0-9a-f]{64}$/);
 const VersionId = z.string().min(1).max(1024);
 /** A count the database keeps as an integer (app.rendition.bytes): a larger one is refused as the contract's. */
@@ -117,7 +117,7 @@ export const DocxResult = z.strictObject({
 });
 export type DocxResult = z.infer<typeof DocxResult>;
 
-export const JOB_KINDS = ["media.ingest", "docx.import"] as const;
+export const JOB_KINDS = ["media.ingest", "docx.import", "news.collect", "news.draft"] as const;
 
 /** A job that cannot finish (the queue writes it: a final failure, or a retry out of attempts). */
 export const JobFailed = z.strictObject({
@@ -125,7 +125,7 @@ export const JobFailed = z.strictObject({
   org_id: OrgId,
   pub_id: Uuid7,
   job_kind: z.enum(JOB_KINDS),
-  /** the asset (media.ingest) or the import (docx.import) */
+  /** the asset (media.ingest), the import (docx.import), the run (news.collect) or the draft (news.draft) */
   target_id: Uuid7,
   code: z.string().regex(/^worker\.[a-z]{1,120}$/),
   message: z.string().max(2000),
@@ -136,6 +136,9 @@ export const EngineEvent = z.discriminatedUnion("kind", [
   MediaRejected,
   ImportParsed,
   ImportRejected,
+  NewsCollected,
+  NewsDrafted,
+  NewsDraftFailed,
   JobFailed,
 ]);
 export type EngineEvent = z.infer<typeof EngineEvent>;

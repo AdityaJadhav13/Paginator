@@ -26,6 +26,13 @@ export const REVIEWED: Record<string, { licence: string; version?: string; why: 
   "lru-cache": { licence: "BlueOak-1.0.0", why: "permissive (like MIT, with a patent grant); a tool dependency" },
   minimatch: { licence: "BlueOak-1.0.0", why: "permissive (like MIT, with a patent grant); a tool dependency" },
   "mdn-data": { licence: "CC0-1.0", why: "public-domain data for the CSS tools" },
+  // the official Claude SDK's webhook verifier (@anthropic-ai/sdk → standardwebhooks), the news finder's (L2.7); the
+  // Unlicense is a public-domain dedication, more permissive than MIT; version 1.3.0 as reviewed
+  "fast-sha256": {
+    licence: "Unlicense",
+    version: "1.3.0",
+    why: "public-domain dedication (Unlicense); a dependency of the Claude SDK's webhook helper, used unmodified",
+  },
   // Owner decision 2026-10-24 (docs/product/09-launch-plan.md §1): the PSF licence (SPDX "Python-2.0", the Python
   // Software Foundation licence stack argparse carries) for argparse only, used unmodified (graphile-worker's
   // cosmiconfig → js-yaml), version 2.0.1 as reviewed. Any other package under it, argparse under another licence, or

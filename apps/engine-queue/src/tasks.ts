@@ -6,15 +6,20 @@
 // attempt, or the inbox refuses every report) the API's sweep settles (plan §2.2, exhaustedJobs).
 import {
   DocxImportPayload,
+  EngineEvent,
   MediaIngestPayload,
+  NewsCollectPayload,
+  NewsDraftPayload,
   OrgId,
   Uuid7,
   WORKER_JOB_FORMAT,
-  type EngineEvent,
+  type JOB_KINDS,
   type WorkerJob,
 } from "@pageinator/contracts";
 import type { JobHelpers, Task, TaskList } from "graphile-worker";
 import { z } from "zod";
+import { draft } from "./news/draft.ts";
+import { collect, type NewsDeps } from "./news/group.ts";
 import { runJob, type RunOutcome, type RunnerSettings } from "./runner.ts";
 
 export const QUEUE_SCHEMA = "queue";
@@ -49,9 +54,13 @@ type Kind = keyof typeof KINDS;
 const Target = z.object({ org_id: OrgId, pub_id: Uuid7, target_id: Uuid7 });
 type Target = z.infer<typeof Target>;
 
-/** The target an event names (its asset, or its import). */
-export const targetOf = (event: EngineEvent): string =>
-  event.kind === "job.failed" ? event.target_id : "asset_id" in event ? event.asset_id : event.import_id;
+/** The target an event names (its asset, its import, the news run or the news draft). */
+export function targetOf(event: EngineEvent): string {
+  if (event.kind === "job.failed") return event.target_id;
+  if ("asset_id" in event) return event.asset_id;
+  if ("import_id" in event) return event.import_id;
+  return "run_id" in event ? event.run_id : event.draft_id;
+}
 
 export function engineTask(
   kind: Kind,
@@ -133,7 +142,7 @@ async function reportWithRetries(report: Report, event: EngineEvent, helpers: Jo
   }
 }
 
-function failed(kind: Kind, target: Target, code: string, message: string): EngineEvent {
+function failed(kind: (typeof JOB_KINDS)[number], target: Target, code: string, message: string): EngineEvent {
   return {
     kind: "job.failed",
     org_id: target.org_id,
@@ -145,14 +154,55 @@ function failed(kind: Kind, target: Target, code: string, message: string): Engi
   };
 }
 
+/** The news finder's jobs (L2.7): run here in TypeScript, not by the Python runner. Their payload carries what they
+ * need (checked by its contract; one that is not settles its run or draft as job.failed), and their event is checked
+ * by its contract before it is reported. On the last attempt a failure the queue would retry (a rate limit, an
+ * outage) is settled in the event instead (news.collect: its items without topics; news.draft: ai.error). A cancel
+ * (the queue stopping) gives the attempt back and reports nothing. */
+export function newsTask(kind: "news.collect" | "news.draft", deps: NewsDeps, report: Report): Task {
+  const field = kind === "news.collect" ? "run_id" : "draft_id";
+  return async (payload, helpers) => {
+    const settle = (event: EngineEvent) => reportWithRetries(report, event, helpers);
+    const named = payload as Record<string, unknown> | null;
+    const target = Target.safeParse({ ...named, target_id: named?.[field] });
+    if (!target.success) {
+      helpers.logger.error(`${kind}: a payload that names no ${field}; the job is dropped`);
+      return;
+    }
+    const final = helpers.job.attempts >= helpers.job.max_attempts;
+    const news = { ...deps, signal: helpers.abortSignal };
+    let event: EngineEvent | null = null;
+    if (kind === "news.collect") {
+      const args = NewsCollectPayload.safeParse(payload);
+      if (args.success) event = await collect(args.data, news, final);
+    } else {
+      const args = NewsDraftPayload.safeParse(payload);
+      if (args.success) event = await draft(args.data, news, final);
+    }
+    if (!event)
+      return settle(failed(kind, target.data, "worker.job", "the job's payload is not the news finder's payload"));
+    if (helpers.abortSignal?.aborted) {
+      await giveBack(helpers);
+      throw new RetryLater("worker.cancelled"); // what it found while stopping is not reported
+    }
+    const checked = EngineEvent.safeParse(event);
+    if (!checked.success || targetOf(checked.data) !== target.data.target_id)
+      return settle(failed(kind, target.data, "worker.output", "the job's event does not match its contract"));
+    return settle(checked.data);
+  };
+}
+
 export function taskList(
   settings: RunnerSettings,
   report: Report,
   misconfigured?: () => void,
   run: Run = runJob,
+  news: NewsDeps = { ai: null },
 ): TaskList {
   return {
     "media.ingest": engineTask("media.ingest", settings, report, misconfigured, run),
     "docx.import": engineTask("docx.import", settings, report, misconfigured, run),
+    "news.collect": newsTask("news.collect", news, report),
+    "news.draft": newsTask("news.draft", news, report),
   };
 }

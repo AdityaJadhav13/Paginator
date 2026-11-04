@@ -5,6 +5,7 @@ import { run, type Runner } from "graphile-worker";
 import pg from "pg";
 import { healthy, type RunnerSettings } from "./runner.ts";
 import type { Query } from "./schema.ts";
+import type { NewsDeps } from "./news/group.ts";
 import { QUEUE_SCHEMA, taskList, type Report } from "./tasks.ts";
 
 export { QUEUE_SCHEMA };
@@ -81,6 +82,41 @@ revoke execute on function app.enqueue_docx_import(uuid, uuid, uuid, text, text)
 grant execute on function app.enqueue_docx_import(uuid, uuid, uuid, text, text) to pgn_app;
 `;
 
+/** The news finder's enqueues (L2.7), made by migration 2026_12_01_0001 as APP_ENQUEUE is: SECURITY DEFINER, pgn_app's
+ * only, only for app.current_org(). Unlike the photo and Word jobs their payload carries what the job needs (the
+ * feeds' links, the known links' hashes, the articles' links and the house style: no secret, nothing a person wrote
+ * but the house style), built and checked by the API (NewsCollectPayload, NewsDraftPayload) and checked again by the
+ * task. Job keys news-collect:<pub> (one waiting collection per publication: a newer one replaces it) and
+ * news-draft:<draft>. Fewer attempts than the engine's jobs: a collection runs again on its schedule, and a draft the
+ * editor asks for again. */
+export const NEWS_MAX_ATTEMPTS = 3;
+export const APP_ENQUEUE_NEWS = `
+create function app.enqueue_news_collect(org_id uuid, payload jsonb)
+returns bigint language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+begin
+  if org_id is null or org_id is distinct from app.current_org() or payload->>'org_id' is distinct from org_id::text then
+    raise exception 'a job for another organisation' using errcode = 'insufficient_privilege';
+  end if;
+  return (queue.add_job('news.collect', payload::json, max_attempts => ${NEWS_MAX_ATTEMPTS},
+    job_key => 'news-collect:' || (payload->>'pub_id'))).id;
+end
+$$;
+revoke execute on function app.enqueue_news_collect(uuid, jsonb) from public;
+grant execute on function app.enqueue_news_collect(uuid, jsonb) to pgn_app;
+create function app.enqueue_news_draft(org_id uuid, payload jsonb)
+returns bigint language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+begin
+  if org_id is null or org_id is distinct from app.current_org() or payload->>'org_id' is distinct from org_id::text then
+    raise exception 'a job for another organisation' using errcode = 'insufficient_privilege';
+  end if;
+  return (queue.add_job('news.draft', payload::json, max_attempts => ${NEWS_MAX_ATTEMPTS},
+    job_key => 'news-draft:' || (payload->>'draft_id'))).id;
+end
+$$;
+revoke execute on function app.enqueue_news_draft(uuid, jsonb) from public;
+grant execute on function app.enqueue_news_draft(uuid, jsonb) to pgn_app;
+`;
+
 export type ExhaustedJob = {
   id: string;
   task_identifier: string;
@@ -136,6 +172,8 @@ export type QueueSettings = {
   concurrency: number;
   runner: RunnerSettings;
   report: Report;
+  /** the news finder's jobs: Claude (null: the AI part is off) */
+  news?: NewsDeps;
   noHandleSignals?: boolean; // true when the process handles SIGTERM itself (then it calls stop())
 };
 
@@ -185,7 +223,7 @@ export async function startQueue(settings: QueueSettings): Promise<Runner> {
       schema: QUEUE_SCHEMA,
       concurrency: settings.concurrency,
       noHandleSignals: settings.noHandleSignals ?? false,
-      taskList: taskList(settings.runner, settings.report, stopForConfig),
+      taskList: taskList(settings.runner, settings.report, stopForConfig, undefined, settings.news),
       // no cron item and no crontab file: `crontab: ""` is empty, so Graphile Worker would read ./crontab instead
       parsedCronItems: [],
       // running jobs end by themselves (the runner's own time limit) rather than by Graphile Worker's cancel

@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { reach } from "@pageinator/contracts";
 import {
+  Badge,
   Button,
   Cluster,
   Dialog,
@@ -28,6 +29,7 @@ import {
   TextInput,
 } from "../../ui/index.ts";
 import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
+import { formatDateTime } from "../../i18n/dates.ts";
 import { useI18n, type Translate } from "../../i18n/index.ts";
 import type { ApiProblem, MediaItemDto, MediaPatchDto } from "../../services/index.ts";
 import { OfflineNotice } from "../auth/connection.tsx";
@@ -63,6 +65,8 @@ export function MediaScreen() {
   const open = !!org && !(org.twoStep.required && !org.twoStep.satisfied);
   const uploadReach = org ? reach("media.upload", org.orgRole, pubAccess(org, pubId)) : null;
   const upload = open && uploadReach !== null;
+  // "We have the right to print this" on a found photo: the desk's (story.assign)
+  const mayConfirm = open && !!org && reach("story.assign", org.orgRole, pubAccess(org, pubId)) !== null;
   const [version, setVersion] = useState(0);
   const [chosen, setChosen] = useState<MediaItemDto | null>(null);
   const files = useRef<HTMLInputElement>(null);
@@ -115,6 +119,7 @@ export function MediaScreen() {
             item={chosen}
             mayEdit={upload && chosen.mayEdit}
             mayDelete={uploadReach === "full"}
+            mayConfirm={mayConfirm}
             onChanged={(item) => {
               setChosen(item);
               setVersion((count) => count + 1);
@@ -278,6 +283,7 @@ function MediaDetail({
   item: first,
   mayEdit,
   mayDelete,
+  mayConfirm,
   onChanged,
   onDeleted,
 }: {
@@ -286,11 +292,12 @@ function MediaDetail({
   readonly item: MediaItemDto;
   readonly mayEdit: boolean;
   readonly mayDelete: boolean;
+  readonly mayConfirm: boolean;
   readonly onChanged: (item: MediaItemDto) => void;
   readonly onDeleted: () => void;
 }) {
   const media = useMedia();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [item, setItem] = useState(first);
   const [typed, setTyped] = useState<Facts>(() => factsOf(first));
   const [saving, setSaving] = useState(false);
@@ -354,7 +361,16 @@ function MediaDetail({
     onDeleted();
   };
 
+  const confirmRights = async () => {
+    setProblem(null);
+    const result = await media.confirmRights({ orgId, pubId, assetId: item.id });
+    if (!result.ok) return setProblem(result.error);
+    setItem(result.value);
+    onChanged(result.value);
+  };
+
   const reason = mediaReason(item, t);
+  const licence = item.licence;
   const unusable = item.status === "rejected" || item.status === "failed";
   const facts: readonly [string, string][] = [
     [t("library.fact.type"), TYPE_NAMES[item.mime]],
@@ -404,6 +420,68 @@ function MediaDetail({
           </div>
         ))}
       </dl>
+
+      {licence && (
+        <section aria-labelledby={`licence-${item.id}`}>
+          <Stack gap="2">
+            <h3 id={`licence-${item.id}`} className="pg-type-section-title">
+              {t("news.licence")}
+            </h3>
+            <div>
+              <Badge
+                tone={licence.label === "safe" ? "success" : "warning"}
+                icon={licence.label === "safe" ? "circle-check" : "triangle-alert"}
+              >
+                {t(licence.label === "safe" ? "news.label.safe" : "news.label.needs_permission")}
+              </Badge>
+            </div>
+            <dl className="pg-media__facts">
+              <div>
+                <dt>{t("news.licence")}</dt>
+                <dd>
+                  {licence.url ? (
+                    <a href={licence.url} target="_blank" rel="noopener noreferrer">
+                      <bdi>{licence.name}</bdi>
+                    </a>
+                  ) : (
+                    <bdi>{licence.name}</bdi>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t("news.licence.found")}</dt>
+                <dd>
+                  <a href={licence.sourceUrl} target="_blank" rel="noopener noreferrer">
+                    <bdi>{licence.sourceUrl}</bdi>
+                  </a>
+                </dd>
+              </div>
+            </dl>
+            {licence.rightsConfirmed ? (
+              <p>
+                <Icon name="badge-check" size={16} />{" "}
+                {t("news.rights.by", {
+                  name: licence.rightsConfirmed.by.name,
+                  time: formatDateTime(licence.rightsConfirmed.at, language),
+                })}
+              </p>
+            ) : (
+              licence.label === "needs_permission" && (
+                <>
+                  <p>{t("news.rights.needed")}</p>
+                  {mayConfirm && (
+                    <div>
+                      <Button variant="secondary" onClick={() => void confirmRights()}>
+                        {t("news.rights")}
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )
+            )}
+          </Stack>
+        </section>
+      )}
 
       <form
         className="pg-media__form"

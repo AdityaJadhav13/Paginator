@@ -56,6 +56,7 @@ import { moveKey, StatusChip, statusKey } from "./StatusChip.tsx";
 import { useStories } from "./stories-context.tsx";
 import { usePublicationEditions } from "../editions/editions-context.tsx";
 import "./stories.css";
+import "../news/news.css";
 
 const AUTOSAVE_MS = 1500;
 const TEXT_KEYS = ["headline", "kicker", "deck", "byline", "body"] as const;
@@ -977,6 +978,12 @@ function EditorContent({
           )}
         </div>
 
+        {story?.madeWithClaude && (
+          <InlineMessage variant="warning" heading={t("news.madeWithClaude")} iconLabel={t("message.warning")}>
+            {t("news.madeWithClaude.body")}
+          </InlineMessage>
+        )}
+
         {offered && (
           <InlineMessage variant="warning" heading={t("editor.draft.heading")} iconLabel={t("message.warning")}>
             <Stack gap="3">
@@ -1145,6 +1152,26 @@ function EditorContent({
                 </Panel>
               )}
             </form>
+
+            {story?.newsSources && story.newsSources.length > 0 && (
+              <Panel title={t("news.storySources")}>
+                <Stack gap="2">
+                  <p className="pg-type-body-small">{t("news.storySources.hint")}</p>
+                  <ul className="pg-news__sources">
+                    {story.newsSources.map((source) => (
+                      <li key={source.url}>
+                        <a href={source.url} target="_blank" rel="noopener noreferrer">
+                          <bdi>{source.title}</bdi>
+                        </a>{" "}
+                        <span className="pg-type-body-small">
+                          (<bdi>{source.site}</bdi>)
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </Stack>
+              </Panel>
+            )}
 
             {story && !gone && story.can.assign && (
               <Panel title={t("editor.panel.workflow")}>

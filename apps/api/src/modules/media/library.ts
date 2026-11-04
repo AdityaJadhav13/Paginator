@@ -9,6 +9,9 @@
 //     asset_changed with the picture as it is now), cleaned as the Desk cleans text; a Reporter's only on the ones
 //     they uploaded (first, or again). At least one field; a change to nothing changes nothing (no new revision, no
 //     audit). Audited (asset.edit: which fields, never what they say). Each item says `mayEdit` by this same rule.
+//   - POST …/assets/:a/rights (story.assign: the desk, who picks found photos): "We have the right to print this" on a
+//     found photo (the news finder's), recorded once with who and when, and audited (asset.rights_confirm); a picture
+//     that is not a found photo is not found. Answers the picture.
 //   - DELETE …/assets/:a?baseRevision= (a full media.upload): deleted (deleted_at; the original stays in the store),
 //     409 asset_in_use while a story has it as its photo. Audited (asset.delete).
 import { MediaItem, MediaList, MediaPatch, MediaQuery } from "@pageinator/contracts";
@@ -18,6 +21,7 @@ import { recordAudit } from "../../db/audit.ts";
 import { findStory } from "../../db/stories.ts";
 import {
   type LibraryRow,
+  confirmRights,
   deleteAsset,
   editAsset,
   findAsset,
@@ -93,6 +97,23 @@ async function items(tx: Tx, access: Access, o: string, p: string, userId: strin
     updatedAt: row.updated_at.toISOString(),
     // the API's own preview download (a 302 to a 5-minute link), once the engine has made it
     previewUrl: row.status === "ready" ? `/api/v1/orgs/${o}/pubs/${p}/assets/${row.id}/file?variant=preview` : null,
+    ...(row.licence_label && row.source_url
+      ? {
+          licence: {
+            name: row.licence_name ?? "",
+            url: row.licence_url,
+            sourceUrl: row.source_url,
+            label: row.licence_label,
+            rightsConfirmed:
+              row.rights_confirmed_by && row.rights_confirmed_at
+                ? {
+                    by: { id: row.rights_confirmed_by, name: row.rights_confirmed_by_name ?? "" },
+                    at: row.rights_confirmed_at.toISOString(),
+                  }
+                : null,
+          },
+        }
+      : {}),
   }));
 }
 
@@ -210,6 +231,31 @@ export const libraryRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { 
         });
         const changed = (await visible(tx, access, p, a, userId)) as LibraryRow;
         return (await items(tx, access, o, p, userId, [changed]))[0] as MediaItem;
+      });
+    },
+  );
+
+  app.post(
+    "/api/v1/orgs/:o/pubs/:p/assets/:a/rights",
+    { config: { permission: "story.assign" }, schema: { params: OneAsset, response: { 200: MediaItem } } },
+    async (request) => {
+      const access = accessOf(request);
+      const userId = actorOf(request).userId;
+      const { o, p, a } = request.params;
+      return database.withTenant(access.tenant, async (tx) => {
+        const row = await visible(tx, access, p, a, userId);
+        if (!row?.licence_label) throw new ApiError("not_found");
+        if (await confirmRights(tx, p, a, userId)) {
+          await recordAudit(tx, access.tenant, {
+            action: "asset.rights_confirm",
+            targetType: "asset",
+            targetId: a,
+            publicationId: p,
+            data: { label: row.licence_label },
+          });
+        }
+        const now = (await visible(tx, access, p, a, userId)) as LibraryRow;
+        return (await items(tx, access, o, p, userId, [now]))[0] as MediaItem;
       });
     },
   );

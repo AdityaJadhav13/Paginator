@@ -20,6 +20,7 @@ export const ERROR_CODES = [
   "file_too_large",
   "not_a_picture",
   "docx_refused",
+  "rights_needed",
   "bundle_refused",
   "request_too_large",
   "not_json",

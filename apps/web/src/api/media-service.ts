@@ -159,6 +159,10 @@ export function createApiMediaService(
       return read(MediaItem, await client.patch(`${pub(orgId, pubId)}/assets/${encodeURIComponent(assetId)}`, patch));
     },
 
+    async confirmRights({ orgId, pubId, assetId }) {
+      return read(MediaItem, await client.post(`${pub(orgId, pubId)}/assets/${encodeURIComponent(assetId)}/rights`, {}));
+    },
+
     async remove({ orgId, pubId, assetId, baseRevision }) {
       const answer = await client.delete(`${pub(orgId, pubId)}/assets/${encodeURIComponent(assetId)}?baseRevision=${baseRevision}`);
       return answer.ok ? { ok: true, value: undefined } : { ok: false, error: answer.problem };

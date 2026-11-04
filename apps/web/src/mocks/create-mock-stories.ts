@@ -79,6 +79,7 @@ export type MockStoryOperation =
   | "media.get"
   | "media.update"
   | "media.remove"
+  | "media.rights"
   | "comments.list"
   | "comments.create"
   | "comments.update"
@@ -191,6 +192,8 @@ const invalid = (field: string, message: string): Answer => ({
   details: [{ field, message }],
 });
 
+const RIGHTS_NEEDED = "This photo needs permission. Tick \"We have the right to print this\" first.";
+export const MOCK_RIGHTS_NEEDED = RIGHTS_NEEDED;
 const KEY_REUSED = answer(422, "idempotency_key_reused", "This key was already used with a different request.");
 
 /** cleanText (@pageinator/desk-text clean.ts), for the double: NFC, LF only, no controls, no trailing space, stripped. */
@@ -343,6 +346,8 @@ interface MockAsset {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly deleted: boolean;
+  /** a found photo's (the news finder): its licence, the label code gave it, and the rights tick */
+  readonly licence?: NonNullable<MediaItemDto["licence"]>;
 }
 
 /** A fixture picture: the fictional PNG, with its facts. */
@@ -434,6 +439,31 @@ const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingm
 const MAX_DOCX_BYTES = 10_485_760;
 const NOT_WORD = "This is not a Word (.docx) file. Save it as .docx and try again.";
 
+export interface MockNewsStory {
+  readonly orgId: string;
+  readonly pubId: string;
+  readonly by: { readonly userId: string; readonly name: string };
+  readonly headline: string;
+  readonly byline: string;
+  readonly body: string;
+  readonly language: "mr" | "en";
+  readonly sources: NonNullable<StoryDto["newsSources"]>;
+}
+
+export interface MockNewsPhoto {
+  readonly orgId: string;
+  readonly pubId: string;
+  readonly by: { readonly userId: string; readonly name: string };
+  readonly storyId: string | null;
+  readonly widthPx: number;
+  readonly heightPx: number;
+  readonly caption: string;
+  readonly credit: string;
+  readonly photographer: string;
+  readonly licence: { readonly name: string; readonly url: string | null; readonly sourceUrl: string; readonly label: "safe" | "needs_permission" };
+  readonly rightsConfirmed: boolean;
+}
+
 export function createMockStories(deps: MockStoryDeps): {
   stories: StoryService;
   editions: EditionService;
@@ -447,6 +477,10 @@ export function createMockStories(deps: MockStoryDeps): {
   prepare(assetId: string, status: AssetDto["status"], problem?: string | null): void;
   /** The engine's answer for a Word import: its stories made (headlines, in order), or its failure. */
   finishImport(importId: string, outcome?: MockImportOutcome): Promise<void>;
+  /** The news finder's draft made into a story (create-mock-news.ts): a Draft, the picker its reporter and assignee. */
+  newsStory(input: MockNewsStory): string;
+  /** A found photo chosen into the library and made the story's photo; the rights ticked by the chooser if asked. */
+  newsPhoto(input: MockNewsPhoto): string;
   reset(): void;
   all(): readonly Row[];
 } {
@@ -693,6 +727,8 @@ export function createMockStories(deps: MockStoryDeps): {
       textRevision: text ? story.textRevision + 1 : story.textRevision,
       updatedAt: `2026-10-22T10:${String(clock).padStart(2, "0")}:00.000Z`,
       updatedBy: { id: by.userId, name: by.name },
+      // a person's edit of the text ends "Made with Claude — check before use"
+      ...(text && story.madeWithClaude ? { madeWithClaude: false } : {}),
     };
     const brief = (row: Row) => !row.photo && words(row.body) > 0 && words(row.body) <= 60;
     const withCounts = changes.body !== undefined || "photo" in changes ? { ...next, words: words(next.body), isBrief: brief(next) } : next;
@@ -1003,6 +1039,9 @@ export function createMockStories(deps: MockStoryDeps): {
       }
       if (!asset || asset.pubId !== pubId || asset.status === "rejected" || asset.deleted) {
         return failure<StoryDto>(invalid("body.assetId", "is not a picture of this publication"));
+      }
+      if (asset.licence?.label === "needs_permission" && !asset.licence.rightsConfirmed) {
+        return failure<StoryDto>(answer(422, "rights_needed", RIGHTS_NEEDED));
       }
       const photo = {
         assetId,
@@ -1448,6 +1487,21 @@ export function createMockStories(deps: MockStoryDeps): {
       return success(item(next, s, person.userId));
     },
 
+    async confirmRights({ orgId, pubId, assetId }) {
+      const checked = await check<MediaItemDto>("media.rights", orgId, pubId, "story.assign");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const asset = assets.get(assetId);
+      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(s, asset, person.userId)) return failure(NOT_FOUND);
+      if (!asset.licence) return failure(invalid("assetId", "is not a found photo"));
+      clock += 1;
+      const at = `2026-10-22T13:${String(clock).padStart(2, "0")}:00.000Z`;
+      const licence = { ...asset.licence, rightsConfirmed: { by: { id: person.userId, name: person.name }, at } };
+      const next = { ...asset, licence, revision: asset.revision + 1, updatedAt: at };
+      assets = new Map(assets).set(asset.id, next);
+      return success(item(next, s, person.userId));
+    },
+
     async remove({ orgId, pubId, assetId, baseRevision }) {
       const checked = await check<void>("media.remove", orgId, pubId, "media.upload");
       if (refused(checked)) return checked;
@@ -1504,6 +1558,7 @@ export function createMockStories(deps: MockStoryDeps): {
       createdAt: asset.createdAt,
       updatedAt: asset.updatedAt,
       previewUrl: asset.status === "ready" ? `${media.fileUrl({ orgId: asset.orgId, pubId: asset.pubId, assetId: asset.id })}?variant=preview` : null,
+      ...(asset.licence ? { licence: structuredClone(asset.licence) } : {}),
     };
   }
 
@@ -1548,6 +1603,43 @@ export function createMockStories(deps: MockStoryDeps): {
         error: "error" in outcome ? { ...outcome.error } : null,
       };
       deps.emit?.(orgId, { type: "import", publicationId: pubId, importId });
+    },
+    newsStory({ orgId, pubId, by, headline, byline, body, language, sources }) {
+      counter += 1;
+      clock += 1;
+      const id = `story-news-${String(counter).padStart(3, "0")}`;
+      const person = { id: by.userId, name: by.name };
+      const made = row(0, { id, headline, byline, body, language, status: "draft", reporter: person, assignee: person, madeWithClaude: true, newsSources: [...sources] });
+      rows = [...rows, { ...made, orgId, publicationId: pubId, order: rows.length + 1, updatedAt: `2026-10-22T14:${String(clock).padStart(2, "0")}:00.000Z` }];
+      deps.emit?.(orgId, { type: "story", publicationId: pubId, storyId: id });
+      return id;
+    },
+    newsPhoto({ orgId, pubId, by, storyId, widthPx, heightPx, caption, credit, photographer, licence, rightsConfirmed }) {
+      assetCounter += 1;
+      clock += 1;
+      const at = `2026-10-22T14:${String(clock).padStart(2, "0")}:00.000Z`;
+      const id = `asset-news-${String(assetCounter).padStart(3, "0")}`;
+      const [, asset] = fixtureAsset({
+        id,
+        orgId,
+        pubId,
+        uploadedBy: by.userId,
+        status: "received",
+        widthPx,
+        heightPx,
+        caption,
+        credit,
+        photographer,
+        createdAt: at,
+        licence: { ...licence, rightsConfirmed: rightsConfirmed ? { by: { id: by.userId, name: by.name }, at } : null },
+      });
+      assets = new Map(assets).set(id, asset);
+      const story = storyId ? rows.find((candidate) => candidate.id === storyId) : undefined;
+      if (story) {
+        const photo = { assetId: id, caption, credit, status: asset.status, problem: null, widthPx, heightPx, previewUrl: null };
+        touch(story, by, { photo }, false);
+      }
+      return id;
     },
     reset() {
       imports = new Map();

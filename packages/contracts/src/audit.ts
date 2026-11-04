@@ -37,6 +37,8 @@ export const AUDIT_ACTIONS = {
   "asset.fail": { scope: "publication" },
   "asset.ready": { scope: "publication" },
   "asset.reject": { scope: "publication" },
+  /** "We have the right to print this" ticked on a found photo ({label}, and {draft} when ticked with its choice). */
+  "asset.rights_confirm": { scope: "publication" },
   /** An edition made ({date, pages}); a story put in or taken out of one is story.edition_change. */
   "edition.create": { scope: "publication" },
   /** A story bundle sent to the Desk, on its edition ({bundle, stories, photos}). */
@@ -55,6 +57,23 @@ export const AUDIT_ACTIONS = {
   "invitation.membership_repaired": { scope: "org" },
   "invitation.resend": { scope: "org" },
   "member.remove": { scope: "org" },
+  /** The news finder (docs/product/13-news-finder.md): a collection stored, from the engine's inbox (actor: the system;
+   * {job, items, topics, ai}: how many items and topics it added, the AI state; or {job, code}: its job failed). */
+  "news.collect": { scope: "publication" },
+  /** A draft made ({job, story, flagged, photos}: counts) or failed ({job, code}), from the engine's inbox (actor: the
+   * system); the story is also recorded as story.create by the editor who picked the topic. */
+  "news.draft_done": { scope: "publication" },
+  "news.draft_fail": { scope: "publication" },
+  /** A topic picked for a draft ({topic, language, length, findPhoto}). */
+  "news.pick": { scope: "publication" },
+  /** A found photo chosen for the draft's story ({asset, index, label, origin}); the story's photo.attach follows. */
+  "news.photo_choose": { scope: "publication" },
+  /** The house style or the interval changed ({fields}: which, never the style's text). */
+  "news.settings_edit": { scope: "publication" },
+  /** A source added ({language, enabled}), changed ({fields}) or removed. */
+  "news.source_create": { scope: "publication" },
+  "news.source_delete": { scope: "publication" },
+  "news.source_edit": { scope: "publication" },
   "member.update": { scope: "org" },
   /** The organisation made by scripts/bootstrap-org.ts (it names the first publication, yet is the organisation's). */
   "org.bootstrap": { scope: "org" },

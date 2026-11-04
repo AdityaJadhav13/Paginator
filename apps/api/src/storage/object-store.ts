@@ -29,6 +29,14 @@ export interface ObjectStore {
     contentType: string;
     metadata: Record<string, string>;
   }): Promise<{ versionId: string }>;
+  /** Writes bytes the API holds (a found photo the news finder downloaded) as a new version of the key, with this type
+   * and metadata; returns its version (it throws when the store gives none). */
+  put(input: {
+    key: string;
+    body: Uint8Array;
+    contentType: string;
+    metadata: Record<string, string>;
+  }): Promise<{ versionId: string }>;
   /** Deletes every version and delete marker of exactly this key (not a delete marker over them); returns how many
    * there were. */
   removeAll(key: string): Promise<number>;

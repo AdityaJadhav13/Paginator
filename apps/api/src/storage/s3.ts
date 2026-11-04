@@ -8,6 +8,7 @@ import {
   HeadObjectCommand,
   ListObjectVersionsCommand,
   NotFound,
+  PutObjectCommand,
   S3Client,
   type CORSRule,
   type LifecycleRule,
@@ -115,6 +116,13 @@ export function s3Store(config: StorageConfig, client: S3Client = s3Client(confi
       );
       if (!copied.VersionId) throw new Error(`The store gave no version for ${to}: is the bucket versioned?`);
       return { versionId: copied.VersionId };
+    },
+    async put({ key, body, contentType, metadata }) {
+      const put = await client.send(
+        new PutObjectCommand({ Bucket, Key: key, Body: body, ContentType: contentType, Metadata: metadata }),
+      );
+      if (!put.VersionId) throw new Error(`The store gave no version for ${key}: is the bucket versioned?`);
+      return { versionId: put.VersionId };
     },
     async removeAll(key) {
       let removed = 0;
