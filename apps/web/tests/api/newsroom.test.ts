@@ -30,7 +30,7 @@ const COMMENT_DTO = {
 };
 const PAGE = {
   items: [
-    { id: COMMENT, kind: "comment", publicationId: PUB, storyId: STORY, commentId: COMMENT, invitationId: null, actor: PERSON, story: { headline: "पाणी", status: "draft" }, invitee: null, createdAt: AT, readAt: null },
+    { id: COMMENT, kind: "comment", publicationId: PUB, storyId: STORY, commentId: COMMENT, invitationId: null, actor: PERSON, story: { headline: "पाणी", status: "draft" }, invitee: null, ads: null, createdAt: AT, readAt: null },
   ],
   unread: 1,
   nextCursor: null,

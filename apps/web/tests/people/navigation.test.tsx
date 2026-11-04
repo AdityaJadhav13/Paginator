@@ -56,8 +56,11 @@ describe("Navigation from permissions", () => {
       "glossary.stories /org/o/pub/p/stories",
       "nav.media /org/o/pub/p/media",
     ]);
-    // Editions (L2.1) for whoever has edition.view, a ◐ one too; the ads desk is L2.6
-    expect(labels(navigation(org("member", ["advertising"]), "p", false))).toEqual(["nav.editions /org/o/pub/p/editions"]);
+    // Editions (L2.1) for whoever has edition.view, a ◐ one too; the ads desk (L2.6) for ads.view
+    expect(labels(navigation(org("member", ["advertising"]), "p", false))).toEqual([
+      "nav.editions /org/o/pub/p/editions",
+      "nav.ads /org/o/pub/p/ads",
+    ]);
     expect(labels(navigation(org("member", ["photo_editor"]), "p", false))).toEqual([
       "nav.editions /org/o/pub/p/editions",
       "glossary.stories /org/o/pub/p/stories",

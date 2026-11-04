@@ -62,6 +62,9 @@ import { layoutAccess, type LayoutAccess } from "./access.ts";
 import { DeskWords } from "./desk-text.tsx";
 import { useLayout } from "./layout-context.tsx";
 import { PageApproval, ReleaseTab, useEditionRelease } from "../release/ReleaseTab.tsx";
+import { adsAccess, type AdsAccess } from "../ads/access.ts";
+import { useAds } from "../ads/ads-context.tsx";
+import { PlanTab } from "../ads/PlanTab.tsx";
 import {
   ACTIVE_STATES,
   CheckBadge,
@@ -75,7 +78,7 @@ import {
 import "./layout.css";
 
 export const POLL_MS = 3000;
-const TABS = ["readiness", "ads", "run", "pages", "release"] as const;
+const TABS = ["readiness", "plan", "ads", "run", "pages", "release"] as const;
 type Tab = (typeof TABS)[number];
 
 type Load =
@@ -115,7 +118,14 @@ export function EditionLayoutScreen() {
     <Stack gap="5" className="pg-layout">
       <PageHeader title={title} headingId={ROUTE_HEADING_ID} {...(subtitle ? { subtitle } : {})} />
       <OfflineNotice />
-      {access.view && <LayoutContent where={{ orgId, pubId, editionId }} edition={edition} access={access} />}
+      {access.view && (
+        <LayoutContent
+          where={{ orgId, pubId, editionId }}
+          edition={edition}
+          access={access}
+          adsAccess={adsAccess(org, pubId)}
+        />
+      )}
     </Stack>
   );
 }
@@ -124,10 +134,12 @@ function LayoutContent({
   where,
   edition,
   access,
+  adsAccess: ads,
 }: {
   readonly where: Where;
   readonly edition: PubEditionDto | undefined;
   readonly access: LayoutAccess;
+  readonly adsAccess: AdsAccess;
 }) {
   const layout = useLayout();
   const { t } = useI18n();
@@ -218,6 +230,15 @@ function LayoutContent({
             label: t("editionLayout.tab.readiness"),
             panel: <ReadinessTab where={where} data={data} />,
           },
+          ...(ads.plan
+            ? [
+                {
+                  id: "plan",
+                  label: t("editionLayout.tab.plan"),
+                  panel: <PlanTab where={where} access={ads} edition={edition} />,
+                },
+              ]
+            : []),
           {
             id: "ads",
             label: t("editionLayout.tab.ads"),
@@ -428,7 +449,22 @@ function AdsTab({
 }) {
   const layout = useLayout();
   const media = useMedia();
+  const ads = useAds();
   const { t } = useI18n();
+  const [holders, setHolders] = useState<ReadonlyMap<string, string>>(new Map());
+  const { orgId, pubId, editionId } = where;
+  // which booking holds each slot (the ads desk's placements): the plain picture route refuses one (409 slot_booked)
+  useEffect(() => {
+    let current = true;
+    void ads.plan({ orgId, pubId, editionId }).then((result) => {
+      if (!current || !result.ok) return;
+      const held = result.value.tiles.flatMap((tile) => tile.slots).filter((slot) => slot.booking);
+      setHolders(new Map(held.map((slot) => [slot.slot, slot.booking!.campaign ? `${slot.booking!.advertiser} — ${slot.booking!.campaign}` : slot.booking!.advertiser])));
+    });
+    return () => {
+      current = false;
+    };
+  }, [ads, orgId, pubId, editionId, data]);
   const [picking, setPicking] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -472,6 +508,14 @@ function AdsTab({
                     />
                   </div>
                 )}
+                {holders.has(slot.slot) && (
+                  <>
+                    <p>
+                      {t("editionLayout.ads.booked")} <bdi>{holders.get(slot.slot)}</bdi>
+                    </p>
+                    <p className="pg-layout__note">{t("editionLayout.ads.bookedHint")}</p>
+                  </>
+                )}
                 <div>
                   <SlotState slot={slot} t={t} />
                 </div>
@@ -480,7 +524,8 @@ function AdsTab({
                     <DeskWords text={slot.problem} />
                   </p>
                 )}
-                {may && (
+                {/* a booked slot's picture is its booking's artwork: this route refuses it (409 slot_booked) */}
+                {may && !holders.has(slot.slot) && (
                   <Cluster gap="3">
                     <Button variant="secondary" disabled={busy} onClick={() => setPicking(slot.slot)}>
                       <Icon name="image" size={16} />
@@ -512,6 +557,7 @@ function AdsTab({
               pubId={where.pubId}
               compact
               picker
+              photoFilters={false}
               onChoose={(item) => {
                 const slot = picking;
                 setPicking(null);

@@ -123,11 +123,15 @@ export const notificationRoutes: FastifyPluginAsyncZod<LiveOptions> = async (app
             storyId: row.data.storyId ?? null,
             commentId: row.data.commentId ?? null,
             invitationId: row.data.invitationId ?? null,
-            actor: row.actor_name !== null ? { id: row.data.actorId, name: row.actor_name } : null,
+            actor: row.actor_name !== null && row.data.actorId ? { id: row.data.actorId, name: row.actor_name } : null,
             story: storyShown(access, actor.userId, row),
             invitee:
-              row.kind === "invitation_accepted" && row.actor_name !== null
+              row.kind === "invitation_accepted" && row.actor_name !== null && row.data.actorId
                 ? { id: row.data.actorId, name: row.actor_name }
+                : null,
+            ads:
+              row.kind === "ad_artwork_missing" && row.data.date && row.data.missing
+                ? { date: row.data.date, missing: row.data.missing }
                 : null,
             createdAt: row.created_at.toISOString(),
             readAt: row.read_at ? row.read_at.toISOString() : null,

@@ -13,8 +13,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button, Checkbox, Drawer, EmptyState, Icon, ProgressIndicator, Stack, VisuallyHidden, type IconName } from "../../ui/index.ts";
 import { paths } from "../../app/routes.ts";
-import { formatDateTime } from "../../i18n/dates.ts";
-import { useI18n, type Translate } from "../../i18n/index.ts";
+import { formatDate, formatDateTime } from "../../i18n/dates.ts";
+import { useI18n, type Language, type Translate } from "../../i18n/index.ts";
 import type { ApiProblem, NotificationDto } from "../../services/index.ts";
 import { OfflineNotice } from "../auth/connection.tsx";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
@@ -25,7 +25,7 @@ import "./live.css";
 const PAGE = 20;
 
 /** Who did what, to a story the reader can no longer see: no headline. */
-function aboutAStory(kind: Exclude<NotificationDto["kind"], "invitation_accepted">, name: string | undefined, t: Translate) {
+function aboutAStory(kind: Exclude<NotificationDto["kind"], "invitation_accepted" | "ad_artwork_missing">, name: string | undefined, t: Translate) {
   switch (kind) {
     case "story_filed":
       return name ? t("notification.storyFiled", { name }) : t("notification.storyFiled.someone");
@@ -40,7 +40,7 @@ function aboutAStory(kind: Exclude<NotificationDto["kind"], "invitation_accepted
 
 /** Who did what, to the story named by its headline. */
 function aboutTheStory(
-  kind: Exclude<NotificationDto["kind"], "invitation_accepted">,
+  kind: Exclude<NotificationDto["kind"], "invitation_accepted" | "ad_artwork_missing">,
   name: string | undefined,
   headline: string,
   t: Translate,
@@ -62,11 +62,18 @@ function aboutTheStory(
 }
 
 /** The notification's sentences: who did what, to which story and where it stands now (or that it is gone). */
-export function notificationText(item: NotificationDto, t: Translate): string {
+export function notificationText(item: NotificationDto, t: Translate, language: Language = "en"): string {
   const name = item.actor?.name;
   if (item.kind === "invitation_accepted") {
     const invitee = item.invitee?.name ?? name;
     return invitee ? t("notification.invitationAccepted", { name: invitee }) : t("notification.invitationAccepted.someone");
+  }
+  if (item.kind === "ad_artwork_missing") {
+    const count = item.ads?.missing ?? 0;
+    const date = item.ads ? formatDate(item.ads.date, language) : "";
+    return count === 1
+      ? t("notification.adArtworkMissing.one", { date })
+      : t("notification.adArtworkMissing", { count, date });
   }
   if (!item.story) return `${aboutAStory(item.kind, name, t)} ${t("notification.storyGone")}`;
   const now = t("notification.storyNow", { status: t(statusKey(item.story.status)) });
@@ -76,6 +83,10 @@ export function notificationText(item: NotificationDto, t: Translate): string {
 /** Where the notification leads: the story (at its comment), or the team; null when there is nowhere to go. */
 export function notificationLink(item: NotificationDto, orgId: string, mayViewTeam: boolean): string | null {
   if (item.kind === "invitation_accepted") return mayViewTeam ? paths.orgTeam(orgId) : null;
+  // the Ads desk on that date, which lists the bookings still without usable artwork
+  if (item.kind === "ad_artwork_missing") {
+    return item.publicationId && item.ads ? `${paths.pubAds(orgId, item.publicationId)}?date=${item.ads.date}` : null;
+  }
   // a story the reader no longer reaches would only open "not found"
   if (!item.story || !item.publicationId || !item.storyId) return null;
   const story = paths.pubStory(orgId, item.publicationId, item.storyId);
@@ -89,6 +100,7 @@ const KIND_ICON: Record<NotificationDto["kind"], IconName> = {
   story_assigned: "file-text",
   comment: "message-square",
   invitation_accepted: "users",
+  ad_artwork_missing: "megaphone",
 };
 
 type List =
@@ -325,7 +337,7 @@ function NotificationsDrawer({
           <ul className="pg-notifications" aria-label={t("notifications.title")}>
             {list.items.map((item) => {
               const to = notificationLink(item, orgId, mayViewTeam);
-              const text = notificationText(item, t);
+              const text = notificationText(item, t, language);
               const fresh = item.readAt === null;
               return (
                 <li key={item.id} className={fresh ? "pg-notification pg-notification--unread" : "pg-notification"}>

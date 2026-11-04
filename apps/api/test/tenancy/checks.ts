@@ -76,6 +76,15 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   release_file: ["INSERT", "SELECT"],
   delivery: ["INSERT", "SELECT"],
   press_test: ["INSERT", "SELECT", "UPDATE"],
+  // the ads cut-off (migration 2026_12_05_0002): the settings are rewritten; an alert is only added
+  ad_settings: ["INSERT", "SELECT", "UPDATE"],
+  ad_cutoff_alert: ["INSERT", "SELECT"],
+  // the ads desk (migration 2026_12_05_0001): advertisers are archived and bookings cancelled, never removed; a
+  // placement is taken out; a plan page is rewritten
+  advertiser: ["INSERT", "SELECT", "UPDATE"],
+  ad_booking: ["INSERT", "SELECT", "UPDATE"],
+  ad_placement: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  flatplan_page: ["INSERT", "SELECT", "UPDATE"],
   // notifications (migration 2026_11_24_0001): never deleted; only read_at and emailed_at change (COLUMN_RIGHTS)
   notification: ["INSERT", "SELECT"],
   publication_grant: ["DELETE", "INSERT", "SELECT", "UPDATE"],

@@ -29,6 +29,7 @@ export type MailKind =
   | "invitation"
   | "story-sent-back"
   | "invitation-accepted"
+  | "ad-artwork-missing"
   | "contact";
 /** A message. Without `html` it is plain text only. `replyTo` must be one plain address, like the recipient. */
 export type Mail = { kind: MailKind; to: string; subject: string; text: string; html?: string; replyTo?: string };

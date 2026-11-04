@@ -84,6 +84,22 @@ export const AUDIT_ACTIONS = {
   "release.confirm": { scope: "publication" },
   "release.verify": { scope: "publication" },
   "press_test.set": { scope: "publication" },
+  /** The ads desk (L2.6): an advertiser made or changed ({fields}); a booking made ({advertiser, dates, slot}),
+   * changed ({fields}) or given artwork ({asset, passed}, or {asset: null} when taken off); a booking placed in an
+   * edition's slot ({edition, slot, booking, replaced}) or taken out ({edition, slot, booking}); a plan page's section
+   * or note set ({edition, page}); a plan copied ({edition, from, pages, placements}); the cut-off settings changed;
+   * the missing-artwork alert at cut-off ({date, bookings, told}; actor: the system). */
+  "advertiser.create": { scope: "publication" },
+  "advertiser.edit": { scope: "publication" },
+  "ad_booking.create": { scope: "publication" },
+  "ad_booking.edit": { scope: "publication" },
+  "ad_booking.artwork": { scope: "publication" },
+  "ad_placement.set": { scope: "publication" },
+  "ad_placement.clear": { scope: "publication" },
+  "plan.page": { scope: "publication" },
+  "plan.copy": { scope: "publication" },
+  "ad_settings.set": { scope: "publication" },
+  "ad_cutoff.alert": { scope: "publication" },
   /** An engine event the inbox would not apply ({event, job, kind, reason}): not the contract's, or for an asset that
    * is not the organisation's and publication's it names, or one that still could not be applied after every try
    * (reason "error"). Only Owner and Admin see it (its publication is unchecked). */

@@ -106,3 +106,19 @@ export type {
   PubEditionDto,
 } from "./edition-service.ts";
 export type { AuditEventDto, AuditFilterDto, AuditPageDto, AuditService } from "./audit-service.ts";
+export type {
+  AdSettingsDto,
+  AdSizesDto,
+  AdsService,
+  AdvertiserDto,
+  AdvertiserInputDto,
+  AdvertiserPatchDto,
+  ArtworkCheckDto,
+  BookingDto,
+  BookingInputDto,
+  BookingPatchDto,
+  CopyPlanResultDto,
+  EditionPlanDto,
+  PlanPageDto,
+  PlanSlotDto,
+} from "./ads-service.ts";

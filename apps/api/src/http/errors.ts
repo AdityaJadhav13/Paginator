@@ -95,6 +95,9 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     message:
       "The receipt could not be written to the archive, so this was not recorded. The release is unchanged. Try again.",
   },
+  // the ads desk (L2.6)
+  advertiser_exists: { status: 409, message: "This paper already has an advertiser of that name." },
+  slot_booked: { status: 409, message: "A booking holds this ad slot. Take the booking out of the slot first." },
   request_too_large: { status: 413, message: "This request is too large." },
   not_json: { status: 415, message: "This request must be sent as JSON." },
   slow_down: { status: 429, message: "Too many tries. Wait a minute and try again." },

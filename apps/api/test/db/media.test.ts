@@ -140,6 +140,12 @@ describe("presign", () => {
     const big = await presign(photo.cookie, 41_943_041);
     expect([big.statusCode, big.json().error.code]).toEqual([413, "file_too_large"]);
     expect((await presign(viewer.cookie, 10)).statusCode).toBe(403);
+    // Advertising (ads.manage, no media.upload) uploads a booking's artwork to the library, and nothing else (L2.6)
+    const ads = await n.member(a, [{ publicationId: a.pubId, roles: ["advertising"], grants: [] }], "member", "ads");
+    const url = `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}/uploads`;
+    const body = { filename: "ad.jpg", contentType: "image/jpeg", bytes: 10 };
+    expect((await change("POST", url, ads.cookie, { ...body, purpose: "library" })).statusCode).toBe(201);
+    expect((await change("POST", url, ads.cookie, { ...body, purpose: "story_photo" })).statusCode).toBe(403);
     const someone = await n.member(a, [{ publicationId: a.pubId, roles: ["reporter"], grants: [] }], "member", "busy");
     await su.query(
       `insert into app.upload (org_id, publication_id, user_id, purpose, declared_type, declared_bytes, expires_at)

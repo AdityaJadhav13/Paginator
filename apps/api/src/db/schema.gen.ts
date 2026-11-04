@@ -10,6 +10,56 @@ export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 /** A column the database computes (generated always): read only. */
 export type GeneratedAlways<T> = ColumnType<T, never, never>;
 
+export interface AppAdBooking {
+  advertiser_id: string;
+  artwork_asset_id: string | null;
+  artwork_set_at: Timestamp | null;
+  artwork_set_by: string | null;
+  campaign: Generated<string>;
+  colour: string;
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  dates: string[];
+  h_mm: string;
+  id: Generated<string>;
+  note: Generated<string>;
+  org_id: string;
+  publication_id: string;
+  slot: string | null;
+  status: Generated<string>;
+  updated_at: Generated<Timestamp>;
+  w_mm: string;
+}
+
+export interface AppAdCutoffAlert {
+  bookings: string[];
+  edition_date: string;
+  fired_at: Generated<Timestamp>;
+  org_id: string;
+  publication_id: string;
+  told: number;
+}
+
+export interface AppAdPlacement {
+  booking_id: string;
+  edition_id: string;
+  id: Generated<string>;
+  org_id: string;
+  placed_at: Generated<Timestamp>;
+  placed_by: string | null;
+  publication_id: string;
+  slot: string;
+}
+
+export interface AppAdSettings {
+  cutoff_time: Generated<string>;
+  days_before: Generated<number>;
+  org_id: string;
+  publication_id: string;
+  updated_at: Generated<Timestamp>;
+  updated_by: string | null;
+}
+
 export interface AppAdSlotArtwork {
   asset_id: string;
   created_at: Generated<Timestamp>;
@@ -27,6 +77,21 @@ export interface AppAdSlotArtwork {
   state: Generated<string>;
   updated_at: Generated<Timestamp>;
   w_mm: string;
+}
+
+export interface AppAdvertiser {
+  archived_at: Timestamp | null;
+  contact_name: Generated<string>;
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  email: Generated<string>;
+  id: Generated<string>;
+  name: string;
+  note: Generated<string>;
+  org_id: string;
+  phone: Generated<string>;
+  publication_id: string;
+  updated_at: Generated<Timestamp>;
 }
 
 export interface AppAiUsage {
@@ -212,6 +277,17 @@ export interface AppEngineProfile {
   updated_at: Generated<Timestamp>;
   upload_id: string;
   version: number;
+}
+
+export interface AppFlatplanPage {
+  edition_id: string;
+  note: Generated<string>;
+  org_id: string;
+  page_no: number;
+  publication_id: string;
+  section_id: string | null;
+  updated_at: Generated<Timestamp>;
+  updated_by: string;
 }
 
 export interface AppIdempotencyKey {
@@ -673,7 +749,12 @@ export interface AppUploadQuota {
 }
 
 export interface DB {
+  "app.ad_booking": AppAdBooking;
+  "app.ad_cutoff_alert": AppAdCutoffAlert;
+  "app.ad_placement": AppAdPlacement;
+  "app.ad_settings": AppAdSettings;
   "app.ad_slot_artwork": AppAdSlotArtwork;
+  "app.advertiser": AppAdvertiser;
   "app.ai_usage": AppAiUsage;
   "app.asset": AppAsset;
   "app.audit_event": AppAuditEvent;
@@ -685,6 +766,7 @@ export interface DB {
   "app.edition_measure": AppEditionMeasure;
   "app.engine_event": AppEngineEvent;
   "app.engine_profile": AppEngineProfile;
+  "app.flatplan_page": AppFlatplanPage;
   "app.idempotency_key": AppIdempotencyKey;
   "app.import_job": AppImportJob;
   "app.invitation_grant": AppInvitationGrant;

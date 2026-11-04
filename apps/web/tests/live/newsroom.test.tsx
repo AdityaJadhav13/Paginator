@@ -393,6 +393,7 @@ describe("A notification's sentences", () => {
     actor: null,
     story: { headline: "पाणीपुरवठा बंद", status: "ready" as const },
     invitee: null,
+    ads: null,
     createdAt: "2026-10-22T09:00:00.000Z",
     readAt: null,
   };

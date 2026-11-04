@@ -42,6 +42,8 @@ export interface MockNotice {
   readonly storyId?: string | null;
   readonly commentId?: string | null;
   readonly invitationId?: string | null;
+  /** For ad_artwork_missing: the edition date and how many of its bookings lack good artwork. */
+  readonly ads?: NotificationDto["ads"];
   readonly actor: { readonly id: string; readonly name: string } | null;
 }
 
@@ -68,6 +70,7 @@ function fixtures(): Row[] {
     commentId: null,
     invitationId: null,
     invitee: null,
+    ads: null,
   };
   return [
     {
@@ -164,6 +167,7 @@ export function createMockNotifications(deps: MockNotificationDeps): {
     actor: row.actor ? { ...row.actor } : null,
     story: row.storyId ? deps.storyShown(row.userId, row.orgId, row.storyId) : null,
     invitee: row.invitee ? { ...row.invitee } : null,
+    ads: row.ads ? { ...row.ads } : null,
     createdAt: row.createdAt,
     readAt: row.readAt,
   });
@@ -234,6 +238,7 @@ export function createMockNotifications(deps: MockNotificationDeps): {
           invitationId: notice.invitationId ?? null,
           actor: notice.actor ? { ...notice.actor } : null,
           invitee: null, // no change of the story double tells of an invitation
+          ads: notice.ads ?? null,
           createdAt: `2026-10-22T11:${String(counter % 60).padStart(2, "0")}:00.000Z`,
           readAt: null,
           order: 100 + counter,

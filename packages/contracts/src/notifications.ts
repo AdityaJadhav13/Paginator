@@ -43,6 +43,7 @@ export const NOTIFICATION_KINDS = [
   "story_assigned",
   "comment",
   "invitation_accepted",
+  "ad_artwork_missing",
 ] as const;
 export const NotificationKind = z.enum(NOTIFICATION_KINDS);
 
@@ -62,6 +63,9 @@ export const Notification = z.strictObject({
   story: z.strictObject({ headline: z.string(), status: StoryStatus }).nullable(),
   /** For invitation_accepted: who joined, by their directory name. */
   invitee: Person.nullable(),
+  /** For ad_artwork_missing (L2.6): the edition date whose cut-off passed, and how many of its bookings had no good
+   * artwork then (the Ads desk shows which, for that date). */
+  ads: z.strictObject({ date: z.iso.date(), missing: z.number().int().min(1) }).nullable(),
   createdAt: Moment,
   readAt: Moment.nullable(),
 });

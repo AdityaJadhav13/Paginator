@@ -10,7 +10,8 @@
 //     slots, and its active, last and newest done runs (src/modules/layout/request.ts).
 //   - PUT editions/:e/ads/:slot {assetId} (layout.generate or ads.manage): a ready picture of the media library fitted
 //     into a slot of the plan (media.ad enqueued with it; the slot's artwork row is the job's target) → AdSlot. The same
-//     picture again changes nothing. DELETE …/ads/:slot → 204 (a job still running for it is then ignored).
+//     picture again changes nothing. DELETE …/ads/:slot → 204 (a job still running for it is then ignored). Both
+//     refuse a slot that holds a booking of the ads desk (409 slot_booked: its artwork follows the booking).
 //   - POST editions/:e/runs (layout.generate, Idempotency-Key) → 202 LayoutRun (queued): with the edition locked, one
 //     active run an edition (409 run_active, its current run), a profile ready, at least one Ready story and no blocker
 //     (409 layout_refused, saying what); then the frozen request (the Desk's shape, request.ts) written to
@@ -40,6 +41,7 @@ import {
 } from "@pageinator/contracts";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { bookingInSlot } from "../../db/ads.ts";
 import { recordAudit } from "../../db/audit.ts";
 import {
   ACTIVE_STATES,
@@ -275,7 +277,8 @@ export const layoutRoutes: FastifyPluginAsyncZod<LayoutOptions> = async (app, { 
 
   /** The edition, the plan of the profile in use, and the slot of it (404 when the plan has no such slot). */
   async function slotOf(tx: Tx, pub: string, e: string, slot: string) {
-    const edition = UUID.test(e) ? await layoutEdition(tx, pub, e) : undefined;
+    // locked: a placement of the ads desk (which locks the edition) cannot slip in between the check and the change
+    const edition = UUID.test(e) ? await layoutEdition(tx, pub, e, true) : undefined;
     if (!edition) throw new ApiError("not_found");
     const profile = await profileInUse(tx, pub);
     if (!profile) throw new ApiError("no_profile");
@@ -298,6 +301,7 @@ export const layoutRoutes: FastifyPluginAsyncZod<LayoutOptions> = async (app, { 
       const { assetId } = request.body;
       return database.withTenant(access.tenant, async (tx) => {
         const found = await slotOf(tx, pub, e, slot);
+        if (await bookingInSlot(tx, pub, e, slot)) throw new ApiError("slot_booked");
         const asset = await findAsset(tx, pub, assetId, "share");
         if (!asset) throw new ApiError("not_found");
         if (asset.status !== "ready" || !asset.version_id) {
@@ -340,8 +344,9 @@ export const layoutRoutes: FastifyPluginAsyncZod<LayoutOptions> = async (app, { 
       const { p: pub, e, slot } = request.params;
       slotAccess(access, pub);
       await database.withTenant(access.tenant, async (tx) => {
-        const edition = UUID.test(e) ? await layoutEdition(tx, pub, e) : undefined;
+        const edition = UUID.test(e) ? await layoutEdition(tx, pub, e, true) : undefined;
         if (!edition) throw new ApiError("not_found");
+        if (await bookingInSlot(tx, pub, e, slot)) throw new ApiError("slot_booked");
         const gone = await clearArtwork(tx, pub, e, slot);
         if (!gone) return;
         await recordAudit(tx, access.tenant, {

@@ -16,6 +16,7 @@ import type {
   LayoutService,
   EditorService,
   ReleaseService,
+  AdsService,
   CommentService,
   NotificationService,
   LiveService,
@@ -45,6 +46,7 @@ export interface MockApplicationEnvironment extends ServiceEnvironment {
   readonly layout: LayoutService;
   readonly editor: EditorService;
   readonly release: ReleaseService;
+  readonly ads: AdsService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
   readonly live: LiveService;

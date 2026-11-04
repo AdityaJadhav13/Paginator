@@ -9,6 +9,7 @@ import type { MediaService } from "./media-service.ts";
 import type { LayoutService } from "./layout-service.ts";
 import type { EditorService } from "./editor-service.ts";
 import type { ReleaseService } from "./release-service.ts";
+import type { AdsService } from "./ads-service.ts";
 import type { NewsService } from "./news-service.ts";
 import type { NotificationService } from "./notification-service.ts";
 import type { StoryService } from "./story-service.ts";
@@ -39,6 +40,8 @@ export interface ServiceEnvironment {
   readonly editor: EditorService;
   /** The release (L2.5): preflight, page approval, the release and its archive copy, sending, the press test. */
   readonly release: ReleaseService;
+  /** The ads desk and the edition plan (L2.6): advertisers, bookings, artwork checks, placement, the flatplan. */
+  readonly ads: AdsService;
   /** The public website's contact form. */
   readonly contact: ContactService;
   readonly comments: CommentService;

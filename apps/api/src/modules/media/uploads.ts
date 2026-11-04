@@ -7,6 +7,8 @@
 //     exactly the upload's key (uploads/orgs/<org>/pubs/<pub>/<upload>, the database's), its Content-Type and its
 //     upload id. SeaweedFS enforces each condition (test/db/media.test.ts); S3 is checked in staging
 //     (11-fix-before-launch).
+//   - Who: media.upload; a library picture also ads.manage (Advertising uploads a booking's artwork, L2.6). The routes
+//     declare pages.view and check this themselves (uploaderOf).
 //   - Complete (the uploader only): one read of the version the store names gives the file's SHA-256, its size, its
 //     type from its bytes and its width and height (picture.ts). A file of another size than declared, or that is not
 //     a picture, is refused (422 not_a_picture). A picture becomes an asset, copied out of quarantine to
@@ -103,18 +105,27 @@ export function docxRefused(field: string, message?: string): ApiError {
   return error;
 }
 
+/** media.upload, or (a library picture only) ads.manage: Advertising's booking artwork (L2.6). */
+function uploaderOf(access: ReturnType<typeof accessOf>, pub: string, purpose: string): void {
+  const here = access.publications.get(pub) ?? { roles: [], grants: [] };
+  if (reach("media.upload", access.orgRole, here) !== null) return;
+  if (purpose === "library" && reach("ads.manage", access.orgRole, here) !== null) return;
+  throw refused("an upload needs media.upload (a library picture: or ads.manage)");
+}
+
 export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { database, store }) => {
   auditRefusals(app, database);
   app.post(
     "/api/v1/orgs/:o/pubs/:p/uploads",
     {
-      config: { permission: "media.upload" },
+      config: { permission: "pages.view" },
       schema: { params: Pub, body: UploadRequest, response: { 201: PresignedUpload } },
     },
     async (request, reply) => {
       const access = accessOf(request);
       const pub = request.params.p;
       const input = request.body;
+      uploaderOf(access, pub, input.purpose);
       if (input.purpose === "docx") {
         // a Word file is for stories (POST …/imports/docx): story.create, at most 10 MiB
         if (reach("story.create", access.orgRole, access.publications.get(pub) ?? { roles: [], grants: [] }) === null)
@@ -186,7 +197,7 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
 
   app.post(
     "/api/v1/orgs/:o/pubs/:p/uploads/:u/complete",
-    { config: { permission: "media.upload" }, schema: { params: OneUpload, response: { 200: CompletedUpload } } },
+    { config: { permission: "pages.view" }, schema: { params: OneUpload, response: { 200: CompletedUpload } } },
     async (request) => {
       const access = accessOf(request);
       const userId = actorOf(request).userId;
@@ -196,6 +207,7 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
         : undefined;
       // someone else's upload is not theirs to complete: the same answer as none at all
       if (!upload || upload.user_id !== userId) throw new ApiError("not_found");
+      uploaderOf(access, pub, upload.purpose);
       // a Word file is completed by its import (POST …/imports/docx), never as a picture
       // and a dataset bundle by its engine profile (POST …/engine-profiles)
       if (upload.purpose === "docx" || upload.purpose === "engine_dataset") throw new ApiError("not_a_picture");

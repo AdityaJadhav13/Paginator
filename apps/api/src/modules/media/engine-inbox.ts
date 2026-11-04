@@ -14,6 +14,7 @@
 //                     the asset ready;
 //       media.rejected → rejected, with the Desk's message code;
 //       job.failed → failed, with the engine's code.
+//     Rejected or failed, the picture leaves the ad slots its bookings hold (L2.6).
 //     Each is audited as the system (asset.ready, asset.reject, asset.fail), and the asset's status change tells the
 //     stories it is the photo of (migration 2026_11_27_0001's trigger), so an open story editor shows the new state.
 //       import.parsed, import.rejected, and a docx.import's job.failed → the import settled (imports.ts
@@ -35,6 +36,7 @@
 import { EngineEvent, JOB_KINDS, OrgId, Uuid7 } from "@pageinator/contracts";
 import type { FastifyBaseLogger } from "fastify";
 import { z } from "zod";
+import { clearBookedArtwork } from "../../db/ads.ts";
 import { recordAudit } from "../../db/audit.ts";
 import {
   type Outcome,
@@ -196,9 +198,11 @@ async function decide(
     await audit("asset.ready", { paramsHash: event.params_hash });
   } else if (event.kind === "media.rejected") {
     await settleAsset(tx, event.pub_id, asset.id, "rejected", event.code);
+    await clearBookedArtwork(tx, event.pub_id, asset.id);
     await audit("asset.reject", { code: event.code, status: event.status });
   } else {
     await settleAsset(tx, event.pub_id, asset.id, "failed", event.code);
+    await clearBookedArtwork(tx, event.pub_id, asset.id);
     await audit("asset.fail", { code: event.code });
   }
   return "applied";

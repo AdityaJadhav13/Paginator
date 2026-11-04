@@ -35,10 +35,12 @@ import { importRoutes } from "./modules/media/imports.ts";
 import { startMeasureSchedule } from "./modules/layout/measure.ts";
 import { gatewayClient } from "./modules/editor/gateway.ts";
 import { editorRoutes } from "./modules/editor/routes.ts";
+import { adsRoutes } from "./modules/ads/routes.ts";
 import { layoutRoutes } from "./modules/layout/routes.ts";
 import { releaseRoutes } from "./modules/release/routes.ts";
 import { type PhotoFetch, newsRoutes } from "./modules/news/routes.ts";
 import { startNewsSchedule } from "./modules/news/schedule.ts";
+import { adSettingsRoutes, startAdCutoffSchedule } from "./modules/ads/cutoff.ts";
 import { contactRoutes } from "./modules/contact/routes.ts";
 import { closeWhenStopping } from "./shutdown.ts";
 import type { ObjectStore } from "./storage/object-store.ts";
@@ -176,6 +178,13 @@ export async function buildApp(deps: AppDeps) {
     // the news finder's collections, on their schedule (as the inbox, in the process that runs it)
     const schedule = startNewsSchedule(database, fastify.log, config.aiDailyCapInr);
     fastify.addHook("preClose", () => schedule.close());
+    // the ads' missing-artwork alert at each date's cut-off (every minute)
+    const cutoff = startAdCutoffSchedule(database, fastify.log, {
+      identity: database.identity,
+      mailer: people.mailer,
+      origin: config.publicOrigin,
+    });
+    fastify.addHook("preClose", () => cutoff.close());
     // hosted layout's background measuring (it writes measure.json: only with the object store)
     if (store) {
       const measuring = startMeasureSchedule(database, store, fastify.log);
@@ -201,6 +210,7 @@ export async function buildApp(deps: AppDeps) {
     await app.register(storyRoutes, { database: people.database, notify: people.notify, mail: people.mail });
     await app.register(commentRoutes, { database: people.database, notify: people.notify });
     await app.register(editionRoutes, { database: people.database });
+    await app.register(adSettingsRoutes, { database: people.database });
     await app.register(auditRoutes, { database: people.database });
     // the page editor: through the edit gateway (without its settings, its routes answer 503 editor_unavailable)
     await app.register(editorRoutes, {
@@ -222,6 +232,7 @@ export async function buildApp(deps: AppDeps) {
       await app.register(deskBundleRoutes, { database: people.database, store });
       await app.register(importRoutes, { database: people.database, store });
       await app.register(layoutRoutes, { database: people.database, store });
+      await app.register(adsRoutes, { database: people.database });
       await app.register(releaseRoutes, {
         database: people.database,
         store,

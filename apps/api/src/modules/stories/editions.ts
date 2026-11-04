@@ -4,7 +4,8 @@
 //   - POST makes one (edition.create, the whole cell only: Advertising's and Prepress's ◐ are their ad positions and
 //     colour map, 07 §12, not a new edition), with an Idempotency-Key; a date that has one already answers 409
 //     edition_exists with that edition as `current`. Audited (edition.create) in the change's transaction; the database
-//     tells other tabs (live event `edition`, migration 2026_11_28_0001);
+//     tells other tabs (live event `edition`, migration 2026_11_28_0001). The bookings of its date are placed in it by
+//     their rules in the same transaction (src/modules/ads/place.ts);
 //   - PATCH /:e changes its folio, volume, issue and price (edition.edit, the whole cell only): the fields changed are
 //     audited (edition.edit) and the edition's folio_changed_at moves (the release's folio check: page 1 prints it only
 //     once saved again after Update text, or laid out again). Unchanged fields change nothing.
@@ -20,6 +21,7 @@ import type { Database } from "../../db/pools.ts";
 import type { Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 import { accessOf, auditRefusals, refused } from "../access/access.ts";
+import { placeBooked } from "../ads/place.ts";
 import { idempotent } from "../requests/idempotency.ts";
 import { storyScope } from "./rules.ts";
 
@@ -119,6 +121,8 @@ export const editionRoutes: FastifyPluginAsyncZod<{ database: Database }> = asyn
             publicationId: pub,
             data: { date: edition.date, pages: edition.pages },
           });
+          // the ads booked for its date go into their slots at once (src/modules/ads/place.ts)
+          await placeBooked(tx, access.tenant, pub, id);
           return { status: 201, body: await one(tx, pub, id), stored: { id } };
         },
         // a replay shows the edition as it is now

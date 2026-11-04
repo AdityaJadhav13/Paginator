@@ -281,7 +281,7 @@ describe("Editions for other roles", () => {
 
   it("tells a Reporter who types the address that their role cannot, with no Try again", async () => {
     renderAuth(EDITIONS, { preset: "sahyadri-reporter" });
-    expect(await screen.findByText("Your role cannot do this. Ask an editor or the owner.")).toBeInTheDocument();
+    expect(await screen.findByText("Your role cannot do this. Ask the owner if you need it.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
 

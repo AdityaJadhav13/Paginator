@@ -27,6 +27,7 @@ import type {
   LayoutService,
   EditorService,
   ReleaseService,
+  AdsService,
   NewsSettingsDto,
   CommentService,
   LiveEventDto,
@@ -46,6 +47,7 @@ import { createMockNews, type MockNewsOperation, type MockNewsOutcome } from "./
 import { createMockLayout, type MockLayoutController, type MockLayoutOperation } from "./create-mock-layout.ts";
 import { createMockEditor } from "./create-mock-editor.ts";
 import { createMockRelease } from "./create-mock-release.ts";
+import { createMockAds } from "./create-mock-ads.ts";
 import { createMockAudit, type MockAuditOperation } from "./create-mock-audit.ts";
 import { createMockNotifications, type MockNotificationOperation, type MockOrgStanding } from "./create-mock-notifications.ts";
 import {
@@ -186,6 +188,7 @@ export interface MockSessionEnvironment {
   readonly layout: LayoutService;
   readonly editor: EditorService;
   readonly release: ReleaseService;
+  readonly ads: AdsService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
   readonly live: LiveService;
@@ -1023,6 +1026,12 @@ export function createMockSessionEnvironment(
   });
 
   const releaseDouble = createMockRelease({ layout: layoutDouble.layout, person: storyDeps.person });
+  const adsDouble = createMockAds({
+    person: storyDeps.person,
+    edition: (orgId, pubId, editionId) => storyDouble.editionOf(orgId, pubId, editionId),
+    editions: (orgId, pubId) => storyDouble.editionsOf(orgId, pubId),
+    pictureOf: (orgId, pubId, assetId) => storyDouble.pictureOf(orgId, pubId, assetId),
+  });
   const editorDouble = createMockEditor((runId, page) => releaseDouble.approvalOf(runId, page));
 
   const sessionController: MockSessionController = {
@@ -1055,6 +1064,7 @@ export function createMockSessionEnvironment(
       layoutDouble.reset();
       editorDouble.reset();
       releaseDouble.reset();
+      adsDouble.reset();
       notificationDouble.reset();
       liveDouble.reset();
       acting = 0;
@@ -1138,6 +1148,7 @@ export function createMockSessionEnvironment(
     layout: layoutDouble.layout,
     editor: editorDouble.editor,
     release: releaseDouble.release,
+    ads: adsDouble.ads,
     comments: storyDouble.comments,
     notifications: notificationDouble.notifications,
     live: liveDouble.live,

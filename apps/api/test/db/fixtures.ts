@@ -440,6 +440,59 @@ export const FIXTURES: Fixture[] = [
       recorded_by: org.user,
     }),
   },
+  { table: "ad_settings", per: "publication", row: (org, pub) => ({ ...inPub(org, pub), updated_by: org.user }) },
+  {
+    table: "ad_cutoff_alert",
+    per: "publication",
+    row: (org, pub) => ({ ...inPub(org, pub), edition_date: "2026-10-21", bookings: "{}", told: 0 }),
+  },
+  // the ads desk (migration 2026_12_05_0001): an advertiser, its booking (with the asset as artwork) placed in the
+  // edition's slot, and a plan page naming the section
+  {
+    table: "advertiser",
+    per: "publication",
+    row: (org, pub) => ({ ...inPub(org, pub), id: childId(pub, 19), name: "Example Jewellers", created_by: org.user }),
+  },
+  {
+    table: "ad_booking",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      id: childId(pub, 20),
+      advertiser_id: childId(pub, 19),
+      w_mm: "100.00",
+      h_mm: "50.00",
+      colour: "colour",
+      slot: "back-1",
+      dates: "{2026-10-21}",
+      artwork_asset_id: childId(pub, 5),
+      artwork_set_by: org.user,
+      artwork_set_at: "2026-10-20T10:00:00Z",
+      created_by: org.user,
+    }),
+  },
+  {
+    table: "ad_placement",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      edition_id: childId(pub, 2),
+      slot: "back-1",
+      booking_id: childId(pub, 20),
+    }),
+  },
+  {
+    table: "flatplan_page",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      edition_id: childId(pub, 2),
+      page_no: 1,
+      section_id: childId(pub, 1),
+      note: "A fictional note",
+      updated_by: org.user,
+    }),
+  },
   {
     table: "ad_slot_artwork",
     per: "publication",

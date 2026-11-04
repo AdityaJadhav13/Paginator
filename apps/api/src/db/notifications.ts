@@ -5,7 +5,8 @@
 import { sql } from "kysely";
 import type { Tx } from "./tenant.ts";
 
-export type NotificationKind = "story_filed" | "story_sent_back" | "story_assigned" | "comment" | "invitation_accepted";
+export type NotificationKind =
+  "story_filed" | "story_sent_back" | "story_assigned" | "comment" | "invitation_accepted" | "ad_artwork_missing";
 
 /** What a notification names: ids only (the web fetches each through the routes that check access). */
 export type NotificationData = {
@@ -13,14 +14,17 @@ export type NotificationData = {
   storyId?: string;
   commentId?: string;
   invitationId?: string;
-  /** who did it */
-  actorId: string;
+  /** ad_artwork_missing: the edition date and how many of its bookings had no good artwork */
+  date?: string;
+  missing?: number;
+  /** who did it (none for the system's own notices) */
+  actorId?: string;
 };
 
 export type NewNotification = {
   userId: string;
   kind: NotificationKind;
-  targetType: "story" | "invitation";
+  targetType: "story" | "invitation" | "publication";
   targetId: string;
   data: NotificationData;
   /** true when an email goes with it (sent once this transaction has committed) */

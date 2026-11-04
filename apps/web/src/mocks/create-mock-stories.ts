@@ -502,7 +502,14 @@ export function createMockStories(deps: MockStoryDeps): {
   all(): readonly Row[];
   /** For the layout double (create-mock-layout.ts): an edition, whether a picture is ready, an upload. */
   editionOf(orgId: string, pubId: string, editionId: string): EditionRow | undefined;
+  editionsOf(orgId: string, pubId: string): readonly EditionRow[];
   assetReady(orgId: string, pubId: string, assetId: string): boolean | undefined;
+  /** A picture's pixel size and state, for the ads double's artwork check (undefined: not this publication's). */
+  pictureOf(
+    orgId: string,
+    pubId: string,
+    assetId: string,
+  ): { readonly widthPx: number; readonly heightPx: number; readonly status: string } | undefined;
   uploadOf(
     orgId: string,
     pubId: string,
@@ -1471,6 +1478,8 @@ export function createMockStories(deps: MockStoryDeps): {
         orgId,
         pubId,
         docx ? "story.create" : dataset ? "settings.edit" : "media.upload",
+        // the ads desk uploads its artwork to the library (L2.6)
+        purpose === "library" ? ["ads.manage"] : [],
       );
       if (refused(checked)) return checked;
       const { person } = checked;
@@ -1542,7 +1551,8 @@ export function createMockStories(deps: MockStoryDeps): {
     },
 
     async complete({ orgId, pubId, uploadId }) {
-      const checked = await check<AssetDto>("media.complete", orgId, pubId, "media.upload");
+      // ads.manage completes only what it could presign: a library picture (L2.6)
+      const checked = await check<AssetDto>("media.complete", orgId, pubId, "media.upload", ["ads.manage"]);
       if (refused(checked)) return checked;
       const { person } = checked;
       const upload = uploads.get(uploadId);
@@ -1914,6 +1924,8 @@ export function createMockStories(deps: MockStoryDeps): {
       keys = new Map();
     },
     all: () => rows,
+    editionsOf: (orgId, pubId) =>
+      editionRows.filter((edition) => edition.orgId === orgId && edition.publicationId === pubId),
     editionOf: (orgId, pubId, editionId) =>
       editionRows.find(
         (edition) => edition.id === editionId && edition.orgId === orgId && edition.publicationId === pubId,
@@ -1922,6 +1934,12 @@ export function createMockStories(deps: MockStoryDeps): {
       const asset = assets.get(assetId);
       return asset && !asset.deleted && asset.orgId === orgId && asset.pubId === pubId
         ? asset.status === "ready"
+        : undefined;
+    },
+    pictureOf(orgId, pubId, assetId) {
+      const asset = assets.get(assetId);
+      return asset && !asset.deleted && asset.orgId === orgId && asset.pubId === pubId
+        ? { widthPx: asset.widthPx, heightPx: asset.heightPx, status: asset.status }
         : undefined;
     },
     uploadOf(orgId, pubId, uploadId) {

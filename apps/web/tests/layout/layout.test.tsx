@@ -308,7 +308,9 @@ describe("Lay out", () => {
     act(() =>
       environment.sessionController.layout.finish(id, { state: "failed", error: restarted, message: restarted }),
     );
-    const last = within(await screen.findByRole("region", { name: "Last layout" }));
+    // the region first shows the older done run: wait for the failed run's refetch (slow under a full, loaded run)
+    await screen.findByText(/^Stopped after 11 min/);
+    const last = within(screen.getByRole("region", { name: "Last layout" }));
     expect(last.getByText(/^Stopped after 11 min/)).toBeInTheDocument();
     expect(last.getAllByText(restarted.text)).toHaveLength(1);
   });

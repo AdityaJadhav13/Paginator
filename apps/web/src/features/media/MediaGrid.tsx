@@ -55,6 +55,7 @@ export function MediaGrid({
   picker = false,
   compact = false,
   version = 0,
+  photoFilters = true,
 }: {
   readonly orgId: string;
   readonly pubId: string;
@@ -65,6 +66,8 @@ export function MediaGrid({
   readonly compact?: boolean;
   /** Bumped by the screen to fetch again (after an upload, a change, a delete). */
   readonly version?: number;
+  /** The news photo filters (caption or credit missing, too small for columns): off when choosing ad artwork. */
+  readonly photoFilters?: boolean;
 }) {
   const media = useMedia();
   const { t } = useI18n();
@@ -171,6 +174,7 @@ export function MediaGrid({
               {t("stories.filter.apply")}
             </Button>
           </div>
+          {photoFilters && (
           <Field label={t("library.filter.missing")}>
             {/* one choice: the API takes one `missing` */}
             <Select
@@ -182,7 +186,8 @@ export function MediaGrid({
               <option value="credit">{t("glossary.photoCredit")}</option>
             </Select>
           </Field>
-          {gridKnown && (
+          )}
+          {photoFilters && gridKnown && (
           <Field label={t("library.filter.tooSmall")}>
             <Select
               value={query.tooSmallForCols ? String(query.tooSmallForCols) : ""}

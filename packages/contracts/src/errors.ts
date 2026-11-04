@@ -40,6 +40,8 @@ export const ERROR_CODES = [
   "already_confirmed",
   "archive_failed",
   "receipt_failed",
+  "advertiser_exists",
+  "slot_booked",
   "request_too_large",
   "not_json",
   "slow_down",

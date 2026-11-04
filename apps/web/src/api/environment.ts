@@ -18,6 +18,7 @@ import { createApiMediaService } from "./media-service.ts";
 import { createApiLayoutService } from "./layout-service.ts";
 import { createApiEditorService } from "./editor-service.ts";
 import { createApiReleaseService } from "./release-service.ts";
+import { createApiAdsService } from "./ads-service.ts";
 import { createApiNewsService } from "./news-service.ts";
 import { createApiTeamService } from "./team-service.ts";
 import { createApiWorkspace } from "./workspace.ts";
@@ -71,6 +72,7 @@ export function createApiEnvironment(
     layout: createApiLayoutService(client, options.fetch ? { fetch: options.fetch } : {}),
     editor: createApiEditorService(client),
     release: createApiReleaseService(client),
+    ads: createApiAdsService(client),
     comments: createApiCommentService(client),
     notifications: createApiNotificationService(client),
     live,
