@@ -4,6 +4,20 @@
 import { z } from "zod";
 
 import { OrgId, Uuid7 } from "./ids.ts";
+import {
+  AdReady,
+  AdRejected,
+  EngineLayoutPayload,
+  EngineMeasurePayload,
+  EngineSetupPayload,
+  MeasureStatus,
+  MediaAdPayload,
+  ProfileReady,
+  ProfileRejected,
+  RunFinished,
+  RunPage,
+  RunProgress,
+} from "./layout.ts";
 import { NewsCollected, NewsDrafted, NewsDraftFailed } from "./news.ts";
 
 export { OrgId, Uuid7 };
@@ -117,7 +131,16 @@ export const DocxResult = z.strictObject({
 });
 export type DocxResult = z.infer<typeof DocxResult>;
 
-export const JOB_KINDS = ["media.ingest", "docx.import", "news.collect", "news.draft"] as const;
+export const JOB_KINDS = [
+  "media.ingest",
+  "docx.import",
+  "news.collect",
+  "news.draft",
+  "engine.setup",
+  "engine.measure",
+  "engine.layout",
+  "media.ad",
+] as const;
 
 /** A job that cannot finish (the queue writes it: a final failure, or a retry out of attempts). */
 export const JobFailed = z.strictObject({
@@ -125,7 +148,8 @@ export const JobFailed = z.strictObject({
   org_id: OrgId,
   pub_id: Uuid7,
   job_kind: z.enum(JOB_KINDS),
-  /** the asset (media.ingest), the import (docx.import), the run (news.collect) or the draft (news.draft) */
+  /** the asset (media.ingest), the import (docx.import), the run (news.collect), the draft (news.draft), the profile
+   * (engine.setup), the edition (engine.measure), the layout run (engine.layout) or the ad slot's row (media.ad) */
   target_id: Uuid7,
   code: z.string().regex(/^worker\.[a-z]{1,120}$/),
   message: z.string().max(2000),
@@ -139,6 +163,14 @@ export const EngineEvent = z.discriminatedUnion("kind", [
   NewsCollected,
   NewsDrafted,
   NewsDraftFailed,
+  ProfileReady,
+  ProfileRejected,
+  MeasureStatus,
+  RunProgress,
+  RunPage,
+  RunFinished,
+  AdReady,
+  AdRejected,
   JobFailed,
 ]);
 export type EngineEvent = z.infer<typeof EngineEvent>;
@@ -151,6 +183,10 @@ const JobBase = { format: z.literal(WORKER_JOB_FORMAT), id: z.string().regex(/^[
 export const WorkerJob = z.discriminatedUnion("kind", [
   z.strictObject({ ...JobBase, kind: z.literal("media.ingest"), args: MediaIngestPayload }),
   z.strictObject({ ...JobBase, kind: z.literal("docx.import"), args: DocxImportPayload }),
+  z.strictObject({ ...JobBase, kind: z.literal("engine.setup"), args: EngineSetupPayload }),
+  z.strictObject({ ...JobBase, kind: z.literal("engine.measure"), args: EngineMeasurePayload }),
+  z.strictObject({ ...JobBase, kind: z.literal("engine.layout"), args: EngineLayoutPayload }),
+  z.strictObject({ ...JobBase, kind: z.literal("media.ad"), args: MediaAdPayload }),
 ]);
 export type WorkerJob = z.infer<typeof WorkerJob>;
 const ErrorPart = z.strictObject({ code: z.string().regex(/^worker\.[a-z]+$/), message: z.string().max(2000) });
@@ -165,7 +201,18 @@ export const WorkerResult = z.discriminatedUnion("outcome", [
   z.strictObject({
     ...ResultBase,
     outcome: z.literal("done"),
-    event: z.discriminatedUnion("kind", [MediaReady, MediaRejected, ImportParsed, ImportRejected]),
+    event: z.discriminatedUnion("kind", [
+      MediaReady,
+      MediaRejected,
+      ImportParsed,
+      ImportRejected,
+      ProfileReady,
+      ProfileRejected,
+      MeasureStatus,
+      RunFinished,
+      AdReady,
+      AdRejected,
+    ]),
   }),
   z.strictObject({ ...ResultBase, outcome: z.literal("retry"), error: ErrorPart }),
   z.strictObject({ ...ResultBase, outcome: z.literal("failed"), error: ErrorPart }),

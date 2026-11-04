@@ -1,0 +1,178 @@
+/* An edition's layout, the engine profile and the Today card (L2.3). Tokens and logical properties only. */
+
+.pg-layout__note {
+  margin: 0;
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-200);
+}
+
+.pg-layout__pad {
+  padding: var(--pg-space-3) var(--pg-space-4);
+}
+
+.pg-layout__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-2) var(--pg-space-3);
+}
+
+.pg-layout__subhead {
+  margin: 0 0 var(--pg-space-1);
+  font-size: var(--pg-font-size-200);
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-layout__list,
+.pg-layout__slots,
+.pg-layout__board,
+.pg-layout__progress,
+.pg-layout__downloads,
+.pg-layout__facts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-layout__list {
+  display: grid;
+  gap: var(--pg-space-2);
+}
+
+.pg-layout__list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-1) var(--pg-space-3);
+}
+
+.pg-layout__slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--pg-app-gutter);
+}
+
+/* the board: a laptop shows four pages a row, a phone one */
+.pg-layout__board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--pg-app-gutter);
+}
+
+.pg-layout__thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 5 / 7;
+  background: var(--pg-app-canvas);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  overflow: hidden;
+}
+
+.pg-layout__thumb img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.pg-layout__progress {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--pg-space-2);
+}
+
+.pg-layout__progress > li {
+  display: grid;
+  gap: var(--pg-space-1);
+  padding: var(--pg-space-2) var(--pg-space-3);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+}
+
+.pg-layout__progress > li[data-state="done"] {
+  background: var(--pg-app-tone-success-bg);
+}
+
+.pg-layout__progress > li[data-state="failed"] {
+  background: var(--pg-app-tone-danger-bg);
+}
+
+.pg-layout__downloads {
+  display: grid;
+  gap: var(--pg-space-3);
+}
+
+.pg-layout__downloads > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-2) var(--pg-space-3);
+}
+
+.pg-layout__proof {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pg-space-2);
+  margin: 0;
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-200);
+}
+
+.pg-layout__proof > svg {
+  flex: none;
+  margin-block-start: 0.15em;
+}
+
+.pg-layout__facts {
+  display: grid;
+  grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr);
+  gap: var(--pg-space-2) var(--pg-space-4);
+}
+
+.pg-layout__facts > div {
+  display: contents;
+}
+
+.pg-layout__facts dt {
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-layout__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* a phone: the facts under their names */
+@media (max-width: 767px) {
+  .pg-layout__facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pg-layout__facts dd {
+    margin-block-end: var(--pg-space-2);
+  }
+}
+
+.pg-today {
+  display: grid;
+  gap: var(--pg-space-2);
+  padding-block-start: var(--pg-space-3);
+  border-block-start: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-today__heading {
+  margin: 0;
+  font-size: var(--pg-font-size-200);
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-today p {
+  margin: 0;
+}
+
+/* the check's words are long: they wrap inside the page's card rather than run out of it */
+.pg-layout__board .pg-badge-chip {
+  white-space: normal;
+  border-radius: var(--pg-app-radius-md);
+  padding-block: var(--pg-space-1);
+}

@@ -19,7 +19,7 @@ describe("the queue's settings", () => {
       "pgn_engine",
     ]);
     expect(decodeURIComponent(url.password)).toBe("p@ss:w/rd%");
-    expect(s.concurrency).toBe(1);
+    expect(s.concurrency).toBe(2);
     expect(s.noHandleSignals).toBe(true);
     expect(s.report).toBe(reportToInbox);
     expect(s.runner).toMatchObject({

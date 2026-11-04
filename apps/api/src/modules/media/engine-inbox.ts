@@ -20,10 +20,15 @@
 //                     applyImportEvent: its stories made, or its failure); the inbox's asset_id is the import's id.
 //       news.collected, news.drafted, news.draft_failed, and a news job's job.failed → the news finder's
 //                     (src/modules/news/inbox.ts applyNewsEvent); the inbox's asset_id is the run's or the draft's id.
+//       profile.*, measure.status, run.*, ad.*, and a job.failed of engine.setup, engine.measure, engine.layout or
+//                     media.ad → hosted layout's (src/modules/layout/inbox.ts applyLayoutEvent); the inbox's asset_id
+//                     is the profile's, the edition's, the run's or the ad slot's artwork row's id.
 //   - The sweep, at start-up and every 5 minutes, so every asset settles even when the queue cannot: jobs out of
 //     attempts that nobody settled (exhaustedJobs: unlocked, or locked longer than STALE_MS) are written to the inbox as
 //     job.failed worker.lost (dropped when the job had reported), then removed; and an asset (or a Word import) still
-//     waiting after DEADLINE_MS with no job and no waiting event gets the same (a news draft too). It reads and removes jobs as the system reader
+//     waiting after DEADLINE_MS with no job and no waiting event gets the same (a news draft too; and a profile setting
+//     up, an ad's artwork preparing, a measure waiting and a queued layout run); a run whose worker stopped reporting
+//     for RUN_STALE_MS (10 minutes) too, which the inbox then fails in the Desk's words (m.run.restarted). It reads and removes jobs as the system reader
 //     'engine-sweep' (plain pgn_app sees no job), and writes under each job's organisation. Two API instances may
 //     sweep at once, and a sweep may stop between a write and a removal: the inbox's unique job id and the
 //     conditional delete make a repeat's writes no-ops. It counts and logs only the failures it wrote.
@@ -41,6 +46,7 @@ import {
   organisationIds,
   publicationIds,
   removeSpentJob,
+  reportLost,
   reportToInbox,
   settleAsset,
   settleEvent,
@@ -57,6 +63,8 @@ import type { ObjectStore } from "../../storage/object-store.ts";
 import { strandedDrafts } from "../../db/news.ts";
 import { applyNewsEvent, isNewsEvent } from "../news/inbox.ts";
 import { applyImportEvent } from "./imports.ts";
+import { applyLayoutEvent, isLayoutEvent, layoutTarget } from "../layout/inbox.ts";
+import { stalledRuns, strandedLayout } from "../../db/layout.ts";
 
 /** The system's tenant has no person: the nil UUID (audit events by the system record no actor). */
 const NOBODY = "00000000-0000-0000-0000-000000000000";
@@ -125,6 +133,12 @@ async function decide(
   const parsed = EngineEvent.safeParse(row.payload);
   if (!parsed.success || parsed.data.kind !== row.kind) return refuse("contract");
   const event = parsed.data;
+  if (isLayoutEvent(event)) {
+    if (event.org_id !== tenant.orgId || event.pub_id !== tenant.pubIds[0] || layoutTarget(event) !== row.asset_id)
+      return refuse("mismatch");
+    const out = await applyLayoutEvent(tx, tenant, event, row.job_id, log);
+    return typeof out === "string" ? out : refuse(out.refuse);
+  }
   const targetId =
     event.kind === "job.failed"
       ? event.target_id
@@ -242,9 +256,16 @@ const TARGET_FIELD: Record<(typeof JOB_KINDS)[number], string> = {
   "docx.import": "import_id",
   "news.collect": "run_id",
   "news.draft": "draft_id",
+  "engine.setup": "profile_id",
+  "engine.measure": "edition_id",
+  "engine.layout": "run_id",
+  "media.ad": "artwork_id",
 };
+/** A layout run whose worker has not reported (run.progress, at least every 30 s) for this long is lost: the
+ * reconciler fails it in the Desk's words (m.run.restarted). */
+export const RUN_STALE_MS = 10 * 60_000;
 
-export type SweepLimits = { staleMs: number; deadlineMs: number };
+export type SweepLimits = { staleMs: number; deadlineMs: number; runStaleMs?: number };
 
 /** One pass of the sweep; returns how many failures it wrote to the inbox. */
 export async function sweep(
@@ -285,9 +306,8 @@ export async function sweep(
     if (pubs.length === 0) continue;
     await database.withTenant(tenantFor(orgId, pubs, "engine-sweep"), async (tx) => {
       for (const asset of await strandedAssets(tx, limits.deadlineMs, withJobs)) {
-        const wrote = await reportToInbox(tx, {
+        const wrote = await reportLost(tx, {
           orgId,
-          jobId: `lost:${asset.id}`,
           assetId: asset.id,
           payload: lostEvent(orgId, asset.publication_id, asset.id),
         });
@@ -296,9 +316,8 @@ export async function sweep(
         settled += 1;
       }
       for (const left of await strandedImports(tx, limits.deadlineMs, withJobs)) {
-        const wrote = await reportToInbox(tx, {
+        const wrote = await reportLost(tx, {
           orgId,
-          jobId: `lost:${left.id}`,
           assetId: left.id,
           payload: lostEvent(orgId, left.publication_id, left.id, "docx.import"),
         });
@@ -306,10 +325,27 @@ export async function sweep(
         log.warn({ import: left.id }, "a Word import with no job left was settled as lost");
         settled += 1;
       }
-      for (const left of await strandedDrafts(tx, limits.deadlineMs, withJobs)) {
-        const wrote = await reportToInbox(tx, {
+      // hosted layout: what waits with no job left, and runs whose worker stopped reporting
+      const layoutLeft = [
+        ...(await strandedLayout(tx, limits.deadlineMs, withJobs)),
+        ...(await stalledRuns(tx, limits.runStaleMs ?? RUN_STALE_MS)).map((r) => ({
+          kind: "engine.layout" as const,
+          ...r,
+        })),
+      ];
+      for (const left of layoutLeft) {
+        const wrote = await reportLost(tx, {
           orgId,
-          jobId: `lost:${left.id}`,
+          assetId: left.id,
+          payload: lostEvent(orgId, left.publication_id, left.id, left.kind),
+        });
+        if (!wrote) continue;
+        log.warn({ target: left.id, kind: left.kind }, "a layout job with no worker left was settled as lost");
+        settled += 1;
+      }
+      for (const left of await strandedDrafts(tx, limits.deadlineMs, withJobs)) {
+        const wrote = await reportLost(tx, {
+          orgId,
           assetId: left.id,
           payload: lostEvent(orgId, left.publication_id, left.id, "news.draft"),
         });

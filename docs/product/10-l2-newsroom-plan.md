@@ -154,6 +154,13 @@ This milestone deliberately puts the queue, the worker, the event inbox and S3 i
 
 **Release check:** printing a hosted-made edition follows the Desk's rule (G0–G2: pages with photos or ads only after the press test), plus item 2.
 
+**As built (L2.3), where it differs from this plan:**
+- **ZIP, not `tar.zst`:** `tools/desk/export-home.sh` makes `desk-home.zip` and `engine-dataset.zip`, and the engine profile's dataset bundle is a `.zip` (`profiles/<id>/dataset.zip`): neither the worker's Python 3.11 nor the API reads zstd without a new dependency. Each file still carries its SHA-256.
+- **Inbox payload limit:** an engine event is at most 64 KiB, but `run.finished` and `profile.ready` may be up to 1 MiB (a 16-page run's pages, checks and not-placed reasons; a profile's config), checked by `engine_event_payload_check`.
+- **Imported runs have `profile_id` null:** the Desk made them before any hosted profile existed (`apps/api/src/db/desk-import.ts`).
+- **A queue stopped during a layout** reports `job.failed` with `worker.restarted`: a run cannot be resumed by a later attempt, so the run fails with the Desk's RESTARTED message and the editor starts a new one (`apps/engine-queue/src/tasks.ts`). The deployment's stop grace period must exceed a page's work.
+- **Orphan engines are stopped through `/proc`:** the worker's slim image has no `ps`, which the Desk's own orphan check runs, so the launcher reads `/proc` instead (`apps/engine-worker/pgn_worker/launcher.py`).
+
 ### L2.4 The page editor, hosted (about 16 PRs)
 
 **The newsroom uses it for:** designers adjust pages in the browser on production nights, and editors fix text from the story panel. Every change is set by the engine and kept.

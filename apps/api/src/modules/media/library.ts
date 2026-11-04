@@ -4,6 +4,8 @@
 //     ones they uploaded and those that are the photo of one of their stories (not refused or failed). A deleted one
 //     never. `usedBy` names only the stories the person may see; `inUse` says whether any story uses it. `?story=` a
 //     story the person may not see answers none (not which picture is its photo).
+//     Without media.view, who sets an ad slot (ads.manage or layout.generate: Advertising) lists the ready pictures
+//     only, to pick an ad (their previews too: …/assets/:a/file?variant=preview); anyone else is refused.
 //   - GET …/assets/:a: one of them; 404 when it is not theirs to see (the same answer as none).
 //   - PATCH …/assets/:a (media.upload): the picture's own caption, credit and photographer, on its revision (409
 //     asset_changed with the picture as it is now), cleaned as the Desk cleans text; a Reporter's only on the ones
@@ -19,6 +21,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { recordAudit } from "../../db/audit.ts";
 import { findStory } from "../../db/stories.ts";
+import { profileInUse } from "../../db/layout.ts";
 import {
   type LibraryRow,
   confirmRights,
@@ -34,7 +37,7 @@ import type { Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 import { type Access, accessOf, actorOf, auditRefusals, refused } from "../access/access.ts";
 import { decodeCursor, factsOf } from "../stories/routes.ts";
-import { mediaScope, sees, uploadScope } from "../stories/rules.ts";
+import { mediaScope, picksAds, sees, uploadScope } from "../stories/rules.ts";
 import { cleaned } from "../stories/store.ts";
 import type { MediaOptions } from "./uploads.ts";
 
@@ -59,9 +62,12 @@ export function sharpColumns(widthPx: number, grid: Grid | null): number | null 
   return n;
 }
 
-// shortcut: the hosted product stores no publication grid yet (only the Desk's private house profile has one), so
-// sharpUpToCols is null and no picture is known too small; read the grid here once publication settings hold it.
-const GRID: Grid | null = null;
+/** The column grid of the publication's engine profile in use (L2.3), or null while none is ready: then no picture
+ * is known too small. */
+async function gridOf(tx: Tx, publicationId: string): Promise<Grid | null> {
+  const grid = (await profileInUse(tx, publicationId))?.grid;
+  return grid ? { columns: grid.columns, columnMm: grid.column_width_mm, gutterMm: grid.gutter_mm } : null;
+}
 
 function encodeCursor(row: LibraryRow): string {
   return Buffer.from(JSON.stringify([row.created_cursor, row.id])).toString("base64url");
@@ -72,6 +78,7 @@ async function items(tx: Tx, access: Access, o: string, p: string, userId: strin
   const ids = rows.map((row) => row.id);
   const uses = await usesOf(tx, p, ids);
   const editScope = uploadScope(access, p);
+  const grid = await gridOf(tx, p);
   const mine = editScope === "own" ? await uploadedByOf(tx, p, ids, userId) : new Set<string>();
   return rows.map((row): MediaItem => ({
     id: row.id,
@@ -85,7 +92,7 @@ async function items(tx: Tx, access: Access, o: string, p: string, userId: strin
     caption: row.caption,
     credit: row.credit,
     photographer: row.photographer,
-    sharpUpToCols: sharpColumns(row.width_px, GRID),
+    sharpUpToCols: sharpColumns(row.width_px, grid),
     uploadedBy: { id: row.uploaded_by, name: row.uploaded_by_name },
     usedBy: uses
       .filter((use) => use.asset_id === row.id && sees(access, p, factsOf(use), userId))
@@ -136,7 +143,8 @@ export const libraryRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { 
   app.get(
     "/api/v1/orgs/:o/pubs/:p/media",
     {
-      config: { permission: "media.view" },
+      // media.view, or picksAds (ready pictures only): one route permission, so pages.view and the rule below
+      config: { permission: "pages.view" },
       schema: { params: Pub, querystring: MediaQuery, response: { 200: MediaList } },
     },
     async (request) => {
@@ -145,10 +153,17 @@ export const libraryRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { 
       const { o, p } = request.params;
       const q = request.query;
       const scope = mediaScope(access, p);
-      // with no grid, no picture is known too small for any number of columns
-      if (scope === "none" || (q.tooSmallForCols !== undefined && GRID === null)) return { items: [], next: null };
+      const adsOnly = scope === "none" && picksAds(access, p);
+      if (scope === "none" && !adsOnly) throw refused("the media library needs media.view");
       const after = q.cursor === undefined ? undefined : decodeCursor(q.cursor);
       return database.withTenant(access.tenant, async (tx) => {
+        // too narrow for N columns: N·column + (N−1)·gutter mm; with no grid, no picture is known too small
+        let tooNarrowForMm: number | undefined;
+        if (q.tooSmallForCols !== undefined) {
+          const grid = await gridOf(tx, p);
+          if (!grid) return { items: [], next: null };
+          tooNarrowForMm = q.tooSmallForCols * grid.columnMm + (q.tooSmallForCols - 1) * grid.gutterMm;
+        }
         if (q.story !== undefined) {
           const story = UUID.test(q.story) ? await findStory(tx, p, q.story) : null;
           if (!story || !sees(access, p, factsOf(story), userId)) return { items: [], next: null };
@@ -156,9 +171,11 @@ export const libraryRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { 
         const rows = await listLibrary(tx, {
           publicationId: p,
           ...(scope === "own" ? { mine: userId } : {}),
+          ...(adsOnly ? { readyOnly: true } : {}),
           ...(q.story !== undefined ? { story: q.story } : {}),
           ...(q.missing !== undefined ? { missing: q.missing } : {}),
           ...(q.q ? { q: q.q } : {}),
+          ...(tooNarrowForMm !== undefined ? { tooNarrowForMm } : {}),
           ...(after ? { after: { createdAt: after.updatedAt, id: after.id } } : {}),
           limit: PAGE + 1,
         });

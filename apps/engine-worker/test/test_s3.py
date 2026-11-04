@@ -14,7 +14,9 @@ import io
 import logging
 import os
 import secrets
+import stat
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -159,6 +161,29 @@ class ReadWriteTests(unittest.TestCase):
         self.assertEqual(self.store(FakeClient({"VersionId": "v1", "ContentLength": 3, "Body": body})).get(KEY, "v1"),
                          b"abc")
         self.assertTrue(body.closed)
+
+    def test_a_download_streams_exactly_the_version_and_size_named_to_a_file(self):
+        """engine.setup's dataset bundle (up to 4 GiB): streamed to disk, its SHA-256 worked out on the way."""
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "bundle.zip"
+            data = b"fictional bundle bytes" * 1000
+            body = StreamingBody(io.BytesIO(data), len(data))
+            sha = self.store(FakeClient({"VersionId": "v1", "ContentLength": len(data), "Body": body})).download(
+                KEY, "v1", dest, 1 << 20)
+            self.assertEqual((sha, dest.read_bytes()), (hashlib.sha256(data).hexdigest(), data))
+            self.assertEqual(stat.S_IMODE(dest.stat().st_mode), 0o600)
+            for name, answer, words in (
+                    ("too large, before reading", {"VersionId": "v1", "ContentLength": 11,
+                                                   "Body": StreamingBody(io.BytesIO(b"x" * 11), 11)},
+                     "larger than the worker reads"),
+                    ("a short body", {"VersionId": "v1", "ContentLength": 5,
+                                      "Body": StreamingBody(io.BytesIO(b"abc"), 5)}, "could not be read in full"),
+                    ("another version", {"VersionId": "v2", "ContentLength": 3,
+                                         "Body": StreamingBody(io.BytesIO(b"abc"), 3)}, "another version")):
+                with self.subTest(name):
+                    with self.assertRaisesRegex(StorageError, words):
+                        self.store(FakeClient(answer)).download(KEY, "v1", dest, 10)
+                    self.assertFalse(dest.exists())                 # nothing half written is left
 
     def test_store_errors_carry_no_response_and_a_missing_bucket_is_a_fault(self):
         for code, kind in (("NoSuchKey", MissingObject), ("NoSuchVersion", MissingObject),

@@ -18,15 +18,20 @@ export const MAX_DOCX_BYTES = 10_485_760;
 export const UploadRequest = z
   .strictObject({
     /** story_photo: for a story's photo; library: straight into the media library (L2.2); docx: a Word file to import
-     * as stories (POST …/imports/docx) */
-    purpose: z.enum(["story_photo", "library", "docx"]),
+     * as stories (POST …/imports/docx); engine_dataset: an engine profile's dataset bundle, a ZIP of at most 4 GiB
+     * (POST …/engine-profiles, L2.3) */
+    purpose: z.enum(["story_photo", "library", "docx", "engine_dataset"]),
     filename: z.string().min(1).max(255),
-    contentType: z.enum([...PICTURE_TYPES, DOCX_TYPE]),
+    contentType: z.enum([...PICTURE_TYPES, DOCX_TYPE, "application/zip"]),
     bytes: z.number().int().min(1),
   })
   .refine((u) => (u.purpose === "docx") === (u.contentType === DOCX_TYPE), {
     path: ["contentType"],
     message: "A Word file is uploaded as docx, and a picture as a picture.",
+  })
+  .refine((u) => (u.purpose === "engine_dataset") === (u.contentType === "application/zip"), {
+    path: ["contentType"],
+    message: "A dataset bundle is uploaded as engine_dataset, as a ZIP file.",
   });
 export type UploadRequest = z.infer<typeof UploadRequest>;
 

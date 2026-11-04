@@ -15,15 +15,18 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 
 from PIL import Image
 
-from .desk import images, util
+from .desk import desk_text, images, util
+from . import keys
 from .keys import KeyGuard, uuid
 from .params import THUMB_MAX_PX, ProfileError, params_hash
 from .storage import Storage
 
 ARGS = ("org_id", "pub_id", "asset_id", "version_id", "sha256")     # ids only: the original's key is made from them
+AD_ARGS = ("org_id", "pub_id", "artwork_id", "asset_id", "version_id", "sha256", "w_mm", "h_mm")
 MAX_SIDE_PX = 100_000         # the contract's widest side (packages/contracts engine.ts Pixels): wider is refused
 MIME = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
 SWAPS = (5, 6, 7, 8)          # EXIF orientations that turn the picture a quarter: width and height change places
@@ -114,3 +117,49 @@ def ingest(storage: Storage, args: dict, icc_sha256: str) -> dict:
 def _size(jpeg: bytes) -> tuple[int, int]:
     with Image.open(io.BytesIO(jpeg)) as img:
         return img.size
+
+
+# ------------------------------------------------------------------------------------------- media.ad (L2.3)
+
+
+def check_ad_args(args: dict) -> dict:
+    if not isinstance(args, dict) or set(args) != set(AD_ARGS):
+        raise ValueError(f"media.ad takes exactly {', '.join(AD_ARGS)}")
+    check_args({k: args[k] for k in ARGS})
+    for key in ("w_mm", "h_mm"):                     # the contract's MmText: a positive decimal, at most two places
+        if not re.fullmatch(keys.MM, args[key]) or float(args[key]) <= 0:
+            raise ValueError(f"media.ad: {key} is not a size in millimetres")
+    return args
+
+
+def ad(storage: Storage, args: dict, icc_sha256: str) -> dict:
+    """An ad's artwork fitted into its slot by the Desk's own `images.convert_ad` (at up to 200 ppi, centred on white),
+    unchanged → `ad.ready` with its CMYK raster and preview (purposes ad-cmyk and ad-preview, the slot's size in their
+    names: `assets/<asset>/r/ad-cmyk-<params_hash>-<w>x<h>mm.cmyk.gz` and `ad-preview-….jpg`), or `ad.rejected` with
+    the Desk's words. The profile is checked as for a photo (ingest)."""
+    args = check_ad_args(args)
+    guard = KeyGuard(args["org_id"], args["pub_id"])
+    asset, artwork = uuid(args["asset_id"], "asset_id"), uuid(args["artwork_id"], "artwork_id")
+    data = storage.get(guard.asset_original(asset), args["version_id"])
+    if hashlib.sha256(data).hexdigest() != args["sha256"]:
+        raise Mismatch("the stored original is not the one this job names")
+    base = {"org_id": guard.org_id, "pub_id": guard.pub_id, "artwork_id": artwork, "asset_id": asset,
+            "sha256": args["sha256"]}
+    ph = params_hash(icc_sha256)
+    try:
+        conv = images.convert_ad(data, float(args["w_mm"]), float(args["h_mm"]))     # the Desk's code, unchanged
+    except util.DeskError as e:
+        if e.status >= 500:
+            raise
+        return {"kind": "ad.rejected", **base, "message": desk_text(e.message), "status": e.status}
+    if params_hash(icc_sha256) != ph:
+        raise ProfileError("the colour profile changed during the conversion")
+    size = f"{ph}-{args['w_mm']}x{args['h_mm']}mm"
+    out = {}
+    for name, purpose, body, ext, mime, (w, h) in (
+            ("raster", "ad-cmyk", conv.cmyk_gz, "cmyk.gz", "application/gzip", (conv.width, conv.height)),
+            ("preview", "ad-preview", conv.preview, "jpg", "image/jpeg", _size(conv.preview))):
+        key = guard.rendition(asset, purpose, size, ext)
+        out[name] = {"key": key, "version_id": storage.put(key, body, mime), "sha256": hashlib.sha256(body).hexdigest(),
+                     "bytes": len(body), "width_px": w, "height_px": h}
+    return {"kind": "ad.ready", **base, **out, "params_hash": ph}

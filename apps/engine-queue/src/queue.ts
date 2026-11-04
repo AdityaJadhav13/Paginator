@@ -3,6 +3,7 @@
 // worker: Graphile Worker installs only when its tables are missing, and `pgn_engine` cannot create them.
 import { run, type Runner } from "graphile-worker";
 import pg from "pg";
+import { Cancels, listenForCancels } from "./cancel.ts";
 import { healthy, type RunnerSettings } from "./runner.ts";
 import type { Query } from "./schema.ts";
 import type { NewsDeps } from "./news/group.ts";
@@ -180,8 +181,9 @@ export type QueueSettings = {
 /** Starts the queue once the worker's health command passes (else it rejects, and no job is taken). A job that finds
  * the worker misconfigured (`worker.config`) stops the queue, and the runner's promise then rejects: the process exits
  * non-zero for an operator to fix the worker, the job given back. Stopping waits for running jobs to finish (at most
- * the runner's time limit), and finishing or failing them in the database is awaited before the pool closes: the
- * deployment's stop grace period must be longer than `timeoutMs`. */
+ * the runner's time limit and 5 s; an engine job, whose limit is longer, is then stopped gracefully: up to 10 s more),
+ * and finishing or failing them in the database is awaited before the pool closes: the deployment's stop grace period
+ * must be longer than `timeoutMs` + 20 s. A user's cancel (engine_cancel) is listened for on a connection of its own. */
 export async function startQueue(settings: QueueSettings): Promise<Runner> {
   const { timeoutMs } = settings.runner;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
@@ -212,6 +214,8 @@ export async function startQueue(settings: QueueSettings): Promise<Runner> {
   checking.unref();
   let misconfigured = false;
   let runner: Runner | null = null;
+  const cancels = new Cancels();
+  const listening = listenForCancels(settings.connectionString, cancels);
   const stopForConfig = () => {
     if (misconfigured) return;
     misconfigured = true;
@@ -223,10 +227,11 @@ export async function startQueue(settings: QueueSettings): Promise<Runner> {
       schema: QUEUE_SCHEMA,
       concurrency: settings.concurrency,
       noHandleSignals: settings.noHandleSignals ?? false,
-      taskList: taskList(settings.runner, settings.report, stopForConfig, undefined, settings.news),
+      taskList: taskList(settings.runner, settings.report, stopForConfig, undefined, settings.news, cancels),
       // no cron item and no crontab file: `crontab: ""` is empty, so Graphile Worker would read ./crontab instead
       parsedCronItems: [],
-      // running jobs end by themselves (the runner's own time limit) rather than by Graphile Worker's cancel
+      // running jobs end by themselves (the runner's own time limit) rather than by Graphile Worker's cancel; a job with
+      // a longer limit of its own (the engine's) is stopped then: gracefully, a layout reported worker.restarted
       gracefulShutdownAbortTimeout: timeoutMs + 5_000,
       // Graphile Worker 0.18 does not await an unbatched finish: a shutdown could close the pool first, leaving the job
       // locked for 4 hours. Batched (with no delay), the finishes are flushed and awaited before the pool closes.
@@ -234,7 +239,7 @@ export async function startQueue(settings: QueueSettings): Promise<Runner> {
     });
   } catch (error) {
     clearInterval(checking);
-    await locks.end();
+    await Promise.all([locks.end(), listening.stop()]);
     throw error;
   }
   const started = runner;
@@ -242,7 +247,7 @@ export async function startQueue(settings: QueueSettings): Promise<Runner> {
     promise: started.promise
       .finally(async () => {
         clearInterval(checking);
-        await locks.end();
+        await Promise.all([locks.end(), listening.stop()]);
       })
       .then(() => {
         if (misconfigured) throw new Error("the queue stopped: the worker is misconfigured (worker.config)");

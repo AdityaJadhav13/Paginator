@@ -93,6 +93,14 @@ const SESSION_SEED = {
       twoFactorEnabled: false,
     },
     {
+      userId: "user-demo-sahyadri-ads",
+      name: "Sahyadri Demo Ads Desk",
+      email: "ads@sahyadri.example",
+      password: "fictional ads desk password",
+      emailVerified: true,
+      twoFactorEnabled: false,
+    },
+    {
       userId: "user-demo-sahyadri-photo",
       name: "Sahyadri Demo Photo Editor",
       email: "photo@sahyadri.example",
@@ -154,6 +162,13 @@ const SESSION_SEED = {
         organizationId: "org-demo-sahyadri",
         orgRole: "member",
         publications: [{ publicationId: "pub-demo-pune-daily", roles: ["reporter"], grants: [] }],
+      },
+    ],
+    "user-demo-sahyadri-ads": [
+      {
+        organizationId: "org-demo-sahyadri",
+        orgRole: "member",
+        publications: [{ publicationId: "pub-demo-pune-daily", roles: ["advertising"], grants: [] }],
       },
     ],
     "user-demo-sahyadri-photo": [
@@ -238,6 +253,7 @@ const PRESET_USERS: Readonly<Record<Exclude<MockSessionPreset, "signed-out">, st
   "sahyadri-subeditor": "user-demo-sahyadri-subeditor",
   "sahyadri-reporter": "user-demo-sahyadri-reporter",
   "sahyadri-photo-editor": "user-demo-sahyadri-photo",
+  "sahyadri-advertising": "user-demo-sahyadri-ads",
   "sahyadri-chief-editor": "user-demo-sahyadri-chief",
 };
 

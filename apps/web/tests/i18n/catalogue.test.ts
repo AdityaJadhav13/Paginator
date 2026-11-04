@@ -109,10 +109,12 @@ describe("Keys the code uses", () => {
     expect(missing).toEqual([]);
   });
 
-  it("are every key but the glossary seeds and the error codes (no dead strings)", () => {
+  it("are every key but the glossary seeds, the error codes and the Desk's message codes (no dead strings)", () => {
     const used = new Set(keyLiterals().keys());
+    // the Desk's messages (m.…) are said by the code a DeskText carries (features/layout/desk-text.tsx), as error.… by
+    // the API's code
     const unused = CATALOGUE_KEYS.filter(
-      (key) => !used.has(key) && !key.startsWith("glossary.") && !key.startsWith("error."),
+      (key) => !used.has(key) && !key.startsWith("glossary.") && !key.startsWith("error.") && !key.startsWith("m."),
     );
     expect(unused).toEqual([]);
   });

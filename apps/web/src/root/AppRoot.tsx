@@ -36,6 +36,9 @@ import { EditionsScreen } from "../features/editions/EditionsScreen.tsx";
 import { MediaScreen } from "../features/media/MediaScreen.tsx";
 import { NewsProvider } from "../features/news/news-context.tsx";
 import { SourcesScreen } from "../features/news/SourcesScreen.tsx";
+import { LayoutProvider } from "../features/layout/layout-context.tsx";
+import { EditionLayoutScreen } from "../features/layout/EditionLayoutScreen.tsx";
+import { EngineProfileScreen } from "../features/layout/EngineProfileScreen.tsx";
 import { I18nProvider } from "../i18n/index.ts";
 import type { ServiceEnvironment } from "../services/index.ts";
 import { PlaceholderScreen } from "../demo/ui002/PlaceholderScreen.tsx";
@@ -103,6 +106,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
           <EditionsProvider editions={activeEnvironment.editions}>
           <MediaProvider media={activeEnvironment.media}>
           <NewsProvider news={activeEnvironment.news}>
+          <LayoutProvider layout={activeEnvironment.layout}>
           <ContactProvider contact={activeEnvironment.contact}>
           <NewsroomProvider
             comments={activeEnvironment.comments}
@@ -148,6 +152,8 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                 <Route path={PATTERNS.pubEditions} element={<EditionsScreen />} />
                 <Route path={PATTERNS.pubMedia} element={<MediaScreen />} />
                 <Route path={PATTERNS.pubSources} element={<SourcesScreen />} />
+                <Route path={PATTERNS.pubEditionLayout} element={<EditionLayoutScreen />} />
+                <Route path={PATTERNS.pubEngineProfile} element={<EngineProfileScreen />} />
                 {DEVELOPMENT && (
                   <>
                     <Route path={PATTERNS.orgSettings} element={placeholder("orgSettings")} />
@@ -186,6 +192,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
           </SessionProvider>
           </NewsroomProvider>
           </ContactProvider>
+          </LayoutProvider>
           </NewsProvider>
           </MediaProvider>
           </EditionsProvider>

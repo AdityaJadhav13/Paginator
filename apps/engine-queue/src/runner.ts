@@ -3,13 +3,17 @@
 // refuses, a line that disagrees with its exit code, an unknown code, a death by a signal such as the kernel's
 // out-of-memory killer, the time limit, a cancel) decides nothing: the job is run again. The runner runs in a process
 // group of its own, and the whole group is killed at the time limit, on a cancel, and once the runner has exited, so
-// nothing it started outlives it.
+// nothing it started outlives it. The engine's kinds (L2.3) differ in three ways: a time limit of their own
+// (`limitsMs`); engine.layout and engine.measure write progress lines (WorkerProgress) before their result, each
+// passed to `onProgress` as it comes (one the contract refuses is dropped, never the job's failure); and a stop is
+// graceful: SIGTERM to the group, SIGKILL 10 s later, and the result the runner still answers is read
+// (`stoppedBy` then says why it was stopped: the task decides whether that answer counts).
 import { spawn } from "node:child_process";
-import { WorkerResult, type WorkerJob } from "@pageinator/contracts";
+import { WORKER_PROGRESS_FORMAT, WorkerProgress, WorkerResult, type WorkerJob } from "@pageinator/contracts";
 
 /** What the queue does with a run: report the event, report a final failure, or run the job again. */
 export type RunOutcome =
-  | { outcome: "done"; result: Extract<WorkerResult, { outcome: "done" }> }
+  | { outcome: "done"; result: Extract<WorkerResult, { outcome: "done" }>; stoppedBy?: string }
   | { outcome: "failed"; code: string; message: string }
   | { outcome: "retry"; code: string; message: string };
 
@@ -20,7 +24,16 @@ export type RunnerSettings = {
   cwd: string;
   env: NodeJS.ProcessEnv; // filtered by runnerEnv before any runner sees it: never the queue's database
   timeoutMs: number;
+  /** a kind's own time limit (the engine's: main.ts); any other kind has timeoutMs */
+  limitsMs?: Partial<Record<WorkerJob["kind"], number>>;
 };
+
+/** The kinds that write progress lines before their result, and the kinds stopped gracefully (the Python launcher
+ * stops the engine's own process group on SIGTERM and answers what it did). */
+const STREAMING: ReadonlySet<string> = new Set(["engine.layout", "engine.measure"]);
+const GRACEFUL: ReadonlySet<string> = new Set(["engine.setup", "engine.measure", "engine.layout"]);
+/** How long a graceful stop waits after SIGTERM before SIGKILL. */
+export const STOP_GRACE_MS = 10_000;
 
 /** The exit codes pgn_worker/run.py documents, and the outcome each must come with. */
 const EXIT: Record<number, WorkerResult["outcome"]> = {
@@ -31,19 +44,30 @@ const EXIT: Record<number, WorkerResult["outcome"]> = {
   78: "failed",
 };
 const MAX_STDOUT = 1024 * 1024; // a result line is a few kilobytes; more is not a result
+// progress lines are handed on as they come, never kept: a long run may write many (seq up to 100 000)
+const MAX_STREAMED = 256 * MAX_STDOUT;
 const DRAIN_MS = 2_000; // after the runner exits, how long its output may take to arrive
 /** The runner's settings, copied from the queue's environment: nothing else reaches Python (no database URL).
- * AWS_CA_BUNDLE: a store behind a private CA (pilot-local's Caddy), which boto3 then trusts. */
+ * AWS_CA_BUNDLE: a store behind a private CA (pilot-local's Caddy), which boto3 then trusts. PGN_ENGINE_PYTHON and
+ * PGN_ENGINE_STALL_S: the layout engine's Python and how long an engine may show no progress (L2.3). */
 const PASSED =
-  /^(PATH|HOME|LANG|LC_[A-Z]+|TMPDIR|PYTHONPATH|PYTHONDONTWRITEBYTECODE|PAGEINATOR_ICC|PGN_ICC_SHA256|PGN_S3_[A-Z_]+|PGN_WORKER_HOMES|AWS_CA_BUNDLE)$/;
+  /^(PATH|HOME|LANG|LC_[A-Z]+|TMPDIR|PYTHONPATH|PYTHONDONTWRITEBYTECODE|PAGEINATOR_ICC|PGN_ICC_SHA256|PGN_S3_[A-Z_]+|PGN_WORKER_HOMES|AWS_CA_BUNDLE|PGN_ENGINE_PYTHON|PGN_ENGINE_STALL_S)$/;
 
 export function runnerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(Object.entries(env).filter(([name]) => PASSED.test(name)));
 }
 
-const retry = (code: string, message: string): RunOutcome => ({ outcome: "retry", code, message });
+const retry = (code: string, message: string) => ({ outcome: "retry", code, message }) as const;
 
-export function runJob(job: WorkerJob, settings: RunnerSettings, signal?: AbortSignal): Promise<RunOutcome> {
+export function runJob(
+  job: WorkerJob,
+  settings: RunnerSettings,
+  signal?: AbortSignal,
+  onProgress?: (progress: WorkerProgress) => void,
+): Promise<RunOutcome> {
+  const limitMs = settings.limitsMs?.[job.kind] ?? settings.timeoutMs;
+  const streaming = STREAMING.has(job.kind);
+  const graceful = GRACEFUL.has(job.kind);
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve(retry("worker.cancelled", "the queue stopped before the job ran"));
     const child = spawn(settings.command, settings.args, {
@@ -54,35 +78,57 @@ export function runJob(job: WorkerJob, settings: RunnerSettings, signal?: AbortS
     });
     const chunks: Buffer[] = [];
     let size = 0;
-    let stopped: RunOutcome | null = null;
+    let partial = ""; // a streaming kind's line not yet ended
+    let stopped: Extract<RunOutcome, { outcome: "retry" }> | null = null;
     let exited = false;
-    const killGroup = () => {
+    let killing: NodeJS.Timeout | undefined;
+    const killGroup = (signal: NodeJS.Signals = "SIGKILL") => {
       try {
-        if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+        if (child.pid !== undefined) process.kill(-child.pid, signal);
       } catch {
         // the group is gone already
       }
     };
-    const stop = (why: RunOutcome) => {
-      if (exited) return; // a finished run keeps its own outcome
-      stopped ??= why;
-      killGroup();
+    const stop = (why: Extract<RunOutcome, { outcome: "retry" }>) => {
+      if (exited || stopped) return; // a finished run keeps its own outcome; a stop is made once
+      stopped = why;
+      if (!graceful) return killGroup();
+      killGroup("SIGTERM");
+      killing = setTimeout(() => killGroup(), STOP_GRACE_MS);
     };
-    const timer = setTimeout(
-      () => stop(retry("worker.timeout", `the runner took longer than ${settings.timeoutMs} ms`)),
-      settings.timeoutMs,
-    );
+    const timer = setTimeout(() => stop(retry("worker.timeout", `the runner took longer than ${limitMs} ms`)), limitMs);
     const onAbort = () => stop(retry("worker.cancelled", "the queue stopped while the job ran"));
     signal?.addEventListener("abort", onAbort, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
       size += chunk.length;
-      if (size > MAX_STDOUT) stop(retry("worker.output", "the runner wrote more than a result"));
-      else chunks.push(chunk);
+      if (size > (streaming ? MAX_STREAMED : MAX_STDOUT))
+        return stop(retry("worker.output", "the runner wrote more than a result"));
+      if (!streaming) return void chunks.push(chunk);
+      const lines = (partial + chunk.toString("utf8")).split("\n");
+      partial = lines.pop() ?? "";
+      if (partial.length > MAX_STDOUT) return stop(retry("worker.output", "the runner wrote more than a result"));
+      for (const text of lines) if (!progress(text)) chunks.push(Buffer.from(text + "\n"));
     });
+    /** A progress line: handed on when the contract takes it, else dropped. False: not a progress line (kept). */
+    const progress = (text: string): boolean => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return false;
+      }
+      if ((parsed as { format?: unknown } | null)?.format !== WORKER_PROGRESS_FORMAT) return false;
+      const line = WorkerProgress.safeParse(parsed);
+      // the line's words go to no log (they may name a story): only that it was dropped
+      if (!line.success || line.data.job !== job.id) console.warn(`${job.kind} ${job.id}: a progress line was dropped`);
+      else onProgress?.(line.data);
+      return true;
+    };
     child.stdin.on("error", () => {}); // a runner that exits before reading: its exit says what happened
     child.stdin.end(JSON.stringify(job));
     const finish = (out: RunOutcome) => {
       clearTimeout(timer);
+      clearTimeout(killing);
       signal?.removeEventListener("abort", onAbort);
       resolve(out);
     };
@@ -94,9 +140,14 @@ export function runJob(job: WorkerJob, settings: RunnerSettings, signal?: AbortS
       exited = true;
       killGroup(); // anything the runner left behind; its output pipe then closes
       const outcome = (): RunOutcome => {
-        if (stopped) return stopped;
+        const output = Buffer.concat([...chunks, Buffer.from(partial)]).toString("utf8");
+        if (stopped) {
+          // a graceful stop's answer, when the runner gave one (engine.layout: run.finished cancelled)
+          const answer = graceful && code !== null ? read(output, code, job.id) : null;
+          return answer?.outcome === "done" ? { ...answer, stoppedBy: stopped.code } : stopped;
+        }
         if (code === null) return retry("worker.signal", `the runner was ended by ${killedBy ?? "a signal"}`);
-        return read(Buffer.concat(chunks).toString("utf8"), code, job.id);
+        return read(output, code, job.id);
       };
       if (child.stdout.readableEnded || child.stdout.destroyed) return finish(outcome());
       const drained = setTimeout(() => finish(outcome()), DRAIN_MS);

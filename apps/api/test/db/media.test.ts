@@ -121,7 +121,7 @@ describe("presign", () => {
     const { rows } = await su.query("select key, user_id, status, declared_bytes from app.upload where id = $1", [
       body.uploadId,
     ]);
-    expect(rows[0]).toMatchObject({ user_id: photo.id, status: "presigned", declared_bytes: 1234 });
+    expect(rows[0]).toMatchObject({ user_id: photo.id, status: "presigned", declared_bytes: "1234" }); // bigint (a dataset bundle may be 4 GiB)
     expect(rows[0].key).toBe(`uploads/orgs/${a.orgId}/pubs/${a.pubId}/${body.uploadId}`);
     expect(body.fields).toMatchObject({
       key: rows[0].key,

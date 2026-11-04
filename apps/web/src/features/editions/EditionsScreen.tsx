@@ -11,7 +11,7 @@
  * editions themselves, and only their counts move.
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent, type MutableRefObject } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { EDITION_PAGES } from "@pageinator/contracts";
 import {
   Badge,
@@ -42,6 +42,7 @@ import { ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useSession } from "../auth/SessionProvider.tsx";
 import { useLiveEvents } from "../live/live-context.tsx";
 import { mayCreateEdition, mayExport } from "../stories/access.ts";
+import { layoutAccess } from "../layout/access.ts";
 import { useEditions } from "./editions-context.tsx";
 import "./editions.css";
 
@@ -74,7 +75,9 @@ export function EditionsScreen() {
   const { orgId = "", pubId = "" } = useParams<{ orgId: string; pubId: string }>();
   const { state } = useSession();
   const { t } = useI18n();
-  const [creating, setCreating] = useState(false);
+  // the Overview's "Create today's edition" opens the sheet (?create=1)
+  const [search] = useSearchParams();
+  const [creating, setCreating] = useState(() => search.get("create") === "1");
   const org =
     state.status === "ready"
       ? state.workspace?.organizations.find((candidate) => candidate.org.id === orgId)
@@ -107,6 +110,7 @@ export function EditionsScreen() {
           publicationName={publication?.name ?? ""}
           create={create}
           send={mayExport(org, pubId)}
+          layout={layoutAccess(org, pubId).view}
           creating={creating}
           onCreating={setCreating}
         />
@@ -137,6 +141,7 @@ function EditionsContent({
   publicationName,
   create,
   send,
+  layout,
   creating,
   onCreating,
 }: {
@@ -145,6 +150,7 @@ function EditionsContent({
   readonly publicationName: string;
   readonly create: boolean;
   readonly send: boolean;
+  readonly layout: boolean;
   readonly creating: boolean;
   readonly onCreating: (open: boolean) => void;
 }) {
@@ -266,7 +272,7 @@ function EditionsContent({
               </tbody>
             </Table>
           </Panel>
-          <EditionDetail key={selected.id} orgId={orgId} pubId={pubId} edition={selected} send={send} />
+          <EditionDetail key={selected.id} orgId={orgId} pubId={pubId} edition={selected} send={send} layout={layout} />
         </div>
       )}
     </Stack>
@@ -285,11 +291,13 @@ function EditionDetail({
   pubId,
   edition,
   send,
+  layout,
 }: {
   readonly orgId: string;
   readonly pubId: string;
   readonly edition: PubEditionDto;
   readonly send: boolean;
+  readonly layout: boolean;
 }) {
   const editions = useEditions();
   const { t, language } = useI18n();
@@ -377,6 +385,14 @@ function EditionDetail({
             {t("editions.stories", { date })}
           </Link>
         </p>
+        {layout && (
+          <p>
+            <Link className="pg-editions__link" to={paths.pubEditionLayout(orgId, pubId, edition.id)}>
+              <Icon name="layout-template" size={16} />
+              {t("editionLayout.open")}
+            </Link>
+          </p>
+        )}
       </Stack>
     </Panel>
   );

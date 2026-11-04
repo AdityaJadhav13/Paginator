@@ -12,6 +12,7 @@ import { useSession } from "../auth/SessionProvider.tsx";
 import { may } from "./navigation.ts";
 import { roleName, rolesAndGrants } from "./roles.ts";
 import { mayViewEditions, storyScope } from "../stories/access.ts";
+import { TodayCard } from "../layout/TodayCard.tsx";
 import "./org-home.css";
 
 export function OrgHome() {
@@ -74,6 +75,7 @@ export function OrgHome() {
                       )}
                     </div>
                   )}
+                  {editions && <TodayCard org={org} pubId={publication.id} />}
                 </li>
               );
             })}

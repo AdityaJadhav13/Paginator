@@ -32,6 +32,7 @@ const NAV_ICONS: Partial<Record<PlainKey, IconName>> = {
   "glossary.archive": "archive",
   "nav.brand": "palette",
   "nav.printProfiles": "printer",
+  "nav.engineProfile": "settings",
   "glossary.team": "users",
   "nav.audit": "scroll-text",
   "nav.orgSettings": "settings",

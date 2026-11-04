@@ -1,0 +1,989 @@
+{
+  "results": [
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "engine.setup",
+      "outcome": "done",
+      "event": {
+        "kind": "profile.ready",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "profile_id": "01890a5d-ac96-774b-bcce-b302099a8061",
+        "sha256": "9bd99aebbad6f61ea337f8ba383826ff899f4c1be9ac8fa86c6a7afac60daeda",
+        "config": {
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/profiles/01890a5d-ac96-774b-bcce-b302099a8061/config.json",
+          "version_id": "7a3d1ac11972b757712727ef1b37c48f84aafa8105f3b3cc41c0d3b21bee51bb",
+          "sha256": "7a3d1ac11972b757712727ef1b37c48f84aafa8105f3b3cc41c0d3b21bee51bb",
+          "bytes": 359
+        },
+        "engine_version": "desk-engine/0.1.0",
+        "templates": {
+          "front": "fictional-p1",
+          "inside_imprint": "fictional-p2",
+          "inside": "fictional-p3",
+          "back": "fictional-p4"
+        },
+        "grid": {
+          "columns": 8,
+          "column_width_mm": 36.5,
+          "gutter_mm": 4.19
+        },
+        "plans": [
+          {
+            "pages": 4,
+            "back_page_ads": true,
+            "page_plan": [
+              {
+                "page": 1,
+                "role": "front",
+                "template_role": "front",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 2,
+                "role": "inside",
+                "template_role": "inside_imprint",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 3,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 4,
+                "role": "back",
+                "template_role": "back",
+                "news_mm2": 50000.0,
+                "ad_slots": [
+                  {
+                    "slot": "back-1",
+                    "w_mm": 100.0,
+                    "h_mm": 50.0
+                  }
+                ]
+              }
+            ],
+            "needs": {
+              "stories": 20,
+              "briefs": 4,
+              "photos": 8,
+              "words": 6000,
+              "per_role": {
+                "front": {
+                  "stories": 5,
+                  "briefs": 1,
+                  "photos": 2,
+                  "words": 1500
+                }
+              },
+              "spare_share": 0.2
+            }
+          },
+          {
+            "pages": 4,
+            "back_page_ads": false,
+            "page_plan": [
+              {
+                "page": 1,
+                "role": "front",
+                "template_role": "front",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 2,
+                "role": "inside",
+                "template_role": "inside_imprint",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 3,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 4,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              }
+            ],
+            "needs": {
+              "stories": 20,
+              "briefs": 4,
+              "photos": 8,
+              "words": 6000,
+              "per_role": {
+                "front": {
+                  "stories": 5,
+                  "briefs": 1,
+                  "photos": 2,
+                  "words": 1500
+                }
+              },
+              "spare_share": 0.2
+            }
+          },
+          {
+            "pages": 8,
+            "back_page_ads": true,
+            "page_plan": [
+              {
+                "page": 1,
+                "role": "front",
+                "template_role": "front",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 2,
+                "role": "inside",
+                "template_role": "inside_imprint",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 3,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 4,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 5,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 6,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 7,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 8,
+                "role": "back",
+                "template_role": "back",
+                "news_mm2": 50000.0,
+                "ad_slots": [
+                  {
+                    "slot": "back-1",
+                    "w_mm": 100.0,
+                    "h_mm": 50.0
+                  }
+                ]
+              }
+            ],
+            "needs": {
+              "stories": 40,
+              "briefs": 8,
+              "photos": 16,
+              "words": 12000,
+              "per_role": {
+                "front": {
+                  "stories": 5,
+                  "briefs": 1,
+                  "photos": 2,
+                  "words": 1500
+                }
+              },
+              "spare_share": 0.2
+            }
+          },
+          {
+            "pages": 8,
+            "back_page_ads": false,
+            "page_plan": [
+              {
+                "page": 1,
+                "role": "front",
+                "template_role": "front",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 2,
+                "role": "inside",
+                "template_role": "inside_imprint",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 3,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 4,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 5,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 6,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 7,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 8,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              }
+            ],
+            "needs": {
+              "stories": 40,
+              "briefs": 8,
+              "photos": 16,
+              "words": 12000,
+              "per_role": {
+                "front": {
+                  "stories": 5,
+                  "briefs": 1,
+                  "photos": 2,
+                  "words": 1500
+                }
+              },
+              "spare_share": 0.2
+            }
+          },
+          {
+            "pages": 16,
+            "back_page_ads": true,
+            "page_plan": [
+              {
+                "page": 1,
+                "role": "front",
+                "template_role": "front",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 2,
+                "role": "inside",
+                "template_role": "inside_imprint",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 3,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 4,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 5,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 6,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 7,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 8,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 9,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 10,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 11,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 12,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 13,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 14,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 15,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 16,
+                "role": "back",
+                "template_role": "back",
+                "news_mm2": 50000.0,
+                "ad_slots": [
+                  {
+                    "slot": "back-1",
+                    "w_mm": 100.0,
+                    "h_mm": 50.0
+                  }
+                ]
+              }
+            ],
+            "needs": {
+              "stories": 80,
+              "briefs": 16,
+              "photos": 32,
+              "words": 24000,
+              "per_role": {
+                "front": {
+                  "stories": 5,
+                  "briefs": 1,
+                  "photos": 2,
+                  "words": 1500
+                }
+              },
+              "spare_share": 0.2
+            }
+          },
+          {
+            "pages": 16,
+            "back_page_ads": false,
+            "page_plan": [
+              {
+                "page": 1,
+                "role": "front",
+                "template_role": "front",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 2,
+                "role": "inside",
+                "template_role": "inside_imprint",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 3,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 4,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 5,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 6,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 7,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 8,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 9,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 10,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 11,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 12,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 13,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 14,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 15,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              },
+              {
+                "page": 16,
+                "role": "inside",
+                "template_role": "inside",
+                "news_mm2": 50000.0,
+                "ad_slots": []
+              }
+            ],
+            "needs": {
+              "stories": 80,
+              "briefs": 16,
+              "photos": 32,
+              "words": 24000,
+              "per_role": {
+                "front": {
+                  "stories": 5,
+                  "briefs": 1,
+                  "photos": 2,
+                  "words": 1500
+                }
+              },
+              "spare_share": 0.2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "engine.setup",
+      "outcome": "done",
+      "event": {
+        "kind": "profile.rejected",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "profile_id": "01890a5d-ac96-774b-bcce-b302099a8061",
+        "sha256": "12e8191386b94b44baa75c5b7cacaff70d832e31bdfc6e865b324bb4ba6f8ce4",
+        "code": "profile.unsafe_path",
+        "message": {
+          "text": "This dataset bundle holds a path outside its folder (../x): the file was refused.",
+          "code": null,
+          "params": null
+        }
+      }
+    },
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "engine.layout",
+      "outcome": "done",
+      "event": {
+        "kind": "run.finished",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "run_id": "01890a5d-ac96-774b-bcce-b302099a8063",
+        "sha256": "acc42269838df24280220aa258a5af9dc214e6854a388d06ee4fbe537e35479c",
+        "state": "done",
+        "message": {
+          "text": "The PDF/X-1a check found problems in page-01.pdf, page-02.pdf: do not send those to the press.",
+          "code": "m.run.checkProblems",
+          "params": {
+            "files": "page-01.pdf, page-02.pdf"
+          }
+        },
+        "error": null,
+        "pages": [
+          {
+            "page": 1,
+            "role": "front",
+            "articles": [
+              "a-0000000001",
+              "a-0000000003"
+            ],
+            "pdf": {
+              "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/01/page.pdf",
+              "version_id": "ac14642872cd456bc9d8b1537d2cdebb57d0b30e1903783836b3037a84a72543",
+              "sha256": "ac14642872cd456bc9d8b1537d2cdebb57d0b30e1903783836b3037a84a72543",
+              "bytes": 569
+            },
+            "png": {
+              "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/01/preview.png",
+              "version_id": "ad8ec7e310dba2211d4b23f92eeee4a867e65d59cd4721124572787c3c31ab04",
+              "sha256": "ad8ec7e310dba2211d4b23f92eeee4a867e65d59cd4721124572787c3c31ab04",
+              "bytes": 10235
+            },
+            "thumb": {
+              "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/01/thumb.png",
+              "version_id": "2aa8ae903f27f6a14f3c7e168767942f684c7a8ef839ee51776823f8d5d04b1c",
+              "sha256": "2aa8ae903f27f6a14f3c7e168767942f684c7a8ef839ee51776823f8d5d04b1c",
+              "bytes": 1215
+            },
+            "seconds": 0.01,
+            "warnings": [
+              {
+                "text": "the headline: removed a character the fonts do not have (U+2018)",
+                "code": "m.warn.charRemoved",
+                "params": {
+                  "what": "the headline",
+                  "code": "2018"
+                }
+              }
+            ],
+            "state": "done",
+            "check": {
+              "passed": false,
+              "fails": 4,
+              "warnings": 1,
+              "report": {
+                "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/01/pdfx-check.txt",
+                "version_id": "389fb71d8c67526a441f5d015c5b5fba6cf0704cb9bcfad4e6fe5f5d5f4c4b2d",
+                "sha256": "389fb71d8c67526a441f5d015c5b5fba6cf0704cb9bcfad4e6fe5f5d5f4c4b2d",
+                "bytes": 3587
+              }
+            }
+          },
+          {
+            "page": 2,
+            "role": "back",
+            "articles": [
+              "a-0000000002"
+            ],
+            "pdf": {
+              "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/02/page.pdf",
+              "version_id": "ac14642872cd456bc9d8b1537d2cdebb57d0b30e1903783836b3037a84a72543",
+              "sha256": "ac14642872cd456bc9d8b1537d2cdebb57d0b30e1903783836b3037a84a72543",
+              "bytes": 569
+            },
+            "png": {
+              "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/02/preview.png",
+              "version_id": "ad8ec7e310dba2211d4b23f92eeee4a867e65d59cd4721124572787c3c31ab04",
+              "sha256": "ad8ec7e310dba2211d4b23f92eeee4a867e65d59cd4721124572787c3c31ab04",
+              "bytes": 10235
+            },
+            "thumb": {
+              "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/02/thumb.png",
+              "version_id": "2aa8ae903f27f6a14f3c7e168767942f684c7a8ef839ee51776823f8d5d04b1c",
+              "sha256": "2aa8ae903f27f6a14f3c7e168767942f684c7a8ef839ee51776823f8d5d04b1c",
+              "bytes": 1215
+            },
+            "seconds": 0.01,
+            "warnings": [
+              {
+                "text": "the headline: removed a character the fonts do not have (U+2018)",
+                "code": "m.warn.charRemoved",
+                "params": {
+                  "what": "the headline",
+                  "code": "2018"
+                }
+              }
+            ],
+            "state": "done",
+            "check": {
+              "passed": false,
+              "fails": 4,
+              "warnings": 1,
+              "report": {
+                "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/02/pdfx-check.txt",
+                "version_id": "035a8bf2eef20753b57e8defb7222b8c59936c6db0b6aa75a89c5ebc7af18506",
+                "sha256": "035a8bf2eef20753b57e8defb7222b8c59936c6db0b6aa75a89c5ebc7af18506",
+                "bytes": 3587
+              }
+            }
+          }
+        ],
+        "not_placed": [
+          {
+            "article": "a-0000000001",
+            "reason": {
+              "text": "It needs a headline and some body text",
+              "code": "m.plan.needsText",
+              "params": {}
+            }
+          }
+        ],
+        "edition_pdf": {
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/edition.pdf",
+          "version_id": "d10fa36bd2e7bdcd322be28fc7a39c5a18ba82319c732e9eb6966c221c966804",
+          "sha256": "d10fa36bd2e7bdcd322be28fc7a39c5a18ba82319c732e9eb6966c221c966804",
+          "bytes": 823
+        },
+        "press_zip": {
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/press-files.zip",
+          "version_id": "1db150b1958f067efed350a47967a62d0ce6897c61be7f576bfbf844af0d427c",
+          "sha256": "1db150b1958f067efed350a47967a62d0ce6897c61be7f576bfbf844af0d427c",
+          "bytes": 1356
+        },
+        "checker_sha256": "307bfc4df43837725f94ebc9619c54ad2815abdae4e9159ae14cca7039aef14b",
+        "engine_version": "desk-engine/0.1.0",
+        "timings": {
+          "measure_s": 0.1,
+          "plan_s": 0.2,
+          "layout_s": 0.3
+        },
+        "elapsed_s": 0.5
+      }
+    },
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "engine.layout",
+      "outcome": "done",
+      "event": {
+        "kind": "run.finished",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "run_id": "01890a5d-ac96-774b-bcce-b302099a8063",
+        "sha256": "a40a7554e1f58344ec154cc351c0b49b35a84b8be68c6edd33fed88c9b951a7e",
+        "state": "failed",
+        "message": null,
+        "error": {
+          "text": "The fake engine failed on purpose.",
+          "code": null,
+          "params": null
+        },
+        "pages": [
+          {
+            "page": 1,
+            "role": "front",
+            "state": "failed",
+            "message": null
+          },
+          {
+            "page": 2,
+            "role": "back",
+            "state": "failed",
+            "message": null
+          }
+        ],
+        "not_placed": [],
+        "edition_pdf": null,
+        "press_zip": null,
+        "checker_sha256": "307bfc4df43837725f94ebc9619c54ad2815abdae4e9159ae14cca7039aef14b",
+        "engine_version": "desk-engine/0.1.0",
+        "timings": {
+          "measure_s": 0.1,
+          "plan_s": 0.2,
+          "layout_s": 0.3
+        },
+        "elapsed_s": 0.1
+      }
+    },
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "engine.measure",
+      "outcome": "done",
+      "event": {
+        "kind": "measure.status",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "edition_id": "01890a5d-ac96-774b-bcce-b302099a8062",
+        "sha256": "e4662ef293609aea029e504e4482e7d87e276b28dde4dadc2d7bc9c14cf7bd9d",
+        "state": "done",
+        "measured": 3,
+        "total": 3,
+        "failed": 0
+      }
+    },
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "engine.layout",
+      "outcome": "done",
+      "event": {
+        "kind": "run.finished",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "run_id": "01890a5d-ac96-774b-bcce-b302099a8063",
+        "sha256": "593d82ef6fe31302b6b4a00d186d658600d885d0d8b8ebf1d9a2b15b8fa504b8",
+        "state": "cancelled",
+        "message": {
+          "text": "Cancelled before it started.",
+          "code": "m.run.cancelledBefore",
+          "params": {}
+        },
+        "error": null,
+        "pages": [],
+        "not_placed": [],
+        "edition_pdf": null,
+        "press_zip": null,
+        "checker_sha256": "307bfc4df43837725f94ebc9619c54ad2815abdae4e9159ae14cca7039aef14b",
+        "engine_version": "desk-engine/0.1.0",
+        "timings": {},
+        "elapsed_s": 0.0
+      }
+    },
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "media.ad",
+      "outcome": "done",
+      "event": {
+        "kind": "ad.ready",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "artwork_id": "01890a5d-ac96-774b-bcce-b302099a8064",
+        "asset_id": "01890a5d-ac96-774b-bcce-b302099a8065",
+        "sha256": "ab1664abd5e69b364e4807485626b026aea41f90cf44e9cda46a44f7772c8128",
+        "raster": {
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/assets/01890a5d-ac96-774b-bcce-b302099a8065/r/ad-cmyk-b47a4af3185bbdb93bd9c75fe535a408-100x50mm.cmyk.gz",
+          "version_id": "517276c15d204592a66dbd63c4c93f7e69de2df3882203bb4add0b60e705d997",
+          "sha256": "517276c15d204592a66dbd63c4c93f7e69de2df3882203bb4add0b60e705d997",
+          "bytes": 1384,
+          "width_px": 400,
+          "height_px": 200
+        },
+        "preview": {
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/assets/01890a5d-ac96-774b-bcce-b302099a8065/r/ad-preview-b47a4af3185bbdb93bd9c75fe535a408-100x50mm.jpg",
+          "version_id": "338f61df31cbfa6bc939c076795668968a1269e70eea81f12f177b2bf2b933d5",
+          "sha256": "338f61df31cbfa6bc939c076795668968a1269e70eea81f12f177b2bf2b933d5",
+          "bytes": 2339,
+          "width_px": 400,
+          "height_px": 200
+        },
+        "params_hash": "b47a4af3185bbdb93bd9c75fe535a408"
+      }
+    },
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "media.ad",
+      "outcome": "done",
+      "event": {
+        "kind": "ad.rejected",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "artwork_id": "01890a5d-ac96-774b-bcce-b302099a8064",
+        "asset_id": "01890a5d-ac96-774b-bcce-b302099a8065",
+        "sha256": "bf891ea46ead4993e89aa7da02ab8c23dd50f29e9aae64607105363a5f070e03",
+        "message": {
+          "text": "This file is not a picture the Desk can read. Use a JPEG, PNG or WebP file.",
+          "code": "m.img.notAPicture",
+          "params": {}
+        },
+        "status": 400
+      }
+    }
+  ],
+  "progress": [
+    {
+      "format": "pageinator.worker-progress/1",
+      "job": "job-7",
+      "seq": 1,
+      "event": {
+        "kind": "run.progress",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "run_id": "01890a5d-ac96-774b-bcce-b302099a8063",
+        "sha256": "acc42269838df24280220aa258a5af9dc214e6854a388d06ee4fbe537e35479c",
+        "state": "planning",
+        "message": {
+          "text": "The layout engine has started.",
+          "code": "m.run.engineStarted",
+          "params": {}
+        },
+        "pages": [],
+        "elapsed_s": 0.0
+      }
+    },
+    {
+      "format": "pageinator.worker-progress/1",
+      "job": "job-7",
+      "seq": 4,
+      "event": {
+        "kind": "run.page",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "run_id": "01890a5d-ac96-774b-bcce-b302099a8063",
+        "sha256": "acc42269838df24280220aa258a5af9dc214e6854a388d06ee4fbe537e35479c",
+        "page": 1,
+        "role": "front",
+        "articles": [
+          "a-0000000001",
+          "a-0000000003"
+        ],
+        "pdf": {
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/01/page.pdf",
+          "version_id": "ac14642872cd456bc9d8b1537d2cdebb57d0b30e1903783836b3037a84a72543",
+          "sha256": "ac14642872cd456bc9d8b1537d2cdebb57d0b30e1903783836b3037a84a72543",
+          "bytes": 569
+        },
+        "png": {
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/01/preview.png",
+          "version_id": "ad8ec7e310dba2211d4b23f92eeee4a867e65d59cd4721124572787c3c31ab04",
+          "sha256": "ad8ec7e310dba2211d4b23f92eeee4a867e65d59cd4721124572787c3c31ab04",
+          "bytes": 10235
+        },
+        "thumb": {
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/01/thumb.png",
+          "version_id": "2aa8ae903f27f6a14f3c7e168767942f684c7a8ef839ee51776823f8d5d04b1c",
+          "sha256": "2aa8ae903f27f6a14f3c7e168767942f684c7a8ef839ee51776823f8d5d04b1c",
+          "bytes": 1215
+        },
+        "seconds": 0.01,
+        "warnings": [
+          {
+            "text": "the headline: removed a character the fonts do not have (U+2018)",
+            "code": "m.warn.charRemoved",
+            "params": {
+              "what": "the headline",
+              "code": "2018"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "format": "pageinator.worker-progress/1",
+      "job": "job-7",
+      "seq": 1,
+      "event": {
+        "kind": "run.progress",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "run_id": "01890a5d-ac96-774b-bcce-b302099a8063",
+        "sha256": "a40a7554e1f58344ec154cc351c0b49b35a84b8be68c6edd33fed88c9b951a7e",
+        "state": "planning",
+        "message": {
+          "text": "The layout engine has started.",
+          "code": "m.run.engineStarted",
+          "params": {}
+        },
+        "pages": [],
+        "elapsed_s": 0.0
+      }
+    },
+    {
+      "format": "pageinator.worker-progress/1",
+      "job": "job-7",
+      "seq": 1,
+      "event": {
+        "kind": "measure.status",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "edition_id": "01890a5d-ac96-774b-bcce-b302099a8062",
+        "sha256": "e4662ef293609aea029e504e4482e7d87e276b28dde4dadc2d7bc9c14cf7bd9d",
+        "state": "measuring",
+        "measured": 0,
+        "total": 3,
+        "failed": 0
+      }
+    }
+  ]
+}

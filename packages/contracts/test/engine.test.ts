@@ -7,6 +7,7 @@ import {
   UploadRequest,
   WORKER_JOB_FORMAT,
   WorkerJob,
+  WorkerProgress,
   WorkerResult,
 } from "../src/index.ts";
 
@@ -138,5 +139,77 @@ describe("the engine's contracts", () => {
     expect(UploadRequest.safeParse({ ...up, purpose: "docx", contentType: "image/jpeg" }).success).toBe(false);
     expect(UploadRequest.safeParse({ ...up, purpose: "library", contentType: docx }).success).toBe(false);
     expect(UploadRequest.safeParse({ ...up, purpose: "library", contentType: "image/png" }).success).toBe(true);
+  });
+
+  it("read the engine's own results and progress lines (apps/engine-worker test_engine_jobs.py ContractTests)", () => {
+    const engine = JSON.parse(readFileSync(new URL("./fixtures/engine-results.json", import.meta.url), "utf8")) as {
+      results: unknown[];
+      progress: unknown[];
+    };
+    const events = engine.results.map((r) => WorkerResult.parse(r)).map((r) => (r.outcome === "done" ? r.event : null));
+    expect(events.map((e) => e && ("state" in e ? `${e.kind}:${e.state}` : e.kind))).toEqual([
+      "profile.ready",
+      "profile.rejected",
+      "run.finished:done",
+      "run.finished:failed",
+      "measure.status:done",
+      "run.finished:cancelled",
+      "ad.ready",
+      "ad.rejected",
+    ]);
+    for (const e of events) EngineEvent.parse(e);
+    expect(engine.progress.map((p) => WorkerProgress.parse(p).event.kind)).toEqual([
+      "run.progress",
+      "run.page",
+      "run.progress",
+      "measure.status",
+    ]);
+    // a run's files and the check's verdict ride in run.finished; the job's job id and seq in each line
+    const done = structuredClone(engine.results[2]) as { event: { pages: Record<string, unknown>[] } };
+    delete done.event.pages[0]!["check"];
+    expect(WorkerResult.safeParse(done).success).toBe(false);
+    const line = engine.progress[0] as Record<string, unknown>;
+    for (const bad of [
+      { ...line, seq: 0 },
+      { ...line, job: "a b" },
+      { ...line, format: "pageinator.worker-progress/2" },
+    ])
+      expect(WorkerProgress.safeParse(bad).success).toBe(false);
+    // a progress line is never a result: run.finished is the result's, not a line's
+    expect(WorkerProgress.safeParse({ ...line, event: (engine.results[2] as { event: unknown }).event }).success).toBe(
+      false,
+    );
+  });
+
+  it("give the engine's jobs only their own arguments", () => {
+    const ids = { org_id: ORG, pub_id: ORG };
+    const facts = {
+      profile_id: ORG,
+      dataset_version_id: "v1",
+      dataset_sha256: "a".repeat(64),
+      config_version_id: "v2",
+      config_sha256: "b".repeat(64),
+    };
+    const pinned = { version_id: "v3", sha256: "c".repeat(64) };
+    const jobs = [
+      { kind: "engine.setup", args: { ...ids, profile_id: ORG, ...pinned } },
+      { kind: "engine.measure", args: { ...ids, edition_id: ORG, edition_key: "2026-11-04", ...pinned, ...facts } },
+      {
+        kind: "engine.layout",
+        args: { ...ids, run_id: ORG, edition_key: "2026-11-04", run_key: "r-20261104-101500", ...pinned, ...facts },
+      },
+      { kind: "media.ad", args: { ...ids, artwork_id: ORG, asset_id: ORG, ...pinned, w_mm: "100", h_mm: "50.5" } },
+    ];
+    for (const job of jobs) {
+      expect(WorkerJob.safeParse({ format: WORKER_JOB_FORMAT, id: "1", ...job }).success).toBe(true);
+      expect(
+        WorkerJob.safeParse({ format: WORKER_JOB_FORMAT, id: "1", ...job, args: { ...job.args, x: "1" } }).success,
+      ).toBe(false);
+    }
+    const ad = jobs[3]!;
+    for (const w_mm of ["1e3", "100.123", "-1", "10000"])
+      expect(
+        WorkerJob.safeParse({ format: WORKER_JOB_FORMAT, id: "1", ...ad, args: { ...ad.args, w_mm } }).success,
+      ).toBe(false);
   });
 });

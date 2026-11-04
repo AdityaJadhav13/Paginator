@@ -10,6 +10,25 @@ export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 /** A column the database computes (generated always): read only. */
 export type GeneratedAlways<T> = ColumnType<T, never, never>;
 
+export interface AppAdSlotArtwork {
+  asset_id: string;
+  created_at: Generated<Timestamp>;
+  edition_id: string;
+  h_mm: string;
+  id: Generated<string>;
+  org_id: string;
+  params_hash: string | null;
+  preview: Json | null;
+  problem: Json | null;
+  publication_id: string;
+  raster: Json | null;
+  set_by: string;
+  slot: string;
+  state: Generated<string>;
+  updated_at: Generated<Timestamp>;
+  w_mm: string;
+}
+
 export interface AppAiUsage {
   cache_read_tokens: number;
   cache_write_tokens: number;
@@ -125,6 +144,20 @@ export interface AppEdition {
   volume: Generated<string>;
 }
 
+export interface AppEditionMeasure {
+  edition_id: string;
+  failed: Generated<number>;
+  measured: Generated<number>;
+  org_id: string;
+  publication_id: string;
+  sha256: string;
+  snapshot_at: Generated<Timestamp>;
+  state: Generated<string>;
+  total: Generated<number>;
+  updated_at: Generated<Timestamp>;
+  version_id: string;
+}
+
 export interface AppEngineEvent {
   asset_id: string;
   created_at: Generated<Timestamp>;
@@ -137,6 +170,31 @@ export interface AppEngineEvent {
   processed_at: Timestamp | null;
   retry_at: Timestamp | null;
   tries: Generated<number>;
+}
+
+export interface AppEngineProfile {
+  config_key: GeneratedAlways<string>;
+  config_sha256: string | null;
+  config_version_id: string | null;
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  dataset_bytes: string;
+  dataset_key: GeneratedAlways<string>;
+  dataset_sha256: string;
+  dataset_version_id: string | null;
+  engine_version: string | null;
+  grid: Json | null;
+  id: Generated<string>;
+  message: Json | null;
+  org_id: string;
+  plans: Json | null;
+  problem: string | null;
+  publication_id: string;
+  state: Generated<string>;
+  templates: Json | null;
+  updated_at: Generated<Timestamp>;
+  upload_id: string;
+  version: number;
 }
 
 export interface AppIdempotencyKey {
@@ -182,6 +240,35 @@ export interface AppInvitationGrant {
   org_id: string;
   publication_id: string;
   roles: string[];
+}
+
+export interface AppLayoutRun {
+  checker_sha256: string | null;
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  desk_key: string;
+  edition_id: string;
+  edition_pdf: Json | null;
+  elapsed_s: number | null;
+  engine_version: string | null;
+  error: Json | null;
+  finished_at: Timestamp | null;
+  heartbeat_at: Timestamp | null;
+  id: Generated<string>;
+  message: Json | null;
+  not_placed: Generated<Json>;
+  org_id: string;
+  press_zip: Json | null;
+  profile_id: string | null;
+  publication_id: string;
+  request_key: GeneratedAlways<string>;
+  request_sha256: string | null;
+  request_version_id: string | null;
+  started_at: Timestamp | null;
+  state: Generated<string>;
+  timings: Json | null;
+  updated_at: Generated<Timestamp>;
+  worker_digest: string | null;
 }
 
 export interface AppNewsDraftJob {
@@ -274,6 +361,18 @@ export interface AppOrgSettings {
   session_absolute_days: Generated<number>;
 }
 
+export interface AppPdfCheck {
+  checker_sha256: string;
+  created_at: Generated<Timestamp>;
+  fails: number | null;
+  org_id: string;
+  passed: boolean;
+  report_key: string | null;
+  report_version_id: string | null;
+  sha256: string;
+  warnings: number | null;
+}
+
 export interface AppPerson {
   display_name: string;
   email: string | null;
@@ -319,6 +418,30 @@ export interface AppRendition {
   sha256: string;
   version_id: string;
   width_px: number;
+}
+
+export interface AppRunPage {
+  articles: Generated<Json>;
+  checked: Json | null;
+  edited: Generated<boolean>;
+  edited_unsaved: Generated<boolean>;
+  message: Json | null;
+  needs_save: Generated<boolean>;
+  needs_save_reason: string | null;
+  org_id: string;
+  page_no: number;
+  pdf: Json | null;
+  pdf_sha256: string | null;
+  png: Json | null;
+  publication_id: string;
+  report: Json | null;
+  role: string;
+  run_id: string;
+  seconds: number | null;
+  state: Generated<string>;
+  thumb: Json | null;
+  updated_at: Generated<Timestamp>;
+  warnings: Generated<Json>;
 }
 
 export interface AppSection {
@@ -402,8 +525,9 @@ export interface AppUpload {
   asset_id: string | null;
   completed_at: Timestamp | null;
   created_at: Generated<Timestamp>;
-  declared_bytes: number;
+  declared_bytes: string;
   declared_type: string;
+  engine_profile_id: string | null;
   expires_at: Timestamp;
   id: Generated<string>;
   import_id: string | null;
@@ -422,6 +546,7 @@ export interface AppUploadQuota {
 }
 
 export interface DB {
+  "app.ad_slot_artwork": AppAdSlotArtwork;
   "app.ai_usage": AppAiUsage;
   "app.asset": AppAsset;
   "app.audit_event": AppAuditEvent;
@@ -429,10 +554,13 @@ export interface DB {
   "app.desk_bundle": AppDeskBundle;
   "app.desk_bundle_revision": AppDeskBundleRevision;
   "app.edition": AppEdition;
+  "app.edition_measure": AppEditionMeasure;
   "app.engine_event": AppEngineEvent;
+  "app.engine_profile": AppEngineProfile;
   "app.idempotency_key": AppIdempotencyKey;
   "app.import_job": AppImportJob;
   "app.invitation_grant": AppInvitationGrant;
+  "app.layout_run": AppLayoutRun;
   "app.news_draft_job": AppNewsDraftJob;
   "app.news_item": AppNewsItem;
   "app.news_settings": AppNewsSettings;
@@ -440,10 +568,12 @@ export interface DB {
   "app.news_topic": AppNewsTopic;
   "app.notification": AppNotification;
   "app.org_settings": AppOrgSettings;
+  "app.pdf_check": AppPdfCheck;
   "app.person": AppPerson;
   "app.publication": AppPublication;
   "app.publication_grant": AppPublicationGrant;
   "app.rendition": AppRendition;
+  "app.run_page": AppRunPage;
   "app.section": AppSection;
   "app.story": AppStory;
   "app.story_photo": AppStoryPhoto;

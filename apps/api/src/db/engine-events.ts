@@ -115,6 +115,16 @@ export async function reportToInbox(
   return (numAffectedRows ?? 0n) > 0n;
 }
 
+/** reportToInbox for a target the sweep found with no job left: its job id is lost:<target>, then lost:<target>:<n>
+ * for the n-th time the same target is stranded again (a retried picture, a re-queued run), so a later stranding is
+ * not taken for the first; two sweeps finding the same stranding still write it once. */
+export async function reportLost(tx: Tx, event: { orgId: string; assetId: string; payload: object }): Promise<boolean> {
+  const { rows } = await sql<{ n: number }>`select count(*)::int as n from app.engine_event
+    where org_id = ${event.orgId} and asset_id = ${event.assetId} and job_id like 'lost:%'`.execute(tx);
+  const n = rows[0]?.n ?? 0;
+  return reportToInbox(tx, { ...event, jobId: n === 0 ? `lost:${event.assetId}` : `lost:${event.assetId}:${n}` });
+}
+
 /** Removes a job that is still out of attempts and not held by a live worker (as exhaustedJobs found it; the
  * database's policy also waits an hour for a locked one). */
 export async function removeSpentJob(tx: SystemTx, jobId: string, staleMs: number): Promise<void> {
@@ -130,12 +140,13 @@ export function spentJobs(tx: SystemTx, staleMs: number): Promise<ExhaustedJob[]
   }, staleMs);
 }
 
-/** The assets, imports and news drafts that still have a job in the queue (job key asset:<id>, import:<id> or
- * news-draft:<id>), of every organisation: ids only. */
+/** The assets, imports, news drafts, engine profiles, measured editions, layout runs and ad slots' artwork that still
+ * have a job in the queue (job key asset:, import:, news-draft:, profile:, measure:, run: or ad: and the id), of every
+ * organisation: ids only. */
 export async function jobAssets(tx: SystemTx): Promise<Set<string>> {
   const { rows } = await sql<{ id: string }>`
     select right(key, 36) as id from queue._private_jobs
-    where key ~ '^(asset|import|news-draft):[0-9a-f-]{36}$'`.execute(tx);
+    where key ~ '^(asset|import|news-draft|profile|measure|run|ad):[0-9a-f-]{36}$'`.execute(tx);
   return new Set(rows.map((row) => row.id));
 }
 

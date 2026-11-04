@@ -51,6 +51,16 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     status: 409,
     message: "Some stories cannot be sent to the Desk as they are. Change them, then send again.",
   },
+  run_active: {
+    status: 409,
+    message: "Pages for this edition are already being made. Wait for them, or cancel that run first.",
+  },
+  run_finished: { status: 409, message: "This run has already finished." },
+  layout_refused: { status: 409, message: "This edition cannot be laid out yet: see what it still needs." },
+  no_profile: {
+    status: 409,
+    message: "This paper has no engine profile ready yet. Upload its dataset bundle in Settings first.",
+  },
   request_too_large: { status: 413, message: "This request is too large." },
   not_json: { status: 415, message: "This request must be sent as JSON." },
   slow_down: { status: 429, message: "Too many tries. Wait a minute and try again." },

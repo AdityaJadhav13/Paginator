@@ -43,6 +43,30 @@ export const AUDIT_ACTIONS = {
   "edition.create": { scope: "publication" },
   /** A story bundle sent to the Desk, on its edition ({bundle, stories, photos}). */
   "desk.export": { scope: "publication" },
+  /** The one-time import of the Desk's home (apps/api/scripts/import-desk.ts; actor kind "import", the person who ran
+   * it): an edition, a story, a picture (photo or ad artwork), an ad slot's artwork and a layout run imported (ids,
+   * Desk keys and counts only), and the import's summary ({bundle sha256, counts}). */
+  "desk_import.edition": { scope: "publication" },
+  "desk_import.story": { scope: "publication" },
+  "desk_import.asset": { scope: "publication" },
+  "desk_import.ad_slot": { scope: "publication" },
+  "desk_import.run": { scope: "publication" },
+  "desk_import.done": { scope: "publication" },
+  /** An engine profile asked for from a dataset bundle ({upload, bytes, version}); set up by the engine ({job,
+   * engineVersion}) or not ({job, code}), from the engine's inbox (actor: the system). */
+  "engine_profile.create": { scope: "publication" },
+  "engine_profile.fail": { scope: "publication" },
+  "engine_profile.ready": { scope: "publication" },
+  /** A layout run asked for ({run, deskKey, stories, ads, profile}); cancelled ({run, from}); done ({job, pages,
+   * failed, notPlaced, placed, unplaced}) or failed ({job, code}), from the engine's inbox or the sweep (actor: the
+   * system). A story the done run placed (or no longer places) is also story.status_change by the system. */
+  "layout.run_cancel": { scope: "publication" },
+  "layout.run_create": { scope: "publication" },
+  "layout.run_done": { scope: "publication" },
+  "layout.run_fail": { scope: "publication" },
+  /** A back-page ad slot given a picture of the media library ({slot, asset}), or emptied ({slot}). */
+  "ad_slot.clear": { scope: "publication" },
+  "ad_slot.set": { scope: "publication" },
   /** An engine event the inbox would not apply ({event, job, kind, reason}): not the contract's, or for an asset that
    * is not the organisation's and publication's it names, or one that still could not be applied after every try
    * (reason "error"). Only Owner and Admin see it (its publication is unchecked). */
@@ -101,7 +125,8 @@ export const AUDIT_ACTIONS = {
   /** A saved revision of the text ({rev}), one per save, never its text. */
   "story.revise": { scope: "publication" },
   "story.section_change": { scope: "publication" },
-  /** A move ({from, to, comment}): filed, picked up, sent back, ready, held, spiked, restored. */
+  /** A move ({from, to, comment}): filed, picked up, sent back, ready, held, spiked, restored; and the system's
+   * Placed and back to Ready after a done layout run ({from, to, run}, actor: the system). */
   "story.status_change": { scope: "publication" },
   "story.unassign": { scope: "publication" },
   /** An upload completed as a picture ({upload, bytes, widthPx, heightPx, mime, existing}), or refused ({upload}). */

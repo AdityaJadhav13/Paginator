@@ -11,6 +11,15 @@ export type LiveEventDto =
   | { readonly type: "edition"; readonly publicationId: string; readonly editionId: string }
   /** The person's own Word import finished (GET …/imports/:id tells how). */
   | { readonly type: "import"; readonly publicationId: string; readonly importId: string }
+  /** An edition's layout changed: a run's state or page, an ad slot, its measuring (runId: the run, or null). */
+  | {
+      readonly type: "layout";
+      readonly publicationId: string;
+      readonly editionId: string;
+      readonly runId: string | null;
+    }
+  /** An engine profile of the publication changed (setting up, ready or failed). */
+  | { readonly type: "profile"; readonly publicationId: string; readonly profileId: string }
   | { readonly type: "resync" };
 
 export interface LiveService {

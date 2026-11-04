@@ -24,6 +24,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 import boto3
@@ -238,6 +239,49 @@ class S3Storage:
         if failure is not None:
             raise failure
         return data
+
+    def download(self, key: str, version_id: str, dest: Path, max_bytes: int) -> str:
+        """One version streamed to dest (0600), in 1 MiB chunks, its SHA-256 worked out on the way; the same checks as
+        get (the version answered, a listed length within max_bytes, a body of exactly that length)."""
+        key, version_id = self.guard.check(key), self._version(version_id)
+        answer, error = self._call("read", key, lambda: self._client.get_object(
+            Bucket=self.bucket, Key=key, VersionId=version_id), missing=True)
+        if error is not None:
+            raise error
+        body, digest, got, failure = answer.get("Body"), hashlib.sha256(), 0, None
+        try:
+            length = answer.get("ContentLength")
+            if answer.get("VersionId") != version_id:
+                failure = StorageError(f"the store answered another version of {key}")
+            elif not isinstance(length, int) or isinstance(length, bool) or length < 0:
+                failure = StorageError(f"the store listed no length for {key}")
+            elif length > max_bytes:
+                failure = StorageError(f"{key} is larger than the worker reads")
+            else:
+                try:
+                    fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                    with os.fdopen(fd, "wb") as f:
+                        for chunk in body.iter_chunks(1024 * 1024):
+                            got += len(chunk)
+                            if got > length:
+                                break
+                            digest.update(chunk)
+                            f.write(chunk)
+                except OSError as e:                        # the worker's own disk (full): not the store's fault
+                    failure = StorageError(f"{key} could not be written to the worker's disk ({type(e).__name__})")
+                except Exception as e:  # noqa: BLE001 — timeouts, cut-off streams, urllib3 and socket errors
+                    failure = StorageError(f"the store's answer for {key} could not be read in full "
+                                           f"({type(e).__name__})")
+                else:
+                    if got != length:
+                        failure = StorageError(f"{key}: not the size the store listed")
+        finally:
+            if body is not None:
+                body.close()
+        if failure is not None:
+            Path(dest).unlink(missing_ok=True)
+            raise failure
+        return digest.hexdigest()
 
     def put(self, key: str, data: bytes, content_type: str) -> str:
         key = self.guard.check(key)

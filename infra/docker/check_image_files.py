@@ -1,6 +1,6 @@
 """The engine worker image's files, checked (W4; fail closed). Reads the image as `docker export` writes it (a tar on
 stdin) and refuses:
-- under /opt/pageinator (the venv and the queue's node_modules aside): any file that is not a file of the repository with exactly the bytes of its
+- under /opt/pageinator (the two venvs and the queue's node_modules aside): any file that is not a file of the repository with exactly the bytes of its
   blob in git's index (in CI, the commit), and any such file of what the image takes that is missing; links there;
 - any font, by its name or by its content (TrueType, OpenType, collections, WOFF, WOFF2), but the repository's 22 OFL
   stand-ins at their repository paths, and any colour profile, by its name or by its content (`acsp` at byte 36): a
@@ -21,14 +21,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-FONT_DIRS = ("experiments/phase0/compose2/fonts", "tools/oracle/v0/assets/fonts")
+# the frozen code the engine imports (L2.3), the 22 stand-in fonts among it; never experiments/phase0/published1
+ENGINE_CODE = ("tools/oracle/v0/", *(f"experiments/phase0/{d}/" for d in (
+    "compose1", "compose2", "compose3", "gen1", "head1", "page1", "pdfx1", "typeset_harness", "results/page1")))
 TAKEN = ("tools/desk/deskserver/", "tools/desk/engine/", "apps/engine-worker/pgn_worker/", "apps/engine-queue/src/",
-         "packages/contracts/src/", *(d + "/" for d in FONT_DIRS))
+         "packages/contracts/src/", *ENGINE_CODE)
 TAKEN_FILES = ("apps/engine-worker/requirements.lock", "apps/engine-queue/package.json", "packages/contracts/package.json")
 ROOT = "opt/pageinator/"
 VENV = ROOT + "venv/"
+ENGINE_VENV = ROOT + "engine-venv/"             # the engine's environment: the frozen oracle lock (L2.3)
 NODE_MODULES = ROOT + "node_modules/"           # the queue's packages, hoisted (and its one link to packages/contracts)
-INSTALLED = (VENV, NODE_MODULES)
+INSTALLED = (VENV, ENGINE_VENV, NODE_MODULES)
 FONT = re.compile(r"\.(ttf|otf|ttc|woff2?|pfb|pfa|dfont)$", re.IGNORECASE)
 PROFILE = re.compile(r"\.(icc|icm)$", re.IGNORECASE)
 PRIVATE = re.compile(r"PageinatorPrivate|published1|(^|/)datasets?/|(^|/)\.env|(^|/)\.git(/|$)", re.IGNORECASE)

@@ -67,6 +67,11 @@ export const PATTERNS = {
   pubBrand: "pub/:pubId/brand",
   pubPrintProfiles: "pub/:pubId/print-profiles",
   pubTeam: "pub/:pubId/team",
+  /** The engine profile (L2.3): the publication's settings for the layout engine. */
+  pubEngineProfile: "pub/:pubId/engine-profile",
+  /** An edition's layout (L2.3): readiness, ads, runs and the Pages board. Its param is not `editionId`, which the
+   * workspace resolves for the placeholder edition workspace below. */
+  pubEditionLayout: "pub/:pubId/editions/:edition/layout",
 
   // Edition workspace (relative to workspaceRoot; layout route + children)
   editionLayout: "pub/:pubId/editions/:editionId",
@@ -123,6 +128,9 @@ export const paths = {
   pubPrintProfiles: (orgId: string, pubId: string) =>
     `/org/${orgId}/pub/${pubId}/print-profiles`,
   pubTeam: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/team`,
+  pubEngineProfile: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/engine-profile`,
+  pubEditionLayout: (orgId: string, pubId: string, editionId: string) =>
+    `/org/${orgId}/pub/${pubId}/editions/${encodeURIComponent(editionId)}/layout`,
 
   edition: (orgId: string, pubId: string, editionId: string) =>
     `/org/${orgId}/pub/${pubId}/editions/${editionId}`,

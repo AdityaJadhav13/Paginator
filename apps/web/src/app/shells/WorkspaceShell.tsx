@@ -31,6 +31,7 @@ const SEGMENT_LABEL: Readonly<Record<string, PlainKey>> = {
   templates: "nav.templates",
   newsroom: "nav.newsroom",
   sources: "nav.sources",
+  "engine-profile": "nav.engineProfile",
   archive: "glossary.archive",
   brand: "nav.brand",
   "print-profiles": "nav.printProfiles",
@@ -91,6 +92,9 @@ export function WorkspaceShell() {
     if (publication && parts[4] === "stories" && parts.length === 6) {
       breadcrumbItems.push({ label: t("glossary.stories"), to: paths.pubStories(organization.id, publication.id) });
       breadcrumbItems.push({ label: t("glossary.story"), to: location.pathname });
+    } else if (publication && parts[4] === "editions" && parts[6] === "layout") {
+      breadcrumbItems.push({ label: t("nav.editions"), to: paths.pubEditions(organization.id, publication.id) });
+      breadcrumbItems.push({ label: t("glossary.edition.issue"), to: location.pathname });
     } else {
       const key = segment ? SEGMENT_LABEL[segment] : undefined;
       if (key) breadcrumbItems.push({ label: t(key), to: location.pathname });

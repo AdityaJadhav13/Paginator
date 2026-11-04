@@ -93,4 +93,16 @@ export const NotificationsRead = z.union([
  *   - import {publicationId, importId}: the person's own Word import finished (fetch GET …/imports/:id);
  *   - resync {}: updates may have been missed (after a reconnect): fetch what is on the screen afresh.
  * A comment line comes every 25 s to keep the connection open. */
-export const LIVE_EVENTS = ["story", "comment", "notification", "edition", "import", "resync"] as const;
+/** layout: an edition's layout changed (a run's state or page, an ad slot, its measuring): {publicationId, editionId,
+ * runId | null}, to people with pages.view; profile: an engine profile changed: {publicationId, profileId}, to people
+ * with settings.view (L2.3). */
+export const LIVE_EVENTS = [
+  "story",
+  "comment",
+  "notification",
+  "edition",
+  "import",
+  "layout",
+  "profile",
+  "resync",
+] as const;

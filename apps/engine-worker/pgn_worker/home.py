@@ -108,14 +108,15 @@ def _empty(folder: Path) -> None:
             f.unlink()
 
 
-def materialise(storage: Storage, homes: Path, org_id: str, pub_id: str, edition_id: str, run_key: str,
+def materialise(storage: Storage, homes: Path, org_id: str, pub_id: str, edition_id: str, run_key: str | None,
                 request: bytes, request_sha256: str, config: dict | None = None) -> Path:
-    """→ the run's folder in the publication's home, ready for `desk_engine.py generate`."""
+    """→ the run's folder in the publication's home, ready for `desk_engine.py generate`; with no run (a measure's
+    snapshot, engine.measure), the edition's folder, its files only."""
     if hashlib.sha256(request).hexdigest() != request_sha256:
         raise BadRequest("the request is not the one the run names (its SHA-256 differs)")
     guard = KeyGuard(org_id, pub_id)
     eid = _id(EDITION_ID, edition_id, "the job's edition")
-    rid = _id(RUN_ID, run_key, "the run")
+    rid = None if run_key is None else _id(RUN_ID, run_key, "the run")
     try:
         req = json.loads(request.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
@@ -162,8 +163,9 @@ def materialise(storage: Storage, homes: Path, org_id: str, pub_id: str, edition
     home = _folder(util.ensure_dir(Path(homes)), guard.org_id, guard.pub_id)   # homes: the worker's own setting
     ed = _folder(home, "editions", eid)
     pdir, adir = _folder(ed, "photos"), _folder(ed, "ads")
-    run = _folder(ed, "runs", rid)
-    _empty(run)
+    run = None if rid is None else _folder(ed, "runs", rid)
+    if run is not None:
+        _empty(run)
     _sweep(pdir, set(photo_files))
     _sweep(adir, set(ad_files))
     for pid, data in photo_files.items():
@@ -179,7 +181,8 @@ def materialise(storage: Storage, homes: Path, org_id: str, pub_id: str, edition
                                                         for a in plain]})
     desk_ads = {slot: {**ad_index[slot], "slot": slot, "w_px": ad_index[slot]["width_px"],
                        "h_px": ad_index[slot]["height_px"]} for slot in ads}
-    util.write_json(run / "request.json", {"edition": edition, "articles": plain, "ads": desk_ads})
+    if run is not None:
+        util.write_json(run / "request.json", {"edition": edition, "articles": plain, "ads": desk_ads})
     if config is not None:
         util.write_json(home / "config.json", config)
-    return run
+    return ed if run is None else run

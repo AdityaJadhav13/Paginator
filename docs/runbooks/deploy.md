@@ -3,7 +3,7 @@
 The app host runs `infra/docker/compose.pilot.yml` (profile `pilot`): Caddy with the web app (`pageinator-web`), the API
 (`pageinator-api`), the nightly backup (`pageinator-backup`), the engine's queue (`pageinator-engine-worker`: photo
 conversions; the newsprint colour profile at `PGN_ICC_FILE` on the host, checked against `PGN_ICC_SHA256`), and the
-one-shot migration step. The engine's 1 GB makes the host's containers 2 GB in all: a t3.medium (4 GB). `infra/deploy/deploy.sh`
+one-shot migration step. The engine's 2 GB (two jobs at once, L2.3) makes the host's containers 3 GB in all: a t3.medium (4 GB). `infra/deploy/deploy.sh`
 does every step; AWS setup is `aws-setup.md`.
 
 ## When

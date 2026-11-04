@@ -35,7 +35,12 @@ export async function createUpload(
   tx: Tx,
   who: Who,
   publicationId: string,
-  upload: { purpose: "story_photo" | "library" | "docx"; type: string; bytes: number; expiresSeconds: number },
+  upload: {
+    purpose: "story_photo" | "library" | "docx" | "engine_dataset";
+    type: string;
+    bytes: number;
+    expiresSeconds: number;
+  },
 ) {
   return tx
     .insertInto("app.upload")
@@ -45,7 +50,7 @@ export async function createUpload(
       user_id: who.userId,
       purpose: upload.purpose,
       declared_type: upload.type,
-      declared_bytes: upload.bytes,
+      declared_bytes: String(upload.bytes), // bigint: a dataset bundle may be up to 4 GiB
       expires_at: sql`now() + make_interval(secs => ${upload.expiresSeconds})`,
     })
     .returning(["id", "key", "expires_at"])
@@ -55,10 +60,23 @@ export async function createUpload(
 export async function findUpload(tx: Tx, publicationId: string, uploadId: string, lock = false) {
   const query = tx
     .selectFrom("app.upload")
-    .select(["id", "user_id", "purpose", "key", "status", "asset_id", "import_id", "declared_type", "declared_bytes"])
+    .select([
+      "id",
+      "user_id",
+      "purpose",
+      "key",
+      "status",
+      "asset_id",
+      "import_id",
+      "engine_profile_id",
+      "declared_type",
+      "declared_bytes",
+    ])
     .where("publication_id", "=", publicationId)
     .where("id", "=", uploadId);
-  return (lock ? query.forUpdate() : query).executeTakeFirst();
+  const row = await (lock ? query.forUpdate() : query).executeTakeFirst();
+  // at most 4 GiB (the table's check): exact as a number
+  return row && { ...row, declared_bytes: Number(row.declared_bytes) };
 }
 
 /** Marks a presigned upload refused; false when it was not presigned (refused or completed already). */
@@ -262,6 +280,10 @@ export type LibraryFilter = {
   story?: string;
   missing?: "caption" | "credit";
   q?: string;
+  /** the pictures too narrow to print sharp across this many millimetres (MIN_PPI: width·25.4 < 150·mm) */
+  tooNarrowForMm?: number;
+  /** ready pictures only (an ad slot's picker without media.view) */
+  readyOnly?: boolean;
   after?: { createdAt: string; id: string };
   limit: number;
 };
@@ -294,9 +316,12 @@ export async function listLibrary(tx: Tx, f: LibraryFilter): Promise<LibraryRow[
         join app.story s on s.org_id = sp.org_id and s.publication_id = sp.publication_id and s.id = sp.story_id
         where sp.org_id = a.org_id and sp.publication_id = a.publication_id and sp.asset_id = a.id
           and sp.story_id = ${story}::uuid and s.deleted_at is null))
+      and (not ${f.readyOnly ?? false}::boolean or (a.status = 'ready' and a.version_id is not null))
       and (${f.missing ?? null}::text is distinct from 'caption' or a.caption = '')
       and (${f.missing ?? null}::text is distinct from 'credit' or a.credit = '')
       and (${like}::text is null or a.caption ilike ${like} or a.credit ilike ${like} or a.photographer ilike ${like})
+      and (${f.tooNarrowForMm ?? null}::double precision is null
+        or a.width_px * 25.4 < 150 * ${f.tooNarrowForMm ?? null}::double precision)
       and (${f.after?.createdAt ?? null}::timestamptz is null
         or (a.created_at, a.id) < (${f.after?.createdAt ?? null}::timestamptz, ${f.after?.id ?? null}::uuid))
     order by a.created_at desc, a.id desc

@@ -1,18 +1,22 @@
 """The worker's job runner, whatever queue drives it (l22-plan W6; D-8 is open): one job in, one result out.
 
-    job    {"format": "pageinator.worker-job/1", "id": "<the queue's job id>", "kind": "media.ingest" | "docx.import",
-            "args": {…}}
+    job    {"format": "pageinator.worker-job/1", "id": "<the queue's job id>", "kind": "media.ingest" | "docx.import" |
+            "media.ad" | "engine.setup" | "engine.measure" | "engine.layout", "args": {…}}
     result {"format": "pageinator.worker-result/1", "job": id, "kind": kind, "outcome": "done" | "retry" | "failed",
             "event": {…} (done), "error": {"code", "message"} (retry, failed)}
 
 - **done**: the task ran to its answer, which is the event for the API's inbox: `media.ready`, or `media.rejected`
   (a photo the Desk refuses is a finished job, not a failure); for docx.import, `import.parsed` or `import.rejected`
-  (pgn_worker/docx_import.py).
+  (pgn_worker/docx_import.py); media.ad: `ad.ready` or `ad.rejected` (media.py); engine.setup: `profile.ready` or
+  `profile.rejected` (engine.py); engine.measure: `measure.status`; engine.layout: `run.finished`, whatever the run's
+  end (done, failed with the engine's words, cancelled: launcher.py). The last two write progress lines first
+  (pgn_worker/run.py).
 - **retry**: nothing was decided and the job may be run again as it is: the colour profile cannot be read or the
   conversion's environment failed (`worker.profile`), the store failed or could not be reached (`worker.store`), or it
   ran out of memory (`worker.memory`).
 - **failed**: running it again cannot help: the job is not one this runner takes (`worker.job`), a key is outside its
-  organisation and publication (`worker.key`), the original is not the one it names (`worker.checksum`), or that
+  organisation and publication (`worker.key`), a request or home the materialiser refuses (`worker.job`), the
+  original (or the dataset, config, request or snapshot) is not the one it names (`worker.checksum`), or that
   version is not in the store (`worker.missing`); the worker's own settings are missing or not valid, or its colour
   profile is not the one it was given (`worker.config`: an operator must fix the worker, the same job would fail the
   same way); or the worker has a fault (`worker.internal`, its exception's type only).
@@ -23,10 +27,14 @@ code (pgn_worker/run.py). Messages are at most 2000 characters and never carry a
 text or the job's own values (only its ids, in keys made from them)."""
 from __future__ import annotations
 
+import os
 import re
+import threading
 from typing import Any, Callable
 
-from . import docx_import, media
+from . import docx_import, engine, launcher, media
+from .engine import ConfigError
+from .home import BadRequest
 from .keys import KeyGuard, KeyRefused
 from .params import ProfileError, ProfileMismatch
 from .storage import MissingObject, Storage
@@ -36,18 +44,16 @@ from .desk import util
 JOB_FORMAT = "pageinator.worker-job/1"
 RESULT_FORMAT = "pageinator.worker-result/1"
 JOB_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", re.ASCII)
-KINDS = {"media.ingest": media.ARGS, "docx.import": docx_import.ARGS}
-CHECKS = {"media.ingest": media.check_args, "docx.import": docx_import.check_args}
+KINDS = {"media.ingest": media.ARGS, "docx.import": docx_import.ARGS, "media.ad": media.AD_ARGS, **engine.ARGS}
+CHECKS = {"media.ingest": media.check_args, "docx.import": docx_import.check_args, "media.ad": media.check_ad_args,
+          **{kind: (lambda args, kind=kind: engine.check_args(kind, args)) for kind in engine.ARGS}}
+STREAMING = ("engine.layout", "engine.measure")         # kinds that write progress lines before their result
 RETRY, FAILED, DONE = "retry", "failed", "done"
 MAX_MESSAGE = 2000
 
 
 class JobRefused(ValueError):
     """A job that is not one this runner takes (its shape, its kind or its arguments)."""
-
-
-class ConfigError(RuntimeError):
-    """The worker's own settings are missing or not valid (never the job's fault)."""
 
 
 def check(job: Any) -> dict:
@@ -93,16 +99,30 @@ def result(job: Any, outcome: str, event: dict | None = None, code: str | None =
     return out
 
 
-def run(job: Any, storage_for: Callable[[KeyGuard], Storage], icc_sha256: str) -> dict:
-    """One job → its result (never raises an Exception). `storage_for(guard)` gives the job's store view (S3Storage in production),
-    `icc_sha256` is the colour profile the worker was given."""
+def run(job: Any, storage_for: Callable[[KeyGuard], Storage], icc_sha256: str,
+        progress: Callable[[dict], None] = lambda event: None, cancel: threading.Event | None = None,
+        environ: dict[str, str] | None = None) -> dict:
+    """One job → its result (never raises an Exception; launcher.StdoutClosed, a BaseException, goes through).
+    `storage_for(guard)` gives the job's store view (S3Storage in production), `icc_sha256` is the colour profile the
+    worker was given; for the engine's kinds, `progress(event)` writes a progress line, `cancel` is set on SIGTERM and
+    `environ` holds the engine's settings (engine.Settings)."""
     try:
         job = check(job)
         guard = KeyGuard(job["args"]["org_id"], job["args"]["pub_id"])
-        if job["kind"] == "docx.import":
-            event = docx_import.read(storage_for(guard), job["args"])
+        kind, args, store = job["kind"], job["args"], storage_for(guard)
+        if kind == "docx.import":
+            event = docx_import.read(store, args)
+        elif kind == "media.ingest":
+            event = media.ingest(store, args, icc_sha256)
+        elif kind == "media.ad":
+            event = media.ad(store, args, icc_sha256)
         else:
-            event = media.ingest(storage_for(guard), job["args"], icc_sha256)
+            settings = engine.Settings.from_env(dict(os.environ if environ is None else environ))
+            if kind == "engine.setup":
+                event = engine.setup(store, args, settings)
+            else:
+                task = launcher.layout if kind == "engine.layout" else launcher.measure
+                event = task(store, args, settings, progress, cancel or threading.Event())
         return result(job, DONE, event=event)
     except JobRefused as e:
         return result(job, FAILED, code="worker.job", message=str(e))
@@ -110,6 +130,8 @@ def run(job: Any, storage_for: Callable[[KeyGuard], Storage], icc_sha256: str) -
         return result(job, FAILED, code="worker.key", message=str(e))
     except media.Mismatch as e:
         return result(job, FAILED, code="worker.checksum", message=str(e))
+    except BadRequest as e:                                  # a request or home the materialiser does not take
+        return result(job, FAILED, code="worker.job", message=str(e))
     except MissingObject:
         return result(job, FAILED, code="worker.missing", message="the original's version is not in the store")
     except ProfileMismatch as e:                              # the worker's settings, not the job: an operator fixes it

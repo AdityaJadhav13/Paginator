@@ -586,3 +586,22 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | L2-429 | `apps/web` news pick drawer | Polling a draft has no limit of its own: it stops at done or failed, which the API's sweep reaches within 30 minutes for a lost job | The editor can close the drawer at any time |
 | L2-430 | `apps/web` Sources Settings | The compact feeds table (row menu, header "Collect now", wrapping panel actions) is checked by tests and CSS only, not yet looked at in a browser at 390 px | The table scrolls sideways inside its panel, never the page |
 | L2-431 | News finder, AI off | Topics grouped while the AI part was on stay stored but are not shown while it is off (the headlines list shows their items); a NAT64 address in 64:ff9b:1::/48 is read only in its /96 shape, any other shape is refused | Picking is refused while off anyway; refusing is the safe side |
+
+## Editions and layout, hosted (L2.3; `apps/api` layout, `apps/engine-queue`, `apps/engine-worker` launcher, `apps/web/src/features/layout`)
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| L2-440 | `apps/api` layout cancel | A cancel that arrives as the run finishes can be answered 409 `run_finished` after the job was already removed, or remove a job a moment before its run settles | The run always ends in one state (done, failed or cancelled) and the editor sees that state |
+| L2-441 | `apps/engine-worker` engine setup | The dataset's temporary files are left in the worker's `/tmp` tmpfs if the worker dies mid-unpack | The tmpfs is emptied when the container restarts; a later setup starts from an empty folder |
+| L2-442 | `apps/api` Desk import | The import records each imported page's check verdict under the current checker's SHA-256, not the checker that made it on the Mac | The verdict itself is the Desk's; parity (R1) re-lays one page hosted and checks it again |
+| L2-443 | `apps/api` measuring | After a stop, the edition is not measured again by itself; the readiness panel shows the last measure until the next story change | The next change of any story of the edition measures again |
+| L2-444 | `apps/api` layout files | An object written to S3 in a transaction that then rolls back (a profile upload, a run's request) is left as an orphan | It is private to the organisation's prefix and never read; versioning keeps the trail (as L2-404) |
+| L2-445 | `apps/web` layout mocks | The mock layout service differs from the API in small ways (error bodies, some fields' nullability) | The API tests and the live verification use the real API |
+| L2-446 | `apps/web` ad slots | A slot's thumbnail can stay the old picture until the page is reloaded after another person changes the slot | Reloading shows the right picture; the engine lays out the slot's current artwork |
+| L2-447 | `apps/web` Pages board | A page whose check failed has no link to its check report from the board | The report is in the press ZIP and the run's files |
+| L2-448 | `apps/web` ad slots | Slot sizes are shown unrounded | The engine uses its own exact sizes; the text is only a label |
+| L2-449 | `apps/web` ad slots on a phone | The ad slot grid is not laid out for 390 px (it scrolls sideways) | Desktop first (owner decision 2026-11-02); the phone is the secondary version |
+| L2-450 | `apps/web` Today card | "Today" is the browser's date, not the publication's time zone | The pilot's staff and paper are in one time zone (IST) |
+| L2-451 | `apps/web` layout screens | axe does not yet cover every layout state (a failed run, a refused layout, the profile screen while setting up) | Those states use the same kit components axe checks elsewhere |
+| L2-452 | Operations: a dead queue | When the queue process dies without a goodbye, a running layout is failed by the API's reconciler only after about 11 minutes (the stale time plus a pass); by design, so a slow page is not killed. Ops note: restart the queue and start the run again | The run is then failed with the Desk's RESTARTED message, and nothing half-published is kept |
+| L2-453 | L2.3 live checks not yet run | Not tried on the real stack: the queue stopped by SIGTERM mid-run, a damaged dataset bundle, the screens on a phone, two browsers watching one run | Each has a unit or database test; a fictional edition was laid out end to end with the real engine, and a failed run was seen live |

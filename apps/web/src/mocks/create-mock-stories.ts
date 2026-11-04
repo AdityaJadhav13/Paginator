@@ -394,6 +394,8 @@ const FIXTURE_PICTURE = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 
 });
 
 const MAX_BYTES = 41_943_040;
+/** the contracts' MAX_DATASET_BYTES (4 GiB) */
+const MAX_DATASET_BYTES = 4 * 1024 ** 3;
 const MEDIA_PAGE = 60;
 const UPLOADS_PER_HOUR = 60;
 const ORG_BYTES_PER_DAY = 2 * 1024 ** 3;
@@ -483,6 +485,10 @@ export function createMockStories(deps: MockStoryDeps): {
   newsPhoto(input: MockNewsPhoto): string;
   reset(): void;
   all(): readonly Row[];
+  /** For the layout double (create-mock-layout.ts): an edition, whether a picture is ready, an upload. */
+  editionOf(orgId: string, pubId: string, editionId: string): EditionRow | undefined;
+  assetReady(orgId: string, pubId: string, assetId: string): boolean | undefined;
+  uploadOf(orgId: string, pubId: string, uploadId: string): { readonly contentType: string; readonly bytes: number } | undefined;
 } {
   let rows = fixtures();
   let editionRows = editionFixtures();
@@ -695,7 +701,10 @@ export function createMockStories(deps: MockStoryDeps): {
       | "comment.write"
       | "edition.view"
       | "edition.create"
-      | "desk.export",
+      | "desk.export"
+      | "settings.edit",
+    /** also allowed by any of these (the ad picker: a ready picture to whoever may set an ad slot) */
+    orAny: readonly ("ads.manage" | "layout.generate")[] = [],
   ): Promise<ServiceResult<T, ApiProblem> | { person: { userId: string; name: string }; s: MockStanding }> {
     const problem = await deps.gate(operation);
     if (problem) return failure(problem);
@@ -704,7 +713,8 @@ export function createMockStories(deps: MockStoryDeps): {
     const s = deps.standing(person.userId, orgId, pubId);
     if (!s) return failure(NOT_FOUND);
     if (s.twoStepBlocked) return failure(TWO_STEP);
-    if (reach(permission, s.orgRole, s.access) === null) return failure(NOT_ALLOWED);
+    const allowed = [permission, ...orAny].some((one) => reach(one, s.orgRole, s.access) !== null);
+    if (!allowed) return failure(NOT_ALLOWED);
     return { person, s };
   }
   const refused = <T,>(checked: object): checked is ServiceResult<T, ApiProblem> => "ok" in checked;
@@ -1009,6 +1019,7 @@ export function createMockStories(deps: MockStoryDeps): {
   };
 
 
+  const AD_PICKER = ["ads.manage", "layout.generate"] as const;
   const PHOTO_NOT_THEIRS = NOT_ALLOWED;
   /** canAttachPhoto: whoever edits the story, or a Photo Editor of the publication on any story they see but a spiked one. */
   const mayPhoto = (s: MockStanding, story: Row, userId: string) =>
@@ -1227,6 +1238,11 @@ export function createMockStories(deps: MockStoryDeps): {
   function hears(userId: string, orgId: string, event: LiveEventDto): boolean {
     if (event.type === "resync" || event.type === "notification") return true;
     if (event.type === "import") return imports.get(event.importId)?.userId === userId;
+    if (event.type === "layout" || event.type === "profile") {
+      const standing = deps.standing(userId, orgId, event.publicationId);
+      const permission = event.type === "layout" ? "pages.view" : "settings.view";
+      return standing !== undefined && reach(permission, standing.orgRole, standing.access) !== null;
+    }
     if (event.type === "edition") {
       const standing = deps.standing(userId, orgId, event.publicationId);
       return standing !== undefined && reach("edition.view", standing.orgRole, standing.access) !== null;
@@ -1316,7 +1332,8 @@ export function createMockStories(deps: MockStoryDeps): {
   const media: MediaService = {
     async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey, purpose = "story_photo" }) {
       const docx = purpose === "docx";
-      const checked = await check<never>("media.presign", orgId, pubId, docx ? "story.create" : "media.upload");
+      const dataset = purpose === "engine_dataset";
+      const checked = await check<never>("media.presign", orgId, pubId, docx ? "story.create" : dataset ? "settings.edit" : "media.upload");
       if (refused(checked)) return checked;
       const { person } = checked;
       const body = { filename, contentType, bytes };
@@ -1324,17 +1341,20 @@ export function createMockStories(deps: MockStoryDeps): {
       if (replayed && isReused(replayed)) return failure(replayed);
       if (replayed) return success(replayed.value);
       if (docx !== (contentType === DOCX_TYPE)) return failure(invalid("body.contentType", "A Word file is uploaded as docx, and a picture as a picture."));
-      if (!docx && !(TYPES as readonly string[]).includes(contentType)) return failure(invalid("body.contentType", "must be JPEG, PNG or WebP"));
+      if (dataset !== (contentType === "application/zip")) return failure(invalid("body.contentType", "A dataset bundle is uploaded as engine_dataset, as a ZIP file."));
+      if (dataset && bytes > MAX_DATASET_BYTES) return failure(answer(413, "file_too_large", "A dataset bundle is at most 4 GiB."));
+      if (!docx && !dataset && !(TYPES as readonly string[]).includes(contentType)) return failure(invalid("body.contentType", "must be JPEG, PNG or WebP"));
       if (docx && bytes > MAX_DOCX_BYTES) {
         return failure({ ...answer(422, "docx_refused", NOT_WORD), details: [{ field: "body.bytes", message: "This Word file is larger than 10 MB." }] });
       }
-      if (bytes > MAX_BYTES) return failure(answer(413, "file_too_large", "This picture is larger than 40 MB."));
+      if (!dataset && bytes > MAX_BYTES) return failure(answer(413, "file_too_large", "This picture is larger than 40 MB."));
       const used = orgBytes.get(orgId) ?? 0;
       const count = uploadCount.get(person.userId) ?? 0;
-      if (used + bytes > ORG_BYTES_PER_DAY || count >= UPLOADS_PER_HOUR) {
+      // a dataset bundle (up to 4 GiB) is not a newsroom's daily pictures: the daily byte cap is the pictures'
+      if ((!dataset && used + bytes > ORG_BYTES_PER_DAY) || count >= UPLOADS_PER_HOUR) {
         return failure(answer(429, "slow_down", "Too many tries. Wait a minute and try again."));
       }
-      orgBytes.set(orgId, used + bytes);
+      if (!dataset) orgBytes.set(orgId, used + bytes);
       uploadCount.set(person.userId, count + 1);
       const id = `upload-${String(uploads.size + 1).padStart(3, "0")}`;
       uploads.set(id, { id, orgId, pubId, userId: person.userId, contentType, bytes, status: "presigned" });
@@ -1436,7 +1456,7 @@ export function createMockStories(deps: MockStoryDeps): {
     },
 
     async list({ orgId, pubId, query }) {
-      const checked = await check<{ items: MediaItemDto[]; next: string | null }>("media.list", orgId, pubId, "media.view");
+      const checked = await check<{ items: MediaItemDto[]; next: string | null }>("media.list", orgId, pubId, "media.view", AD_PICKER);
       if (refused(checked)) return checked;
       const { person, s } = checked;
       const q = query.q?.trim().toLowerCase();
@@ -1525,7 +1545,7 @@ export function createMockStories(deps: MockStoryDeps): {
     if (asset.deleted) return false;
     const seen = reach("media.view", s.orgRole, s.access);
     if (seen === "full") return true;
-    if (seen !== "scoped") return false;
+    if (seen === null) return asset.status === "ready"; // the ad picker (ads.manage or layout.generate): ready pictures
     if (asset.uploadedBy === userId) return true;
     return asset.status !== "rejected" && asset.status !== "failed" && maySeeAsset(s, asset, userId);
   }
@@ -1659,5 +1679,15 @@ export function createMockStories(deps: MockStoryDeps): {
       keys = new Map();
     },
     all: () => rows,
+    editionOf: (orgId, pubId, editionId) =>
+      editionRows.find((edition) => edition.id === editionId && edition.orgId === orgId && edition.publicationId === pubId),
+    assetReady(orgId, pubId, assetId) {
+      const asset = assets.get(assetId);
+      return asset && !asset.deleted && asset.orgId === orgId && asset.pubId === pubId ? asset.status === "ready" : undefined;
+    },
+    uploadOf(orgId, pubId, uploadId) {
+      const upload = uploads.get(uploadId);
+      return upload && upload.orgId === orgId && upload.pubId === pubId ? { contentType: upload.contentType, bytes: upload.bytes } : undefined;
+    },
   };
 }

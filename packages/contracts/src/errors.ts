@@ -23,6 +23,10 @@ export const ERROR_CODES = [
   "rights_needed",
   "ai_off",
   "bundle_refused",
+  "run_active",
+  "run_finished",
+  "layout_refused",
+  "no_profile",
   "request_too_large",
   "not_json",
   "slow_down",
@@ -45,7 +49,8 @@ export const ErrorEnvelope = z.strictObject({
     message: z.string().min(1),
     details: z.array(FieldProblem).min(1).optional(),
     /** With story_changed: the story as it is now, so the web can show theirs beside the text it keeps; with
-     * edition_exists: the edition that has that date; with asset_changed: the picture (MediaItem) as it is now. */
+     * edition_exists: the edition that has that date; with asset_changed: the picture (MediaItem) as it is now; with
+     * run_active and run_finished: the run (LayoutRun) as it is now; with layout_refused: the readiness's blockers. */
     current: z.unknown().optional(),
     requestId: z.string().min(1),
   }),

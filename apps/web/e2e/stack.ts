@@ -7,6 +7,8 @@
 //   PGN_E2E_ICC        a CMYK colour profile (default: macOS's Generic CMYK; never the private newsprint one)
 //   PGN_E2E_PORT_BASE  62000 by default: Postgres +432, S3 +333, Mailpit +25, SMTP +125, API +780, web +180
 //   PGN_E2E_KEEP=1     keeps the logs folder (its path is printed)
+// Of a shell's other PGN_* settings only these reach the processes, so a real layout can run (without them the engine's
+// jobs refuse): PGN_ENGINE_PYTHON (the engine environment's Python), PGN_ENGINE_STALL_S, PGN_LAYOUT_TIMEOUT_S.
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -114,8 +116,11 @@ export default async function stack(): Promise<() => Promise<void>> {
       { encoding: "utf8", stdio: "pipe" },
     );
 
-  // the settings every process gets: no inherited PGN_* (a developer's shell), only these
-  const base = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("PGN_")));
+  // the settings every process gets: no inherited PGN_* (a developer's shell) but the engine's, only these
+  const kept = new Set(["PGN_ENGINE_PYTHON", "PGN_ENGINE_STALL_S", "PGN_LAYOUT_TIMEOUT_S"]);
+  const base = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith("PGN_") || kept.has(name)),
+  );
   const env = {
     ...base,
     ...secrets,

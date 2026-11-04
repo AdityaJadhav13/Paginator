@@ -4,8 +4,19 @@
 // worker (`worker.config`: the operator's fault, not the photo's) give the attempt back, are never reported as a
 // failure, and the latter stops the queue (startQueue). What still cannot settle here (the process dies on the last
 // attempt, or the inbox refuses every report) the API's sweep settles (plan §2.2, exhaustedJobs).
+// The engine's jobs (L2.3) add: engine.layout runs once (a retry outcome, and a misconfigured worker, are its final
+// failure); engine.layout and engine.measure report each progress line as it comes (job id `<job>:<seq>`); a user's
+// cancel (cancel.ts) stops the runner, and its answer (run.finished cancelled) is reported as usual, or nothing when it
+// gave none (the API has recorded the cancel); setup, measure and layout keep their locks fresh while they run. The
+// queue stopping during a layout is reported as job.failed worker.restarted: the run cannot go on in a later attempt,
+// so the API fails it with the Desk's RESTARTED words at once rather than after its sweep. (The launcher's answer then,
+// run.finished cancelled, would say a person cancelled it.) Setup, measure and media.ad give the attempt back as today.
 import {
   DocxImportPayload,
+  EngineLayoutPayload,
+  EngineMeasurePayload,
+  EngineSetupPayload,
+  MediaAdPayload,
   EngineEvent,
   MediaIngestPayload,
   NewsCollectPayload,
@@ -15,9 +26,11 @@ import {
   WORKER_JOB_FORMAT,
   type JOB_KINDS,
   type WorkerJob,
+  type WorkerProgress,
 } from "@pageinator/contracts";
 import type { JobHelpers, Task, TaskList } from "graphile-worker";
 import { z } from "zod";
+import { Cancels } from "./cancel.ts";
 import { draft } from "./news/draft.ts";
 import { collect, type NewsDeps } from "./news/group.ts";
 import { runJob, type RunOutcome, type RunnerSettings } from "./runner.ts";
@@ -28,6 +41,9 @@ export const QUEUE_SCHEMA = "queue";
 export const MAX_GIVEN_BACK = 30;
 /** report() is tried this many times, waiting this long before each retry; then the job fails (and is run again). */
 export const REPORT_WAITS_MS = [500, 2_000] as const;
+/** How often a long engine job refreshes its lock (releaseStaleLocks and the API's sweep take a lock older than the
+ * runner's limit plus 5 minutes). */
+export const HEARTBEAT_MS = 60_000;
 
 /** Writes one event to the API's inbox (app.engine_event and its NOTIFY): the API part brings it (plan §2.2). The
  * queue's job id goes with it: a job reports one event, so the inbox keeps one row per job id and drops a repeat (a
@@ -43,22 +59,43 @@ export class RetryLater extends Error {
   }
 }
 
-/** Each kind: its ids-only payload, and the payload's field that names its target (an asset, an import). */
+/** Each kind: its ids-only payload, the payload's field that names its target (an asset, an import, a profile …), its
+ * done events and the events its progress lines may carry. */
 const KINDS = {
   "media.ingest": { payload: MediaIngestPayload, target: "asset_id", events: ["media.ready", "media.rejected"] },
   "docx.import": { payload: DocxImportPayload, target: "import_id", events: ["import.parsed", "import.rejected"] },
+  "engine.setup": { payload: EngineSetupPayload, target: "profile_id", events: ["profile.ready", "profile.rejected"] },
+  "engine.measure": {
+    payload: EngineMeasurePayload,
+    target: "edition_id",
+    events: ["measure.status"],
+    progress: ["measure.status"],
+  },
+  "engine.layout": {
+    payload: EngineLayoutPayload,
+    target: "run_id",
+    events: ["run.finished"],
+    progress: ["run.progress", "run.page"],
+  },
+  "media.ad": { payload: MediaAdPayload, target: "artwork_id", events: ["ad.ready", "ad.rejected"] },
 } as const;
+/** The kinds whose lock is refreshed while they run (they may outlast the runner's default limit). */
+const LONG: ReadonlySet<string> = new Set(["engine.setup", "engine.measure", "engine.layout"]);
 type Kind = keyof typeof KINDS;
 
 /** What a payload that is not ids-only must still name for its target to settle. */
 const Target = z.object({ org_id: OrgId, pub_id: Uuid7, target_id: Uuid7 });
 type Target = z.infer<typeof Target>;
 
-/** The target an event names (its asset, its import, the news run or the news draft). */
+/** The target an event names (its asset, its import, the profile, the edition, the ad slot's row, the layout or news
+ * run or the news draft). An ad's event names its asset too: its target is the slot's row. */
 export function targetOf(event: EngineEvent): string {
   if (event.kind === "job.failed") return event.target_id;
+  if ("artwork_id" in event) return event.artwork_id;
   if ("asset_id" in event) return event.asset_id;
   if ("import_id" in event) return event.import_id;
+  if ("profile_id" in event) return event.profile_id;
+  if ("edition_id" in event) return event.edition_id;
   return "run_id" in event ? event.run_id : event.draft_id;
 }
 
@@ -68,8 +105,10 @@ export function engineTask(
   report: Report,
   misconfigured: () => void = () => {},
   run: Run = runJob,
+  cancels: Cancels = new Cancels(),
 ): Task {
   const { payload: Payload, target: field, events } = KINDS[kind];
+  const progressKinds = (KINDS[kind] as { progress?: readonly string[] }).progress ?? [];
   return async (payload, helpers) => {
     const settle = (event: EngineEvent) => reportWithRetries(report, event, helpers);
     const args = Payload.safeParse(payload);
@@ -85,26 +124,76 @@ export function engineTask(
     const data = args.data as Record<string, string>;
     const target = { org_id: data["org_id"] ?? "", pub_id: data["pub_id"] ?? "", target_id: data[field] ?? "" };
     const job = { format: WORKER_JOB_FORMAT, id: helpers.job.id, kind, args: args.data } as WorkerJob;
-    const out: RunOutcome = await run(job, settings, helpers.abortSignal);
+    const ours = (event: EngineEvent, kinds: readonly string[]) =>
+      kinds.includes(event.kind) &&
+      event.org_id === target.org_id &&
+      event.pub_id === target.pub_id &&
+      targetOf(event) === target.target_id &&
+      "sha256" in event &&
+      event.sha256 === data["sha256"];
+    // progress goes to the inbox in order, each once (`<job>:<seq>`); a lost one is only a missed update
+    let progressed = Promise.resolve();
+    const onProgress = (line: WorkerProgress) => {
+      if (!ours(line.event, progressKinds))
+        return helpers.logger.warn(`${kind}: a progress line for another ${field.slice(0, -3)} was dropped`);
+      progressed = progressed.then(() =>
+        report(line.event, `${helpers.job.id}:${line.seq}`, helpers).catch(() =>
+          helpers.logger.warn(`${kind}: a progress report failed; it is not sent again`),
+        ),
+      );
+    };
+    const cancel = cancels.watch(helpers.job.key);
+    const beat = LONG.has(kind) ? setInterval(() => void refreshLock(helpers), HEARTBEAT_MS) : undefined;
+    let out: RunOutcome;
+    try {
+      const signal = helpers.abortSignal ? AbortSignal.any([helpers.abortSignal, cancel.signal]) : cancel.signal;
+      out = await run(job, settings, signal, onProgress);
+    } finally {
+      clearInterval(beat);
+      cancel.done();
+    }
+    await progressed;
+    const cancelled = cancel.signal.aborted;
+    const shutdown = !cancelled && (helpers.abortSignal?.aborted ?? false);
+    // stopped by a user's cancel: its answer is reported as any other; none, nothing (the API recorded the cancel)
+    if (cancelled && out.outcome !== "done") return;
+    // stopped by anything else, the runner's answer is not what happened (it would say cancelled): the stop counts
+    if (out.outcome === "done" && out.stoppedBy !== undefined && !cancelled)
+      out = { outcome: "retry", code: out.stoppedBy, message: "the job was stopped" };
     if (out.outcome === "done") {
-      const event = out.result.event;
-      if (
-        !(events as readonly string[]).includes(event.kind) ||
-        event.org_id !== target.org_id ||
-        event.pub_id !== target.pub_id ||
-        targetOf(event) !== target.target_id ||
-        event.sha256 !== data["sha256"]
-      )
+      if (!ours(out.result.event, events))
         return settle(failed(kind, target, "worker.output", `the runner's event is for another ${field.slice(0, -3)}`));
-      return settle(event);
+      return settle(out.result.event);
+    }
+    if (out.code === "worker.config") misconfigured();
+    if (kind === "engine.layout") {
+      // never run twice: a later attempt would lay the edition out again from a run the API may have shown as going
+      if (shutdown) return settle(failed(kind, target, "worker.restarted", "the queue stopped while the run ran"));
+      return settle(failed(kind, target, out.code, out.message));
     }
     const notThePhotos = out.code === "worker.cancelled" || out.code === "worker.config";
-    if (out.code === "worker.config") misconfigured();
     if (notThePhotos && (await giveBack(helpers))) throw new RetryLater(out.code);
     if ((out.outcome === "retry" || notThePhotos) && helpers.job.attempts < helpers.job.max_attempts)
       throw new RetryLater(out.code);
     return settle(failed(kind, target, out.code, out.message));
   };
+}
+
+/** Refreshes a running job's lock and its named queue's (only while this queue still holds them). A failure is only
+ * logged: the next beat tries again, and a lock goes stale only after the runner's limit plus 5 minutes. */
+export async function refreshLock(helpers: JobHelpers): Promise<void> {
+  try {
+    await helpers.withPgClient((client) =>
+      client.query(
+        `with queues as (
+           update ${QUEUE_SCHEMA}._private_job_queues set locked_at = now() where id = $3 and locked_by = $2
+         ) update ${QUEUE_SCHEMA}._private_jobs set locked_at = now() where id = $1 and locked_by = $2`,
+        [helpers.job.id, helpers.job.locked_by, helpers.job.job_queue_id],
+      ),
+    );
+  } catch {
+    helpers.logger.warn(`${helpers.job.task_identifier}: its lock could not be refreshed`);
+  }
 }
 
 /** media.ingest: an uploaded photo's print versions. */
@@ -198,10 +287,16 @@ export function taskList(
   misconfigured?: () => void,
   run: Run = runJob,
   news: NewsDeps = { ai: null },
+  cancels: Cancels = new Cancels(),
 ): TaskList {
+  const engine = (kind: Kind) => engineTask(kind, settings, report, misconfigured, run, cancels);
   return {
-    "media.ingest": engineTask("media.ingest", settings, report, misconfigured, run),
-    "docx.import": engineTask("docx.import", settings, report, misconfigured, run),
+    "media.ingest": engine("media.ingest"),
+    "docx.import": engine("docx.import"),
+    "engine.setup": engine("engine.setup"),
+    "engine.measure": engine("engine.measure"),
+    "engine.layout": engine("engine.layout"),
+    "media.ad": engine("media.ad"),
     "news.collect": newsTask("news.collect", news, report),
     "news.draft": newsTask("news.draft", news, report),
   };

@@ -32,6 +32,8 @@ import { startEngineInbox } from "./modules/media/engine-inbox.ts";
 import { libraryRoutes } from "./modules/media/library.ts";
 import { uploadRoutes } from "./modules/media/uploads.ts";
 import { importRoutes } from "./modules/media/imports.ts";
+import { startMeasureSchedule } from "./modules/layout/measure.ts";
+import { layoutRoutes } from "./modules/layout/routes.ts";
 import { type PhotoFetch, newsRoutes } from "./modules/news/routes.ts";
 import { startNewsSchedule } from "./modules/news/schedule.ts";
 import { contactRoutes } from "./modules/contact/routes.ts";
@@ -170,6 +172,11 @@ export async function buildApp(deps: AppDeps) {
     // the news finder's collections, on their schedule (as the inbox, in the process that runs it)
     const schedule = startNewsSchedule(database, fastify.log, config.aiDailyCapInr);
     fastify.addHook("preClose", () => schedule.close());
+    // hosted layout's background measuring (it writes measure.json: only with the object store)
+    if (store) {
+      const measuring = startMeasureSchedule(database, store, fastify.log);
+      fastify.addHook("preClose", () => measuring.close());
+    }
   }
 
   const app = fastify.withTypeProvider<ZodTypeProvider>();
@@ -205,6 +212,7 @@ export async function buildApp(deps: AppDeps) {
       await app.register(libraryRoutes, { database: people.database, store });
       await app.register(deskBundleRoutes, { database: people.database, store });
       await app.register(importRoutes, { database: people.database, store });
+      await app.register(layoutRoutes, { database: people.database, store });
       await app.register(newsRoutes, {
         database: people.database,
         store,

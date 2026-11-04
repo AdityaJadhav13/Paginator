@@ -92,6 +92,16 @@ export function liveEventOf(type: string, data: unknown): LiveEventDto | null {
       return isId(data["publicationId"]) && isId(data["importId"])
         ? { type, publicationId: data["publicationId"], importId: data["importId"] }
         : null;
+    case "layout": {
+      const runId = data["runId"];
+      return isId(data["publicationId"]) && isId(data["editionId"]) && (runId === null || isId(runId))
+        ? { type, publicationId: data["publicationId"], editionId: data["editionId"], runId }
+        : null;
+    }
+    case "profile":
+      return isId(data["publicationId"]) && isId(data["profileId"])
+        ? { type, publicationId: data["publicationId"], profileId: data["profileId"] }
+        : null;
     case "resync":
       return { type };
     default:

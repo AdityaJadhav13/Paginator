@@ -175,6 +175,13 @@ export function mediaScope(access: Access, publicationId: string): Scope {
   return seen === "full" ? "all" : seen === "scoped" ? "own" : "none";
 }
 
+/** Who sets an ad slot (ads.manage or layout.generate) may pick its picture: without media.view, the ready pictures of
+ * the library and their previews only (an Advertising person; L2.3). */
+export function picksAds(access: Access, publicationId: string): boolean {
+  const here = on(access, publicationId);
+  return !!(reach("ads.manage", access.orgRole, here) || reach("layout.generate", access.orgRole, here));
+}
+
 /** Whose pictures' own facts the person may change: all of the publication's with a full media.upload, a Reporter's ◐
  * the ones they uploaded; none without media.upload. Only "all" deletes a picture. */
 export function uploadScope(access: Access, publicationId: string): Scope {

@@ -16,12 +16,14 @@
 # Stopping: the API waits PGN_SHUTDOWN_GRACE_S (10 s) for requests in flight and gives up 5 s after that (src/shutdown.ts),
 # so compose waits 20 s before it kills it. init: true puts tini in front, so a second stop signal still kills it.
 # Memory: every container has a ceiling (mem_limit), so one that grows cannot take the host down with it: Caddy 128 MB,
-# the API 640 MB, the backup 256 MB, the engine 1 GB (a 100-megapixel photo's conversion), 2 GB together, and the
+# the API 640 MB, the backup 256 MB, the engine 2 GB (two jobs at once, PGN_QUEUE_CONCURRENCY 2, so photos are not held
+# behind a layout: 1 GB each, a 100-megapixel photo's conversion), 3 GB together, and the
 # migration step's 384 MB while it runs: the host must be a t3.medium (4 GB) once the engine runs on it (plan §8.1 puts
 # it on an engine host of its own later). pilot-local's scratch database and file store get 512 MB each.
 # The engine (the queue, apps/engine-queue/src/main.ts) stops only after its running jobs end: at most
-# PGN_RUNNER_TIMEOUT_S (180 s), then 5 s, so compose waits 200 s before it kills it (a job killed mid-run stays locked
-# until Graphile Worker's 4-hour lock reset, or the API's sweep on its last attempt).
+# PGN_RUNNER_TIMEOUT_S (180 s), then 5 s; a layout run still going then gets SIGTERM and 10 s more (L2.3: it is failed
+# with the Desk's RESTARTED message), so compose waits 210 s before it kills it (a job killed mid-run stays locked
+# until the queue releases stale locks, or the API's sweep on its last attempt). A layout may run PGN_LAYOUT_TIMEOUT_S.
 
 x-hardened: &hardened
   read_only: true
@@ -145,8 +147,9 @@ x-backup: &backup
 x-engine-environment: &engine-environment
   <<: *database
   PGN_ENGINE_PASSWORD: ${PGN_ENGINE_PASSWORD:?}
-  PGN_QUEUE_CONCURRENCY: "1"
+  PGN_QUEUE_CONCURRENCY: "2"
   PGN_RUNNER_TIMEOUT_S: "180"
+  PGN_LAYOUT_TIMEOUT_S: "3600"
   PGN_S3_ENDPOINT: ${PGN_S3_ENDPOINT:?}
   PGN_S3_REGION: ap-south-1
   PGN_S3_ACCESS_KEY_ID: ${PGN_ENGINE_S3_ACCESS_KEY_ID:?}
@@ -163,8 +166,8 @@ x-engine: &engine
   image: ${PGN_REGISTRY:?}/pageinator-engine-worker:${PGN_IMAGE_TAG:?}
   platform: linux/amd64
   environment: *engine-environment
-  mem_limit: 1g
-  stop_grace_period: 200s
+  mem_limit: 2g
+  stop_grace_period: 210s
   restart: unless-stopped
 
 x-caddy: &caddy

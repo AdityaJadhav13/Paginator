@@ -2,8 +2,17 @@
 
     python -B -m pgn_worker.run [--job FILE] < job.json        → one JSON result line on stdout
 
+engine.layout and engine.measure write progress lines first (L2.3), each flushed as it is written, the result line
+always last:
+    {"format": "pageinator.worker-progress/1", "job": id, "seq": 1, 2, …, "event": run.progress | run.page |
+     measure.status}
+For those two kinds SIGTERM is a cancel: the engine's process group is stopped (SIGTERM, SIGKILL after 5 s) and the
+result answered (run.finished `cancelled`, measure.status `stopped`); a stdout that closes meanwhile (EPIPE: the queue
+died) stops the engine and exits 74 with no more lines.
+
 Settings from the environment: `PGN_S3_*` (the store, pgn_worker/storage_s3.py) and `PGN_ICC_SHA256` (the colour
-profile the worker was given; `PAGEINATOR_ICC` names its file). Exit codes (sysexits):
+profile the worker was given; `PAGEINATOR_ICC` names its file); for the engine's kinds `PGN_ENGINE_PYTHON` (the engine
+environment's Python), `PGN_WORKER_HOMES` and `PGN_ENGINE_STALL_S` (pgn_worker/engine.py Settings). Exit codes (sysexits):
   0   done: the result holds the event (`media.ready`, or `media.rejected` for a photo the Desk refuses)
   65  failed: the job is wrong (its shape, a key, the checksum, a missing version): do not run it again
   70  failed: a fault in the worker (its type only)
@@ -12,7 +21,7 @@ profile the worker was given; `PAGEINATOR_ICC` names its file). Exit codes (syse
       run the job again later
   78  failed: the worker's own settings are missing or not valid, or its colour profile is not the one it was given
       (worker.config): an operator fixes the worker; the job is not run again as it is
-Nothing but the result line is written to stdout (UTF-8), and nothing to stderr: warnings and log records are
+Nothing but the progress lines and the result line is written to stdout (UTF-8), and nothing to stderr: warnings and log records are
 silenced (Pillow's decompression-bomb and damaged-EXIF warnings among them); no credential or endpoint is in either.
 A death by a signal (the kernel's out-of-memory killer) writes no line: the queue treats it as a retry."""
 from __future__ import annotations
@@ -22,17 +31,20 @@ import json
 import logging
 import os
 import re
+import signal
 import sys
+import threading
 import warnings
 from pathlib import Path
 from typing import Any, BinaryIO, Callable
 
-from . import jobs
+from . import jobs, launcher
 from .keys import KeyGuard
 from .storage import Storage
 from .storage_s3 import S3Settings, S3Storage, SettingsError
 
 MAX_JOB = 64 * 1024
+PROGRESS_FORMAT = "pageinator.worker-progress/1"
 EXIT = {"done": 0, "worker.job": 65, "worker.key": 65, "worker.checksum": 65, "worker.missing": 65,
         "worker.internal": 70, "worker.profile": 75, "worker.store": 75, "worker.memory": 75, "worker.config": 78}
 
@@ -88,13 +100,13 @@ def main(argv: list[str] | None = None, stdin: Any = None, stdout: BinaryIO | No
     quiet()
     stdout = sys.stdout.buffer if stdout is None else stdout
     try:
-        line = _answer(args, stdin, environ, setup)
-    except Exception:  # noqa: BLE001 — a fault outside every handler: the fixed line
-        line = LAST_RESORT
-    try:
+        try:
+            line = _answer(args, stdin, environ, setup, stdout)
+        except Exception:  # noqa: BLE001 — a fault outside every handler: the fixed line
+            line = LAST_RESORT
         stdout.write(line)
         stdout.flush()
-    except BrokenPipeError:                                  # the queue went away: no line, it runs the job again
+    except (BrokenPipeError, launcher.StdoutClosed):        # the queue went away: no line, it runs the job again
         if stdout is sys.stdout.buffer:                      # so the exit's own flush does not fail on stderr
             os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 74
@@ -102,8 +114,34 @@ def main(argv: list[str] | None = None, stdin: Any = None, stdout: BinaryIO | No
     return EXIT[out["error"]["code"]] if "error" in out else EXIT["done"]
 
 
+def progress_writer(job_id: str, stdout: BinaryIO) -> Callable[[dict], None]:
+    """Writes each event as a progress line (seq from 1), flushed at once; a closed stdout is StdoutClosed."""
+    seq = 0
+
+    def write(event: dict) -> None:
+        nonlocal seq
+        seq += 1
+        line = json.dumps({"format": PROGRESS_FORMAT, "job": job_id, "seq": seq, "event": event},
+                          ensure_ascii=False, sort_keys=True) + "\n"
+        try:
+            stdout.write(line.encode("utf-8"))
+            stdout.flush()
+        except (BrokenPipeError, ConnectionResetError, ValueError):     # ValueError: written to a closed file
+            raise launcher.StdoutClosed() from None
+    return write
+
+
+def _cancel_on_sigterm() -> threading.Event:
+    """SIGTERM sets the event the launcher watches (only in the main thread, where a handler can be set)."""
+    cancel = threading.Event()
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, lambda signum, frame: cancel.set())
+    return cancel
+
+
 def _answer(args: argparse.Namespace, stdin: Any, environ: dict[str, str] | None,
-            setup: Callable[[dict[str, str]], tuple[Callable[[KeyGuard], Storage], str]]) -> bytes:
+            setup: Callable[[dict[str, str]], tuple[Callable[[KeyGuard], Storage], str]],
+            stdout: BinaryIO | None = None) -> bytes:
     environ = dict(os.environ if environ is None else environ)
     job: Any = None
     try:
@@ -112,8 +150,12 @@ def _answer(args: argparse.Namespace, stdin: Any, environ: dict[str, str] | None
                 job = _job(_read(f))
         else:
             job = _job(_read(sys.stdin.buffer if stdin is None else stdin))
+        streaming = isinstance(job, dict) and job.get("kind") in jobs.STREAMING and isinstance(job.get("id"), str) \
+            and jobs.JOB_ID.fullmatch(job["id"]) is not None and stdout is not None
+        cancel = _cancel_on_sigterm() if streaming else None
         storage_for, icc = setup(environ)
-        out = jobs.run(job, storage_for, icc)
+        out = jobs.run(job, storage_for, icc, progress=progress_writer(job["id"], stdout) if streaming
+                       else (lambda event: None), cancel=cancel, environ=environ)
     except jobs.JobRefused as e:
         out = jobs.result(job, jobs.FAILED, code="worker.job", message=str(e))
     except OSError:

@@ -65,6 +65,17 @@ export type {
   NewsSourceInputDto,
   NewsTopicDto,
 } from "./news-service.ts";
+export type {
+  AdSlotDto,
+  DeskTextDto,
+  EditionLayoutDto,
+  EngineProfileDto,
+  EngineProfileListDto,
+  FileLinkDto,
+  LayoutPageDto,
+  LayoutRunDto,
+  LayoutService,
+} from "./layout-service.ts";
 export type { ServiceEnvironment } from "./environment.ts";
 export type { CommentDto, CommentPatchDto, CommentService } from "./comment-service.ts";
 export type {

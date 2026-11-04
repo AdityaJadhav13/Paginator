@@ -24,6 +24,7 @@ import type {
   EditionService,
   MediaService,
   NewsService,
+  LayoutService,
   NewsSettingsDto,
   CommentService,
   LiveEventDto,
@@ -40,6 +41,7 @@ import { createCanonicalSeed } from "./seed.ts";
 import { createMockStories, type MockImportOutcome, type MockStoryOperation } from "./create-mock-stories.ts";
 import { createMockLive, type MockLiveController } from "./create-mock-live.ts";
 import { createMockNews, type MockNewsOperation, type MockNewsOutcome } from "./create-mock-news.ts";
+import { createMockLayout, type MockLayoutController, type MockLayoutOperation } from "./create-mock-layout.ts";
 import { createMockAudit, type MockAuditOperation } from "./create-mock-audit.ts";
 import { createMockNotifications, type MockNotificationOperation, type MockOrgStanding } from "./create-mock-notifications.ts";
 import {
@@ -63,6 +65,7 @@ export type MockSessionPreset =
   | "sahyadri-subeditor"
   | "sahyadri-reporter"
   | "sahyadri-photo-editor"
+  | "sahyadri-advertising"
   | "sahyadri-chief-editor"
   | "signed-out";
 
@@ -92,6 +95,7 @@ export type MockAuthOperation =
   | "team.cancelInvitation"
   | MockStoryOperation
   | MockNewsOperation
+  | MockLayoutOperation
   | MockNotificationOperation
   | MockAuditOperation;
 
@@ -160,6 +164,8 @@ export interface MockSessionController {
   finishNews(draftId: string, outcome?: MockNewsOutcome): void;
   /** The news finder's AI state, as the last run found it. */
   setNewsAi(state: NewsSettingsDto["ai"]["state"]): void;
+  /** The layout engine's side (L2.3): runs moved on and finished, ads fitted, profiles set up. */
+  readonly layout: MockLayoutController;
   readonly fixtures: MockSessionFixtures;
 }
 
@@ -173,6 +179,7 @@ export interface MockSessionEnvironment {
   readonly editions: EditionService;
   readonly media: MediaService;
   readonly news: NewsService;
+  readonly layout: LayoutService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
   readonly live: LiveService;
@@ -196,6 +203,7 @@ const PRESETS: readonly MockSessionPreset[] = [
   "sahyadri-subeditor",
   "sahyadri-reporter",
   "sahyadri-photo-editor",
+  "sahyadri-advertising",
   "sahyadri-chief-editor",
   "signed-out",
 ];
@@ -992,6 +1000,22 @@ export function createMockSessionEnvironment(
     newsPhoto: (input) => storyDouble.newsPhoto(input),
   });
 
+  const layoutDouble = createMockLayout({
+    person: storyDeps.person,
+    standing: storyDeps.standing,
+    signedOut: () => signedOutAnswer(),
+    gate: (operation) => gate(operation),
+    emit: (orgId, event) => emitLive(orgId, event),
+    edition: (orgId, pubId, editionId) => storyDouble.editionOf(orgId, pubId, editionId),
+    stories: (orgId, pubId, editionId) =>
+      storyDouble
+        .all()
+        .filter((story) => story.orgId === orgId && story.publicationId === pubId && story.edition?.id === editionId)
+        .map((story) => ({ ...story, photo: story.photo ? { status: story.photo.status } : null })),
+    assetReady: (orgId, pubId, assetId) => storyDouble.assetReady(orgId, pubId, assetId),
+    upload: (orgId, pubId, uploadId) => storyDouble.uploadOf(orgId, pubId, uploadId),
+  });
+
   const sessionController: MockSessionController = {
     setPreset,
     getPreset: () => preset,
@@ -1019,6 +1043,7 @@ export function createMockSessionEnvironment(
       problems = new Map();
       storyDouble.reset();
       newsDouble.reset();
+      layoutDouble.reset();
       notificationDouble.reset();
       liveDouble.reset();
       acting = 0;
@@ -1047,6 +1072,7 @@ export function createMockSessionEnvironment(
     finishImport: (importId, outcome) => storyDouble.finishImport(importId, outcome),
     finishNews: (draftId, outcome) => newsDouble.finish(draftId, outcome),
     setNewsAi: (state) => newsDouble.setAi(state),
+    layout: layoutDouble.controller,
     async actAs(other, run) {
       const was = { preset, signedInUserId, sessionTwoStep };
       preset = other;
@@ -1098,6 +1124,7 @@ export function createMockSessionEnvironment(
     editions: storyDouble.editions,
     media: storyDouble.media,
     news: newsDouble.news,
+    layout: layoutDouble.layout,
     comments: storyDouble.comments,
     notifications: notificationDouble.notifications,
     live: liveDouble.live,

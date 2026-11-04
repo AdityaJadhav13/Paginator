@@ -5,6 +5,8 @@
 //   - a notification: to its own person only, in its own organisation;
 //   - a Word import settled: to its importer only, in its own organisation, while they still reach its publication;
 //   - an edition: to people of its organisation who may view its publication's editions (edition.view);
+//   - an edition's layout (a run, a page, an ad slot, its measuring): to those who may view its pages (pages.view);
+//     an engine profile: to those who may view the publication's settings (settings.view);
 //   - a story, or a comment on one: to people of its organisation who reach its publication and see the story; a
 //     comment also needs comment.read. A Reporter sees their own stories only: the hint's people (the story's reporter
 //     and assignees, before and after) only narrow who is asked, and the story is then read under the Reporter's own
@@ -39,6 +41,8 @@ export const AppEvent = z.discriminatedUnion("type", [
   z.strictObject({ v: z.literal(1), type: z.literal("notification"), org: Id, user: Id, notification: Id }),
   z.strictObject({ v: z.literal(1), type: z.literal("edition"), org: Id, pub: Id, edition: Id }),
   z.strictObject({ v: z.literal(1), type: z.literal("import"), org: Id, pub: Id, import: Id, user: Id }),
+  z.strictObject({ v: z.literal(1), type: z.literal("layout"), org: Id, pub: Id, edition: Id, run: Id.nullable() }),
+  z.strictObject({ v: z.literal(1), type: z.literal("profile"), org: Id, pub: Id, profile: Id }),
 ]);
 export type AppEvent = z.infer<typeof AppEvent>;
 
@@ -63,6 +67,15 @@ export function messageFor(listener: Listener, event: AppEvent): Message | null 
   if (event.type === "import") {
     if (event.user !== listener.userId) return null;
     return { event: "import", data: { publicationId: event.pub, importId: event.import } };
+  }
+  if (event.type === "layout" || event.type === "profile") {
+    const here = access.publications.get(event.pub) ?? { roles: [], grants: [] };
+    if (event.type === "layout") {
+      if (reach("pages.view", access.orgRole, here) === null) return null;
+      return { event: "layout", data: { publicationId: event.pub, editionId: event.edition, runId: event.run } };
+    }
+    if (reach("settings.view", access.orgRole, here) === null) return null;
+    return { event: "profile", data: { publicationId: event.pub, profileId: event.profile } };
   }
   if (event.type === "edition") {
     const here = access.publications.get(event.pub) ?? { roles: [], grants: [] };

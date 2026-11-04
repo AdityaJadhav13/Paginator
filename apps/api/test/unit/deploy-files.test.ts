@@ -75,6 +75,11 @@ describe("the pilot's deployment files", () => {
       ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/assets/*/r/*"],
       // a Word import's result file only, never its original (imports/<id>/original)
       ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/imports/*/result-*.json"],
+      // L2.3: an engine profile's config, and a run's own files; never its request (runs/<id>/request.json)
+      ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/profiles/*/config.json"],
+      ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/runs/*/pages/*"],
+      ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/runs/*/edition.pdf"],
+      ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/runs/*/press-files.zip"],
     ]);
   });
 });

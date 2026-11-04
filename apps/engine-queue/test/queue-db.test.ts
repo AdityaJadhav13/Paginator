@@ -22,11 +22,14 @@ import {
   installQueueSchema,
   MAX_ATTEMPTS,
   QUEUE_SCHEMA,
+  refreshLock,
   runnerEnv,
   startQueue,
   type Report,
   type RunnerSettings,
 } from "../src/index.ts";
+import { doneResult, finished, PAYLOADS, RUN } from "./engine-fixtures.ts";
+import type { JobHelpers } from "graphile-worker";
 
 const ADMIN = process.env["PGN_QUEUE_DB_URL"];
 const WORKER = fileURLToPath(new URL("../../engine-worker/", import.meta.url));
@@ -429,4 +432,92 @@ describe.runIf(ADMIN)("the queue on a database and a store of its own", () => {
     ]);
     await owner.query("delete from queue._private_jobs");
   });
+
+  it("keeps a running layout's lock fresh, and stops it on a user's cancel (engine_cancel), reporting its answer", async () => {
+    const utils = await makeWorkerUtils({ connectionString: url.href, schema: QUEUE_SCHEMA });
+    const job = await utils.addJob("engine.layout", PAYLOADS["engine.layout"], {
+      queueName: "engine-cpu",
+      jobKey: `run:${RUN}`,
+      maxAttempts: 1,
+    });
+    await utils.release();
+    // the launcher's part: on SIGTERM it answers run.finished cancelled
+    const answer = JSON.stringify(doneResult(finished("cancelled")));
+    const script =
+      "let job='';process.stdin.on('data',c=>job+=c);process.stdin.on('end',()=>{const j=JSON.parse(job);" +
+      `process.on('SIGTERM',()=>process.stdout.write(JSON.stringify({...${answer},job:j.id})+'\\n',()=>process.exit(0)));` +
+      "setInterval(()=>{},1000);});";
+    const { reported, report } = collect();
+    const runner = await queue(
+      {
+        command: process.execPath,
+        args: ["-e", script],
+        health: ["-e", ""],
+        cwd: WORKER,
+        env: {},
+        timeoutMs: 2_000,
+        limitsMs: { "engine.layout": 60_000 },
+      },
+      report,
+    );
+    try {
+      await until(async () => (await jobs())[0]?.locked_by != null);
+      const locks = async () =>
+        (
+          await owner.query<{ job: Date; queue: Date; locked_by: string; job_queue_id: number }>(
+            `select j.locked_at as job, q.locked_at as queue, j.locked_by, j.job_queue_id
+             from queue._private_jobs j join queue._private_job_queues q on q.id = j.job_queue_id where j.id = $1`,
+            [job.id],
+          )
+        ).rows[0];
+      const held = await locks();
+      expect(held?.queue).not.toBeNull(); // the named queue is locked with the job
+      await owner.query("update queue._private_jobs set locked_at = now() - interval '10 minutes' where id = $1", [
+        job.id,
+      ]);
+      await owner.query("update queue._private_job_queues set locked_at = now() - interval '10 minutes'");
+      // the refresh, as the engine role under ENGINE_GRANTS: another holder's lock is left alone, its own refreshed
+      const engine = new pg.Client({ connectionString: engineUrl });
+      await engine.connect();
+      try {
+        const as = (lockedBy: string) =>
+          ({
+            job: {
+              id: job.id,
+              locked_by: lockedBy,
+              job_queue_id: held?.job_queue_id,
+              task_identifier: "engine.layout",
+            },
+            withPgClient: (fn: (c: pg.Client) => unknown) => fn(engine),
+            logger: { warn: (m: string) => expect.fail(m) },
+          }) as unknown as JobHelpers;
+        const age = async () => {
+          const l = await locks();
+          return [Date.now() - (l?.job.getTime() ?? 0), Date.now() - (l?.queue.getTime() ?? 0)].map(
+            (ms) => ms < 60_000,
+          );
+        };
+        await refreshLock(as("another-pool"));
+        expect(await age()).toEqual([false, false]);
+        await refreshLock(as(held?.locked_by ?? ""));
+        expect(await age()).toEqual([true, true]);
+      } finally {
+        await engine.end();
+      }
+      // a user's cancel: the API's app.cancel_engine_job NOTIFYs the job's key (again until heard: the listener may
+      // still be connecting)
+      await until(async () => {
+        await owner.query("select pg_notify('engine_cancel', $1)", [`run:${RUN}`]);
+        return reported.length > 0;
+      });
+      expect(reported.map(([e, j]) => [e.kind, e.kind === "run.finished" && e.state, j])).toEqual([
+        ["run.finished", "cancelled", job.id],
+      ]);
+      await until(async () => (await jobs()).length === 0); // finished, not failed: never run again
+    } finally {
+      await runner.stop();
+      await runner.promise;
+      await owner.query("delete from queue._private_jobs");
+    }
+  }, 60_000);
 });

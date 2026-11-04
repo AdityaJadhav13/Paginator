@@ -40,6 +40,7 @@ const PUBLICATION_ENTRIES: readonly Rule[] = [
   { label: "nav.templates", permission: "templates.view", built: false, to: (o, p) => paths.pubTemplates(o, p) },
   { label: "nav.newsroom", permission: "story.view", built: false, to: (o, p) => paths.pubNewsroom(o, p) },
   { label: "nav.sources", permission: "story.assign", built: true, to: (o, p) => paths.pubSources(o, p) },
+  { label: "nav.engineProfile", permission: "settings.view", built: true, to: (o, p) => paths.pubEngineProfile(o, p) },
   { label: "glossary.archive", permission: "archive.view", built: false, to: (o, p) => paths.pubArchive(o, p) },
   { label: "nav.brand", permission: "brand.edit", built: false, to: (o, p) => paths.pubBrand(o, p) },
   { label: "nav.printProfiles", permission: "print_profiles.view", built: false, to: (o, p) => paths.pubPrintProfiles(o, p) },

@@ -1,6 +1,7 @@
 // Photo uploads (docs/product/10-l2-newsroom-plan.md §5.2, §6.2): the browser uploads straight to the object store
 // with a presigned POST, then asks the API to complete it.
-//   - Presign: JPEG, PNG or WebP, at most 40 MiB; 60 uploads an hour per person and 2 GB a day per organisation,
+//   - Presign: JPEG, PNG or WebP, at most 40 MiB (a Word file, purpose docx: 10 MiB; a dataset bundle, purpose
+//     engine_dataset: a ZIP of at most 4 GiB, settings.edit, not charged to the daily quota); 60 uploads an hour per person and 2 GB a day per organisation,
 //     both counted under the organisation's quota row lock, so requests at once cannot pass the limits together. The
 //     quota is charged the declared size, and the POST policy (valid 15 minutes) takes exactly that many bytes, for
 //     exactly the upload's key (uploads/orgs/<org>/pubs/<pub>/<upload>, the database's), its Content-Type and its
@@ -18,6 +19,7 @@ import { createHash } from "node:crypto";
 import {
   Asset,
   CompletedUpload,
+  MAX_DATASET_BYTES,
   MAX_DOCX_BYTES,
   MAX_PICTURE_BYTES,
   PresignedUpload,
@@ -118,6 +120,18 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
         if (reach("story.create", access.orgRole, access.publications.get(pub) ?? { roles: [], grants: [] }) === null)
           throw refused("a Word file is imported as stories: story.create");
         if (input.bytes > MAX_DOCX_BYTES) throw docxRefused("body.bytes", "This Word file is larger than 10 MB.");
+      } else if (input.purpose === "engine_dataset") {
+        // an engine profile's dataset bundle (POST …/engine-profiles): settings.edit, at most 4 GiB
+        if (reach("settings.edit", access.orgRole, access.publications.get(pub) ?? { roles: [], grants: [] }) === null)
+          throw refused("a dataset bundle is an engine profile's: settings.edit");
+        if (input.bytes > MAX_DATASET_BYTES) {
+          throw new ApiError("file_too_large", [
+            {
+              field: "body.bytes",
+              message: "A dataset bundle is at most 4 GB: leave out what the engine does not read.",
+            },
+          ]);
+        }
       } else if (input.bytes > MAX_PICTURE_BYTES) throw new ApiError("file_too_large");
       const answer = await idempotent(
         database,
@@ -126,7 +140,9 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
         async (tx) => {
           // the quota row's lock first: the hour's count then sees every upload committed before it (a refusal rolls
           // the quota back with the rest)
-          if ((await addToQuota(tx, access.tenant.orgId, input.bytes)) > ORG_BYTES_PER_DAY) {
+          // a dataset bundle (settings.edit only, a few a year) is larger than a day's quota, and is not charged to it
+          const charged = input.purpose === "engine_dataset" ? 0 : input.bytes;
+          if ((await addToQuota(tx, access.tenant.orgId, charged)) > ORG_BYTES_PER_DAY) {
             throw new ApiError("slow_down");
           }
           if ((await uploadsLastHour(tx, access.tenant.userId)) >= UPLOADS_PER_HOUR) throw new ApiError("slow_down");
@@ -181,7 +197,8 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
       // someone else's upload is not theirs to complete: the same answer as none at all
       if (!upload || upload.user_id !== userId) throw new ApiError("not_found");
       // a Word file is completed by its import (POST …/imports/docx), never as a picture
-      if (upload.purpose === "docx") throw new ApiError("not_a_picture");
+      // and a dataset bundle by its engine profile (POST …/engine-profiles)
+      if (upload.purpose === "docx" || upload.purpose === "engine_dataset") throw new ApiError("not_a_picture");
       if (upload.status === "completed" && upload.asset_id) {
         const assetId = upload.asset_id;
         const asset = await database.withTenant(access.tenant, (tx) => findAsset(tx, pub, assetId));

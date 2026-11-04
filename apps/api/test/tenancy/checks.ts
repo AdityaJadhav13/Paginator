@@ -55,6 +55,14 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   news_item: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   news_draft_job: ["INSERT", "SELECT", "UPDATE"],
   ai_usage: ["INSERT", "SELECT"],
+  // hosted layout (migration 2026_12_02_0001): profiles and runs only change state, pages are rewritten while their
+  // run goes on, a check's verdict is never changed, and an ad slot's artwork is replaced and removed
+  engine_profile: ["INSERT", "SELECT", "UPDATE"],
+  layout_run: ["INSERT", "SELECT", "UPDATE"],
+  run_page: ["INSERT", "SELECT", "UPDATE"],
+  edition_measure: ["INSERT", "SELECT", "UPDATE"],
+  pdf_check: ["INSERT", "SELECT"],
+  ad_slot_artwork: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   // notifications (migration 2026_11_24_0001): never deleted; only read_at and emailed_at change (COLUMN_RIGHTS)
   notification: ["INSERT", "SELECT"],
   publication_grant: ["DELETE", "INSERT", "SELECT", "UPDATE"],
@@ -96,6 +104,11 @@ export const DEFINERS = [
   "app.enqueue_docx_import",
   "app.enqueue_news_collect",
   "app.enqueue_news_draft",
+  "app.enqueue_engine_setup",
+  "app.enqueue_engine_measure",
+  "app.enqueue_engine_layout",
+  "app.enqueue_media_ad",
+  "app.cancel_engine_job",
 ];
 
 /** The column-level grants allowed, as `schema.table role RIGHT (columns)`: any other is a problem. */

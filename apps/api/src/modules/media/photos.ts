@@ -20,7 +20,7 @@ import type { Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 import { type Access, accessOf, actorOf, auditRefusals, refused } from "../access/access.ts";
 import { forChange, view } from "../stories/routes.ts";
-import { canAttachPhoto, mediaScope } from "../stories/rules.ts";
+import { canAttachPhoto, mediaScope, picksAds } from "../stories/rules.ts";
 import { cleaned } from "../stories/store.ts";
 import { EXTENSION } from "./picture.ts";
 import type { MediaOptions } from "./uploads.ts";
@@ -133,15 +133,23 @@ export const photoRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { da
 
   app.get(
     "/api/v1/orgs/:o/pubs/:p/assets/:a/file",
-    { config: { permission: "media.view" }, schema: { params: OneAsset, querystring: FileQuery } },
+    // media.view, or picksAds (a ready picture's preview only): one route permission, so pages.view and the rule below
+    { config: { permission: "pages.view" }, schema: { params: OneAsset, querystring: FileQuery } },
     async (request, reply) => {
       const access = accessOf(request);
       const userId = actorOf(request).userId;
       const { p, a } = request.params;
       const preview = request.query.variant === "preview";
+      const adsOnly = mediaScope(access, p) === "none" && picksAds(access, p);
+      if (mediaScope(access, p) === "none" && !(adsOnly && preview)) {
+        throw refused("the media library needs media.view");
+      }
       const { asset, rendition } = await database.withTenant(access.tenant, async (tx) => {
         const found = UUID.test(a) ? await findAsset(tx, p, a) : undefined;
-        if (!found || !(await maySee(tx, access, p, found, userId))) return { asset: undefined, rendition: undefined };
+        const may = adsOnly
+          ? found?.status === "ready"
+          : found !== undefined && (await maySee(tx, access, p, found, userId));
+        if (!found || !may) return { asset: undefined, rendition: undefined };
         return { asset: found, rendition: preview ? await renditionOf(tx, p, found.id, "preview") : undefined };
       });
       // version_id is set in the transaction that makes the asset: an asset without one has no file to give

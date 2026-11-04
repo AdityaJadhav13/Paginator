@@ -8,7 +8,10 @@ import re
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", re.ASCII)
 # an organisation's id is Better Auth's (gen_random_uuid(), version 4): any RFC 9562 version, lowercase
 ORG_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", re.ASCII)
-CMYK_RASTER = re.compile(r"assets/(?P<asset>[^/]+)/r/cmyk-[0-9a-f]{32}\.cmyk\.gz", re.ASCII)
+MM = r"(?:[1-9][0-9]{0,3}|0)(?:\.[0-9]{1,2})?"                           # a millimetre size as job text (media.ad)
+# a photo's CMYK rendition, or an ad's (media.ad: fitted into its slot, the slot's size in its name)
+CMYK_RASTER = re.compile(rf"assets/(?P<asset>[^/]+)/r/(?:cmyk-[0-9a-f]{{32}}|ad-cmyk-[0-9a-f]{{32}}-{MM}x{MM}mm)\.cmyk\.gz",
+                         re.ASCII)
 SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", re.ASCII)      # one part of a key: no "/", "..", spaces or controls
 
 
@@ -51,7 +54,8 @@ class KeyGuard:
 
     def cmyk_raster(self, key: object) -> str:
         """A key the engine may read a placed picture from: only a CMYK rendition, `assets/<uuid7>/r/cmyk-<32 hex>.cmyk.gz`
-        (never an upload, an original or another rendition)."""
+        or an ad's, `assets/<uuid7>/r/ad-cmyk-<32 hex>-<w>x<h>mm.cmyk.gz` (never an upload, an original or another
+        rendition)."""
         rest = self.check(key)[len(self.prefix):]
         m = CMYK_RASTER.fullmatch(rest)
         if not m or not UUID.fullmatch(m.group("asset")):
@@ -61,3 +65,35 @@ class KeyGuard:
     def rendition(self, asset_id: str, purpose: str, params_hash: str, ext: str) -> str:
         """`assets/<asset>/r/<purpose>-<params_hash>.<ext>` (plan §6.1)."""
         return self.key("assets", uuid(asset_id, "asset_id"), "r", f"{purpose}-{params_hash}.{ext}")
+
+    # L2.3: the engine's keys, each made from ids (and fixed names), never taken from a job's text
+
+    def profile_dataset(self, profile_id: object) -> str:
+        """The dataset bundle the API copied out of quarantine (engine.setup reads it)."""
+        return self.key("profiles", uuid(profile_id, "profile_id"), "dataset.zip")
+
+    def profile_config(self, profile_id: object) -> str:
+        """The config the setup wrote (its local dataset path taken out)."""
+        return self.key("profiles", uuid(profile_id, "profile_id"), "config.json")
+
+    def edition_measure(self, edition_id: object) -> str:
+        """The snapshot a measure works on (the API writes it)."""
+        return self.key("editions", uuid(edition_id, "edition_id"), "measure.json")
+
+    def run_request(self, run_id: object) -> str:
+        """A run's frozen request (the API writes it; the worker never does)."""
+        return self.key("runs", uuid(run_id, "run_id"), "request.json")
+
+    def run_file(self, run_id: object, name: str, page: int | None = None) -> str:
+        """A run's output: `runs/<run>/edition.pdf`, `press-files.zip`, or a page's `runs/<run>/pages/NN/<name>`."""
+        if name not in (RUN_FILES if page is None else PAGE_FILES):
+            raise KeyRefused("not a file a run writes")
+        if page is None:
+            return self.key("runs", uuid(run_id, "run_id"), name)
+        if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= 16:
+            raise KeyRefused("not a page of a run")
+        return self.key("runs", uuid(run_id, "run_id"), "pages", f"{page:02d}", name)
+
+
+RUN_FILES = ("edition.pdf", "press-files.zip")
+PAGE_FILES = ("page.pdf", "preview.png", "thumb.png", "pdfx-check.txt")

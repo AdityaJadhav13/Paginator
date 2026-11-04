@@ -6,7 +6,13 @@
 # - the worker's lock installed with every hash checked, wheels only, into a venv that then holds the lock and
 #   nothing else (its own pip and setuptools are removed once the lock is in);
 # - the repository's own code and its 22 OFL stand-in fonts (with their licences), at the repository's paths: no
-#   private file (the colour profile is mounted at run time, never built in; the dataset arrives with L2.3);
+#   private file (the colour profile is mounted at run time, never built in; a paper's dataset is fetched by
+#   engine.setup at run time, into the homes volume);
+# - the engine's own environment (L2.3): the frozen oracle's lock (tools/oracle/v0/requirements.lock) with every hash
+#   checked, as CI installs it, in a venv of its own at /opt/pageinator/engine-venv (PGN_ENGINE_PYTHON), and the
+#   frozen code the engine imports at the repository's paths: tools/oracle/v0 and the experiments/phase0 folders
+#   gen1, page1, compose1–3, head1, pdfx1 (the independent checker among them), typeset_harness and results/page1
+#   (house_profile.json), byte for byte (never published1: the private dataset's extraction tools);
 # - a user that is not root; run with a read-only root (`--read-only`), the homes on a volume and /tmp on a tmpfs:
 #   docker run --read-only --tmpfs /tmp -v pgn-homes:/var/lib/pageinator/homes \
 #     -v /path/to/newsprint.icc:/run/pageinator/newsprint.icc:ro -e PGN_ICC_SHA256=… pageinator-engine-worker
@@ -15,7 +21,6 @@
 #   /opt/pageinator/node_modules; its own code and packages/contracts at the repository's paths (Node runs the
 #   TypeScript as it is). The container runs the queue's process (src/main.ts: as pgn_engine, reporting to the API's
 #   inbox, app.engine_event); its health check is the worker's own (pgn_worker.health).
-# The engine's own environment (the frozen oracle lock) comes with L2.3.
 
 # the queue's packages: the lock's, for apps/engine-queue only, production only, hoisted (pnpm deploy). The copy of
 # packages/contracts it makes becomes a link to the repository's path, where Node strips its types (never in node_modules).
@@ -45,7 +50,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH=/opt/pageinator/venv/bin:$PATH \
     PYTHONPATH=/opt/pageinator/apps/engine-worker \
     PGN_WORKER_HOMES=/var/lib/pageinator/homes \
-    PAGEINATOR_ICC=/run/pageinator/newsprint.icc
+    PAGEINATOR_ICC=/run/pageinator/newsprint.icc \
+    PGN_ENGINE_PYTHON=/opt/pageinator/engine-venv/bin/python \
+    PGN_ENGINE_STALL_S=600
 
 # the io environment: the worker's lock, wheels only, every hash checked, checked whole; then the venv's own pip and
 # setuptools are removed, so the venv holds exactly the lock's packages (pip 24.0's --python cannot install into a
@@ -56,6 +63,14 @@ RUN python -m venv /opt/pageinator/venv \
       -r /opt/pageinator/apps/engine-worker/requirements.lock \
  && /opt/pageinator/venv/bin/python -m pip check \
  && /opt/pageinator/venv/bin/python -m pip uninstall --yes pip setuptools
+
+# the engine environment (L2.3): the frozen oracle's lock, every hash checked, wheels only, then its pip removed too
+COPY tools/oracle/v0/requirements.lock /opt/pageinator/tools/oracle/v0/requirements.lock
+RUN python -m venv /opt/pageinator/engine-venv \
+ && /opt/pageinator/engine-venv/bin/python -m pip install --require-hashes --only-binary=:all: --no-deps \
+      -r /opt/pageinator/tools/oracle/v0/requirements.lock \
+ && /opt/pageinator/engine-venv/bin/python -m pip check \
+ && /opt/pageinator/engine-venv/bin/python -m pip uninstall --yes pip setuptools
 
 # Node and the queue's packages (above), then the repository's code the worker runs, at its paths (pgn_worker finds the
 # Desk through them; the queue finds @pageinator/contracts through node_modules' link to packages/contracts)
@@ -68,9 +83,17 @@ COPY packages/contracts/src /opt/pageinator/packages/contracts/src
 COPY tools/desk/deskserver /opt/pageinator/tools/desk/deskserver
 COPY tools/desk/engine /opt/pageinator/tools/desk/engine
 COPY apps/engine-worker/pgn_worker /opt/pageinator/apps/engine-worker/pgn_worker
-# the OFL stand-in fonts and their licences (the engine's, from L2.3), nothing else of those folders
-COPY experiments/phase0/compose2/fonts /opt/pageinator/experiments/phase0/compose2/fonts
-COPY tools/oracle/v0/assets/fonts /opt/pageinator/tools/oracle/v0/assets/fonts
+# the frozen code the engine imports (its OFL stand-in fonts and their licences among it), at the repository's paths
+COPY tools/oracle/v0 /opt/pageinator/tools/oracle/v0
+COPY experiments/phase0/compose1 /opt/pageinator/experiments/phase0/compose1
+COPY experiments/phase0/compose2 /opt/pageinator/experiments/phase0/compose2
+COPY experiments/phase0/compose3 /opt/pageinator/experiments/phase0/compose3
+COPY experiments/phase0/gen1 /opt/pageinator/experiments/phase0/gen1
+COPY experiments/phase0/head1 /opt/pageinator/experiments/phase0/head1
+COPY experiments/phase0/page1 /opt/pageinator/experiments/phase0/page1
+COPY experiments/phase0/pdfx1 /opt/pageinator/experiments/phase0/pdfx1
+COPY experiments/phase0/typeset_harness /opt/pageinator/experiments/phase0/typeset_harness
+COPY experiments/phase0/results/page1 /opt/pageinator/experiments/phase0/results/page1
 
 RUN groupadd --system --gid 10001 pgn \
  && useradd --system --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin pgn \
@@ -92,6 +115,7 @@ COPY --chown=10001:10001 packages/contracts/test/fixtures /opt/pageinator/packag
 # the Desk's fictional .docx builders (test_docx_import.py uses them)
 COPY --chown=10001:10001 tools/desk/test/test_docx.py /opt/pageinator/tools/desk/test/test_docx.py
 RUN python -B -m unittest discover -s /opt/pageinator/apps/engine-worker/test \
+ && /opt/pageinator/engine-venv/bin/python -B -c 'import sys; sys.path.insert(0, "/opt/pageinator/tools/desk/engine"); import desk_engine' \
  && node --version | grep -qx v24.22.0 \
  && ! find /opt/pageinator/node_modules -name typescript -o -name '@typescript' | grep -q . \
  && node -e 'import("/opt/pageinator/apps/engine-queue/src/index.ts").then((q) => { if (typeof q.startQueue !== "function") process.exit(1); })'
