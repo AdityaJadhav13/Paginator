@@ -26,6 +26,7 @@ import type {
   NewsService,
   LayoutService,
   EditorService,
+  ReleaseService,
   NewsSettingsDto,
   CommentService,
   LiveEventDto,
@@ -44,6 +45,7 @@ import { createMockLive, type MockLiveController } from "./create-mock-live.ts";
 import { createMockNews, type MockNewsOperation, type MockNewsOutcome } from "./create-mock-news.ts";
 import { createMockLayout, type MockLayoutController, type MockLayoutOperation } from "./create-mock-layout.ts";
 import { createMockEditor } from "./create-mock-editor.ts";
+import { createMockRelease } from "./create-mock-release.ts";
 import { createMockAudit, type MockAuditOperation } from "./create-mock-audit.ts";
 import { createMockNotifications, type MockNotificationOperation, type MockOrgStanding } from "./create-mock-notifications.ts";
 import {
@@ -183,6 +185,7 @@ export interface MockSessionEnvironment {
   readonly news: NewsService;
   readonly layout: LayoutService;
   readonly editor: EditorService;
+  readonly release: ReleaseService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
   readonly live: LiveService;
@@ -1003,7 +1006,6 @@ export function createMockSessionEnvironment(
     newsPhoto: (input) => storyDouble.newsPhoto(input),
   });
 
-  const editorDouble = createMockEditor();
   const layoutDouble = createMockLayout({
     person: storyDeps.person,
     standing: storyDeps.standing,
@@ -1019,6 +1021,9 @@ export function createMockSessionEnvironment(
     assetReady: (orgId, pubId, assetId) => storyDouble.assetReady(orgId, pubId, assetId),
     upload: (orgId, pubId, uploadId) => storyDouble.uploadOf(orgId, pubId, uploadId),
   });
+
+  const releaseDouble = createMockRelease({ layout: layoutDouble.layout, person: storyDeps.person });
+  const editorDouble = createMockEditor((runId, page) => releaseDouble.approvalOf(runId, page));
 
   const sessionController: MockSessionController = {
     setPreset,
@@ -1049,6 +1054,7 @@ export function createMockSessionEnvironment(
       newsDouble.reset();
       layoutDouble.reset();
       editorDouble.reset();
+      releaseDouble.reset();
       notificationDouble.reset();
       liveDouble.reset();
       acting = 0;
@@ -1131,6 +1137,7 @@ export function createMockSessionEnvironment(
     news: newsDouble.news,
     layout: layoutDouble.layout,
     editor: editorDouble.editor,
+    release: releaseDouble.release,
     comments: storyDouble.comments,
     notifications: notificationDouble.notifications,
     live: liveDouble.live,

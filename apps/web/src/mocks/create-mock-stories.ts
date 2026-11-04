@@ -85,6 +85,7 @@ export type MockStoryOperation =
   | "comments.update"
   | "editions.list"
   | "editions.create"
+  | "editions.update"
   | "editions.deskBundle";
 
 /** The person's standing on a publication, as the API's access check finds it. */
@@ -192,7 +193,7 @@ const invalid = (field: string, message: string): Answer => ({
   details: [{ field, message }],
 });
 
-const RIGHTS_NEEDED = "This photo needs permission. Tick \"We have the right to print this\" first.";
+const RIGHTS_NEEDED = 'This photo needs permission. Tick "We have the right to print this" first.';
 export const MOCK_RIGHTS_NEEDED = RIGHTS_NEEDED;
 const KEY_REUSED = answer(422, "idempotency_key_reused", "This key was already used with a different request.");
 
@@ -210,8 +211,8 @@ export function cleanText(value: string | undefined): string {
     .trim();
 }
 
-const success = <T,>(value: T): ServiceResult<T, ApiProblem> => ({ ok: true, value });
-const failure = <T,>(problem: ApiProblem): ServiceResult<T, ApiProblem> => ({ ok: false, error: { ...problem } });
+const success = <T>(value: T): ServiceResult<T, ApiProblem> => ({ ok: true, value });
+const failure = <T>(problem: ApiProblem): ServiceResult<T, ApiProblem> => ({ ok: false, error: { ...problem } });
 
 const SAHYADRI = "org-demo-sahyadri";
 const PUNE = "pub-demo-pune-daily";
@@ -351,7 +352,9 @@ interface MockAsset {
 }
 
 /** A fixture picture: the fictional PNG, with its facts. */
-function fixtureAsset(fields: Partial<MockAsset> & Pick<MockAsset, "id" | "uploadedBy" | "createdAt">): [string, MockAsset] {
+function fixtureAsset(
+  fields: Partial<MockAsset> & Pick<MockAsset, "id" | "uploadedBy" | "createdAt">,
+): [string, MockAsset] {
   return [
     fields.id,
     {
@@ -389,9 +392,16 @@ interface MockUpload {
 }
 
 /** A one-pixel-ish PNG's first bytes, enough for the double to tell its type (a fictional picture). */
-const FIXTURE_PICTURE = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 6, 64, 0, 0, 4, 176])], {
-  type: "image/png",
-});
+const FIXTURE_PICTURE = new Blob(
+  [
+    new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 6, 64, 0, 0, 4, 176,
+    ]),
+  ],
+  {
+    type: "image/png",
+  },
+);
 
 const MAX_BYTES = 41_943_040;
 /** the contracts' MAX_DATASET_BYTES (4 GiB) */
@@ -462,7 +472,12 @@ export interface MockNewsPhoto {
   readonly caption: string;
   readonly credit: string;
   readonly photographer: string;
-  readonly licence: { readonly name: string; readonly url: string | null; readonly sourceUrl: string; readonly label: "safe" | "needs_permission" };
+  readonly licence: {
+    readonly name: string;
+    readonly url: string | null;
+    readonly sourceUrl: string;
+    readonly label: "safe" | "needs_permission";
+  };
   readonly rightsConfirmed: boolean;
 }
 
@@ -488,7 +503,11 @@ export function createMockStories(deps: MockStoryDeps): {
   /** For the layout double (create-mock-layout.ts): an edition, whether a picture is ready, an upload. */
   editionOf(orgId: string, pubId: string, editionId: string): EditionRow | undefined;
   assetReady(orgId: string, pubId: string, assetId: string): boolean | undefined;
-  uploadOf(orgId: string, pubId: string, uploadId: string): { readonly contentType: string; readonly bytes: number } | undefined;
+  uploadOf(
+    orgId: string,
+    pubId: string,
+    uploadId: string,
+  ): { readonly contentType: string; readonly bytes: number } | undefined;
 } {
   let rows = fixtures();
   let editionRows = editionFixtures();
@@ -632,9 +651,16 @@ export function createMockStories(deps: MockStoryDeps): {
     (comment.author.id === userId || isDesk(s) || theirs(story, userId));
 
   /** Who among these, other than the one acting, is a member who sees the story (and may read its comments). */
-  function audience(story: Row, candidates: readonly (string | null | undefined)[], actorId: string, comments = false): string[] {
+  function audience(
+    story: Row,
+    candidates: readonly (string | null | undefined)[],
+    actorId: string,
+    comments = false,
+  ): string[] {
     const members = new Set(deps.members?.(story.orgId) ?? []);
-    const ids = [...new Set(candidates.filter((id): id is string => Boolean(id)))].filter((id) => id !== actorId && members.has(id));
+    const ids = [...new Set(candidates.filter((id): id is string => Boolean(id)))].filter(
+      (id) => id !== actorId && members.has(id),
+    );
     return ids.filter((id) => {
       const standing = deps.standing(id, story.orgId, story.publicationId);
       if (!standing || !sees(standing, story, id)) return false;
@@ -701,6 +727,7 @@ export function createMockStories(deps: MockStoryDeps): {
       | "comment.write"
       | "edition.view"
       | "edition.create"
+      | "edition.edit"
       | "desk.export"
       | "settings.edit",
     /** also allowed by any of these (the ad picker: a ready picture to whoever may set an ad slot) */
@@ -717,7 +744,7 @@ export function createMockStories(deps: MockStoryDeps): {
     if (!allowed) return failure(NOT_ALLOWED);
     return { person, s };
   }
-  const refused = <T,>(checked: object): checked is ServiceResult<T, ApiProblem> => "ok" in checked;
+  const refused = <T>(checked: object): checked is ServiceResult<T, ApiProblem> => "ok" in checked;
 
   function find(orgId: string, pubId: string, storyId: string): Row | undefined {
     return rows.find((story) => story.id === storyId && story.orgId === orgId && story.publicationId === pubId);
@@ -725,7 +752,9 @@ export function createMockStories(deps: MockStoryDeps): {
   /** A story's edition from its `editionId`: one of this publication's, or none (null); undefined when unknown. */
   function placement(orgId: string, pubId: string, editionId: string | null): Row["edition"] | undefined {
     if (editionId === null) return null;
-    const edition = editionRows.find((candidate) => candidate.id === editionId && candidate.orgId === orgId && candidate.publicationId === pubId);
+    const edition = editionRows.find(
+      (candidate) => candidate.id === editionId && candidate.orgId === orgId && candidate.publicationId === pubId,
+    );
     return edition ? { id: edition.id, date: edition.date } : undefined;
   }
   function touch(story: Row, by: { userId: string; name: string }, changes: Partial<Row>, text: boolean): Row {
@@ -741,7 +770,10 @@ export function createMockStories(deps: MockStoryDeps): {
       ...(text && story.madeWithClaude ? { madeWithClaude: false } : {}),
     };
     const brief = (row: Row) => !row.photo && words(row.body) > 0 && words(row.body) <= 60;
-    const withCounts = changes.body !== undefined || "photo" in changes ? { ...next, words: words(next.body), isBrief: brief(next) } : next;
+    const withCounts =
+      changes.body !== undefined || "photo" in changes
+        ? { ...next, words: words(next.body), isBrief: brief(next) }
+        : next;
     rows = rows.map((candidate) => (candidate.id === story.id ? withCounts : candidate));
     deps.emit?.(story.orgId, { type: "story", publicationId: story.publicationId, storyId: story.id });
     return withCounts;
@@ -759,7 +791,12 @@ export function createMockStories(deps: MockStoryDeps): {
 
   const stories: Omit<StoryService, "attachPhoto" | "updatePhoto" | "removePhoto"> = {
     async list({ orgId, pubId, filter }) {
-      const checked = await check<{ items: StoryListItemDto[]; nextCursor: string | null }>("stories.list", orgId, pubId, "story.view");
+      const checked = await check<{ items: StoryListItemDto[]; nextCursor: string | null }>(
+        "stories.list",
+        orgId,
+        pubId,
+        "story.view",
+      );
       if (refused(checked)) return checked;
       const { person, s } = checked;
       const q = filter.q?.trim().toLowerCase();
@@ -773,7 +810,8 @@ export function createMockStories(deps: MockStoryDeps): {
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.order - a.order);
       const limit = filter.limit ?? 50;
       const start = filter.cursor ? Number(filter.cursor.replace("cursor-", "")) : 0;
-      if (!Number.isInteger(start) || start < 0) return failure(invalid("querystring.cursor", "is not a cursor this API gave"));
+      if (!Number.isInteger(start) || start < 0)
+        return failure(invalid("querystring.cursor", "is not a cursor this API gave"));
       const page = matching.slice(start, start + limit);
       return success({
         items: page.map((story) => listItem(view(story, s, person.userId))),
@@ -839,7 +877,10 @@ export function createMockStories(deps: MockStoryDeps): {
       const story = find(orgId, pubId, storyId);
       if (!story || !sees(s, story, person.userId)) return failure(NOT_FOUND);
       if (patch.baseRevision !== story.revision) {
-        return failure({ ...answer(409, "story_changed", "Someone changed this story."), current: view(story, s, person.userId) });
+        return failure({
+          ...answer(409, "story_changed", "Someone changed this story."),
+          current: view(story, s, person.userId),
+        });
       }
       if (!canEdit(s, story, person.userId)) return failure(NOT_ALLOWED);
       const { baseRevision: _base, editionId: _edition, ...fields } = patch;
@@ -851,7 +892,10 @@ export function createMockStories(deps: MockStoryDeps): {
       const cleaned = Object.fromEntries(
         Object.entries(fields)
           .filter(([, value]) => value !== undefined)
-          .map(([key, value]) => [key, (textKeys as readonly string[]).includes(key) ? cleanText(value as string) : value]),
+          .map(([key, value]) => [
+            key,
+            (textKeys as readonly string[]).includes(key) ? cleanText(value as string) : value,
+          ]),
       ) as Partial<Row>;
       if (cleaned.headline !== undefined && cleaned.headline === "") {
         return failure(invalid("body.headline", "Every story needs a headline."));
@@ -883,7 +927,10 @@ export function createMockStories(deps: MockStoryDeps): {
       const story = find(orgId, pubId, storyId);
       if (!story || !sees(s, story, person.userId)) return failure(NOT_FOUND);
       if (baseRevision !== story.revision) {
-        return failure({ ...answer(409, "story_changed", "Someone changed this story."), current: view(story, s, person.userId) });
+        return failure({
+          ...answer(409, "story_changed", "Someone changed this story."),
+          current: view(story, s, person.userId),
+        });
       }
       if (!transitions(s, story, person.userId).includes(to)) {
         return failure(to === "filed" || isDesk(s) ? INVALID_TRANSITION : NOT_ALLOWED);
@@ -906,7 +953,11 @@ export function createMockStories(deps: MockStoryDeps): {
         tell(after, audience(after, desk, person.userId), { kind: "story_filed", actor });
       }
       if (to === "draft" && noteId) {
-        tell(after, audience(after, [after.reporter.id], person.userId), { kind: "story_sent_back", commentId: noteId, actor });
+        tell(after, audience(after, [after.reporter.id], person.userId), {
+          kind: "story_sent_back",
+          commentId: noteId,
+          actor,
+        });
       }
       const moved = view(rows.find((candidate) => candidate.id === after.id) ?? after, s, person.userId);
       keep(idempotencyKey, "transition", { storyId, to, baseRevision, comment }, moved);
@@ -920,7 +971,10 @@ export function createMockStories(deps: MockStoryDeps): {
       const story = find(orgId, pubId, storyId);
       if (!story || !sees(s, story, person.userId)) return failure(NOT_FOUND);
       if (baseRevision !== story.revision) {
-        return failure({ ...answer(409, "story_changed", "Someone changed this story."), current: view(story, s, person.userId) });
+        return failure({
+          ...answer(409, "story_changed", "Someone changed this story."),
+          current: view(story, s, person.userId),
+        });
       }
       if (userId !== null && !deps.standing(userId, orgId, pubId)) {
         return failure(invalid("body.userId", "is not a member who reaches this publication"));
@@ -928,7 +982,10 @@ export function createMockStories(deps: MockStoryDeps): {
       const assignee = userId === null ? null : { id: userId, name: deps.nameOf(userId) ?? userId };
       const after = touch(story, person, { assignee }, false);
       if (assignee && assignee.id !== story.assignee?.id) {
-        tell(after, audience(after, [assignee.id], person.userId), { kind: "story_assigned", actor: { id: person.userId, name: person.name } });
+        tell(after, audience(after, [assignee.id], person.userId), {
+          kind: "story_assigned",
+          actor: { id: person.userId, name: person.name },
+        });
       }
       return success(view(after, s, person.userId));
     },
@@ -948,7 +1005,8 @@ export function createMockStories(deps: MockStoryDeps): {
         const lines = part.split(/\r?\n/).filter((line) => line.trim() !== "");
         const [first, second, ...rest] = lines;
         if (first === undefined) continue;
-        const byline = second && /^\s*(byline|वार्ताहर)\s*[:：]/i.test(second) ? second.replace(/^[^:：]*[:：]\s*/, "") : "";
+        const byline =
+          second && /^\s*(byline|वार्ताहर)\s*[:：]/i.test(second) ? second.replace(/^[^:：]*[:：]\s*/, "") : "";
         const body = (byline ? rest : [second, ...rest].filter((line) => line !== undefined)).join("\n").trim();
         if (body === "") {
           skipped.push({ headline: first.trim().slice(0, 200), reason: "Every article needs some text." });
@@ -983,12 +1041,14 @@ export function createMockStories(deps: MockStoryDeps): {
       if (replayed && isReused(replayed)) return failure(replayed);
       if (replayed) return success(replayed.value);
       const upload = uploads.get(uploadId);
-      if (!upload || upload.userId !== person.userId || upload.pubId !== pubId || upload.contentType !== DOCX_TYPE) return failure(NOT_FOUND);
+      if (!upload || upload.userId !== person.userId || upload.pubId !== pubId || upload.contentType !== DOCX_TYPE)
+        return failure(NOT_FOUND);
       if (!upload.file) return failure(invalid("body.uploadId", "The file has not arrived yet."));
       if (editionId !== undefined && !isDesk(s)) return failure(NOT_ALLOWED);
       if (editionId !== undefined && !placement(orgId, pubId, editionId)) return failure(NOT_FOUND);
       const head = await headOf(upload.file);
-      if (!(head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04)) return failure(answer(422, "docx_refused", NOT_WORD));
+      if (!(head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04))
+        return failure(answer(422, "docx_refused", NOT_WORD));
       const id = `import-${String(imports.size + 1).padStart(3, "0")}`;
       clock += 1;
       const at = `2026-10-22T11:${String(clock).padStart(2, "0")}:00.000Z`;
@@ -1018,7 +1078,6 @@ export function createMockStories(deps: MockStoryDeps): {
     },
   };
 
-
   const AD_PICKER = ["ads.manage", "layout.generate"] as const;
   const PHOTO_NOT_THEIRS = NOT_ALLOWED;
   /** canAttachPhoto: whoever edits the story, or a Photo Editor of the publication on any story they see but a spiked one. */
@@ -1030,13 +1089,26 @@ export function createMockStories(deps: MockStoryDeps): {
     const seen = reach("media.view", s.orgRole, s.access);
     if (seen === "full") return true;
     if (seen !== "scoped") return false;
-    return asset.uploadedBy === userId || rows.some((story) => story.photo?.assetId === asset.id && theirs(story, userId));
+    return (
+      asset.uploadedBy === userId || rows.some((story) => story.photo?.assetId === asset.id && theirs(story, userId))
+    );
   };
   const changed = (story: Row, s: MockStanding, userId: string) =>
-    failure<StoryDto>({ ...answer(409, "story_changed", "Someone changed this story."), current: view(story, s, userId) });
+    failure<StoryDto>({
+      ...answer(409, "story_changed", "Someone changed this story."),
+      current: view(story, s, userId),
+    });
 
   const photoOps = {
-    async attachPhoto({ orgId, pubId, storyId, baseRevision, assetId, caption, credit }: Parameters<StoryService["attachPhoto"]>[0]) {
+    async attachPhoto({
+      orgId,
+      pubId,
+      storyId,
+      baseRevision,
+      assetId,
+      caption,
+      credit,
+    }: Parameters<StoryService["attachPhoto"]>[0]) {
       const checked = await check<StoryDto>("stories.photo", orgId, pubId, "media.upload");
       if (refused(checked)) return checked;
       const { person, s } = checked;
@@ -1045,7 +1117,13 @@ export function createMockStories(deps: MockStoryDeps): {
       if (baseRevision !== story.revision) return changed(story, s, person.userId);
       if (!mayPhoto(s, story, person.userId)) return failure<StoryDto>(PHOTO_NOT_THEIRS);
       const asset = assets.get(assetId);
-      if (asset && asset.pubId === pubId && asset.status !== "rejected" && !asset.deleted && !maySeeAsset(s, asset, person.userId)) {
+      if (
+        asset &&
+        asset.pubId === pubId &&
+        asset.status !== "rejected" &&
+        !asset.deleted &&
+        !maySeeAsset(s, asset, person.userId)
+      ) {
         return failure<StoryDto>(NOT_FOUND);
       }
       if (!asset || asset.pubId !== pubId || asset.status === "rejected" || asset.deleted) {
@@ -1066,7 +1144,14 @@ export function createMockStories(deps: MockStoryDeps): {
       };
       return success(view(touch(story, person, { photo }, false), s, person.userId));
     },
-    async updatePhoto({ orgId, pubId, storyId, baseRevision, caption, credit }: Parameters<StoryService["updatePhoto"]>[0]) {
+    async updatePhoto({
+      orgId,
+      pubId,
+      storyId,
+      baseRevision,
+      caption,
+      credit,
+    }: Parameters<StoryService["updatePhoto"]>[0]) {
       const checked = await check<StoryDto>("stories.photo", orgId, pubId, "media.upload");
       if (refused(checked)) return checked;
       const { person, s } = checked;
@@ -1097,7 +1182,12 @@ export function createMockStories(deps: MockStoryDeps): {
   const withPhotos: StoryService = { ...stories, ...photoOps };
 
   /** A new comment (or reply) on the story, and its live update; who is told is the caller's to decide. */
-  function addComment(story: Row, by: { userId: string; name: string }, parentId: string | null, body: string): CommentRow {
+  function addComment(
+    story: Row,
+    by: { userId: string; name: string },
+    parentId: string | null,
+    body: string,
+  ): CommentRow {
     commentCounter += 1;
     clock += 1;
     const at = `2026-10-22T10:${String(clock).padStart(2, "0")}:00.000Z`;
@@ -1115,7 +1205,12 @@ export function createMockStories(deps: MockStoryDeps): {
       order: 100 + commentCounter,
     };
     comments = [...comments, made];
-    deps.emit?.(story.orgId, { type: "comment", publicationId: story.publicationId, storyId: story.id, commentId: made.id });
+    deps.emit?.(story.orgId, {
+      type: "comment",
+      publicationId: story.publicationId,
+      storyId: story.id,
+      commentId: made.id,
+    });
     return made;
   }
   const COMMENT_LIMIT = 10_000;
@@ -1125,7 +1220,10 @@ export function createMockStories(deps: MockStoryDeps): {
     if (text === "") return { ok: false, problem: invalid("body.body", "A comment needs some text.") };
     const n = [...text].length;
     if (n > COMMENT_LIMIT) {
-      return { ok: false, problem: invalid("body.body", `The comment is too long (${n} characters; the most is ${COMMENT_LIMIT}).`) };
+      return {
+        ok: false,
+        problem: invalid("body.body", `The comment is too long (${n} characters; the most is ${COMMENT_LIMIT}).`),
+      };
     }
     return { ok: true, body: text };
   }
@@ -1184,7 +1282,11 @@ export function createMockStories(deps: MockStoryDeps): {
       const text = commentBody(body);
       if (!text.ok) return failure(text.problem);
       const made = addComment(story, person, parent?.id ?? null, text.body);
-      const writers = parent ? comments.filter((comment) => comment.id === parent.id || comment.parentId === parent.id).map((comment) => comment.author.id) : [];
+      const writers = parent
+        ? comments
+            .filter((comment) => comment.id === parent.id || comment.parentId === parent.id)
+            .map((comment) => comment.author.id)
+        : [];
       tell(story, audience(story, [story.reporter.id, story.assignee?.id, ...writers], person.userId, true), {
         kind: "comment",
         commentId: made.id,
@@ -1198,7 +1300,9 @@ export function createMockStories(deps: MockStoryDeps): {
       const checked = await check<CommentDto>("comments.update", orgId, pubId, "comment.write");
       if (refused(checked)) return checked;
       const { person, s } = checked;
-      const comment = comments.find((candidate) => candidate.id === commentId && candidate.orgId === orgId && candidate.pubId === pubId);
+      const comment = comments.find(
+        (candidate) => candidate.id === commentId && candidate.orgId === orgId && candidate.pubId === pubId,
+      );
       if (!comment) return failure(NOT_FOUND);
       const story = find(orgId, pubId, comment.storyId);
       if (!story || !canReadComments(s, story, person.userId)) return failure(NOT_FOUND);
@@ -1227,7 +1331,8 @@ export function createMockStories(deps: MockStoryDeps): {
           comment.body = body;
           comment.updatedAt = at;
         }
-        if (resolve !== undefined) comment.resolved = resolve ? { at, by: { id: person.userId, name: person.name } } : null;
+        if (resolve !== undefined)
+          comment.resolved = resolve ? { at, by: { id: person.userId, name: person.name } } : null;
         deps.emit?.(orgId, { type: "comment", publicationId: pubId, storyId: story.id, commentId: comment.id });
       }
       return success(commentView(comment, s, story, person.userId));
@@ -1249,14 +1354,17 @@ export function createMockStories(deps: MockStoryDeps): {
     }
     const story = rows.find((candidate) => candidate.id === event.storyId && candidate.orgId === orgId);
     const standing = story ? deps.standing(userId, orgId, story.publicationId) : undefined;
-    if (!story || !standing || story.publicationId !== event.publicationId || !sees(standing, story, userId)) return false;
+    if (!story || !standing || story.publicationId !== event.publicationId || !sees(standing, story, userId))
+      return false;
     return event.type === "story" || reach("comment.read", standing.orgRole, standing.access) !== null;
   }
 
   function shown(userId: string, orgId: string, storyId: string) {
     const story = rows.find((candidate) => candidate.id === storyId && candidate.orgId === orgId);
     const standing = story ? deps.standing(userId, orgId, story.publicationId) : undefined;
-    return story && standing && sees(standing, story, userId) ? { headline: story.headline, status: story.status } : null;
+    return story && standing && sees(standing, story, userId)
+      ? { headline: story.headline, status: story.status }
+      : null;
   }
 
   function editionView(edition: EditionRow, s?: MockStanding): PubEditionDto {
@@ -1279,7 +1387,9 @@ export function createMockStories(deps: MockStoryDeps): {
       const checked = await check<readonly PubEditionDto[]>("editions.list", orgId, pubId, "edition.view");
       if (refused(checked)) return checked;
       const here = editionRows.filter((edition) => edition.orgId === orgId && edition.publicationId === pubId);
-      return success([...here].sort((a, b) => b.date.localeCompare(a.date)).map((edition) => editionView(edition, checked.s)));
+      return success(
+        [...here].sort((a, b) => b.date.localeCompare(a.date)).map((edition) => editionView(edition, checked.s)),
+      );
     },
 
     async create({ orgId, pubId, input, idempotencyKey }) {
@@ -1293,9 +1403,14 @@ export function createMockStories(deps: MockStoryDeps): {
         const made = editionRows.find((edition) => edition.id === replayed.value);
         return made ? success(editionView(made)) : failure(NOT_FOUND);
       }
-      const existing = editionRows.find((edition) => edition.orgId === orgId && edition.publicationId === pubId && edition.date === input.date);
+      const existing = editionRows.find(
+        (edition) => edition.orgId === orgId && edition.publicationId === pubId && edition.date === input.date,
+      );
       if (existing) {
-        return failure({ ...answer(409, "edition_exists", "There is already an edition for that date."), current: editionView(existing) });
+        return failure({
+          ...answer(409, "edition_exists", "There is already an edition for that date."),
+          current: editionView(existing),
+        });
       }
       editionCounter += 1;
       const made: EditionRow = {
@@ -1316,13 +1431,31 @@ export function createMockStories(deps: MockStoryDeps): {
       return success(editionView(made));
     },
 
+    async update({ orgId, pubId, editionId, patch }) {
+      const checked = await check<PubEditionDto>("editions.update", orgId, pubId, "edition.edit");
+      if (refused(checked)) return checked;
+      if (reach("edition.edit", checked.s.orgRole, checked.s.access) !== "full") return failure(NOT_ALLOWED);
+      const found = editionRows.find(
+        (edition) => edition.id === editionId && edition.orgId === orgId && edition.publicationId === pubId,
+      );
+      if (!found) return failure(NOT_FOUND);
+      const changed: EditionRow = { ...found, ...patch };
+      editionRows = editionRows.map((edition) => (edition === found ? changed : edition));
+      deps.emit?.(orgId, { type: "edition", publicationId: pubId, editionId });
+      return success(editionView(changed, checked.s));
+    },
+
     async deskBundle({ orgId, pubId, editionId }) {
       const checked = await check<DeskBundleDto>("editions.deskBundle", orgId, pubId, "desk.export");
       if (refused(checked)) return checked;
       if (reach("desk.export", checked.s.orgRole, checked.s.access) !== "full") return failure(NOT_ALLOWED);
-      const edition = editionRows.find((candidate) => candidate.id === editionId && candidate.orgId === orgId && candidate.publicationId === pubId);
+      const edition = editionRows.find(
+        (candidate) => candidate.id === editionId && candidate.orgId === orgId && candidate.publicationId === pubId,
+      );
       if (!edition) return failure(NOT_FOUND);
-      const ready = rows.filter((story) => story.orgId === orgId && story.edition?.id === editionId && story.status === "ready");
+      const ready = rows.filter(
+        (story) => story.orgId === orgId && story.edition?.id === editionId && story.status === "ready",
+      );
       // a fictional ZIP: its first bytes, then the stories' ids
       const file = new Blob(["PK\u0003\u0004", ready.map((story) => story.id).join("\n")], { type: "application/zip" });
       return success({ file, filename: `pageinator-stories-${edition.date}.zip`, stories: ready.length });
@@ -1333,21 +1466,38 @@ export function createMockStories(deps: MockStoryDeps): {
     async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey, purpose = "story_photo" }) {
       const docx = purpose === "docx";
       const dataset = purpose === "engine_dataset";
-      const checked = await check<never>("media.presign", orgId, pubId, docx ? "story.create" : dataset ? "settings.edit" : "media.upload");
+      const checked = await check<never>(
+        "media.presign",
+        orgId,
+        pubId,
+        docx ? "story.create" : dataset ? "settings.edit" : "media.upload",
+      );
       if (refused(checked)) return checked;
       const { person } = checked;
       const body = { filename, contentType, bytes };
-      const replayed = replay<{ uploadId: string; url: string; fields: Record<string, string>; expiresAt: string }>(idempotencyKey, "presign", body);
+      const replayed = replay<{ uploadId: string; url: string; fields: Record<string, string>; expiresAt: string }>(
+        idempotencyKey,
+        "presign",
+        body,
+      );
       if (replayed && isReused(replayed)) return failure(replayed);
       if (replayed) return success(replayed.value);
-      if (docx !== (contentType === DOCX_TYPE)) return failure(invalid("body.contentType", "A Word file is uploaded as docx, and a picture as a picture."));
-      if (dataset !== (contentType === "application/zip")) return failure(invalid("body.contentType", "A dataset bundle is uploaded as engine_dataset, as a ZIP file."));
-      if (dataset && bytes > MAX_DATASET_BYTES) return failure(answer(413, "file_too_large", "A dataset bundle is at most 4 GiB."));
-      if (!docx && !dataset && !(TYPES as readonly string[]).includes(contentType)) return failure(invalid("body.contentType", "must be JPEG, PNG or WebP"));
+      if (docx !== (contentType === DOCX_TYPE))
+        return failure(invalid("body.contentType", "A Word file is uploaded as docx, and a picture as a picture."));
+      if (dataset !== (contentType === "application/zip"))
+        return failure(invalid("body.contentType", "A dataset bundle is uploaded as engine_dataset, as a ZIP file."));
+      if (dataset && bytes > MAX_DATASET_BYTES)
+        return failure(answer(413, "file_too_large", "A dataset bundle is at most 4 GiB."));
+      if (!docx && !dataset && !(TYPES as readonly string[]).includes(contentType))
+        return failure(invalid("body.contentType", "must be JPEG, PNG or WebP"));
       if (docx && bytes > MAX_DOCX_BYTES) {
-        return failure({ ...answer(422, "docx_refused", NOT_WORD), details: [{ field: "body.bytes", message: "This Word file is larger than 10 MB." }] });
+        return failure({
+          ...answer(422, "docx_refused", NOT_WORD),
+          details: [{ field: "body.bytes", message: "This Word file is larger than 10 MB." }],
+        });
       }
-      if (!dataset && bytes > MAX_BYTES) return failure(answer(413, "file_too_large", "This picture is larger than 40 MB."));
+      if (!dataset && bytes > MAX_BYTES)
+        return failure(answer(413, "file_too_large", "This picture is larger than 40 MB."));
       const used = orgBytes.get(orgId) ?? 0;
       const count = uploadCount.get(person.userId) ?? 0;
       // a dataset bundle (up to 4 GiB) is not a newsroom's daily pictures: the daily byte cap is the pictures'
@@ -1361,7 +1511,11 @@ export function createMockStories(deps: MockStoryDeps): {
       const presigned = {
         uploadId: id,
         url: "mock-store://pgn-dev-work",
-        fields: { key: `uploads/orgs/${orgId}/pubs/${pubId}/${id}`, "Content-Type": contentType, "x-amz-meta-upload-id": id },
+        fields: {
+          key: `uploads/orgs/${orgId}/pubs/${pubId}/${id}`,
+          "Content-Type": contentType,
+          "x-amz-meta-upload-id": id,
+        },
         // the double has no clock: its policies do not run out (a test changes this answer to see one that has)
         expiresAt: "2099-01-01T00:00:00.000Z",
       };
@@ -1375,7 +1529,8 @@ export function createMockStories(deps: MockStoryDeps): {
       const problem = await deps.gate("media.send");
       if (problem) return failure(problem);
       const kept = uploads.get(upload.uploadId);
-      if (!kept || upload.fields["Content-Type"] !== kept.contentType) return failure(answer(403, "upload_denied", "AccessDenied"));
+      if (!kept || upload.fields["Content-Type"] !== kept.contentType)
+        return failure(answer(403, "upload_denied", "AccessDenied"));
       // the policy's content-length-range is the declared size exactly
       if (file.size !== kept.bytes) return failure(answer(400, "upload_size_mismatch", ""));
       onProgress?.(0.5);
@@ -1407,7 +1562,8 @@ export function createMockStories(deps: MockStoryDeps): {
         const done = assets.get(upload.assetId);
         if (done) return success(asDto(done));
       }
-      if (upload.status !== "presigned") return failure(answer(422, "not_a_picture", "This file is not a picture Pageinator can use."));
+      if (upload.status !== "presigned")
+        return failure(answer(422, "not_a_picture", "This file is not a picture Pageinator can use."));
       if (!upload.file) return failure(invalid("params.u", "The file has not arrived yet."));
       const found = sniff(await headOf(upload.file));
       if (!found) {
@@ -1451,21 +1607,34 @@ export function createMockStories(deps: MockStoryDeps): {
       const checked = await check<Blob>("media.load", orgId, pubId, "media.view");
       if (refused(checked)) return checked;
       const asset = assets.get(assetId);
-      if (!asset || asset.pubId !== pubId || !maySeeAsset(checked.s, asset, checked.person.userId)) return failure(NOT_FOUND);
+      if (!asset || asset.pubId !== pubId || !maySeeAsset(checked.s, asset, checked.person.userId))
+        return failure(NOT_FOUND);
       return success(asset.data);
     },
 
     async list({ orgId, pubId, query }) {
-      const checked = await check<{ items: MediaItemDto[]; next: string | null }>("media.list", orgId, pubId, "media.view", AD_PICKER);
+      const checked = await check<{ items: MediaItemDto[]; next: string | null }>(
+        "media.list",
+        orgId,
+        pubId,
+        "media.view",
+        AD_PICKER,
+      );
       if (refused(checked)) return checked;
       const { person, s } = checked;
       const q = query.q?.trim().toLowerCase();
       const matching = [...assets.values()]
         .filter((asset) => asset.orgId === orgId && asset.pubId === pubId && listed(s, asset, person.userId))
-        .filter((asset) => !query.story || rows.some((story) => story.id === query.story && story.photo?.assetId === asset.id))
+        .filter(
+          (asset) =>
+            !query.story || rows.some((story) => story.id === query.story && story.photo?.assetId === asset.id),
+        )
         .filter((asset) => query.missing !== "caption" || asset.caption === "")
         .filter((asset) => query.missing !== "credit" || asset.credit === "")
-        .filter((asset) => !query.tooSmallForCols || (asset.sharpUpToCols !== null && asset.sharpUpToCols < query.tooSmallForCols))
+        .filter(
+          (asset) =>
+            !query.tooSmallForCols || (asset.sharpUpToCols !== null && asset.sharpUpToCols < query.tooSmallForCols),
+        )
         .filter((asset) => !q || `${asset.caption}\n${asset.credit}\n${asset.photographer}`.toLowerCase().includes(q))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
       const start = query.cursor ? Number(query.cursor.replace("media-cursor-", "")) : 0;
@@ -1478,7 +1647,12 @@ export function createMockStories(deps: MockStoryDeps): {
       const checked = await check<MediaItemDto>("media.get", orgId, pubId, "media.view");
       if (refused(checked)) return checked;
       const asset = assets.get(assetId);
-      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(checked.s, asset, checked.person.userId)) {
+      if (
+        !asset ||
+        asset.orgId !== orgId ||
+        asset.pubId !== pubId ||
+        !listed(checked.s, asset, checked.person.userId)
+      ) {
         return failure(NOT_FOUND);
       }
       return success(item(asset, checked.s, checked.person.userId));
@@ -1489,10 +1663,14 @@ export function createMockStories(deps: MockStoryDeps): {
       if (refused(checked)) return checked;
       const { person, s } = checked;
       const asset = assets.get(assetId);
-      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(s, asset, person.userId)) return failure(NOT_FOUND);
+      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(s, asset, person.userId))
+        return failure(NOT_FOUND);
       if (!mayEditAsset(s, asset, person.userId)) return failure(NOT_ALLOWED);
       if (patch.baseRevision !== asset.revision) {
-        return failure({ ...answer(409, "asset_changed", "Someone changed this picture."), current: item(asset, s, person.userId) });
+        return failure({
+          ...answer(409, "asset_changed", "Someone changed this picture."),
+          current: item(asset, s, person.userId),
+        });
       }
       clock += 1;
       const next: MockAsset = {
@@ -1512,7 +1690,8 @@ export function createMockStories(deps: MockStoryDeps): {
       if (refused(checked)) return checked;
       const { person, s } = checked;
       const asset = assets.get(assetId);
-      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(s, asset, person.userId)) return failure(NOT_FOUND);
+      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(s, asset, person.userId))
+        return failure(NOT_FOUND);
       if (!asset.licence) return failure(invalid("assetId", "is not a found photo"));
       clock += 1;
       const at = `2026-10-22T13:${String(clock).padStart(2, "0")}:00.000Z`;
@@ -1527,10 +1706,14 @@ export function createMockStories(deps: MockStoryDeps): {
       if (refused(checked)) return checked;
       const { person, s } = checked;
       const asset = assets.get(assetId);
-      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(s, asset, person.userId)) return failure(NOT_FOUND);
+      if (!asset || asset.orgId !== orgId || asset.pubId !== pubId || !listed(s, asset, person.userId))
+        return failure(NOT_FOUND);
       if (reach("media.upload", s.orgRole, s.access) !== "full") return failure(NOT_ALLOWED);
       if (baseRevision !== asset.revision) {
-        return failure({ ...answer(409, "asset_changed", "Someone changed this picture."), current: item(asset, s, person.userId) });
+        return failure({
+          ...answer(409, "asset_changed", "Someone changed this picture."),
+          current: item(asset, s, person.userId),
+        });
       }
       if (rows.some((story) => story.photo?.assetId === asset.id)) {
         return failure(answer(409, "asset_in_use", "A story uses this picture."));
@@ -1577,7 +1760,10 @@ export function createMockStories(deps: MockStoryDeps): {
       revision: asset.revision,
       createdAt: asset.createdAt,
       updatedAt: asset.updatedAt,
-      previewUrl: asset.status === "ready" ? `${media.fileUrl({ orgId: asset.orgId, pubId: asset.pubId, assetId: asset.id })}?variant=preview` : null,
+      previewUrl:
+        asset.status === "ready"
+          ? `${media.fileUrl({ orgId: asset.orgId, pubId: asset.pubId, assetId: asset.id })}?variant=preview`
+          : null,
       ...(asset.licence ? { licence: structuredClone(asset.licence) } : {}),
     };
   }
@@ -1594,7 +1780,11 @@ export function createMockStories(deps: MockStoryDeps): {
       if (!asset) return;
       assets = new Map(assets).set(assetId, { ...asset, status, problem });
       for (const story of rows.filter((candidate) => candidate.photo?.assetId === assetId)) {
-        rows = rows.map((candidate) => (candidate.id === story.id && candidate.photo ? { ...candidate, photo: { ...candidate.photo, status, problem } } : candidate));
+        rows = rows.map((candidate) =>
+          candidate.id === story.id && candidate.photo
+            ? { ...candidate, photo: { ...candidate.photo, status, problem } }
+            : candidate,
+        );
         deps.emit?.(story.orgId, { type: "story", publicationId: story.publicationId, storyId: story.id });
       }
     },
@@ -1608,7 +1798,11 @@ export function createMockStories(deps: MockStoryDeps): {
           const made = await stories.create({
             orgId,
             pubId,
-            input: { headline, body: "Fictional text from a Word file.", ...(kept.value.editionId ? { editionId: kept.value.editionId } : {}) },
+            input: {
+              headline,
+              body: "Fictional text from a Word file.",
+              ...(kept.value.editionId ? { editionId: kept.value.editionId } : {}),
+            },
             idempotencyKey: `${importId}:${created.length}`,
           });
           if (made.ok) created.push({ storyId: made.value.id, headline: made.value.headline });
@@ -1629,12 +1823,44 @@ export function createMockStories(deps: MockStoryDeps): {
       clock += 1;
       const id = `story-news-${String(counter).padStart(3, "0")}`;
       const person = { id: by.userId, name: by.name };
-      const made = row(0, { id, headline, byline, body, language, status: "draft", reporter: person, assignee: person, madeWithClaude: true, newsSources: [...sources] });
-      rows = [...rows, { ...made, orgId, publicationId: pubId, order: rows.length + 1, updatedAt: `2026-10-22T14:${String(clock).padStart(2, "0")}:00.000Z` }];
+      const made = row(0, {
+        id,
+        headline,
+        byline,
+        body,
+        language,
+        status: "draft",
+        reporter: person,
+        assignee: person,
+        madeWithClaude: true,
+        newsSources: [...sources],
+      });
+      rows = [
+        ...rows,
+        {
+          ...made,
+          orgId,
+          publicationId: pubId,
+          order: rows.length + 1,
+          updatedAt: `2026-10-22T14:${String(clock).padStart(2, "0")}:00.000Z`,
+        },
+      ];
       deps.emit?.(orgId, { type: "story", publicationId: pubId, storyId: id });
       return id;
     },
-    newsPhoto({ orgId, pubId, by, storyId, widthPx, heightPx, caption, credit, photographer, licence, rightsConfirmed }) {
+    newsPhoto({
+      orgId,
+      pubId,
+      by,
+      storyId,
+      widthPx,
+      heightPx,
+      caption,
+      credit,
+      photographer,
+      licence,
+      rightsConfirmed,
+    }) {
       assetCounter += 1;
       clock += 1;
       const at = `2026-10-22T14:${String(clock).padStart(2, "0")}:00.000Z`;
@@ -1656,7 +1882,16 @@ export function createMockStories(deps: MockStoryDeps): {
       assets = new Map(assets).set(id, asset);
       const story = storyId ? rows.find((candidate) => candidate.id === storyId) : undefined;
       if (story) {
-        const photo = { assetId: id, caption, credit, status: asset.status, problem: null, widthPx, heightPx, previewUrl: null };
+        const photo = {
+          assetId: id,
+          caption,
+          credit,
+          status: asset.status,
+          problem: null,
+          widthPx,
+          heightPx,
+          previewUrl: null,
+        };
         touch(story, by, { photo }, false);
       }
       return id;
@@ -1680,14 +1915,20 @@ export function createMockStories(deps: MockStoryDeps): {
     },
     all: () => rows,
     editionOf: (orgId, pubId, editionId) =>
-      editionRows.find((edition) => edition.id === editionId && edition.orgId === orgId && edition.publicationId === pubId),
+      editionRows.find(
+        (edition) => edition.id === editionId && edition.orgId === orgId && edition.publicationId === pubId,
+      ),
     assetReady(orgId, pubId, assetId) {
       const asset = assets.get(assetId);
-      return asset && !asset.deleted && asset.orgId === orgId && asset.pubId === pubId ? asset.status === "ready" : undefined;
+      return asset && !asset.deleted && asset.orgId === orgId && asset.pubId === pubId
+        ? asset.status === "ready"
+        : undefined;
     },
     uploadOf(orgId, pubId, uploadId) {
       const upload = uploads.get(uploadId);
-      return upload && upload.orgId === orgId && upload.pubId === pubId ? { contentType: upload.contentType, bytes: upload.bytes } : undefined;
+      return upload && upload.orgId === orgId && upload.pubId === pubId
+        ? { contentType: upload.contentType, bytes: upload.bytes }
+        : undefined;
     },
   };
 }

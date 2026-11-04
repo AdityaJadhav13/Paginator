@@ -29,6 +29,7 @@ const EDITION: LayoutEdition = {
   price: "",
   created_at: at,
   updated_at: at,
+  folio_changed_at: null,
   timezone: "Asia/Kolkata",
 };
 const PLAN = {

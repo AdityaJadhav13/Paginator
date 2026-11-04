@@ -33,6 +33,13 @@ export const ERROR_CODES = [
   "edit_refused",
   "run_missing",
   "editor_unavailable",
+  "approval_stale",
+  "page_approved",
+  "not_approved",
+  "release_refused",
+  "already_confirmed",
+  "archive_failed",
+  "receipt_failed",
   "request_too_large",
   "not_json",
   "slow_down",
@@ -58,7 +65,9 @@ export const ErrorEnvelope = z.strictObject({
      * edition_exists: the edition that has that date; with asset_changed: the picture (MediaItem) as it is now; with
      * run_active and run_finished: the run (LayoutRun) as it is now; with layout_refused: the readiness's blockers; with
      * stale: the page in the editor (EditorPage) as it is now; with page_locked: the page's lock (PageLock); with
-     * edit_refused: the engine's refusal in the Desk's words (DeskText). */
+     * edit_refused: the engine's refusal in the Desk's words (DeskText); with approval_stale: the page (ReleasePage)
+     * or the release candidate (ReleaseCandidate or null) as it is now; with page_approved: the page's approval
+     * (PageApproval). */
     current: z.unknown().optional(),
     requestId: z.string().min(1),
   }),

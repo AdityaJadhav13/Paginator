@@ -71,6 +71,7 @@ export const AUDIT_ACTION_KEYS = [
   "auditLog.action.comment.resolve",
   "auditLog.action.desk.export",
   "auditLog.action.edition.create",
+  "auditLog.action.edition.edit",
   "auditLog.action.engine.event_ignore",
   "auditLog.action.engine.event_refuse",
   "auditLog.action.import.create",
@@ -97,8 +98,15 @@ export const AUDIT_ACTION_KEYS = [
   "auditLog.action.photo.attach",
   "auditLog.action.photo.caption_change",
   "auditLog.action.photo.credit_change",
+  "auditLog.action.page.approve",
+  "auditLog.action.page.unlock",
   "auditLog.action.photo.remove",
   "auditLog.action.photo.replace",
+  "auditLog.action.press_test.set",
+  "auditLog.action.release.confirm",
+  "auditLog.action.release.create",
+  "auditLog.action.release.send",
+  "auditLog.action.release.verify",
   "auditLog.action.story.assign",
   "auditLog.action.story.create",
   "auditLog.action.story.delete",
@@ -116,7 +124,9 @@ export const AUDIT_ACTION_KEYS = [
   "auditLog.action.upload.presign",
   "auditLog.action.upload.reject",
 ] as const satisfies readonly (`auditLog.action.${AuditAction}` & PlainKey)[];
-const allNamed: [Exclude<`auditLog.action.${AuditAction}`, (typeof AUDIT_ACTION_KEYS)[number]>] extends [never] ? true : never = true;
+const allNamed: [Exclude<`auditLog.action.${AuditAction}`, (typeof AUDIT_ACTION_KEYS)[number]>] extends [never]
+  ? true
+  : never = true;
 void allNamed;
 
 const TARGET_KEYS: Readonly<Record<string, PlainKey>> = {
@@ -138,7 +148,9 @@ const TARGET_KEYS: Readonly<Record<string, PlainKey>> = {
 export function actionName(action: string, t: Translate, data?: Readonly<Record<string, unknown>>): string {
   if (action === "upload.presign" && data?.["purpose"] === "docx") return t("auditLog.action.uploadWord");
   const key = `auditLog.action.${action}`;
-  return (AUDIT_ACTION_KEYS as readonly string[]).includes(key) ? t(key as PlainKey) : t("auditLog.action.unknown", { action });
+  return (AUDIT_ACTION_KEYS as readonly string[]).includes(key)
+    ? t(key as PlainKey)
+    : t("auditLog.action.unknown", { action });
 }
 
 function actorName(actor: AuditEventDto["actor"], t: Translate): string {
@@ -221,11 +233,18 @@ export function AuditScreen() {
   const { orgId } = useParams<{ orgId: string }>();
   const { state } = useSession();
   const { t } = useI18n();
-  const org = state.status === "ready" ? state.workspace?.organizations.find((candidate) => candidate.org.id === orgId) : undefined;
+  const org =
+    state.status === "ready"
+      ? state.workspace?.organizations.find((candidate) => candidate.org.id === orgId)
+      : undefined;
   const allowed = org !== undefined && !(org.twoStep.required && !org.twoStep.satisfied) && may(org, "audit.view");
   return (
     <Stack gap="5" className="pg-people">
-      <PageHeader title={t("nav.audit")} headingId={ROUTE_HEADING_ID} subtitle={allowed ? t("auditLog.intro") : undefined} />
+      <PageHeader
+        title={t("nav.audit")}
+        headingId={ROUTE_HEADING_ID}
+        subtitle={allowed ? t("auditLog.intro") : undefined}
+      />
       <OfflineNotice />
       {!org ? (
         <NoAccess />
@@ -244,7 +263,9 @@ function AuditContent({ org }: { readonly org: OrgAccessDto }) {
   const orgId = org.org.id;
   const full = reach("audit.view", org.orgRole, orgAccess(org)) === "full";
   const actions: readonly string[] = full ? AUDIT_ACTION_NAMES : PUBLICATION_AUDIT_ACTIONS;
-  const publications = full ? org.publications : org.publications.filter((publication) => publication.roles.includes("chief_editor"));
+  const publications = full
+    ? org.publications
+    : org.publications.filter((publication) => publication.roles.includes("chief_editor"));
   const [params, setParams] = useSearchParams();
   const search = params.toString();
   const { filters, ignored } = filtersFrom(
@@ -271,14 +292,20 @@ function AuditContent({ org }: { readonly org: OrgAccessDto }) {
     if (list.status !== "ready" || !list.nextCursor || more.pending) return;
     const mine = asking.current;
     setMore({ pending: true, problem: null });
-    const result = await audit.list({ orgId, ...(JSON.parse(asked) as AuditFilterDto), cursor: list.nextCursor, limit: PAGE });
+    const result = await audit.list({
+      orgId,
+      ...(JSON.parse(asked) as AuditFilterDto),
+      cursor: list.nextCursor,
+      limit: PAGE,
+    });
     if (mine !== asking.current) return; // the filters changed meanwhile
     if (!result.ok) return setMore({ pending: false, problem: result.error });
     setMore({ pending: false, problem: null });
     setList({ status: "ready", items: [...list.items, ...result.value.items], nextCursor: result.value.nextCursor });
   };
 
-  const publicationName = (id: string | null) => (id ? org.publications.find((publication) => publication.id === id)?.name : undefined);
+  const publicationName = (id: string | null) =>
+    id ? org.publications.find((publication) => publication.id === id)?.name : undefined;
   const filtered = Object.keys(filters).length > 0;
 
   return (
@@ -317,7 +344,11 @@ function AuditContent({ org }: { readonly org: OrgAccessDto }) {
           </Stack>
         )}
         {list.status === "ready" && list.items.length === 0 && (
-          <EmptyState icon={filtered ? "list-filter" : "scroll-text"} heading={filtered ? t("auditLog.noMatch") : t("auditLog.none")} headingLevel={3} />
+          <EmptyState
+            icon={filtered ? "list-filter" : "scroll-text"}
+            heading={filtered ? t("auditLog.noMatch") : t("auditLog.none")}
+            headingLevel={3}
+          />
         )}
         {list.status === "ready" && list.items.length > 0 && (
           <Table caption={t("auditLog.events")} className="pg-people-audit">
@@ -386,7 +417,12 @@ function AuditContent({ org }: { readonly org: OrgAccessDto }) {
           <Stack gap="3" className="pg-people-panel-foot">
             {more.problem && <ProblemMessage problem={more.problem} />}
             <div>
-              <Button variant="secondary" disabled={more.pending} aria-busy={more.pending} onClick={() => void showMore()}>
+              <Button
+                variant="secondary"
+                disabled={more.pending}
+                aria-busy={more.pending}
+                onClick={() => void showMore()}
+              >
                 {more.pending ? t("auditLog.loadingMore") : t("auditLog.more")}
               </Button>
             </div>

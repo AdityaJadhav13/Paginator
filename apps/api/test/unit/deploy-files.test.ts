@@ -15,7 +15,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { loadConfig } from "../../src/config.ts";
 import { STUCK_MS } from "../../src/shutdown.ts";
+import { PASSWORDS } from "./helpers.ts";
 import { UPLOADS_LIFECYCLE, uploadsCors } from "../../src/storage/s3.ts";
 
 const read = (path: string) => readFileSync(new URL(`../../../../${path}`, import.meta.url), "utf8");
@@ -33,13 +35,45 @@ describe("the pilot's deployment files", () => {
   });
 
   it("the API's key deletes only under uploads/ (all that src/modules/media/uploads.ts deletes); the host role has no KMS right", () => {
-    type Policy = { Statement: { Action: string | string[]; Resource: string }[] };
+    type Policy = { Statement: { Effect: string; Action: string | string[]; Resource: string | string[] }[] };
     const api = JSON.parse(read("infra/aws/iam-api-policy.json")) as Policy;
-    const deletes = api.Statement.filter((s) => [s.Action].flat().some((action) => action.startsWith("s3:Delete")));
+    const deletes = api.Statement.filter(
+      (s) => s.Effect === "Allow" && [s.Action].flat().some((action) => action.startsWith("s3:Delete")),
+    );
     expect(deletes.map((s) => s.Resource)).toEqual(["arn:aws:s3:::${PGN_S3_WORK_BUCKET}/uploads/*"]);
     expect(UPLOADS_LIFECYCLE.every((rule) => rule.Filter?.Prefix === "uploads/")).toBe(true);
     const host = JSON.parse(read("infra/aws/iam-app-host-role-policy.json")) as Policy;
     expect(JSON.stringify(host)).not.toContain("kms:");
+  });
+
+  it("the API's key writes the archive only under Object Lock and can never delete, unlock or hold it", () => {
+    type Statement = { Effect: string; Action: string | string[]; Resource: string | string[] };
+    const api = JSON.parse(read("infra/aws/iam-api-policy.json")) as { Statement: Statement[] };
+    const ARCHIVE = "arn:aws:s3:::${PGN_S3_ARCHIVE_BUCKET}";
+    const on = (s: Statement) => [s.Resource].flat().filter((r) => r.startsWith(ARCHIVE));
+    const allowed = api.Statement.filter((s) => s.Effect === "Allow" && on(s).length > 0);
+    expect(allowed.flatMap((s) => [s.Action].flat()).sort()).toEqual([
+      "s3:GetObject",
+      "s3:GetObjectVersion",
+      "s3:PutObject",
+      "s3:PutObjectRetention",
+    ]);
+    expect(allowed.flatMap(on)).toEqual([`${ARCHIVE}/*`]);
+    const denied = api.Statement.filter((s) => s.Effect === "Deny" && on(s).length > 0);
+    expect(denied.flatMap((s) => [s.Action].flat()).sort()).toEqual([
+      "s3:BypassGovernanceRetention",
+      "s3:DeleteObject",
+      "s3:DeleteObjectVersion",
+      "s3:PutBucketObjectLockConfiguration",
+      "s3:PutObjectLegalHold",
+    ]);
+    expect(denied.flatMap(on).sort()).toEqual([ARCHIVE, `${ARCHIVE}/*`]);
+    // the bucket's default: governance mode, the API's default retention (PGN_ARCHIVE_RETAIN_DAYS, owner decision D-20)
+    const lock = JSON.parse(read("infra/aws/s3-archive-object-lock.json")) as unknown;
+    expect(lock).toEqual({
+      ObjectLockEnabled: "Enabled",
+      Rule: { DefaultRetention: { Mode: "GOVERNANCE", Days: loadConfig(PASSWORDS).archiveRetainDays } },
+    });
   });
 
   it("compose waits for a stop longer than the API's grace period and its last 5 s", () => {

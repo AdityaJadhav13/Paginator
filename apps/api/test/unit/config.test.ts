@@ -231,6 +231,19 @@ describe("config: TLS to the database in production", () => {
   });
 });
 
+describe("config: the archive", () => {
+  it("keeps a release under Object Lock for ten years unless set (owner decision D-20), and refuses nonsense", () => {
+    expect(load({}).archiveRetainDays).toBe(3653);
+    expect(load({ PGN_ARCHIVE_RETAIN_DAYS: "35" }).archiveRetainDays).toBe(35);
+    for (const bad of ["0", "-1", "1.5", "days"])
+      expect(() => load({ PGN_ARCHIVE_RETAIN_DAYS: bad })).toThrow(ConfigError);
+  });
+
+  it("refuses the work bucket as the archive bucket", () => {
+    expect(() => load({ PGN_S3_WORK_BUCKET: "pgn-one", PGN_S3_ARCHIVE_BUCKET: "pgn-one" })).toThrow(ConfigError);
+  });
+});
+
 describe("config: sign-in and email settings", () => {
   it("defaults to the first allowed origin, Mailpit, and a sender at example.test", () => {
     const config = load({ PGN_ALLOWED_ORIGINS: "https://app.example.test, http://127.0.0.1:5180" });

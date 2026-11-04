@@ -1,6 +1,6 @@
 // What the page editor's routes answer (packages/contracts/src/editor.ts), from the rows of src/db/editor.ts, and the
 // Desk's own words the API says itself (tools/desk/engine/messages.json; test/unit/editor.test.ts keeps them equal).
-import { type EditorPage, type PageLock, type PressFlags, pressFlags } from "@pageinator/contracts";
+import { type EditorPage, type PageApproval, type PageLock, type PressFlags, pressFlags } from "@pageinator/contracts";
 import type { EditPageRow, LockRow } from "../../db/editor.ts";
 import type { DeskTextValue } from "../../db/layout.ts";
 
@@ -75,6 +75,7 @@ export function editorPage(
   view: Record<string, unknown>,
   lock: PageLock,
   saved: EditorPage["saved"] = null,
+  approval: PageApproval | null = null,
 ): EditorPage {
   const row = pages.find((p) => p.page_no === page);
   const rev = typeof view["rev"] === "number" ? view["rev"] : (row?.rev_seen ?? 0);
@@ -95,5 +96,6 @@ export function editorPage(
       stale: row?.stale ?? [],
     },
     saved,
+    approval,
   };
 }

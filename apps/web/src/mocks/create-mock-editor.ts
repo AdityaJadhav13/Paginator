@@ -5,7 +5,14 @@
  * lock held by the caller. Glyph outlines are squares. Permissions are not modelled: the screen hides what the API
  * would refuse from /me, and tests stub a refusal where they need one. Fictional data only.
  */
-import type { ApiProblem, EditorPageDto, EditorService, PageHistoryDto, PageLockDto } from "../services/index.ts";
+import type {
+  ApiProblem,
+  EditorPageDto,
+  EditorService,
+  PageApprovalDto,
+  PageHistoryDto,
+  PageLockDto,
+} from "../services/index.ts";
 
 type Module = { story: string; x: number; y: number; w: number; h: number; locked?: boolean };
 
@@ -36,7 +43,10 @@ interface PageRow {
   history: PageHistoryDto["items"];
 }
 
-export function createMockEditor(): { readonly editor: EditorService; reset(): void } {
+/** `approvalOf`: the page's approval (the release double's): while it stands a change or a save is 409 page_approved. */
+export function createMockEditor(
+  approvalOf: (runId: string, page: number) => PageApprovalDto | null = () => null,
+): { readonly editor: EditorService; reset(): void } {
   let pages = new Map<string, PageRow>();
   const key = (runId: string, page: number) => `${runId}:${page}`;
   const row = (runId: string, page: number): PageRow => {
@@ -111,7 +121,14 @@ export function createMockEditor(): { readonly editor: EditorService; reset(): v
         stale: [],
       },
       saved,
+      approval: approvalOf(runId, page),
     };
+  };
+  const approved = (runId: string, page: number): { ok: false; error: ApiProblem } | null => {
+    const approval = approvalOf(runId, page);
+    return approval
+      ? { ok: false, error: { kind: "answer", status: 409, code: "page_approved", message: "", current: approval } }
+      : null;
   };
   const stale = (runId: string, page: number): ApiProblem => ({
     kind: "answer",
@@ -133,6 +150,8 @@ export function createMockEditor(): { readonly editor: EditorService; reset(): v
       return { ok: true, value: answer(runId, page) };
     },
     async change({ runId, page, change }) {
+      const refused = approved(runId, page);
+      if (refused) return refused;
       const r = row(runId, page);
       if (change.rev !== r.rev) return { ok: false, error: stale(runId, page) };
       if (change.kind === "set") r.modules = change.modules.map((m) => ({ ...m }));
@@ -142,6 +161,8 @@ export function createMockEditor(): { readonly editor: EditorService; reset(): v
       return { ok: true, value: answer(runId, page) };
     },
     async save({ runId, page, rev }) {
+      const refused = approved(runId, page);
+      if (refused) return refused;
       const r = row(runId, page);
       if (rev !== r.rev) return { ok: false, error: stale(runId, page) };
       step(r, "save");

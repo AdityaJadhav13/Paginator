@@ -1,13 +1,16 @@
 /**
  * An edition's layout, /org/:orgId/pub/:pubId/editions/:edition/layout (plan §1 L2.3, §2.6): the Desk's needs panel,
- * back-page ads, "Lay out" with its progress, and the Pages board, as four tabs (GET …/editions/:e/layout, pages.view).
+ * back-page ads, "Lay out" with its progress, the Pages board and the release (L2.5), as five tabs (GET
+ * …/editions/:e/layout and …/release, pages.view).
  *   - Readiness: what the paper needs (the engine's plan of the profile in use) against what the edition has, its
  *     stories not Ready yet, what stops a layout, and the measuring ahead of it.
  *   - Ads: each back-page slot with its size and picture (chosen from the media library), its state in the Desk's words.
  *   - Lay out: start a run (layout.generate, an Idempotency-Key kept while its answer is unknown), its progress page by
  *     page and its time, cancel it; the last run's outcome in the Desk's words.
  *   - Pages: every page of the newest done run, its preview, its independent PDF/X-1a check, its stories and warnings,
- *     the stories not placed with the reason, and the downloads each person may have (a 5-minute link each).
+ *     the stories not placed with the reason, the downloads each person may have (a 5-minute link each), and each
+ *     page's approval (Approve / Unlock, from the release view).
+ *   - Release: features/release/ReleaseTab.tsx.
  * A live `layout` update of this edition, a story of the publication or a `resync` fetches it again; while a run is
  * active it is also fetched every 3 s, in case a live update is missed (as the Word import does).
  */
@@ -44,6 +47,7 @@ import type {
   LayoutPageDto,
   LayoutRunDto,
   PubEditionDto,
+  ReleasePageDto,
   StoryStatusDto,
 } from "../../services/index.ts";
 import { OfflineNotice } from "../auth/connection.tsx";
@@ -57,10 +61,12 @@ import { useMedia } from "../stories/media-context.tsx";
 import { layoutAccess, type LayoutAccess } from "./access.ts";
 import { DeskWords } from "./desk-text.tsx";
 import { useLayout } from "./layout-context.tsx";
+import { PageApproval, ReleaseTab, useEditionRelease } from "../release/ReleaseTab.tsx";
 import {
   ACTIVE_STATES,
   CheckBadge,
   duration,
+  follow,
   pageFile,
   pageStateText,
   roleText,
@@ -69,7 +75,7 @@ import {
 import "./layout.css";
 
 export const POLL_MS = 3000;
-const TABS = ["readiness", "ads", "run", "pages"] as const;
+const TABS = ["readiness", "ads", "run", "pages", "release"] as const;
 type Tab = (typeof TABS)[number];
 
 type Load =
@@ -81,17 +87,6 @@ interface Where {
   readonly orgId: string;
   readonly pubId: string;
   readonly editionId: string;
-}
-
-/** Saves a run's file by its 5-minute link: the browser downloads it from the store. */
-function follow(url: string, name: string): void {
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.rel = "noopener";
-  document.body.append(link);
-  link.click();
-  link.remove();
 }
 
 export function EditionLayoutScreen() {
@@ -120,9 +115,7 @@ export function EditionLayoutScreen() {
     <Stack gap="5" className="pg-layout">
       <PageHeader title={title} headingId={ROUTE_HEADING_ID} {...(subtitle ? { subtitle } : {})} />
       <OfflineNotice />
-      {access.view && (
-<LayoutContent where={{ orgId, pubId, editionId }} edition={edition} access={access} />
-      )}
+      {access.view && <LayoutContent where={{ orgId, pubId, editionId }} edition={edition} access={access} />}
     </Stack>
   );
 }
@@ -144,6 +137,7 @@ function LayoutContent({
   const tab: Tab = (TABS as readonly string[]).includes(asked ?? "") ? (asked as Tab) : "readiness";
   const ask = useRef(0);
   const { orgId, pubId, editionId } = where;
+  const release = useEditionRelease(where);
 
   const fetchLayout = useCallback(
     async (live: boolean) => {
@@ -227,9 +221,7 @@ function LayoutContent({
           {
             id: "ads",
             label: t("editionLayout.tab.ads"),
-            panel: (
-              <AdsTab where={where} data={data} edition={edition} may={access.ads} onChanged={refresh} />
-            ),
+            panel: <AdsTab where={where} data={data} edition={edition} may={access.ads} onChanged={refresh} />,
           },
           {
             id: "run",
@@ -248,7 +240,29 @@ function LayoutContent({
           {
             id: "pages",
             label: t("editionLayout.tab.pages"),
-            panel: <PagesTab where={where} run={data.board} access={access} />,
+            panel: (
+              <PagesTab
+                where={where}
+                run={data.board}
+                access={access}
+                pages={release.load.status === "ready" ? release.load.value.pages : []}
+                onApproval={release.refresh}
+              />
+            ),
+          },
+          {
+            id: "release",
+            label: t("editionLayout.tab.release"),
+            panel: (
+              <ReleaseTab
+                where={where}
+                load={release.load}
+                access={access}
+                onRefresh={release.refresh}
+                onTab={choose}
+                edition={edition}
+              />
+            ),
           },
         ]}
       />
@@ -822,10 +836,15 @@ function PagesTab({
   where,
   run,
   access,
+  pages,
+  onApproval,
 }: {
   readonly where: Where;
   readonly run: LayoutRunDto | null;
   readonly access: LayoutAccess;
+  /** each page's approval (the release view), when known */
+  readonly pages: readonly ReleasePageDto[];
+  readonly onApproval: () => void;
 }) {
   const layout = useLayout();
   const { t, language } = useI18n();
@@ -848,6 +867,7 @@ function PagesTab({
     if (!link.ok) return setProblem(link.error);
     follow(link.value.url, name);
   };
+  const approvals = new Map(pages.filter((p) => p.runId === run.id).map((p) => [p.page, p]));
   const files = [
     ...(access.proof && run.files.editionPdf
       ? [["edition.pdf", t("editionLayout.download.edition"), t("editionLayout.download.editionSub")] as const]
@@ -914,6 +934,9 @@ function PagesTab({
                   <p>
                     {t("editionLayout.page.failed")} {page.message && <DeskWords text={page.message} />}
                   </p>
+                )}
+                {page.state === "done" && approvals.has(page.page) && (
+                  <PageApproval where={where} page={approvals.get(page.page)!} access={access} onChanged={onApproval} />
                 )}
                 {page.state === "done" &&
                   (page.stories.length === 0 ? (

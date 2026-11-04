@@ -16,7 +16,7 @@ declare module "vitest" {
     /** the run's settings, and the migrated template every test file clones */
     database: TestSettings & { template: string };
     /** the run's bucket on the development object store (test/db/storage-run.ts) */
-    storage: { endpoint: string; accessKeyId: string; secretAccessKey: string; bucket: string };
+    storage: { endpoint: string; accessKeyId: string; secretAccessKey: string; bucket: string; archiveBucket: string };
   }
 }
 

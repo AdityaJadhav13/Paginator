@@ -88,3 +88,14 @@ export function CheckBadge({ check, t }: { readonly check: LayoutPageDto["check"
 /** A run's file name for a page: page-07.pdf, page-07.thumb.png … */
 export const pageFile = (page: number, kind: "pdf" | "png" | "thumb.png") =>
   `page-${String(page).padStart(2, "0")}.${kind}`;
+
+/** Saves a file by its 5-minute link: the browser downloads it from the store. */
+export function follow(url: string, name: string): void {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.rel = "noopener";
+  document.body.append(link);
+  link.click();
+  link.remove();
+}

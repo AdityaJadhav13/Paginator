@@ -16,6 +16,7 @@ import { z } from "zod";
 
 import { OrgId, Uuid7 } from "./ids.ts";
 import { DeskEditionKey, DeskRunKey, DeskText, StoredFile } from "./layout.ts";
+import { PageApproval } from "./release.ts";
 
 const Sha256 = z.string().regex(/^[0-9a-f]{64}$/);
 const Moment = z.iso.datetime({ offset: true });
@@ -340,6 +341,9 @@ export const EditorPage = z.strictObject({
   saved: z
     .strictObject({ rev: Rev, error: DeskText.nullable(), warnings: z.array(DeskText), stale: z.array(DeskText) })
     .nullable(),
+  /** the page's approval that counts now (L2.5): while it stands the page is locked (changes answer 409
+   * page_approved) until someone with page.unlock unlocks it */
+  approval: PageApproval.nullable(),
 });
 export type EditorPage = z.infer<typeof EditorPage>;
 

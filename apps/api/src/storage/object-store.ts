@@ -48,6 +48,25 @@ export interface ObjectStore {
     disposition: string;
     expiresSeconds: number;
   }): Promise<string>;
+  /** The archive bucket (plan §6.1; L2.5): bytes the API holds written as a new version under Object Lock, governance
+   * mode, until retainUntil, with their SHA-256 sent (ChecksumSHA256: the store refuses other bytes); returns its
+   * version (it throws when the store gives none). */
+  archivePut(input: {
+    key: string;
+    body: Uint8Array;
+    contentType: string;
+    retainUntil: Date;
+  }): Promise<{ versionId: string }>;
+  /** The bytes of this version of an archived object, as they arrive. */
+  archiveRead(key: string, versionId: string): Promise<AsyncIterable<Uint8Array>>;
+  /** A download link to one version of an archived object, as presignGet. */
+  archivePresignGet(input: {
+    key: string;
+    versionId: string;
+    contentType: string;
+    disposition: string;
+    expiresSeconds: number;
+  }): Promise<string>;
   /** True when the work bucket answers and its versioning is Enabled. */
   ready(): Promise<boolean>;
 }

@@ -1,5 +1,6 @@
 // The object store on S3's API (@aws-sdk 3.1152.0; plan §6): SeaweedFS 4.48 in development (path-style, on this
-// machine), S3 in Mumbai in the pilot. One bucket for work (uploads, assets).
+// machine), S3 in Mumbai in the pilot. One bucket for work (uploads, assets), and the archive bucket for releases.
+import { createHash } from "node:crypto";
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -74,6 +75,24 @@ const missing = (error: unknown) =>
 
 export function s3Store(config: StorageConfig, client: S3Client = s3Client(config)): ObjectStore {
   const Bucket = config.workBucket;
+  const Archive = config.archiveBucket;
+  const readFrom = async (bucket: string, key: string, versionId: string) => {
+    const object = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key, VersionId: versionId }));
+    if (!object.Body) throw new Error(`The object ${key} has no body.`);
+    return object.Body as AsyncIterable<Uint8Array>;
+  };
+  const linkTo = (bucket: string, input: Parameters<ObjectStore["presignGet"]>[0]) =>
+    getSignedUrl(
+      client,
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: input.key,
+        VersionId: input.versionId,
+        ResponseContentType: input.contentType,
+        ResponseContentDisposition: input.disposition,
+      }),
+      { expiresIn: input.expiresSeconds },
+    );
   return {
     async presignPost({ key, contentType, bytes, expiresSeconds, metadata }) {
       const meta = Object.fromEntries(Object.entries(metadata).map(([k, v]) => [`x-amz-meta-${k}`, v]));
@@ -98,11 +117,7 @@ export function s3Store(config: StorageConfig, client: S3Client = s3Client(confi
         throw error;
       }
     },
-    async read(key, versionId) {
-      const object = await client.send(new GetObjectCommand({ Bucket, Key: key, VersionId: versionId }));
-      if (!object.Body) throw new Error(`The object ${key} has no body.`);
-      return object.Body as AsyncIterable<Uint8Array>;
-    },
+    read: (key, versionId) => readFrom(Bucket, key, versionId),
     async copy({ from, fromVersion, to, contentType, metadata }) {
       const copied = await client.send(
         new CopyObjectCommand({
@@ -140,19 +155,24 @@ export function s3Store(config: StorageConfig, client: S3Client = s3Client(confi
       }
       throw new Error(`The versions of ${key} were not all deleted.`);
     },
-    async presignGet({ key, versionId, contentType, disposition, expiresSeconds }) {
-      return getSignedUrl(
-        client,
-        new GetObjectCommand({
-          Bucket,
+    presignGet: (input) => linkTo(Bucket, input),
+    async archivePut({ key, body, contentType, retainUntil }) {
+      const put = await client.send(
+        new PutObjectCommand({
+          Bucket: Archive,
           Key: key,
-          VersionId: versionId,
-          ResponseContentType: contentType,
-          ResponseContentDisposition: disposition,
+          Body: body,
+          ContentType: contentType,
+          ChecksumSHA256: createHash("sha256").update(body).digest("base64"),
+          ObjectLockMode: "GOVERNANCE",
+          ObjectLockRetainUntilDate: retainUntil,
         }),
-        { expiresIn: expiresSeconds },
       );
+      if (!put.VersionId) throw new Error(`The store gave no version for ${key}: is the archive bucket versioned?`);
+      return { versionId: put.VersionId };
     },
+    archiveRead: (key, versionId) => readFrom(Archive, key, versionId),
+    archivePresignGet: (input) => linkTo(Archive, input),
     async ready() {
       try {
         // a bucket without versioning would lose the version every asset is pinned to (plan §6.2)

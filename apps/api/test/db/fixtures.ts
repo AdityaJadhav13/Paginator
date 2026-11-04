@@ -377,6 +377,69 @@ export const FIXTURES: Fixture[] = [
       expires_at: "2026-10-21T10:21:15Z",
     }),
   },
+  // release (migration 2026_12_04_0001): an approval of the run's first page, a release of it with its file and a
+  // delivery, and the publication's press test
+  {
+    table: "page_approval",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      run_id: childId(pub, 16),
+      page_no: 1,
+      rev: 0,
+      pdf_sha256: "8".repeat(64),
+      approved_by: org.user,
+    }),
+  },
+  {
+    table: "release",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      id: childId(pub, 18),
+      edition_id: childId(pub, 2),
+      run_id: childId(pub, 16),
+      number: 1,
+      kind: "release",
+      approved_by: org.user,
+      retain_until: "2036-10-21T10:30:00Z",
+    }),
+  },
+  {
+    table: "release_file",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      release_id: childId(pub, 18),
+      page_no: 1,
+      name: "2026-10-21_P01.pdf",
+      rev: 0,
+      sha256: "8".repeat(64),
+      bytes: 100,
+      archive_key: `orgs/${org.id}/pubs/${pub.id}/editions/${childId(pub, 2)}/releases/${childId(pub, 18)}/pages/2026-10-21_P01.pdf`,
+      archive_version_id: "v1",
+    }),
+  },
+  {
+    table: "delivery",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      release_id: childId(pub, 18),
+      sent_by: org.user,
+      files: JSON.stringify([{ name: "2026-10-21_P01.pdf", sha256: "8".repeat(64), bytes: 100 }]),
+    }),
+  },
+  {
+    table: "press_test",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      page_sha256: "8".repeat(64),
+      accepted_on: "2026-10-20",
+      recorded_by: org.user,
+    }),
+  },
   {
     table: "ad_slot_artwork",
     per: "publication",

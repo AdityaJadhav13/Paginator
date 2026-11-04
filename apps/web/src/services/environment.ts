@@ -8,6 +8,7 @@ import type { LiveService } from "./live-service.ts";
 import type { MediaService } from "./media-service.ts";
 import type { LayoutService } from "./layout-service.ts";
 import type { EditorService } from "./editor-service.ts";
+import type { ReleaseService } from "./release-service.ts";
 import type { NewsService } from "./news-service.ts";
 import type { NotificationService } from "./notification-service.ts";
 import type { StoryService } from "./story-service.ts";
@@ -36,6 +37,8 @@ export interface ServiceEnvironment {
   readonly layout: LayoutService;
   /** The page editor, hosted (L2.4): a done run's page opened, changed, saved; its lock and history. */
   readonly editor: EditorService;
+  /** The release (L2.5): preflight, page approval, the release and its archive copy, sending, the press test. */
+  readonly release: ReleaseService;
   /** The public website's contact form. */
   readonly contact: ContactService;
   readonly comments: CommentService;

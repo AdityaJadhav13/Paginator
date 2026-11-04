@@ -41,6 +41,8 @@ export const AUDIT_ACTIONS = {
   "asset.rights_confirm": { scope: "publication" },
   /** An edition made ({date, pages}); a story put in or taken out of one is story.edition_change. */
   "edition.create": { scope: "publication" },
+  /** Its folio changed ({volume?, issue?, price?}: the fields changed, as they are now). */
+  "edition.edit": { scope: "publication" },
   /** A story bundle sent to the Desk, on its edition ({bundle, stories, photos}). */
   "desk.export": { scope: "publication" },
   /** The one-time import of the Desk's home (apps/api/scripts/import-desk.ts; actor kind "import", the person who ran
@@ -71,6 +73,17 @@ export const AUDIT_ACTIONS = {
    * page's history); a page's soft lock taken over by the person who asked for it ({run, page, from}) (L2.4). */
   "editor.page_save": { scope: "publication" },
   "editor.page_takeover": { scope: "publication" },
+  /** Release (L2.5): a page approved on its revision and bytes ({run, page, rev, pdfSha256}) or unlocked ({run, page});
+   * a release approved and archived ({release, edition, number, kind, files}); a delivery marked as sent ({release,
+   * delivery, files}) and the press's confirmation recorded ({release, delivery}); the archive read back and hashed
+   * ({release, ok}); the G2 press test recorded ({pageSha256, acceptedOn}). */
+  "page.approve": { scope: "publication" },
+  "page.unlock": { scope: "publication" },
+  "release.create": { scope: "publication" },
+  "release.send": { scope: "publication" },
+  "release.confirm": { scope: "publication" },
+  "release.verify": { scope: "publication" },
+  "press_test.set": { scope: "publication" },
   /** An engine event the inbox would not apply ({event, job, kind, reason}): not the contract's, or for an asset that
    * is not the organisation's and publication's it names, or one that still could not be applied after every try
    * (reason "error"). Only Owner and Admin see it (its publication is unchecked). */

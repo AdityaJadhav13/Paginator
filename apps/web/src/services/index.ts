@@ -1,10 +1,4 @@
-export type {
-  EditionDto,
-  OrganizationDto,
-  PublicationDto,
-  TextDirection,
-  UserDto,
-} from "./dtos.ts";
+export type { EditionDto, OrganizationDto, PublicationDto, TextDirection, UserDto } from "./dtos.ts";
 export type { ServiceError, ServiceResult, UnavailableResource } from "./result.ts";
 export type { ApiProblem, FieldProblemDto } from "./problem.ts";
 export type { UserQueryService } from "./user-query-service.ts";
@@ -85,6 +79,16 @@ export type {
   PageHistoryDto,
   PageLockDto,
 } from "./editor-service.ts";
+export type {
+  ArchiveCheckDto,
+  EditionReleaseDto,
+  PageApprovalDto,
+  PreflightItemDto,
+  PressTestDto,
+  ReleaseItemDto,
+  ReleasePageDto,
+  ReleaseService,
+} from "./release-service.ts";
 export type { ServiceEnvironment } from "./environment.ts";
 export type { CommentDto, CommentPatchDto, CommentService } from "./comment-service.ts";
 export type {
@@ -94,5 +98,11 @@ export type {
   NotificationService,
 } from "./notification-service.ts";
 export type { LiveEventDto, LiveService } from "./live-service.ts";
-export type { DeskBundleDto, EditionInputDto, EditionService, PubEditionDto } from "./edition-service.ts";
+export type {
+  DeskBundleDto,
+  EditionInputDto,
+  EditionPatchDto,
+  EditionService,
+  PubEditionDto,
+} from "./edition-service.ts";
 export type { AuditEventDto, AuditFilterDto, AuditPageDto, AuditService } from "./audit-service.ts";

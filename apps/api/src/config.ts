@@ -209,6 +209,9 @@ const Env = z
       .refine((text) => text.length <= 254 && PLAIN_ADDRESS.test(text), { error: "must be one plain address" })
       .optional(),
     ...STORAGE,
+    // How long a released file stays under Object Lock in the archive bucket (governance mode), in days: ten years
+    // by default (3653 days; owner decision D-20, docs/product/10-l2-newsroom-plan.md §6.1).
+    PGN_ARCHIVE_RETAIN_DAYS: wholeNumber(1, 36_525).default(3653),
     // The page editor's edit gateway on the engine host (plan §2.4: its private port, 8790) and the secret both sides
     // sign with (64 or more hex characters). Plain http only on this machine (the bodies carry the run's content).
     // Unset, the editor's routes answer 503 editor_unavailable.
@@ -263,6 +266,14 @@ const Env = z
         message: "may be http only for a gateway on this machine",
       });
     }
+    // Object Lock on work files and the archive's Deny on deletes would break uploads' cleanup
+    if (env.PGN_S3_ARCHIVE_BUCKET === env.PGN_S3_WORK_BUCKET) {
+      context.addIssue({
+        code: "custom",
+        path: ["PGN_S3_ARCHIVE_BUCKET"],
+        message: "must not be the work bucket (PGN_S3_WORK_BUCKET)",
+      });
+    }
     const store = new URL(env.PGN_S3_ENDPOINT);
     if (store.protocol === "http:" && !LOOPBACK.has(store.hostname.replace(/^\[|\]$/g, ""))) {
       context.addIssue({
@@ -294,6 +305,7 @@ const Env = z
     publicOrigin: env.PGN_PUBLIC_ORIGIN ?? env.PGN_ALLOWED_ORIGINS[0] ?? "",
     authSecret: env.PGN_AUTH_SECRET,
     storage: storageOf(env),
+    archiveRetainDays: env.PGN_ARCHIVE_RETAIN_DAYS,
     mail: {
       host: env.PGN_SMTP_HOST,
       port: env.PGN_SMTP_PORT,

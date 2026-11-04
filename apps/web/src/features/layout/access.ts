@@ -3,7 +3,9 @@
  * the API's layout routes decide it: a screen hides only what the API would refuse.
  */
 import type { OrgAccessDto } from "../../services/index.ts";
+import { reach } from "@pageinator/contracts";
 import { may } from "../people/navigation.ts";
+import { pubAccess } from "../stories/access.ts";
 
 export interface LayoutAccess {
   /** pages.view: the edition's layout, previews and the check's report */
@@ -21,6 +23,16 @@ export interface LayoutAccess {
   /** settings.view / settings.edit: the engine profile */
   readonly settings: boolean;
   readonly settingsEdit: boolean;
+  /** page.approve / page.unlock: a page's approval (L2.5) */
+  readonly approve: boolean;
+  readonly unlock: boolean;
+  /** release.approve; release.correct (a correction needs both) */
+  readonly release: boolean;
+  readonly correct: boolean;
+  /** archive.view: check the archive copy of a release */
+  readonly archive: boolean;
+  /** a full edition.edit: the edition's volume, issue number and price (the folio) */
+  readonly editionEdit: boolean;
 }
 
 export function layoutAccess(org: OrgAccessDto | undefined, pubId: string): LayoutAccess {
@@ -36,5 +48,11 @@ export function layoutAccess(org: OrgAccessDto | undefined, pubId: string): Layo
     press: can("export.press"),
     settings: can("settings.view"),
     settingsEdit: can("settings.edit"),
+    approve: can("page.approve"),
+    unlock: can("page.unlock"),
+    release: can("release.approve"),
+    correct: can("release.correct"),
+    archive: can("archive.view"),
+    editionEdit: open && reach("edition.edit", org.orgRole, pubAccess(org, pubId)) === "full",
   };
 }

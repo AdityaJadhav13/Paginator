@@ -149,6 +149,8 @@ export type LayoutEdition = {
   price: string;
   created_at: Date;
   updated_at: Date;
+  /** when its volume, issue or price last changed after it was made (null: never) */
+  folio_changed_at: Date | null;
   timezone: string;
 };
 
@@ -156,7 +158,7 @@ export type LayoutEdition = {
 export async function layoutEdition(tx: Tx, publicationId: string, editionId: string, lock = false) {
   const { rows } = await sql<LayoutEdition>`
     select e.id, e.desk_key, to_char(e.edition_date, 'YYYY-MM-DD') as date, e.pages, e.back_page_ads, e.volume,
-      e.issue, e.price, e.created_at, e.updated_at, p.timezone
+      e.issue, e.price, e.created_at, e.updated_at, e.folio_changed_at, p.timezone
     from app.edition e join app.publication p on p.org_id = e.org_id and p.id = e.publication_id
     where e.publication_id = ${publicationId} and e.id = ${editionId}
     ${lock ? sql`for update of e` : sql``}`.execute(tx);
@@ -424,8 +426,17 @@ export async function createRun(
 /** The Desk's m.run.starting, a queued run's message. */
 export const STARTING: DeskTextValue = { text: "Starting…", code: "m.run.starting", params: null };
 
-export async function setRunRequest(tx: Tx, publicationId: string, runId: string, versionId: string, sha256: string) {
-  await sql`update app.layout_run set request_version_id = ${versionId}, request_sha256 = ${sha256}
+/** The run's request stored: its version, its SHA-256 and the ad rasters it holds (slot → SHA-256, for the preflight). */
+export async function setRunRequest(
+  tx: Tx,
+  publicationId: string,
+  runId: string,
+  versionId: string,
+  sha256: string,
+  adRasters: Record<string, string>,
+) {
+  await sql`update app.layout_run set request_version_id = ${versionId}, request_sha256 = ${sha256},
+      ad_rasters = ${JSON.stringify(adRasters)}::jsonb
     where publication_id = ${publicationId} and id = ${runId}`.execute(tx);
 }
 

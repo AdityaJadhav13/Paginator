@@ -41,6 +41,7 @@ import { EditionLayoutScreen } from "../features/layout/EditionLayoutScreen.tsx"
 import { EngineProfileScreen } from "../features/layout/EngineProfileScreen.tsx";
 import { EditorProvider } from "../features/editor/editor-context.tsx";
 import { PageEditorScreen } from "../features/editor/PageEditorScreen.tsx";
+import { ReleaseProvider } from "../features/release/release-context.tsx";
 import { I18nProvider } from "../i18n/index.ts";
 import type { ServiceEnvironment } from "../services/index.ts";
 import { PlaceholderScreen } from "../demo/ui002/PlaceholderScreen.tsx";
@@ -110,6 +111,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
           <NewsProvider news={activeEnvironment.news}>
           <LayoutProvider layout={activeEnvironment.layout}>
           <EditorProvider editor={activeEnvironment.editor}>
+          <ReleaseProvider release={activeEnvironment.release}>
           <ContactProvider contact={activeEnvironment.contact}>
           <NewsroomProvider
             comments={activeEnvironment.comments}
@@ -196,6 +198,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
           </SessionProvider>
           </NewsroomProvider>
           </ContactProvider>
+          </ReleaseProvider>
           </EditorProvider>
           </LayoutProvider>
           </NewsProvider>

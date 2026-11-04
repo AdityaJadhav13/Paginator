@@ -6,7 +6,16 @@ import type { PageEditCause, PageEditState, SavedPage, StoredFile } from "@pagei
 import { sql } from "kysely";
 import type { z } from "zod";
 import type { DeskTextValue, Stored } from "./layout.ts";
+import type { Database } from "./pools.ts";
 import type { Tenant, Tx } from "./tenant.ts";
+
+/** Moves, saves, approvals and unlocks of one run take turns (the run's turn: a save's marks never cross a move's, and
+ * a page is never approved while a save or move that touches it is checking it). */
+export const runTurn = <T>(database: Database, runId: string, fn: () => Promise<T>) =>
+  database.withLock(`editor:${runId}`, fn);
+/** A change of one page, and its approval or unlock, take turns (the page's turn; an approval holds both turns). */
+export const pageTurn = <T>(database: Database, runId: string, page: number | string, fn: () => Promise<T>) =>
+  database.withLock(`editor:${runId}:${page}`, fn);
 
 export type Cause = z.infer<typeof PageEditCause>;
 
@@ -39,6 +48,8 @@ export type EditPageRow = {
   needs_save: boolean;
   needs_save_why: DeskTextValue | null;
   pdf_rev: number;
+  /** the SHA-256 of the page's PDF now (null: none) */
+  pdf_sha256: string | null;
   rev_seen: number;
   layout_problems: string[] | null;
   layout_problems_now: string[] | null;
@@ -48,7 +59,7 @@ export type EditPageRow = {
 export async function editPages(tx: Tx, publicationId: string, runId: string): Promise<EditPageRow[]> {
   const { rows } = await sql<EditPageRow>`
     select page_no, role, state, articles, checked, edited, edited_unsaved, needs_save, needs_save_why, pdf_rev,
-      rev_seen, layout_problems, layout_problems_now, stale
+      pdf_sha256, rev_seen, layout_problems, layout_problems_now, stale
     from app.run_page where publication_id = ${publicationId} and run_id = ${runId} order by page_no`.execute(tx);
   return rows;
 }
@@ -178,10 +189,18 @@ export async function beforeSave(
   return marks.filter((mark) => mark !== undefined);
 }
 
+/** The transaction's time (now()): no read in it is older. */
+export async function transactionTime(tx: Tx): Promise<Date> {
+  const { rows } = await sql<{ at: Date }>`select now() as at`.execute(tx);
+  if (!rows[0]) throw new Error("the database told no time");
+  return rows[0].at;
+}
+
 /** editing.saved_page and after_save, from the gateway's SavedPage: the pages a story left take their article lists
  * and need saving; the page records its files, what it prints, its problems and warnings, and stays "needs saving"
  * when a step after the export failed (saved.error). Its check is recorded separately (recordPageCheck). A PDF that
- * could not be stored (saved.pdf null) records nothing of the page but why it still needs saving. */
+ * could not be stored (saved.pdf null) records nothing of the page but why it still needs saving. Its saved_at is
+ * liveAt: when the save read the live edition it prints (the release's folio check compares it). */
 export async function afterSave(
   tx: Tx,
   who: Tenant,
@@ -190,6 +209,7 @@ export async function afterSave(
   page: number,
   saved: SavedPage,
   movedFrom: (page: number) => DeskTextValue,
+  liveAt: Date,
 ): Promise<void> {
   for (const [n, articles] of Object.entries(saved.pages_changed)) {
     await sql`update app.run_page set articles = ${JSON.stringify(articles)}::jsonb, needs_save = true,
@@ -211,7 +231,7 @@ export async function afterSave(
       warnings = ${JSON.stringify(saved.warnings)}::jsonb, stale = ${JSON.stringify(saved.stale)}::jsonb,
       pdf_rev = ${saved.rev}, edited = true, edited_unsaved = rev_seen > ${saved.rev},
       needs_save = ${saved.error !== null}, needs_save_why = ${j(saved.error)}::jsonb,
-      checked = null, report = null, saved_at = now(), saved_by = ${who.userId}, updated_at = now()
+      checked = null, report = null, saved_at = ${liveAt}, saved_by = ${who.userId}, updated_at = now()
     where publication_id = ${publicationId} and run_id = ${runId} and page_no = ${page}`.execute(tx);
   await sql`update app.layout_run set
       edition_pdf = coalesce(${j(saved.edition_pdf)}::jsonb, edition_pdf),

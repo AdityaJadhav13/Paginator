@@ -74,6 +74,27 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     message: "This layout's files are not on the engine's computer. Lay the edition out again to edit its pages.",
   },
   editor_unavailable: { status: 503, message: "The page editor is not available just now. Try again in a minute." },
+  // release (L2.5)
+  approval_stale: {
+    status: 409,
+    message: "This page or release changed after you looked at it. It is shown again as it is now.",
+  },
+  page_approved: {
+    status: 409,
+    message: "This page is approved, so it is locked. Ask a chief editor to unlock it first.",
+  },
+  not_approved: { status: 409, message: "This page is not approved, so there is nothing to unlock." },
+  release_refused: { status: 409, message: "This edition cannot be released yet: see what is not done." },
+  already_confirmed: { status: 409, message: "The press's confirmation of this delivery is already recorded." },
+  archive_failed: {
+    status: 502,
+    message: "The files could not be copied to the archive and checked. Nothing was released. Try again.",
+  },
+  receipt_failed: {
+    status: 502,
+    message:
+      "The receipt could not be written to the archive, so this was not recorded. The release is unchanged. Try again.",
+  },
   request_too_large: { status: 413, message: "This request is too large." },
   not_json: { status: 415, message: "This request must be sent as JSON." },
   slow_down: { status: 429, message: "Too many tries. Wait a minute and try again." },

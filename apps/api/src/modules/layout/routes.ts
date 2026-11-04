@@ -407,7 +407,8 @@ export const layoutRoutes: FastifyPluginAsyncZod<LayoutOptions> = async (app, { 
             contentType: "application/json",
             metadata: { sha256 },
           });
-          await setRunRequest(tx, pub, run.id, put.versionId, sha256);
+          const ads = Object.fromEntries(Object.entries(doc.ads).map(([slot, ad]) => [slot, ad.raster.sha256]));
+          await setRunRequest(tx, pub, run.id, put.versionId, sha256, ads);
           await enqueueEngineLayout(tx, {
             org_id: access.tenant.orgId,
             pub_id: pub,

@@ -4,14 +4,18 @@
 //   - POST makes one (edition.create, the whole cell only: Advertising's and Prepress's ◐ are their ad positions and
 //     colour map, 07 §12, not a new edition), with an Idempotency-Key; a date that has one already answers 409
 //     edition_exists with that edition as `current`. Audited (edition.create) in the change's transaction; the database
-//     tells other tabs (live event `edition`, migration 2026_11_28_0001).
+//     tells other tabs (live event `edition`, migration 2026_11_28_0001);
+//   - PATCH /:e changes its folio, volume, issue and price (edition.edit, the whole cell only): the fields changed are
+//     audited (edition.edit) and the edition's folio_changed_at moves (the release's folio check: page 1 prints it only
+//     once saved again after Update text, or laid out again). Unchanged fields change nothing.
 // A story is put in an edition, or taken out, by the story's own PATCH (editionId; the desk's, story.edition_change).
-import { Edition, EditionInput, EditionList, EditionQuery } from "@pageinator/contracts";
+import { Edition, EditionInput, EditionList, EditionPatch, EditionQuery } from "@pageinator/contracts";
 import { DeskTextError, cleanText } from "@pageinator/desk-text";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { recordAudit } from "../../db/audit.ts";
-import { type EditionRow, createEdition, listEditions } from "../../db/editions.ts";
+import { type EditionRow, createEdition, listEditions, setFolio } from "../../db/editions.ts";
+import { layoutEdition } from "../../db/layout.ts";
 import type { Database } from "../../db/pools.ts";
 import type { Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
@@ -20,6 +24,8 @@ import { idempotent } from "../requests/idempotency.ts";
 import { storyScope } from "./rules.ts";
 
 const Pub = z.strictObject({ o: z.string(), p: z.string() });
+const OneEdition = z.strictObject({ o: z.string(), p: z.string(), e: z.string() });
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BASE = "/api/v1/orgs/:o/pubs/:p/editions";
 /** More than a year of daily editions. */
 const LIST_LIMIT = 400;
@@ -119,6 +125,43 @@ export const editionRoutes: FastifyPluginAsyncZod<{ database: Database }> = asyn
         async (stored, tx) => one(tx, pub, (stored as { id: string }).id),
       );
       return reply.status(201).send(answer.body as Edition);
+    },
+  );
+
+  app.patch(
+    `${BASE}/:e`,
+    {
+      config: { permission: "edition.edit" },
+      schema: { params: OneEdition, body: EditionPatch, response: { 200: Edition } },
+    },
+    async (request) => {
+      const access = accessOf(request);
+      if (access.reach !== "full") throw refused("their role sets ad positions or the colour map, not the folio");
+      const { p: pub, e } = request.params;
+      const input = request.body;
+      return database.withTenant(access.tenant, async (tx) => {
+        const edition = UUID.test(e) ? await layoutEdition(tx, pub, e, true) : undefined;
+        if (!edition) throw new ApiError("not_found");
+        const folio = {
+          volume: input.volume === undefined ? edition.volume : line(input.volume, "volume"),
+          issue: input.issue === undefined ? edition.issue : line(input.issue, "issue"),
+          price: input.price === undefined ? edition.price : line(input.price, "price"),
+        };
+        const changed = (["volume", "issue", "price"] as const).filter((k) => folio[k] !== edition[k]);
+        if (changed.length > 0) {
+          await setFolio(tx, pub, e, folio);
+          await recordAudit(tx, access.tenant, {
+            action: "edition.edit",
+            targetType: "edition",
+            targetId: e,
+            publicationId: pub,
+            data: Object.fromEntries(changed.map((k) => [k, folio[k]])),
+          });
+        }
+        const view = await one(tx, pub, e);
+        if (!view) throw new Error("the edition just changed is not found");
+        return view;
+      });
     },
   );
 };

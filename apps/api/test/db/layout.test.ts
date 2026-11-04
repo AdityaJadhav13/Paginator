@@ -549,7 +549,7 @@ describe("a layout run", () => {
     expect(run).toMatchObject({ state: "queued", editionId: e, message: { code: "m.run.starting" } });
     expect(run.deskKey).toMatch(/^r-[0-9]{8}-[0-9]{6}$/);
     const { rows } = await su.query(
-      "select request_key, request_version_id, request_sha256 from app.layout_run where id = $1",
+      "select request_key, request_version_id, request_sha256, ad_rasters from app.layout_run where id = $1",
       [runId],
     );
     requestSha = rows[0].request_sha256;
@@ -560,6 +560,12 @@ describe("a layout run", () => {
     const doc = JSON.parse(bytes.toString("utf8"));
     expect(Object.keys(doc).sort()).toEqual(["ads", "articles", "edition"]);
     expect(doc.edition).toMatchObject({ schema: "pageinator.desk.edition/1", pages: 8, back_page_ads: true });
+    // the run keeps the ad rasters its request holds (the release's ad_artwork check compares them)
+    expect(rows[0].ad_rasters).toEqual(
+      Object.fromEntries(
+        Object.entries(doc.ads).map(([slot, ad]) => [slot, (ad as { raster: { sha256: string } }).raster.sha256]),
+      ),
+    );
     expect(doc.articles.map((x: { id: string }) => x.id).sort()).toEqual(
       [placed.desk, left.desk, unplaced.desk].sort(),
     );

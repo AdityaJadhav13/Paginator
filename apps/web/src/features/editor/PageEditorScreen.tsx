@@ -11,7 +11,10 @@
  *  - "Try another layout", "Update text", a move to another page and "Save page" wait for the changes on their way and
  *    hold the page while they run; the story panel's "Update" after a text save runs once the changes have settled;
  *  - a refusal of the engine is said in its own words;
- *  - someone else holding the page: read-only, with "Ask to take over"; the holder sees the ask and may hand over.
+ *  - someone else holding the page: read-only, with "Ask to take over"; the holder sees the ask and may hand over;
+ *  - an approved page (L2.5) is read-only, with who approved it and "Unlock" (page.unlock); a saved page with its check
+ *    known may be approved here (page.approve, with the revision and SHA-256 of the release view); a change the API
+ *    refuses as approved meanwhile (409 page_approved) reloads the page and says why.
  * Desktop first: under 900 px the page gives way to "Use a larger screen to edit pages", and is not opened (no lock).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -27,6 +30,7 @@ import type {
   EditorPageDto,
   PageHistoryDto,
   PageLockDto,
+  ReleasePageDto,
 } from "../../services/index.ts";
 import { OfflineNotice } from "../auth/connection.tsx";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
@@ -35,6 +39,7 @@ import { layoutAccess } from "../layout/access.ts";
 import { DeskWords } from "../layout/desk-text.tsx";
 import { useLayout } from "../layout/layout-context.tsx";
 import { checkText, roleText } from "../layout/layout-words.tsx";
+import { useRelease } from "../release/release-context.tsx";
 import { useEditor } from "./editor-context.tsx";
 import { PageCanvas } from "./PageCanvas.tsx";
 import { StoryText, type ArticleRef, type Draft } from "./StoryText.tsx";
@@ -104,7 +109,14 @@ export function PageEditorScreen() {
       <OfflineNotice />
       <p className="pg-editor__narrow">{t("pageEditor.narrow")}</p>
       {wide && access.view && Number.isInteger(page) && page >= 1 && (
-        <PageEditor key={`${runId}:${page}`} where={where} mayEdit={mayEdit} />
+        <PageEditor
+          key={`${runId}:${page}`}
+          where={where}
+          editionId={editionId}
+          mayEdit={mayEdit}
+          approve={access.approve}
+          unlock={access.unlock}
+        />
       )}
     </Stack>
   );
@@ -117,8 +129,22 @@ interface Where {
   readonly page: number;
 }
 
-function PageEditor({ where, mayEdit }: { readonly where: Where; readonly mayEdit: boolean }) {
+function PageEditor({
+  where,
+  editionId,
+  mayEdit,
+  approve,
+  unlock,
+}: {
+  readonly where: Where;
+  readonly editionId: string;
+  readonly mayEdit: boolean;
+  /** page.approve, page.unlock */
+  readonly approve: boolean;
+  readonly unlock: boolean;
+}) {
   const editor = useEditor();
+  const release = useRelease();
   const layout = useLayout();
   const { t, language } = useI18n();
   const tx = t as unknown as (key: string, params?: Record<string, string | number>) => string;
@@ -143,6 +169,9 @@ function PageEditor({ where, mayEdit }: { readonly where: Where; readonly mayEdi
   const [moveTo, setMoveTo] = useState("");
   const [drawn, setDrawn] = useState(0);
   const [storyIds, setStoryIds] = useState<ReadonlyMap<string, string | null>>(new Map());
+  /** the page in the release view: its revision, SHA-256 and check, for "Approve" */
+  const [releasePage, setReleasePage] = useState<ReleasePageDto | null>(null);
+  const [approving, setApproving] = useState(false);
 
   // what the callbacks need now, whatever render they were made in
   const q = useRef({
@@ -175,7 +204,7 @@ function PageEditor({ where, mayEdit }: { readonly where: Where; readonly mayEdi
     setLock(next);
   };
 
-  const readOnly = !mayEdit || !lock?.mine;
+  const readOnly = !mayEdit || !lock?.mine || !!data?.approval;
   const canEdit = !!view && !readOnly && busy === null;
 
   const loadHistory = useCallback(async () => {
@@ -251,6 +280,9 @@ function PageEditor({ where, mayEdit }: { readonly where: Where; readonly mayEdi
       setNotice(t("pageEditor.stale"));
     } else if (code === "page_locked") {
       setNotice(t("pageEditor.pageLocked"));
+      await reload();
+    } else if (code === "page_approved") {
+      setNotice(t("pageEditor.approvedRefused"));
       await reload();
     } else {
       setProblem(error);
@@ -424,6 +456,36 @@ function PageEditor({ where, mayEdit }: { readonly where: Where; readonly mayEdi
     };
   }, [layout, where]);
 
+  // the page in the release view, again whenever the page is saved at a new revision
+  const savedRev = data && !data.pageState.editedUnsaved ? data.rev : null;
+  const loadReleasePage = useCallback(async () => {
+    if (!approve) return;
+    const r = await release.get({ orgId: where.orgId, pubId: where.pubId, editionId });
+    if (q.current.alive && r.ok)
+      setReleasePage(r.value.pages.find((p) => p.runId === where.runId && p.page === where.page) ?? null);
+  }, [approve, release, where, editionId]);
+  useEffect(() => {
+    if (savedRev !== null) void loadReleasePage();
+  }, [loadReleasePage, savedRev]);
+
+  /** Approve (bound to the release view's revision and bytes) or unlock; then the page and its approval again. */
+  const approval = async (kind: "approve" | "unlock") => {
+    setApproving(true);
+    setProblem(null);
+    setNotice(null);
+    const r =
+      kind === "unlock"
+        ? await release.unlockPage(where)
+        : await release.approvePage({ ...where, rev: releasePage!.rev, pdfSha256: releasePage!.pdfSha256! });
+    if (!q.current.alive) return;
+    setApproving(false);
+    if (!r.ok && r.error.kind === "answer" && r.error.code === "approval_stale")
+      setNotice(t("editionRelease.page.changed"));
+    else if (!r.ok) setProblem(r.error);
+    await reload();
+    await loadReleasePage();
+  };
+
   // undo and redo from the keyboard (by key position, so a Marathi layout works too); Esc stops swapping
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   keys.current = (e: KeyboardEvent) => {
@@ -561,6 +623,14 @@ function PageEditor({ where, mayEdit }: { readonly where: Where; readonly mayEdi
       : ps.needsSave || ps.stale.length > 0
         ? t("pageEditor.state.needsSave")
         : t("pageEditor.state.saved");
+  const approveWhy =
+    ps.editedUnsaved || ps.needsSave || ps.stale.length > 0 || releasePage?.needsSave
+      ? t("editionRelease.page.needsSave")
+      : releasePage && !releasePage.pdfSha256
+        ? t("editionRelease.page.noPdf")
+        : releasePage && !releasePage.check
+          ? t("editionRelease.page.notChecked")
+          : null;
   const problemText = (p: PageView["problems"][number]) => {
     const m = problemMsg(p, nameOf);
     if (!m) return p.kind;
@@ -574,10 +644,10 @@ function PageEditor({ where, mayEdit }: { readonly where: Where; readonly mayEdi
         <p className="pg-layout__note">{t("pageEditor.title", { page: data.page, role })}</p>
         {lock && !lock.mine && lock.holder && (
           <InlineMessage variant="info" heading={t("pageEditor.lockedHeading")} iconLabel={t("message.info")}>
-            <p>{t("pageEditor.lockedBy", { name: lock.holder.name })}</p>
+            <span>{t("pageEditor.lockedBy", { name: lock.holder.name })}</span>{" "}
             {mayEdit &&
               (asked ? (
-                <p>{t("pageEditor.asked", { name: lock.holder.name })}</p>
+                <span>{t("pageEditor.asked", { name: lock.holder.name })}</span>
               ) : (
                 <Button variant="secondary" size="sm" onClick={() => void askTakeover()}>
                   {t("pageEditor.askTakeover")}
@@ -595,6 +665,38 @@ function PageEditor({ where, mayEdit }: { readonly where: Where; readonly mayEdi
               {t("pageEditor.handOver")}
             </Button>
           </InlineMessage>
+        )}
+        {data.approval ? (
+          <InlineMessage
+            variant="info"
+            heading={t("pageEditor.approved", {
+              name: data.approval.by.name,
+              time: formatDateTime(data.approval.at, language),
+            })}
+            iconLabel={t("message.info")}
+          >
+            {/* InlineMessage wraps its children in a <p> already */}
+            <span>{unlock ? t("pageEditor.approvedUnlock") : t("pageEditor.approvedAsk")}</span>{" "}
+            {unlock && (
+              <Button variant="secondary" size="sm" disabled={approving} onClick={() => void approval("unlock")}>
+                {t("editionRelease.page.unlock")}
+              </Button>
+            )}
+          </InlineMessage>
+        ) : (
+          approve && (
+            <div className="pg-editor__status">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={approving || sending || busy !== null || !!approveWhy || !releasePage}
+                onClick={() => void approval("approve")}
+              >
+                {t("editionRelease.page.approve")}
+              </Button>
+              {approveWhy && <span className="pg-layout__note">{approveWhy}</span>}
+            </div>
+          )
         )}
         <Toolbar label={t("pageEditor.toolbar")}>
           <Button variant="quiet" size="sm" disabled={!canEdit || !undoStack.length} onClick={undo}>
@@ -839,19 +941,19 @@ function SavedResult({ data }: { readonly data: EditorPageDto }) {
   return (
     <div>
       <InlineMessage
-      variant={saved.error || (check && !check.passed) ? "error" : ok && !saved.stale.length ? "success" : "warning"}
-      heading={saved.error ? t("pageEditor.saveError") : t("pageEditor.savedHeading")}
-      iconLabel={t(ok ? "message.success" : "message.warning")}
-      live
-    >
-      {checkText(check, t)}
-      {saved.error && (
-        <>
-          {" "}
-          <DeskWords text={saved.error} />
-        </>
-      )}
-    </InlineMessage>
+        variant={saved.error || (check && !check.passed) ? "error" : ok && !saved.stale.length ? "success" : "warning"}
+        heading={saved.error ? t("pageEditor.saveError") : t("pageEditor.savedHeading")}
+        iconLabel={t(ok ? "message.success" : "message.warning")}
+        live
+      >
+        {checkText(check, t)}
+        {saved.error && (
+          <>
+            {" "}
+            <DeskWords text={saved.error} />
+          </>
+        )}
+      </InlineMessage>
       {saved.warnings.length > 0 && (
         <>
           <p>{t("pageEditor.saveWarnings")}</p>

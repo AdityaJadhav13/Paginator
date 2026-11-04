@@ -44,6 +44,9 @@ export function createApiEditionService(client: ApiClient): EditionService {
     async create({ orgId, pubId, input, idempotencyKey }) {
       return read(Edition, await client.post(base(orgId, pubId), input, { idempotencyKey }));
     },
+    async update({ orgId, pubId, editionId, patch }) {
+      return read(Edition, await client.patch(`${base(orgId, pubId)}/${encodeURIComponent(editionId)}`, patch));
+    },
     async deskBundle({ orgId, pubId, editionId }) {
       const answer = await client.download(
         `${base(orgId, pubId)}/${encodeURIComponent(editionId)}/desk-bundle`,

@@ -135,19 +135,29 @@ describe("Glossary seeds (02 §3.9)", () => {
       .split("\n")
       .filter((line) => line.startsWith("|") && !line.includes("---"))
       .slice(1)
-      .map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()));
+      .map((line) =>
+        line
+          .split("|")
+          .slice(1, -1)
+          .map((cell) => cell.trim()),
+      );
     const expand = (cell: string): string[] => {
       const parts = cell.split(" / ");
       const first = parts[0]!.split(" ");
       return parts.map((part, index) => {
         if (index === 0) return part;
         const words = part.split(" ");
-        return words.length < first.length ? [...first.slice(0, first.length - words.length), ...words].join(" ") : part;
+        return words.length < first.length
+          ? [...first.slice(0, first.length - words.length), ...words].join(" ")
+          : part;
       });
     };
     const pairs: Array<[string, string]> = [];
     for (const row of rows) {
-      for (const [english, marathi] of [[row[0], row[1]], [row[2], row[3]]] as Array<[string, string]>) {
+      for (const [english, marathi] of [
+        [row[0], row[1]],
+        [row[2], row[3]],
+      ] as Array<[string, string]>) {
         const englishParts = expand(english.replace(/ \([^)]*\)$/, ""));
         const marathiParts = expand(marathi);
         englishParts.forEach((part, index) => pairs.push([part, marathiParts[index] ?? marathiParts[0]!]));
@@ -194,7 +204,11 @@ describe("The Marathi review list", () => {
 
   it("carries the open question on the Marathi term for a release on its three strings", () => {
     const noted = REVIEW.filter((item) => item.note).map((item) => item.key);
-    expect(noted.filter((key) => key.includes("release")).sort()).toEqual(["grant.release_approve", "invalid.release", "nav.release"]);
+    expect(noted.filter((key) => key.includes("release")).sort()).toEqual([
+      "grant.release_approve",
+      "invalid.release",
+      "nav.release",
+    ]);
     // the two invite buttons that read the same in Marathi, as the owner chose
     expect(noted.filter((key) => key.startsWith("team.invite")).sort()).toEqual(["team.invite", "team.invite.submit"]);
     expect(Object.keys(REVIEW_NOTES).every((key) => isCatalogueKey(key))).toBe(true);
@@ -209,6 +223,9 @@ describe("The Marathi review list", () => {
     const mr = CATALOGUES.mr;
     // प्रकाशन is Publication: a release is not one
     expect(mr["grant.release_approve"]).not.toContain("प्रकाशन");
+    // nor anywhere a release is named (L2.5): it is "प्रकाशित आवृत्ती", like the tab (owner to confirm the word)
+    const release = Object.entries(mr).filter(([key]) => /^(editionRelease\.|auditLog\.action\.release\.)/.test(key));
+    expect(release.filter(([, text]) => text.includes("प्रकाशन"))).toEqual([]);
     expect(mr["security.devices.signOut"]).toBe("प्रवेश बंद करा: {device}");
     expect(mr["security.devices.signedOut"]).toBe("{device}: प्रवेश बंद केला आहे.");
     expect(mr["team.grants.hint"]).toBe("हे अधिकार फक्त संपादकांनाच देता येतात.");
@@ -236,7 +253,9 @@ describe("The Marathi review list", () => {
 describe("Formatting", () => {
   it("replaces each placeholder with its value, in both languages", () => {
     expect(translator("en")("invite.join", { organization: "The Sahyadri Daily" })).toBe("Join The Sahyadri Daily");
-    expect(translator("mr")("invite.join", { organization: "द सह्याद्री डेली" })).toBe("द सह्याद्री डेली मध्ये सामील व्हा");
+    expect(translator("mr")("invite.join", { organization: "द सह्याद्री डेली" })).toBe(
+      "द सह्याद्री डेली मध्ये सामील व्हा",
+    );
     expect(translator("en")("verify.wait", { seconds: 42 })).toBe("You can send it again in 42 seconds.");
   });
 

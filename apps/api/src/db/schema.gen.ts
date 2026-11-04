@@ -107,6 +107,22 @@ export interface AppComment {
   updated_at: Generated<Timestamp>;
 }
 
+export interface AppDelivery {
+  confirm_note: string | null;
+  confirmed_at: Timestamp | null;
+  confirmed_by: string | null;
+  files: Json;
+  id: Generated<string>;
+  method: Generated<string>;
+  note: string | null;
+  org_id: string;
+  press_person: string | null;
+  publication_id: string;
+  release_id: string;
+  sent_at: Generated<Timestamp>;
+  sent_by: string;
+}
+
 export interface AppDeskBundle {
   created_at: Generated<Timestamp>;
   created_by: string;
@@ -132,6 +148,7 @@ export interface AppEdition {
   created_at: Generated<Timestamp>;
   desk_key: string;
   edition_date: string;
+  folio_changed_at: Timestamp | null;
   id: Generated<string>;
   issue: Generated<string>;
   org_id: string;
@@ -243,6 +260,7 @@ export interface AppInvitationGrant {
 }
 
 export interface AppLayoutRun {
+  ad_rasters: Json | null;
   checker_sha256: string | null;
   created_at: Generated<Timestamp>;
   created_by: string;
@@ -361,6 +379,20 @@ export interface AppOrgSettings {
   session_absolute_days: Generated<number>;
 }
 
+export interface AppPageApproval {
+  approved_at: Generated<Timestamp>;
+  approved_by: string;
+  id: Generated<string>;
+  org_id: string;
+  page_no: number;
+  pdf_sha256: string;
+  publication_id: string;
+  rev: number;
+  run_id: string;
+  unlocked_at: Timestamp | null;
+  unlocked_by: string | null;
+}
+
 export interface AppPageEdit {
   author_id: string | null;
   cause: string;
@@ -418,6 +450,16 @@ export interface AppPerson {
   user_id: string;
 }
 
+export interface AppPressTest {
+  accepted_on: string;
+  note: string | null;
+  org_id: string;
+  page_sha256: string;
+  publication_id: string;
+  recorded_at: Generated<Timestamp>;
+  recorded_by: string;
+}
+
 export interface AppPublication {
   created_at: Generated<Timestamp>;
   digit_style: string;
@@ -437,6 +479,38 @@ export interface AppPublicationGrant {
   roles: string[];
   updated_at: Generated<Timestamp>;
   user_id: string;
+}
+
+export interface AppRelease {
+  approved_at: Generated<Timestamp>;
+  approved_by: string;
+  edition_id: string;
+  id: Generated<string>;
+  kind: string;
+  manifest_key: string | null;
+  manifest_sha256: string | null;
+  manifest_version_id: string | null;
+  note: string | null;
+  number: number;
+  org_id: string;
+  publication_id: string;
+  retain_until: Timestamp;
+  run_id: string;
+  verified_at: Timestamp | null;
+}
+
+export interface AppReleaseFile {
+  archive_key: string;
+  archive_version_id: string;
+  bytes: number;
+  name: string;
+  org_id: string;
+  page_no: number;
+  publication_id: string;
+  release_id: string;
+  replaces: string | null;
+  rev: number;
+  sha256: string;
 }
 
 export interface AppRendition {
@@ -604,6 +678,7 @@ export interface DB {
   "app.asset": AppAsset;
   "app.audit_event": AppAuditEvent;
   "app.comment": AppComment;
+  "app.delivery": AppDelivery;
   "app.desk_bundle": AppDeskBundle;
   "app.desk_bundle_revision": AppDeskBundleRevision;
   "app.edition": AppEdition;
@@ -621,13 +696,17 @@ export interface DB {
   "app.news_topic": AppNewsTopic;
   "app.notification": AppNotification;
   "app.org_settings": AppOrgSettings;
+  "app.page_approval": AppPageApproval;
   "app.page_edit": AppPageEdit;
   "app.page_lock": AppPageLock;
   "app.page_save": AppPageSave;
   "app.pdf_check": AppPdfCheck;
   "app.person": AppPerson;
+  "app.press_test": AppPressTest;
   "app.publication": AppPublication;
   "app.publication_grant": AppPublicationGrant;
+  "app.release": AppRelease;
+  "app.release_file": AppReleaseFile;
   "app.rendition": AppRendition;
   "app.run_page": AppRunPage;
   "app.run_text_override": AppRunTextOverride;

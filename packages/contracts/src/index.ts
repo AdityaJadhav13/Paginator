@@ -99,7 +99,7 @@ export {
   NotificationsRead,
 } from "./notifications.ts";
 export { BUNDLE_FORMAT, DeskBundleRequest } from "./desk-bundle.ts";
-export { EDITION_PAGES, Edition, EditionInput, EditionList, EditionQuery } from "./editions.ts";
+export { EDITION_PAGES, Edition, EditionInput, EditionList, EditionPatch, EditionQuery } from "./editions.ts";
 export {
   CONTACT_EMAIL,
   CONTACT_INTENTS,
@@ -250,3 +250,25 @@ export {
   SavedPage,
   TextOverrides,
 } from "./editor.ts";
+export {
+  ArchiveCheck,
+  ConfirmInput,
+  Delivery,
+  DeliveryInput,
+  EditionRelease,
+  PageApproval,
+  PageApprovalInput,
+  PREFLIGHT_CHECKS,
+  PRESS_FILE,
+  PreflightCheck,
+  PreflightItem,
+  PressTest,
+  PressTestInput,
+  pressFileName,
+  Release,
+  ReleaseCandidate,
+  ReleaseFile,
+  ReleaseFileRef,
+  ReleaseInput,
+  ReleasePage,
+} from "./release.ts";

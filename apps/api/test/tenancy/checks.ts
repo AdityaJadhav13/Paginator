@@ -69,6 +69,13 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   page_save: ["INSERT", "SELECT"],
   run_text_override: ["INSERT", "SELECT", "UPDATE"],
   page_lock: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  // release (migration 2026_12_04_0001): approvals, releases, their files and deliveries are only added (an unlock, an
+  // archive check and the press's confirmation are column grants, COLUMN_RIGHTS); the press test is rewritten
+  page_approval: ["INSERT", "SELECT"],
+  release: ["INSERT", "SELECT"],
+  release_file: ["INSERT", "SELECT"],
+  delivery: ["INSERT", "SELECT"],
+  press_test: ["INSERT", "SELECT", "UPDATE"],
   // notifications (migration 2026_11_24_0001): never deleted; only read_at and emailed_at change (COLUMN_RIGHTS)
   notification: ["INSERT", "SELECT"],
   publication_grant: ["DELETE", "INSERT", "SELECT", "UPDATE"],
@@ -121,6 +128,9 @@ export const DEFINERS = [
 export const COLUMN_RIGHTS: readonly string[] = [
   "app.engine_event pgn_app UPDATE (outcome, processed_at, retry_at, tries)",
   "app.notification pgn_app UPDATE (emailed_at, read_at)",
+  "app.page_approval pgn_app UPDATE (unlocked_at, unlocked_by)",
+  "app.release pgn_app UPDATE (manifest_key, manifest_sha256, manifest_version_id, verified_at)",
+  "app.delivery pgn_app UPDATE (confirm_note, confirmed_at, confirmed_by, press_person)",
 ];
 
 /** pgn_auth's rights on each identity table: Better Auth's own (it reads and writes them as it needs), and ours,

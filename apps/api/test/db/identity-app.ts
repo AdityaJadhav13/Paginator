@@ -56,6 +56,7 @@ export async function identityApp(
     PGN_S3_ACCESS_KEY_ID: storage.accessKeyId,
     PGN_S3_SECRET_ACCESS_KEY: storage.secretAccessKey,
     PGN_S3_WORK_BUCKET: storage.bucket,
+    PGN_S3_ARCHIVE_BUCKET: storage.archiveBucket,
     // the tests sign in a few people who make many requests; test/db/rate-limit.test.ts sets its own budgets
     PGN_RATE_LIMIT_PER_PERSON_PER_MINUTE: "100000",
     PGN_RATE_LIMIT_SIGNED_IN_PER_ADDRESS_PER_MINUTE: "100000",

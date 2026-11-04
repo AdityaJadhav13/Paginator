@@ -36,6 +36,7 @@ import { startMeasureSchedule } from "./modules/layout/measure.ts";
 import { gatewayClient } from "./modules/editor/gateway.ts";
 import { editorRoutes } from "./modules/editor/routes.ts";
 import { layoutRoutes } from "./modules/layout/routes.ts";
+import { releaseRoutes } from "./modules/release/routes.ts";
 import { type PhotoFetch, newsRoutes } from "./modules/news/routes.ts";
 import { startNewsSchedule } from "./modules/news/schedule.ts";
 import { contactRoutes } from "./modules/contact/routes.ts";
@@ -221,6 +222,11 @@ export async function buildApp(deps: AppDeps) {
       await app.register(deskBundleRoutes, { database: people.database, store });
       await app.register(importRoutes, { database: people.database, store });
       await app.register(layoutRoutes, { database: people.database, store });
+      await app.register(releaseRoutes, {
+        database: people.database,
+        store,
+        retainDays: config.archiveRetainDays,
+      });
       await app.register(newsRoutes, {
         database: people.database,
         store,

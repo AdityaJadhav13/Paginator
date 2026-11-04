@@ -20,9 +20,11 @@
 //   - POST pages/:n/edit/takeover (layout.edit): ask for the lock (taken at once when nobody holds it) → PageLock.
 //   - GET glyphs/:face?ids=… and rasters/:key.jpg (pages.view): the engine's glyph outlines and placed pictures,
 //     through the gateway, kept by the browser (private, immutable: a font instance or a raster never changes).
-// Pages are changed only once their layout run and the page are done (409 not_editable). layout.edit's ◐ cells (text
-// only, images only, ads only) are not applied yet: only those who hold it fully may change a page. Without the
-// gateway's settings every route answers 503 editor_unavailable.
+// Pages are changed only once their layout run and the page are done (409 not_editable). An approved page (L2.5) is
+// locked: a change or a save of it, a move to it, and a save that takes a story off it answer 409 page_approved with
+// its approval until it is unlocked (checked in the run's or the page's turn, which approve and unlock take too).
+// layout.edit's ◐ cells (text only, images only, ads only) are not applied yet: only those who hold it fully may
+// change a page. Without the gateway's settings every route answers 503 editor_unavailable.
 import {
   EDIT_CALL_FORMAT,
   type EditAnswer,
@@ -41,6 +43,7 @@ import { z } from "zod";
 import { recordAudit } from "../../db/audit.ts";
 import {
   type Cause,
+  type EditPageRow,
   type EditRun,
   afterSave,
   askLock,
@@ -54,21 +57,26 @@ import {
   markNeedsSave,
   noteRevs,
   pageHistory,
+  pageTurn,
   pagePdfs,
   persistedState,
   recordPageCheck,
   recordSave,
   releaseLock,
+  runTurn,
   storeEdits,
   storeText,
+  transactionTime,
   unmark,
 } from "../../db/editor.ts";
 import { layoutEdition, layoutStories, recordCheck } from "../../db/layout.ts";
 import type { Database } from "../../db/pools.ts";
+import { standingApprovals } from "../../db/release.ts";
 import type { Tenant, Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 import { type Access, accessOf, auditRefusals, refused } from "../access/access.ts";
 import { frozenRequest } from "../layout/request.ts";
+import { approvalOf } from "../release/preflight.ts";
 import type { Gateway } from "./gateway.ts";
 import { UNFINISHED, editorPage, lockView, movedFrom, movedHere, placement, taking } from "./views.ts";
 
@@ -132,6 +140,17 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
     return { run, pages };
   }
 
+  /** An approved page is locked (L2.5): 409 page_approved, with its approval, when one of these pages has one that
+   * counts (a change or a save of it, or a move to it). */
+  async function notApproved(tx: Tx, pub: string, r: string, pages: readonly EditPageRow[], ns: readonly number[]) {
+    const approvals = await standingApprovals(tx, pub, r);
+    for (const n of ns) {
+      const row = pages.find((p) => p.page_no === n);
+      const approval = row ? approvalOf(row, approvals) : null;
+      if (approval) throw new ApiError("page_approved", undefined, approval);
+    }
+  }
+
   /** Someone else holds a live lock: 409 page_locked; otherwise the caller takes or beats it. */
   async function holdOrRefuse(tx: Tx, tenant: Tenant, pub: string, r: string, n: number) {
     const lock = await lockOf(tx, pub, r, n, true);
@@ -140,8 +159,9 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
     await holdLock(tx, tenant, pub, r, n);
   }
 
-  /** A move or a save of run r, one at a time (the marks of one never cross the other's). */
-  const oneAtATime = <T>(r: string, fn: () => Promise<T>) => database.withLock(`editor:${r}`, fn);
+  /** A move or a save of run r, one at a time (the marks of one never cross the other's), and never while one of its
+   * pages is approved or unlocked (db/editor.ts runTurn). */
+  const oneAtATime = <T>(r: string, fn: () => Promise<T>) => runTurn(database, r, fn);
 
   /** The edition's live content in the Desk's shape, as a layout request would hold it now. */
   async function liveOf(tx: Tx, pub: string, editionId: string) {
@@ -205,7 +225,9 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
 
   async function pageNow(tx: Tx, tenant: Tenant, pub: string, run: EditRun, n: number, view: Record<string, unknown>) {
     const pages = await editPages(tx, pub, run.id);
-    return editorPage(run, pages, n, view, lockView(await lockOf(tx, pub, run.id, n), tenant.userId));
+    const row = pages.find((p) => p.page_no === n);
+    const approval = row ? approvalOf(row, await standingApprovals(tx, pub, run.id)) : null;
+    return editorPage(run, pages, n, view, lockView(await lockOf(tx, pub, run.id, n), tenant.userId), null, approval);
   }
 
   /** The page as the engine holds it now (open: drawn, for the web; state: the save's own checks), its newer revisions
@@ -297,6 +319,7 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
       const apply = async () => {
         const { run, call, mark } = await database.withTenant(tenant, async (tx) => {
           const { run, pages } = await editable(tx, pub, r, n);
+          await notApproved(tx, pub, r, pages, change.kind === "move" ? [n, change.to] : [n]);
           await holdOrRefuse(tx, tenant, pub, r, n);
           let mark: Mark | undefined;
           if (change.kind === "move") {
@@ -326,7 +349,8 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
           return pageNow(tx, tenant, pub, run, n, answer.result);
         });
       };
-      return change.kind === "move" ? oneAtATime(r, apply) : apply();
+      // the approval check and the change take the run's turn (a move) or the page's (approve takes both)
+      return change.kind === "move" ? oneAtATime(r, apply) : pageTurn(database, r, n, apply);
     },
   );
 
@@ -345,7 +369,8 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
       const { rev } = request.body;
       const g = need();
       await database.withTenant(tenant, async (tx) => {
-        await editable(tx, pub, r, n);
+        const { pages } = await editable(tx, pub, r, n);
+        await notApproved(tx, pub, r, pages, [n]);
         await holdOrRefuse(tx, tenant, pub, r, n);
       });
       const { run, saved } = await oneAtATime(r, async () => {
@@ -365,7 +390,9 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
         const held = state.result["locked_on_pages"];
         const refusing =
           held !== undefined && held !== null && (typeof held !== "object" || Object.keys(held).length > 0);
-        const { call, marks } = await database.withTenant(tenant, async (tx) => {
+        const { call, marks, liveAt } = await database.withTenant(tenant, async (tx) => {
+          // in the run's turn, before the engine: this page and every page it takes a story from must not be approved
+          await notApproved(tx, pub, r, await editPages(tx, pub, r), [n, ...others]);
           const marks: Mark[] = refusing
             ? []
             : await beforeSave(
@@ -376,7 +403,9 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
                 UNFINISHED,
                 others.map((page) => ({ page, why: taking(n) })),
               );
-          return { marks, call: await callOf(tx, tenant, pub, run, n, "save", { base_rev: rev }) };
+          // when the live edition the save prints is read (a folio changed after it is not printed)
+          const liveAt = await transactionTime(tx);
+          return { marks, liveAt, call: await callOf(tx, tenant, pub, run, n, "save", { base_rev: rev }) };
         });
         const answer = await g.call(call);
         if (!answer.ok) {
@@ -393,7 +422,7 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
         const causes = new Map<number, Cause>(Object.keys(saved.pages_changed).map((page) => [Number(page), "taken"]));
         await database.withTenant(tenant, async (tx) => {
           await keep(tx, tenant, pub, run, n, "save", answer, causes);
-          await afterSave(tx, tenant, pub, r, n, saved, movedFrom);
+          await afterSave(tx, tenant, pub, r, n, saved, movedFrom, liveAt);
           if (saved.pdf) await recordSave(tx, tenant, pub, r, n, saved.rev, saved.pdf.sha256);
           await recordAudit(tx, tenant, {
             action: "editor.page_save",

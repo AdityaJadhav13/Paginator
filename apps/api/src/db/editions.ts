@@ -79,3 +79,16 @@ export async function createEdition(
     returning id`.execute(tx);
   return rows[0]?.id ?? null;
 }
+
+/** The edition's folio fields set (the caller holds the edition's lock: layoutEdition(…, true)); folio_changed_at is
+ * the clock now, so a run or a save that read the old folio read it before this time. */
+export async function setFolio(
+  tx: Tx,
+  publicationId: string,
+  editionId: string,
+  folio: Pick<NewEdition, "volume" | "issue" | "price">,
+): Promise<void> {
+  await sql`update app.edition set volume = ${folio.volume}, issue = ${folio.issue}, price = ${folio.price},
+      folio_changed_at = clock_timestamp(), updated_at = now()
+    where publication_id = ${publicationId} and id = ${editionId}`.execute(tx);
+}

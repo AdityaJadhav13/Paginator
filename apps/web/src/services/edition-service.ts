@@ -1,10 +1,12 @@
-import type { Edition, EditionInput } from "@pageinator/contracts";
+import type { Edition, EditionInput, EditionPatch } from "@pageinator/contracts";
 import type { ApiProblem } from "./problem.ts";
 import type { ServiceResult } from "./result.ts";
 
 /** A publication's edition as the API sends it (@pageinator/contracts), with its stories counted. */
 export type PubEditionDto = Edition;
 export type EditionInputDto = EditionInput;
+/** PATCH …/editions/:e (edition.edit): the folio's volume, issue number and price; a field left out is kept. */
+export type EditionPatchDto = EditionPatch;
 
 /** "Send to the Desk": the story bundle's ZIP, its file name and how many stories went in. */
 export interface DeskBundleDto {
@@ -25,6 +27,11 @@ interface Where {
  */
 export interface EditionService {
   list(input: Where): Promise<ServiceResult<readonly PubEditionDto[], ApiProblem>>;
-  create(input: Where & { readonly input: EditionInputDto; readonly idempotencyKey: string }): Promise<ServiceResult<PubEditionDto, ApiProblem>>;
+  create(
+    input: Where & { readonly input: EditionInputDto; readonly idempotencyKey: string },
+  ): Promise<ServiceResult<PubEditionDto, ApiProblem>>;
+  update(
+    input: Where & { readonly editionId: string; readonly patch: EditionPatchDto },
+  ): Promise<ServiceResult<PubEditionDto, ApiProblem>>;
   deskBundle(input: Where & { readonly editionId: string }): Promise<ServiceResult<DeskBundleDto, ApiProblem>>;
 }

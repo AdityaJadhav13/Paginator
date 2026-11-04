@@ -1,6 +1,7 @@
 // Editions (docs/product/10-l2-newsroom-plan.md §1 L2.1 "minimal editions", §5.2): one a publication and date, made
-// by the desk (edition.create), listed for whoever has edition.view. A story is put in an edition, or taken out, by the
-// story's own PATCH (editionId). Objects are strict, and responses are sent through these schemas.
+// by the desk (edition.create), listed for whoever has edition.view, its folio changed (edition.edit). A story is put
+// in an edition, or taken out, by the story's own PATCH (editionId). Objects are strict, and responses are sent
+// through these schemas.
 import { z } from "zod";
 
 /** A calendar date, YYYY-MM-DD, in the years the database takes. */
@@ -21,6 +22,17 @@ export const EditionInput = z.strictObject({
   price: Short.optional(),
 });
 export type EditionInput = z.infer<typeof EditionInput>;
+
+/** PATCH …/editions/:e (edition.edit, the whole cell only): the folio's volume, issue and price, each kept as the Desk
+ * keeps a short line; a field left out stays. Audited (edition.edit) when one changes. Page 1 prints the folio its
+ * PDF was made with: a change fails the release's folio check until page 1 prints it (Update text and save page 1, or
+ * lay out again). */
+export const EditionPatch = z.strictObject({
+  volume: Short.optional(),
+  issue: Short.optional(),
+  price: Short.optional(),
+});
+export type EditionPatch = z.infer<typeof EditionPatch>;
 
 export const Edition = z.strictObject({
   id: z.uuid(),

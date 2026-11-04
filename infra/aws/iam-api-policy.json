@@ -18,6 +18,24 @@
       "Effect": "Allow",
       "Action": ["s3:ListBucket", "s3:ListBucketVersions", "s3:GetBucketVersioning"],
       "Resource": "arn:aws:s3:::${PGN_S3_WORK_BUCKET}"
+    },
+    {
+      "Sid": "ArchiveWriteLockedAndRead",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:PutObjectRetention", "s3:GetObject", "s3:GetObjectVersion"],
+      "Resource": "arn:aws:s3:::${PGN_S3_ARCHIVE_BUCKET}/*"
+    },
+    {
+      "Sid": "ArchiveNeverDeletedOrUnlocked",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:BypassGovernanceRetention",
+        "s3:PutBucketObjectLockConfiguration",
+        "s3:PutObjectLegalHold"
+      ],
+      "Resource": ["arn:aws:s3:::${PGN_S3_ARCHIVE_BUCKET}", "arn:aws:s3:::${PGN_S3_ARCHIVE_BUCKET}/*"]
     }
   ]
 }

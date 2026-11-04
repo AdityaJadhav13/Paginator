@@ -94,7 +94,7 @@ describe("AUDIT_ACTIONS", () => {
       AUDIT_ACTION_NAMES.filter((action) => !/^(engine|invitation|member|org)\./.test(action)).sort(),
     );
     // the counts docs/product/10-l2-newsroom-plan.md §5.2 states
-    expect([AUDIT_ACTION_NAMES.length, PUBLICATION_AUDIT_ACTIONS.length]).toEqual([74, 63]);
+    expect([AUDIT_ACTION_NAMES.length, PUBLICATION_AUDIT_ACTIONS.length]).toEqual([82, 71]);
   });
 
   it("catches the table named in any form outside the writer, and a member call's action", () => {
