@@ -1,6 +1,7 @@
 import type {
   DraftLength,
   NewsDraft,
+  NewsItem,
   NewsLanguage,
   NewsPick,
   NewsSettings,
@@ -16,6 +17,7 @@ export type NewsSourceDto = NewsSource;
 export type NewsSourceInputDto = NewsSourceInput;
 export type NewsSettingsDto = NewsSettings;
 export type NewsTopicDto = NewsTopic;
+export type NewsItemDto = NewsItem;
 export type NewsDraftDto = NewsDraft;
 export type NewsPickDto = NewsPick;
 export type NewsLanguageDto = NewsLanguage;
@@ -38,6 +40,8 @@ export interface NewsService {
     input: Where & { readonly sourceId: string; readonly patch: Partial<NewsSourceInputDto> },
   ): Promise<ServiceResult<NewsSourceDto, ApiProblem>>;
   removeSource(input: Where & { readonly sourceId: string }): Promise<ServiceResult<void, ApiProblem>>;
+  /** Adds the suggested public feeds the list does not have yet (POST …/news/sources/suggested); answers the list. */
+  addSuggestedSources(input: Where): Promise<ServiceResult<readonly NewsSourceDto[], ApiProblem>>;
   getSettings(input: Where): Promise<ServiceResult<NewsSettingsDto, ApiProblem>>;
   updateSettings(
     input: Where & { readonly patch: { readonly houseStyle?: string; readonly collectEveryHours?: number } },
@@ -45,6 +49,8 @@ export interface NewsService {
   /** Collects the feeds now (POST …/news/collect, 202): the topics arrive later. */
   collect(input: Where): Promise<ServiceResult<void, ApiProblem>>;
   listTopics(input: Where & { readonly language?: NewsLanguageDto }): Promise<ServiceResult<readonly NewsTopicDto[], ApiProblem>>;
+  /** The items kept, newest first, grouped or not (what the screen lists while the AI part is off). */
+  listHeadlines(input: Where & { readonly language?: NewsLanguageDto }): Promise<ServiceResult<readonly NewsItemDto[], ApiProblem>>;
   /** One topic with its items. */
   getTopic(input: Where & { readonly topicId: string }): Promise<ServiceResult<NewsTopicDto, ApiProblem>>;
   pick(

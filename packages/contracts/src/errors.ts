@@ -21,6 +21,7 @@ export const ERROR_CODES = [
   "not_a_picture",
   "docx_refused",
   "rights_needed",
+  "ai_off",
   "bundle_refused",
   "request_too_large",
   "not_json",

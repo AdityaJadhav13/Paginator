@@ -5,6 +5,7 @@
  */
 import {
   NewsDraft,
+  NewsHeadlineList,
   NewsPhotoChosen,
   NewsPickAccepted,
   NewsSettings,
@@ -47,6 +48,10 @@ export function createApiNewsService(client: ApiClient): NewsService {
     async removeSource({ orgId, pubId, sourceId }) {
       return done(await client.delete(`${news(orgId, pubId)}/sources/${encodeURIComponent(sourceId)}`));
     },
+    async addSuggestedSources({ orgId, pubId }) {
+      const answer = read(NewsSourceList, await client.post(`${news(orgId, pubId)}/sources/suggested`, {}));
+      return answer.ok ? { ok: true, value: answer.value.items } : answer;
+    },
     async getSettings({ orgId, pubId }) {
       return read(NewsSettings, await client.get(`${news(orgId, pubId)}/settings`));
     },
@@ -58,6 +63,10 @@ export function createApiNewsService(client: ApiClient): NewsService {
     },
     async listTopics({ orgId, pubId, language }) {
       const answer = read(NewsTopicList, await client.get(`${news(orgId, pubId)}/topics${language ? `?language=${language}` : ""}`));
+      return answer.ok ? { ok: true, value: answer.value.items } : answer;
+    },
+    async listHeadlines({ orgId, pubId, language }) {
+      const answer = read(NewsHeadlineList, await client.get(`${news(orgId, pubId)}/headlines${language ? `?language=${language}` : ""}`));
       return answer.ok ? { ok: true, value: answer.value.items } : answer;
     },
     async getTopic({ orgId, pubId, topicId }) {

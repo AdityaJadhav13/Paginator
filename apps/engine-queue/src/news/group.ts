@@ -52,11 +52,11 @@ export async function collect(p: NewsCollectPayload, deps: NewsDeps, final: bool
       const xml = body.toString("utf8");
       const found = parseFeed(xml, url);
       if (found.length === 0 && !/<(?:rss|feed|rdf:RDF)\b/.test(xml.slice(0, 2000)))
-        return { source, found, error: "this address is not an RSS or Atom feed" };
+        return { source, found, error: "feed.not_a_feed" };
       return { source, found, error: null };
     } catch (error) {
-      if (error instanceof FetchRefused)
-        return { source, found: [], error: `the feed could not be read: ${error.message}` };
+      // the code only (NEWS_FETCH_ERRORS): the web words it in the reader's language
+      if (error instanceof FetchRefused) return { source, found: [], error: error.code };
       throw error;
     }
   });

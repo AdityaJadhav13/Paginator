@@ -78,6 +78,8 @@ x-api-environment: &api-environment
   PGN_S3_SECRET_ACCESS_KEY: ${PGN_S3_SECRET_ACCESS_KEY:?}
   PGN_S3_WORK_BUCKET: ${PGN_S3_WORK_BUCKET:?}
   PGN_S3_ARCHIVE_BUCKET: ${PGN_S3_ARCHIVE_BUCKET:?}
+  # on exactly when the engine has a Claude key: the API never sees the key itself
+  PGN_NEWS_AI: ${PGN_ANTHROPIC_API_KEY:+on}
   NODE_EXTRA_CA_CERTS: /etc/pageinator/ca.pem
 
 x-api: &api

@@ -10,6 +10,7 @@
 import type {
   ApiProblem,
   NewsDraftDto,
+  NewsItemDto,
   NewsService,
   NewsSettingsDto,
   NewsSourceDto,
@@ -51,6 +52,7 @@ const answer = (status: number, code: string, message: string): Answer => ({ kin
 const NOT_FOUND = answer(404, "not_found", "There is nothing here, or you do not have access to it.");
 const NOT_ALLOWED = answer(403, "not_allowed", "Your role cannot do this. Ask an editor or the owner.");
 const TWO_STEP = answer(403, "two_step_required", "Your role needs two-step sign-in. Set it up in Account → Security.");
+const AI_OFF = answer(409, "ai_off", "The AI part is off, so no story can be drafted. The headlines are still collected.");
 const KEY_REUSED = answer(422, "idempotency_key_reused", "This key was already used with a different request.");
 const invalid = (field: string, message: string): Answer => ({
   ...answer(400, "invalid_request", "Some fields are not right."),
@@ -62,6 +64,12 @@ const failure = <T,>(problem: ApiProblem): ServiceResult<T, ApiProblem> => ({ ok
 const SAHYADRI = "org-demo-sahyadri";
 const PUNE = "pub-demo-pune-daily";
 const AT = "2026-10-22T08:00:00.000Z";
+
+/** Stands in for the API's suggested public feeds (fictional here, as all the double's data). */
+const SUGGESTED = [
+  { name: "Fictional Maharashtra News", url: "https://suggested-mr.example/feed.xml", language: "mr" },
+  { name: "Fictional National Wire", url: "https://suggested-en.example/feed.xml", language: "en" },
+] as const;
 
 interface SourceRow extends NewsSourceDto {
   readonly orgId: string;
@@ -86,7 +94,7 @@ function sourceFixtures(): SourceRow[] {
     source("source-demo-1", "Fictional Marathi Daily", "mr"),
     source("source-demo-2", "Fictional Sahyadri Times", "mr"),
     source("source-demo-3", "Fictional Deccan Herald", "en"),
-    source("source-demo-4", "Fictional Konkan Varta", "mr", { lastError: "The feed did not answer in time." }),
+    source("source-demo-4", "Fictional Konkan Varta", "mr", { lastError: "fetch.timeout" }),
     source("source-demo-5", "Fictional City Wire", "en", { enabled: false, lastFetchAt: null }),
   ];
 }
@@ -276,6 +284,18 @@ export function createMockNews(deps: MockNewsDeps): {
       sources = sources.filter((candidate) => candidate.id !== sourceId);
       return success(undefined);
     },
+    async addSuggestedSources({ orgId, pubId }) {
+      const checked = await check<readonly NewsSourceDto[]>("news.sourceEdit", orgId, pubId, "settings.edit");
+      if (refused(checked)) return checked;
+      const have = new Set(sources.filter(here(orgId, pubId)).map((row) => row.url));
+      for (const suggested of SUGGESTED) {
+        if (have.has(suggested.url)) continue;
+        counter += 1;
+        const id = `source-new-${String(counter).padStart(3, "0")}`;
+        sources = [...sources, { orgId, pubId, id, ...suggested, enabled: true, lastFetchAt: null, lastError: null }];
+      }
+      return success(sources.filter(here(orgId, pubId)).map(strip));
+    },
     async getSettings({ orgId, pubId }) {
       const checked = await check<NewsSettingsDto>("news.settings", orgId, pubId, "story.assign");
       if (refused(checked)) return checked;
@@ -308,6 +328,16 @@ export function createMockNews(deps: MockNewsDeps): {
           .map((topic) => ({ ...strip(topic), items: [] })),
       );
     },
+    async listHeadlines({ orgId, pubId, language }) {
+      const checked = await check<readonly NewsItemDto[]>("news.topics", orgId, pubId, "story.assign");
+      if (refused(checked)) return checked;
+      const items = topics.filter(here(orgId, pubId)).flatMap((topic) => topic.items.map((item) => structuredClone(item)));
+      return success(
+        items
+          .filter((item) => !language || item.language === language)
+          .sort((x, y) => (y.publishedAt ?? "").localeCompare(x.publishedAt ?? "") || x.id.localeCompare(y.id)),
+      );
+    },
     async getTopic({ orgId, pubId, topicId }) {
       const checked = await check<NewsTopicDto>("news.topics", orgId, pubId, "story.assign");
       if (refused(checked)) return checked;
@@ -317,6 +347,7 @@ export function createMockNews(deps: MockNewsDeps): {
     async pick({ orgId, pubId, topicId, pick, idempotencyKey }) {
       const checked = await check<{ draftId: string }>("news.pick", orgId, pubId, "story.assign");
       if (refused(checked)) return checked;
+      if (ai.state === "off") return failure(AI_OFF);
       const body = JSON.stringify({ topicId, pick });
       const kept = keys.get(idempotencyKey);
       if (kept) return kept.body === body ? success({ draftId: kept.draftId }) : failure(KEY_REUSED);

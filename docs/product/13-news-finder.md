@@ -32,8 +32,22 @@ source changes, settings changes, collections, picks, drafts, photo choices and 
 ## 3. How it works
 
 1. **Sources.** Each paper keeps its own list: name, feed address, language (Marathi or English), on or off, last
-   fetch and its last problem. A suggested list of public feeds is offered (§8: the owner confirms it, D-27). Only
-   feeds are read for collection; pages are never scraped for it.
+   fetch and its last problem (shown in English or Marathi). **Add suggested sources** (Chief Editor, Owner, Admin)
+   adds, switched on, whichever of these public feeds the list does not have yet (by address; all answered valid RSS
+   on 2026-11-04; the owner confirms the list, D-27):
+
+   | Name | Feed | Language |
+   |---|---|---|
+   | Sakal | https://www.esakal.com/stories.rss | Marathi |
+   | ABP Majha | https://marathi.abplive.com/home/feed | Marathi |
+   | TV9 Marathi | https://www.tv9marathi.com/feed | Marathi |
+   | The Hindu | https://www.thehindu.com/feeder/default.rss | English |
+   | The Indian Express | https://indianexpress.com/feed/ | English |
+   | Hindustan Times | https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml | English |
+   | NDTV | https://feeds.feedburner.com/ndtvnews-top-stories | English |
+
+   Loksatta, Lokmat and Maharashtra Times had no working public feed on 2026-11-04, and PIB's feed answered in Hindi,
+   so none of them is suggested. Only feeds are read for collection; pages are never scraped for it.
 2. **Collect** (every 3 hours by default; the Chief Editor can change it or collect now). The engine queue fetches
    each feed politely: a product User-Agent (never a person's email), time limits, size limits, at most three
    redirects, and only public internet addresses (§6). Items are kept for 3 days; a link already seen is skipped.
@@ -64,8 +78,11 @@ source changes, settings changes, collections, picks, drafts, photo choices and 
 
 - Every draft and photo choice says **"Made with Claude — check before use"** until a person edits the story.
 - AI only drafts text, groups headlines and ranks photos. No AI for layout, line breaks, fit or validity (unchanged).
-- The API key lives only on the engine queue's server. With no key, the Sources screen says the AI part is off, and
-  collection still works.
+- The API key lives only on the engine queue's server; the API is told only whether there is one (`PGN_NEWS_AI`, set
+  on by the pilot's compose file exactly when the key is). With no key the Sources screen says the AI part is off from
+  the start (before any collection), collection still works, and "Trending" lists the **latest headlines** by source,
+  newest first, labelled as not grouped: no topic is made per headline, and nothing can be picked (the API refuses a
+  pick with `ai_off`, so no draft is queued to fail).
 - A daily spend cap (₹300 by default) is checked before every Claude call; every call's tokens and cost are logged,
   and the Sources screen shows the AI spend this month.
 - Claude's answers are read only after checking that it finished (not refused, not cut short); a refusal is retried
@@ -83,7 +100,8 @@ breaks. Unit tests cover Marathi and English.
 
 Feeds, articles, robots.txt, the photo searches and the chosen photo's download all go through one guarded fetch:
 http and https only; the address actually connected to must be a public one (private, loopback, link-local,
-carrier-grade NAT, multicast and reserved ranges refused, IPv6 included, checked after the name is resolved so a
+carrier-grade NAT, multicast and reserved ranges refused, IPv6 included; an IPv4 address inside IPv6 (mapped,
+compatible, or NAT64 on 64:ff9b::/96 and 64:ff9b:1::/96) is judged as that IPv4 address, checked after the name is resolved so a
 changing DNS answer cannot slip past); every redirect checked again, at most three; a time limit for the whole
 request; a size limit enforced while reading.
 
@@ -109,6 +127,6 @@ Built and tested with a fake Claude and fictional feeds only. Before real use:
 - **D-28** the house style guide text (and examples, kept private);
 - **D-29** any paid agency (PTI, ANI, Reuters pictures) to treat as Safe to print.
 
-The feeds checked on 2026-11-04 as valid public RSS: Sakal, ABP Majha, TV9 Marathi, The Hindu, Indian Express,
-Hindustan Times, NDTV. PIB's feed answered in Hindi; no working public feed was found for Loksatta, Lokmat or
-Maharashtra Times. Minor findings left for the end are L2-420–L2-429 in 11-fix-before-launch.md.
+The feeds checked on 2026-11-04 as valid public RSS are the suggested list in §3.1. Loksatta, Lokmat and Maharashtra
+Times have no working public feed (2026-11-04), and PIB's feed is Hindi. Minor findings left for the end are
+L2-420–L2-431 in 11-fix-before-launch.md.

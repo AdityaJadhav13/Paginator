@@ -310,7 +310,9 @@ export async function storeCollection(
       members.map((m) => m.id),
     );
   }
-  for (const item of await loose(items.map((i) => i.link))) {
+  // an item Claude left out is a topic of its own; with the AI part off nothing is grouped, so none is made (the
+  // screen lists the headlines instead: a topic per item would only pretend to be grouped)
+  for (const item of event.ai === "off" ? [] : await loose(items.map((i) => i.link))) {
     await group(await newTopic({ title_mr: item.title, title_en: item.title, importance: 1 }), [item.id]);
   }
   await sql`delete from app.news_item where publication_id = ${pub} and created_at < now() - ${KEEP}::interval`.execute(
@@ -395,13 +397,20 @@ export type ItemRow = {
   published_at: Date | null;
 };
 
-/** A topic's items, newest first. */
-export async function topicItems(tx: Tx, publicationId: string, topicId: string, limit: number): Promise<ItemRow[]> {
+/** A topic's items (or, with topicId null, every item kept, in one language or both), newest first. */
+export async function topicItems(
+  tx: Tx,
+  publicationId: string,
+  topicId: string | null,
+  limit: number,
+  language: string | null = null,
+): Promise<ItemRow[]> {
   const { rows } = await sql<ItemRow>`
     select i.id, i.source_id, s.name as source_name, i.title, i.summary, i.link, s.language, i.published_at
     from app.news_item i
     join app.news_source s on s.org_id = i.org_id and s.publication_id = i.publication_id and s.id = i.source_id
-    where i.publication_id = ${publicationId} and i.topic_id = ${topicId}
+    where i.publication_id = ${publicationId} and (${topicId}::uuid is null or i.topic_id = ${topicId}::uuid)
+      and (${language}::text is null or s.language = ${language}::text)
     order by coalesce(i.published_at, i.created_at) desc, i.id
     limit ${limit}`.execute(tx);
   return rows;

@@ -43,6 +43,10 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     status: 422,
     message: "This photo needs permission to print. Tick “We have the right to print this” first.",
   },
+  ai_off: {
+    status: 409,
+    message: "The AI part is off, so no story can be drafted. The headlines are still collected.",
+  },
   bundle_refused: {
     status: 409,
     message: "Some stories cannot be sent to the Desk as they are. Change them, then send again.",

@@ -29,6 +29,10 @@ describe("config", () => {
       aiDailyCapInr: 300,
     });
     expect(load({ PGN_AI_DAILY_CAP_INR: "50" }).aiDailyCapInr).toBe(50);
+    expect(load({}).newsAi).toBe(false);
+    expect(load({ PGN_NEWS_AI: "on" }).newsAi).toBe(true);
+    expect(load({ PGN_NEWS_AI: "" }).newsAi).toBe(false); // compose's ${PGN_ANTHROPIC_API_KEY:+on} with no key
+    expect(problems({ PGN_NEWS_AI: "yes" })).toContain("PGN_NEWS_AI must be on or off");
     expect(load({ PGN_ENGINE_STALE_S: "3600", PGN_ENGINE_DEADLINE_S: "60" }).engineSweep).toEqual({
       staleMs: 3_600_000,
       deadlineMs: 60_000,

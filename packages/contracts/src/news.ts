@@ -38,6 +38,32 @@ export const NEWS_KEEP_DAYS = 3;
 
 // ---------------------------------------------------------------- HTTP: sources and settings (settings.edit to change)
 
+/** Why a feed could not be collected, as the engine queue reports it (the web shows its own words for each). */
+export const NEWS_FETCH_ERRORS = [
+  "fetch.scheme",
+  "fetch.private_address",
+  "fetch.too_large",
+  "fetch.timeout",
+  "fetch.redirects",
+  "fetch.status",
+  "fetch.type",
+  "fetch.network",
+  "fetch.robots",
+  "feed.not_a_feed",
+] as const;
+
+/** The suggested public feeds (docs/product/13-news-finder.md §3.1), each answered valid RSS on 2026-11-04. Whether
+ * each may be used is the owner's call (D-27). */
+export const SUGGESTED_NEWS_SOURCES = [
+  { name: "Sakal", url: "https://www.esakal.com/stories.rss", language: "mr" },
+  { name: "ABP Majha", url: "https://marathi.abplive.com/home/feed", language: "mr" },
+  { name: "TV9 Marathi", url: "https://www.tv9marathi.com/feed", language: "mr" },
+  { name: "The Hindu", url: "https://www.thehindu.com/feeder/default.rss", language: "en" },
+  { name: "The Indian Express", url: "https://indianexpress.com/feed/", language: "en" },
+  { name: "Hindustan Times", url: "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml", language: "en" },
+  { name: "NDTV", url: "https://feeds.feedburner.com/ndtvnews-top-stories", language: "en" },
+] as const satisfies readonly { name: string; url: string; language: NewsLanguage }[];
+
 export const NewsSource = z.strictObject({
   id: Id,
   name: z.string(),
@@ -45,7 +71,7 @@ export const NewsSource = z.strictObject({
   language: NewsLanguage,
   enabled: z.boolean(),
   lastFetchAt: Moment.nullable(),
-  /** the last fetch's problem in plain words, or null */
+  /** the last fetch's problem as a code (NEWS_FETCH_ERRORS; the web words it), or null */
   lastError: z.string().nullable(),
 });
 export type NewsSource = z.infer<typeof NewsSource>;
@@ -125,6 +151,9 @@ export type NewsTopic = z.infer<typeof NewsTopic>;
 /** GET …/news/topics?language=mr|en: the last NEWS_KEEP_DAYS days', by distinct sources × recency. */
 export const NewsTopicQuery = z.strictObject({ language: NewsLanguage.optional() });
 export const NewsTopicList = z.strictObject({ items: z.array(NewsTopic) });
+/** GET …/news/headlines?language=mr|en: the last NEWS_KEEP_DAYS days' items, newest first, grouped or not (what the
+ * screen shows while the AI part is off). */
+export const NewsHeadlineList = z.strictObject({ items: z.array(NewsItem) });
 
 /** POST …/news/topics/:t/pick (Idempotency-Key) → 202 {draftId}. */
 export const NewsPick = z.strictObject({ language: NewsLanguage, length: DraftLength, findPhoto: z.boolean() });

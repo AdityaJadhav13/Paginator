@@ -28,7 +28,6 @@ describe("isPublicAddress", () => {
       "fd12:3456::1",
       "ff02::1",
       "2001:db8::1",
-      "64:ff9b::a00:1",
       "2002:a00:1::",
       "not an address",
       "",
@@ -48,6 +47,23 @@ describe("isPublicAddress", () => {
       expect(isPublicAddress(ip), ip).toBe(false);
     expect(isPublicAddress("::ffff:8.8.8.8")).toBe(true);
     expect(isPublicAddress("::ffff:808:808")).toBe(true);
+  });
+
+  it("reads the IPv4 address inside a NAT64 address (64:ff9b::/96, 64:ff9b:1::/96) as that address", () => {
+    for (const ip of [
+      "64:ff9b::a00:1",
+      "64:ff9b::127.0.0.1",
+      "64:ff9b::7f00:1",
+      "64:ff9b::a9fe:a9fe",
+      "64:ff9b::c0a8:101",
+      "64:ff9b::",
+      "64:ff9b:1::a00:1",
+      "64:ff9b:1::169.254.169.254",
+      "64:ff9b:1:808:8:800::", // the /48 shape: not read, so refused
+    ])
+      expect(isPublicAddress(ip), ip).toBe(false);
+    for (const ip of ["64:ff9b::808:808", "64:ff9b::8.8.8.8", "64:ff9b::101:101", "64:ff9b:1::808:808"])
+      expect(isPublicAddress(ip), ip).toBe(true);
   });
 
   it("allows public addresses", () => {

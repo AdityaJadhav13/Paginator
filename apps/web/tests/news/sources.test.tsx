@@ -81,11 +81,39 @@ describe("Trending topics", () => {
     expect(screen.getAllByText("मोठी बातमी").length).toBeGreaterThan(0);
   });
 
-  it("says the AI part is off while collection still works", async () => {
+  it("with the AI part off, lists the latest headlines by source, not as topics, with nothing to pick", async () => {
     const environment = createMockApplicationEnvironment();
     environment.sessionController.setNewsAi("off");
-    await openSources({ environment });
+    const { container } = renderAuth(SOURCES, { preset: "sahyadri-editor", environment });
     expect(await screen.findByText("The AI part is off; collection still works")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "Latest headlines" })).toBeInTheDocument();
+    expect(screen.getByText(/Not grouped into topics/)).toBeInTheDocument();
+    const deccan = screen.getByRole("list", { name: "Headlines from Fictional Deccan Herald" });
+    expect(within(deccan).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Heavy rain shuts Pune schools",
+      "Ring road tenders opened",
+    ]);
+    expect(within(deccan).getByRole("link", { name: "Ring road tenders opened" })).toHaveAttribute(
+      "href",
+      "https://source-demo-3.example/news/item-demo-5",
+    );
+    expect(screen.queryByRole("list", { name: "Topics from the last three days" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: RAIN })).not.toBeInTheDocument();
+    expect(await seriousViolations(container)).toEqual([]);
+  });
+
+  it("refuses a pick while the AI part is off, and queues no draft", async () => {
+    const environment = createMockApplicationEnvironment();
+    environment.sessionController.setNewsAi("off");
+    const picked = await environment.news.pick({
+      orgId: ORG,
+      pubId: PUB,
+      topicId: "topic-demo-1",
+      pick: { language: "mr", length: "short", findPhoto: false },
+      idempotencyKey: "key-off",
+    });
+    expect(picked).toMatchObject({ ok: false, error: { status: 409, code: "ai_off" } });
+    expect(await environment.news.getDraft({ orgId: ORG, pubId: PUB, draftId: "draft-001" })).toMatchObject({ ok: false });
   });
 
   it("is the desk's: Settings only for whoever may change them", async () => {
@@ -224,11 +252,40 @@ describe("Settings", () => {
     expect(settings.ok && settings.value).toMatchObject({ houseStyle: "Short sentences. Numbers in digits.", collectEveryHours: 6 });
   });
 
+  it("puts Collect now in the header for whoever may change the settings only", async () => {
+    await openSources({ preset: "sahyadri-subeditor" });
+    expect(screen.queryByRole("button", { name: "Collect now" })).not.toBeInTheDocument();
+    resetBrowserState();
+    await openSources({ preset: "sahyadri-owner" });
+    expect((await screen.findByRole("button", { name: "Collect now" })).closest(".pg-page-header")).not.toBeNull();
+  });
+
+  it("adds the suggested public feeds once, and words a feed's problem in Marathi", async () => {
+    const { user } = await openSources({ preset: "sahyadri-owner" });
+    await user.click(screen.getByRole("tab", { name: "Settings" }));
+    const feeds = await screen.findByRole("table", { name: "Feeds" });
+    await within(feeds).findByText("Fictional Konkan Varta");
+    await user.click(screen.getByRole("button", { name: "Add suggested sources" }));
+    expect(await within(feeds).findByText("Fictional Maharashtra News")).toBeInTheDocument();
+    expect(within(feeds).getByText("https://suggested-mr.example/feed.xml")).toBeInTheDocument();
+    expect(screen.getByText(/The suggested sources this list did not have are added/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add suggested sources" }));
+    await waitFor(() => expect(within(feeds).getAllByText("Fictional Maharashtra News")).toHaveLength(1));
+    expect(within(feeds).getAllByRole("row")).toHaveLength(1 + 5 + 2);
+
+    resetBrowserState();
+    renderAuth(SOURCES, { preset: "sahyadri-owner", language: "mr" });
+    const user2 = userEvent.setup();
+    await user2.click(await screen.findByRole("tab", { name: "सेटिंग्ज" }));
+    expect(await screen.findByText("फीडने वेळेत उत्तर दिले नाही.")).toBeInTheDocument();
+  });
+
   it("deletes a source after asking", async () => {
     const { user } = await openSources({ preset: "sahyadri-owner" });
     await user.click(screen.getByRole("tab", { name: "Settings" }));
     const feeds = await screen.findByRole("table", { name: "Feeds" });
-    await user.click(await within(feeds).findByRole("button", { name: "Delete Fictional City Wire" }));
+    await user.click(await within(feeds).findByRole("button", { name: "Actions for Fictional City Wire" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
     await user.click(within(await screen.findByRole("dialog", { name: "Delete this source?" })).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(within(feeds).queryByText("Fictional City Wire")).not.toBeInTheDocument());
   });

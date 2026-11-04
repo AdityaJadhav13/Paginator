@@ -78,7 +78,7 @@ for (const [net4, bits] of [
 for (const [net6, bits] of [
   ["::", 128],
   ["::1", 128],
-  ["64:ff9b::", 96], // NAT64: another network's address inside
+  ["64:ff9b::", 96], // NAT64 outside the /96 shapes embeddedV4 reads: another network's address inside
   ["64:ff9b:1::", 48],
   ["100::", 64], // discard
   ["2001::", 23], // IETF protocol assignments (Teredo among them)
@@ -92,19 +92,21 @@ for (const [net6, bits] of [
   BLOCKED.addSubnet(net6, bits, "ipv6");
 
 /** True for an address on the public internet; false for private, loopback, link-local, CGNAT, multicast, reserved,
- * unique-local and documentation addresses, the same inside an IPv4-mapped IPv6 address, and anything not an IP. */
+ * unique-local and documentation addresses, the same inside an IPv4-mapped, IPv4-compatible or NAT64 IPv6 address,
+ * and anything not an IP. */
 export function isPublicAddress(ip: string): boolean {
   const family = net.isIP(ip);
   if (family === 4) return !BLOCKED.check(ip, "ipv4");
   if (family !== 6) return false;
-  const v4 = mappedV4(ip);
+  const v4 = embeddedV4(ip);
   if (v4 !== undefined) return isPublicAddress(v4);
   return !BLOCKED.check(ip, "ipv6");
 }
 
-/** The IPv4 address an IPv4-mapped (::ffff:a.b.c.d, in either spelling) or IPv4-compatible (::a.b.c.d) IPv6 address
- * carries, or undefined. `ip` is a valid IPv6 address (net.isIP). */
-function mappedV4(ip: string): string | undefined {
+/** The IPv4 address an IPv4-mapped (::ffff:a.b.c.d, in either spelling), IPv4-compatible (::a.b.c.d) or NAT64
+ * (64:ff9b::a.b.c.d, RFC 6052; 64:ff9b:1::a.b.c.d with a /96 prefix, RFC 8215) IPv6 address carries, or undefined.
+ * `ip` is a valid IPv6 address (net.isIP). */
+function embeddedV4(ip: string): string | undefined {
   const tail = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip);
   const text = tail
     ? ip.slice(0, tail.index) + [1, 3].map((i) => ((Number(tail[i]) << 8) | Number(tail[i + 1])).toString(16)).join(":")
@@ -118,11 +120,15 @@ function mappedV4(ip: string): string | undefined {
   // ::ffff:0:a.b.c.d (IPv4-translated) carries an IPv4 address as well
   if (groups[4] === 0xffff && groups[5] === 0 && groups.slice(0, 4).every((g) => g === 0))
     [groups[4], groups[5]] = [0, 0xffff];
-  if (groups.slice(0, 5).some((g) => g !== 0)) return undefined;
   const [hi = 0, lo = 0] = groups.slice(6);
+  const v4 = `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+  // NAT64 on a /96 prefix; the other RFC 6052 shapes (/32 to /64) inside 64:ff9b:1::/48 stay refused by the block list
+  if (groups[0] === 0x64 && groups[1] === 0xff9b && groups.slice(3, 6).every((g) => g === 0))
+    return groups[2] === 0 || groups[2] === 1 ? v4 : undefined;
+  if (groups.slice(0, 5).some((g) => g !== 0)) return undefined;
   // ::ffff:x (mapped), or ::x (compatible) but not :: and ::1, which the block list names
   if (groups[5] !== 0xffff && (groups[5] !== 0 || hi === 0)) return undefined;
-  return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+  return v4;
 }
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);

@@ -52,6 +52,16 @@ describe("The news service", () => {
     expect(calls[3]).toMatchObject({ method: "POST", url: `${BASE}/collect` });
   });
 
+  it("reads the headlines by language and adds the suggested sources", async () => {
+    const { fetch, calls } = fakeFetch(() => json(200, { items: [] }));
+    const news = createApiNewsService(createApiClient({ fetch }));
+    const where = { orgId: ORG, pubId: PUB };
+    expect(await news.listHeadlines({ ...where, language: "mr" })).toEqual({ ok: true, value: [] });
+    expect(calls[0]).toMatchObject({ method: "GET", url: `${BASE}/headlines?language=mr` });
+    expect(await news.addSuggestedSources(where)).toEqual({ ok: true, value: [] });
+    expect(calls[1]).toMatchObject({ method: "POST", url: `${BASE}/sources/suggested` });
+  });
+
   it("sends the photo choice and answers a wrong shape as unexpected", async () => {
     const { fetch, calls } = fakeFetch(() => json(201, { assetId: "not-an-id" }));
     const news = createApiNewsService(createApiClient({ fetch }));

@@ -3,14 +3,17 @@
 // and "collect now" are the Chief Editor's (settings.edit).
 //   - GET …/news/sources (story.assign); POST …/news/sources, PATCH and DELETE …/news/sources/:id (settings.edit),
 //     audited (news.source_create, news.source_edit with the fields changed, news.source_delete).
-//   - GET …/news/settings (story.assign): the house style, the interval, the last collection, the AI part's state and
-//     its spend today and this month (Asia/Kolkata) against the day's cap (PGN_AI_DAILY_CAP_INR), and whether this
-//     person may change them. PATCH (settings.edit), audited (news.settings_edit: which fields, never the style's text).
+//   - GET …/news/settings (story.assign): the house style, the interval, the last collection, the AI part's state (off
+//     whatever the last run found while PGN_NEWS_AI is off) and its spend today and this month (Asia/Kolkata) against
+//     the day's cap (PGN_AI_DAILY_CAP_INR), and whether this person may change them. PATCH (settings.edit), audited (news.settings_edit: which fields, never the style's text).
+//   - POST …/news/sources/suggested (settings.edit) → the source list, with the suggested public feeds
+//     (SUGGESTED_NEWS_SOURCES) it did not have (by address) added, on; each audited as news.source_create.
 //   - POST …/news/collect (settings.edit) → 202 {runId}: the feeds collected now, whatever the schedule says.
 //   - GET …/news/topics?language= (story.assign): the last NEWS_KEEP_DAYS days' topics, by distinct sources × recency;
-//     GET …/news/topics/:t with its items.
+//     GET …/news/topics/:t with its items. GET …/news/headlines?language= (story.assign): the items kept, newest first
+//     (the screen's list while the AI part is off).
 //   - POST …/news/topics/:t/pick {language, length, findPhoto} (story.assign; Idempotency-Key) → 202 {draftId}: the
-//     draft asked of the queue (news.draft) with the topic's newest 12 articles, the house style and what may still be
+//     draft asked of the queue (news.draft; refused with ai_off while PGN_NEWS_AI is off, so no draft is queued to fail) with the topic's newest 12 articles, the house style and what may still be
 //     spent on AI today, in one transaction with its row. Audited (news.pick).
 //   - GET …/news/drafts/:d (story.view): to the person who picked it and to the desk; to anyone else, 404.
 //   - POST …/news/drafts/:d/photo {index, caption?, rightsConfirmed} (story.assign, and media.upload's reach) → 201
@@ -27,6 +30,7 @@ import {
   BIG_SOURCES,
   MAX_PICTURE_BYTES,
   NewsDraft,
+  NewsHeadlineList,
   NewsPhotoChoice,
   NewsPhotoChosen,
   NewsPick,
@@ -42,6 +46,7 @@ import {
   NewsTopicQuery,
   PICTURE_TYPES,
   reach,
+  SUGGESTED_NEWS_SOURCES,
 } from "@pageinator/contracts";
 import { FetchRefused, licenceLabel, NEWS_USER_AGENT, safeFetch } from "@pageinator/engine-queue";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -97,6 +102,7 @@ const BASE = "/api/v1/orgs/:o/pubs/:p/news";
 /** The articles a draft is written from: the topic's newest. */
 const ARTICLES = 12;
 const TOPICS = 300;
+const HEADLINES = 300;
 /** A found photo's download: the whole of it, within the time (the engine queue's guard enforces both). */
 const PHOTO_TIMEOUT_MS = 60_000;
 
@@ -116,6 +122,8 @@ export type NewsOptions = {
   store: ObjectStore;
   /** the AI spend allowed a day per publication, in rupees (PGN_AI_DAILY_CAP_INR) */
   capInr: number;
+  /** whether the engine queue has a Claude key (PGN_NEWS_AI) */
+  aiOn: boolean;
   fetchPhoto?: PhotoFetch;
 };
 
@@ -145,18 +153,20 @@ export function topicView(row: TopicRow, items: readonly ItemRow[] = []): NewsTo
     languages: row.languages,
     big: row.sources.length >= BIG_SOURCES || row.importance >= BIG_IMPORTANCE,
     latestAt: row.latest_at.toISOString(),
-    items: items.map((item) => ({
-      id: item.id,
-      sourceId: item.source_id,
-      sourceName: item.source_name,
-      title: item.title,
-      summary: item.summary,
-      link: item.link,
-      language: item.language,
-      publishedAt: item.published_at?.toISOString() ?? null,
-    })),
+    items: items.map(itemView),
   };
 }
+
+const itemView = (item: ItemRow) => ({
+  id: item.id,
+  sourceId: item.source_id,
+  sourceName: item.source_name,
+  title: item.title,
+  summary: item.summary,
+  link: item.link,
+  language: item.language,
+  publishedAt: item.published_at?.toISOString() ?? null,
+});
 
 export function draftView(row: DraftRow): NewsDraft {
   return {
@@ -177,7 +187,7 @@ export function draftView(row: DraftRow): NewsDraft {
 }
 
 export const newsRoutes: FastifyPluginAsyncZod<NewsOptions> = async (app, options) => {
-  const { database, store, capInr } = options;
+  const { database, store, capInr, aiOn } = options;
   const download = options.fetchPhoto ?? fetchPhoto;
   auditRefusals(app, database);
 
@@ -260,6 +270,33 @@ export const newsRoutes: FastifyPluginAsyncZod<NewsOptions> = async (app, option
     },
   );
 
+  app.post(
+    `${BASE}/sources/suggested`,
+    { config: { permission: "settings.edit" }, schema: { params: Pub, response: { 200: NewsSourceList } } },
+    async (request) => {
+      const access = accessOf(request);
+      const pub = request.params.p;
+      const rows = await database.withTenant(access.tenant, async (tx) => {
+        // the settings row first: its upsert locks it, so two clicks at once add each feed once
+        await saveSettings(tx, access.tenant.orgId, pub, {});
+        const have = new Set((await listSources(tx, pub)).map((row) => row.url));
+        for (const suggested of SUGGESTED_NEWS_SOURCES) {
+          if (have.has(suggested.url)) continue;
+          const made = await createSource(tx, access.tenant.orgId, pub, { ...suggested, enabled: true });
+          await recordAudit(tx, access.tenant, {
+            action: "news.source_create",
+            targetType: "news_source",
+            targetId: made.id,
+            publicationId: pub,
+            data: { language: made.language, enabled: made.enabled, suggested: true },
+          });
+        }
+        return listSources(tx, pub);
+      });
+      return { items: rows.map(sourceView) };
+    },
+  );
+
   const settingsOf = async (access: Access, pub: string): Promise<NewsSettings> =>
     database.withTenant(access.tenant, async (tx) => {
       const row = await findSettings(tx, pub);
@@ -268,7 +305,12 @@ export const newsRoutes: FastifyPluginAsyncZod<NewsOptions> = async (app, option
         houseStyle: row?.house_style ?? "",
         collectEveryHours: row?.collect_every_h ?? 3,
         lastCollectedAt: row?.collected_at?.toISOString() ?? null,
-        ai: { state: row?.ai_state ?? null, spentMonthInr: spent.month, spentTodayInr: spent.today, capDayInr: capInr },
+        ai: {
+          state: aiOn ? (row?.ai_state ?? null) : "off",
+          spentMonthInr: spent.month,
+          spentTodayInr: spent.today,
+          capDayInr: capInr,
+        },
         mayManage: mayManage(access, pub),
       };
     });
@@ -339,6 +381,21 @@ export const newsRoutes: FastifyPluginAsyncZod<NewsOptions> = async (app, option
   );
 
   app.get(
+    `${BASE}/headlines`,
+    {
+      config: { permission: "story.assign" },
+      schema: { params: Pub, querystring: NewsTopicQuery, response: { 200: NewsHeadlineList } },
+    },
+    async (request) => {
+      const access = accessOf(request);
+      const rows = await database.withTenant(access.tenant, (tx) =>
+        topicItems(tx, request.params.p, null, HEADLINES, request.query.language ?? null),
+      );
+      return { items: rows.map(itemView) };
+    },
+  );
+
+  app.get(
     `${BASE}/topics/:t`,
     { config: { permission: "story.assign" }, schema: { params: OneTopic, response: { 200: NewsTopic } } },
     async (request) => {
@@ -363,6 +420,7 @@ export const newsRoutes: FastifyPluginAsyncZod<NewsOptions> = async (app, option
       const access = accessOf(request);
       const { p: pub, t } = request.params;
       const pick = request.body;
+      if (!aiOn) throw new ApiError("ai_off");
       const answer = await idempotent(
         database,
         request,

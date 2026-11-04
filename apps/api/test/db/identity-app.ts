@@ -59,6 +59,8 @@ export async function identityApp(
     // the tests sign in a few people who make many requests; test/db/rate-limit.test.ts sets its own budgets
     PGN_RATE_LIMIT_PER_PERSON_PER_MINUTE: "100000",
     PGN_RATE_LIMIT_SIGNED_IN_PER_ADDRESS_PER_MINUTE: "100000",
+    // the news finder's AI part on (its queue is never run here); test/db/news-finder.test.ts turns it off once
+    PGN_NEWS_AI: "on",
     ...env,
   });
   const sent: Sent[] = [];

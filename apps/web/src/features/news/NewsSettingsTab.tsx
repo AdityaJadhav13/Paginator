@@ -1,7 +1,7 @@
 /**
  * The Sources screen's Settings (settings.edit: the Chief Editor, Owner, Admin): the publication's feeds (name, address,
- * language, collected or not, when last collected and its last problem) added, changed and deleted; "Collect now"; the
- * house style Claude drafts in (kept in the database, never in the repository); how often to collect; and the AI spend
+ * language, collected or not, when last collected and its last problem, in the reader's words) added, changed and
+ * deleted, and the suggested public feeds added; the house style Claude drafts in (kept in the database, never in the repository); how often to collect; and the AI spend
  * this month and today against the daily limit.
  */
 import { useEffect, useState, type FormEvent } from "react";
@@ -13,7 +13,9 @@ import {
   Drawer,
   Field,
   Icon,
-  IconButton,
+  MenuButton,
+  MenuItem,
+  MenuSeparator,
   Panel,
   RadioGroup,
   Stack,
@@ -23,13 +25,29 @@ import {
   TextArea,
   TextInput,
 } from "../../ui/index.ts";
+import type { NEWS_FETCH_ERRORS } from "@pageinator/contracts";
 import { formatDateTime } from "../../i18n/dates.ts";
-import { useI18n } from "../../i18n/index.ts";
+import { useI18n, type PlainKey } from "../../i18n/index.ts";
 import type { ApiProblem, NewsLanguageDto, NewsSettingsDto, NewsSourceDto, NewsSourceInputDto } from "../../services/index.ts";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useNews } from "./news-context.tsx";
 
 const rupees = (amount: number) => amount.toFixed(2);
+/** The engine's codes for a feed it could not collect, in the reader's words; any other (an older row's text) is general. */
+const FETCH_ERRORS: Readonly<Record<(typeof NEWS_FETCH_ERRORS)[number], PlainKey>> = {
+  "fetch.scheme": "news.fetchError.fetch.scheme",
+  "fetch.private_address": "news.fetchError.fetch.private_address",
+  "fetch.too_large": "news.fetchError.fetch.too_large",
+  "fetch.timeout": "news.fetchError.fetch.timeout",
+  "fetch.redirects": "news.fetchError.fetch.redirects",
+  "fetch.status": "news.fetchError.fetch.status",
+  "fetch.type": "news.fetchError.fetch.type",
+  "fetch.network": "news.fetchError.fetch.network",
+  "fetch.robots": "news.fetchError.fetch.robots",
+  "feed.not_a_feed": "news.fetchError.feed.not_a_feed",
+};
+const fetchErrorKey = (code: string): PlainKey =>
+  Object.hasOwn(FETCH_ERRORS, code) ? FETCH_ERRORS[code as keyof typeof FETCH_ERRORS] : "news.fetchError.other";
 
 export function NewsSettingsTab({
   orgId,
@@ -43,13 +61,12 @@ export function NewsSettingsTab({
   readonly onSaved: (settings: NewsSettingsDto) => void;
 }) {
   const news = useNews();
-  const { t, language } = useI18n();
+  const { t } = useI18n();
   const [houseStyle, setHouseStyle] = useState(settings.houseStyle);
   const [every, setEvery] = useState(String(settings.collectEveryHours));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [problem, setProblem] = useState<ApiProblem | null>(null);
-  const [collecting, setCollecting] = useState<"idle" | "busy" | "started">("idle");
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -63,28 +80,10 @@ export function NewsSettingsTab({
     onSaved(result.value);
   };
 
-  const collect = async () => {
-    setCollecting("busy");
-    setProblem(null);
-    const result = await news.collect({ orgId, pubId });
-    setCollecting(result.ok ? "started" : "idle");
-    if (!result.ok) setProblem(result.error);
-  };
-
   return (
     <Stack gap="5">
       {problem && <ProblemMessage problem={problem} />}
       <SourcesTable orgId={orgId} pubId={pubId} />
-      <Cluster gap="3">
-        <Button variant="secondary" disabled={collecting === "busy"} onClick={() => void collect()}>
-          <Icon name="refresh-cw" size={16} />
-          {t("news.collectNow")}
-        </Button>
-        {settings.lastCollectedAt && (
-          <span className="pg-news__note">{t("news.lastCollected", { time: formatDateTime(settings.lastCollectedAt, language) })}</span>
-        )}
-      </Cluster>
-      <div aria-live="polite">{collecting === "started" && <p>{t("news.collectStarted")}</p>}</div>
 
       <Panel title={t("news.spend")}>
         <Stack gap="1">
@@ -130,6 +129,7 @@ function SourcesTable({ orgId, pubId }: { readonly orgId: string; readonly pubId
   const [editing, setEditing] = useState<Editing | null>(null);
   const [deleting, setDeleting] = useState<NewsSourceDto | null>(null);
   const [version, setVersion] = useState(0);
+  const [suggesting, setSuggesting] = useState<"idle" | "busy" | "done">("idle");
 
   useEffect(() => {
     let current = true;
@@ -150,52 +150,73 @@ function SourcesTable({ orgId, pubId }: { readonly orgId: string; readonly pubId
     setVersion((count) => count + 1);
   };
 
+  const suggest = async () => {
+    setSuggesting("busy");
+    setProblem(null);
+    const result = await news.addSuggestedSources({ orgId, pubId });
+    setSuggesting(result.ok ? "done" : "idle");
+    if (!result.ok) return setProblem(result.error);
+    setSources(result.value);
+  };
+
   return (
     <Panel
       title={t("news.feeds")}
       flush
       actions={
-        <Button variant="secondary" size="sm" onClick={() => setEditing({ source: null })}>
-          <Icon name="plus" size={16} />
-          {t("news.source.add")}
-        </Button>
+        <Cluster gap="2">
+          <Button variant="secondary" size="sm" disabled={suggesting === "busy"} onClick={() => void suggest()}>
+            {t("news.suggested")}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setEditing({ source: null })}>
+            <Icon name="plus" size={16} />
+            {t("news.source.add")}
+          </Button>
+        </Cluster>
       }
     >
       {problem && <ProblemMessage problem={problem} />}
+      <div aria-live="polite">{suggesting === "done" && <p className="pg-news__note pg-news__panel-note">{t("news.suggested.done")}</p>}</div>
       <Table caption={t("news.feeds")}>
         <thead>
           <tr>
             <TableHeader>{t("news.col.name")}</TableHeader>
-            <TableHeader>{t("news.col.url")}</TableHeader>
             <TableHeader>{t("news.filter")}</TableHeader>
-            <TableHeader>{t("news.col.on")}</TableHeader>
             <TableHeader>{t("news.col.lastFetch")}</TableHeader>
-            <TableHeader>{t("news.col.lastError")}</TableHeader>
-            <TableHeader>{t("news.col.actions")}</TableHeader>
+            <TableHeader>
+              <span className="pg-visually-hidden">{t("news.col.actions")}</span>
+            </TableHeader>
           </tr>
         </thead>
         <tbody>
           {sources.map((source) => (
             <tr key={source.id}>
-              <TableCell>
-                <bdi>{source.name}</bdi>
+              <TableCell className="pg-news__source-cell">
+                <bdi className="pg-news__source-title">{source.name}</bdi>
+                <bdi className="pg-news__url">{source.url}</bdi>
               </TableCell>
-              <TableCell className="pg-news__url">
-                <bdi>{source.url}</bdi>
-              </TableCell>
-              <TableCell>{t(source.language === "mr" ? "news.language.mr" : "news.language.en")}</TableCell>
-              <TableCell>{t(source.enabled ? "news.on" : "news.off")}</TableCell>
-              <TableCell>{source.lastFetchAt ? formatDateTime(source.lastFetchAt, language) : t("news.never")}</TableCell>
-              <TableCell>{source.lastError ? <span lang="en">{source.lastError}</span> : t("news.noProblem")}</TableCell>
               <TableCell>
-                <Cluster gap="1">
-                  <IconButton label={t("news.source.edit", { name: source.name })} onClick={() => setEditing({ source })}>
-                    <Icon name="pencil" size={16} />
-                  </IconButton>
-                  <IconButton label={t("news.source.delete", { name: source.name })} onClick={() => setDeleting(source)}>
-                    <Icon name="trash-2" size={16} />
-                  </IconButton>
-                </Cluster>
+                {t(source.language === "mr" ? "news.language.mr" : "news.language.en")}
+                {!source.enabled && <span className="pg-news__note"> · {t("news.off")}</span>}
+              </TableCell>
+              <TableCell>
+                {source.lastFetchAt ? formatDateTime(source.lastFetchAt, language) : t("news.never")}
+                {source.lastError && (
+                  <span className="pg-news__fetch-error">
+                    {t(fetchErrorKey(source.lastError))}
+                  </span>
+                )}
+              </TableCell>
+              <TableCell className="pg-news__row-actions">
+                <MenuButton label={t("news.source.actions", { name: source.name })} icon="ellipsis" iconOnly align="end">
+                  <MenuItem icon="pencil" onSelect={() => setEditing({ source })}>
+                    {t("news.source.editTitle")}
+                  </MenuItem>
+                  <MenuSeparator />
+                  <MenuItem icon="trash-2" danger onSelect={() => setDeleting(source)}>
+                    {t("library.delete.confirm")}
+                  </MenuItem>
+                </MenuButton>
               </TableCell>
             </tr>
           ))}

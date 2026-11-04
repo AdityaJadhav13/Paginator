@@ -209,6 +209,7 @@ export async function buildApp(deps: AppDeps) {
         database: people.database,
         store,
         capInr: config.aiDailyCapInr,
+        aiOn: config.newsAi,
         ...(deps.fetchPhoto ? { fetchPhoto: deps.fetchPhoto } : {}),
       });
     }

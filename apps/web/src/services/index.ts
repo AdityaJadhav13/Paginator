@@ -56,6 +56,7 @@ export type { ContactConnection, ContactOutcome, ContactRequestDto, ContactServi
 export type {
   DraftLengthDto,
   NewsDraftDto,
+  NewsItemDto,
   NewsLanguageDto,
   NewsPickDto,
   NewsService,

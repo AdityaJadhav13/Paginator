@@ -162,6 +162,9 @@ const Env = z
     // The news finder's AI spend allowed a day per publication, in rupees (docs/product/13-news-finder.md): the queue
     // refuses a Claude call once it is spent.
     PGN_AI_DAILY_CAP_INR: wholeNumber(0, 1_000_000).default(300),
+    // Whether the engine queue has a Claude key (on when ANTHROPIC_API_KEY is set there; empty is off): with it off the
+    // Sources screen says so from the start and a pick is refused (ai_off) instead of queued to fail.
+    PGN_NEWS_AI: z.enum(["on", "off", ""], { error: "must be on or off" }).default("off"),
     PGN_LOG_LEVEL: z.enum(LOG_LEVELS, { error: `must be one of ${LOG_LEVELS.join(", ")}` }).default("info"),
     // The security baseline (§4.5–4.6). The web app's origins: in production exactly the app's own origin; in
     // development Vite on 127.0.0.1:5180 (§7.1).
@@ -254,6 +257,7 @@ const Env = z
     shutdownGraceSeconds: env.PGN_SHUTDOWN_GRACE_S,
     engineSweep: { staleMs: env.PGN_ENGINE_STALE_S * 1000, deadlineMs: env.PGN_ENGINE_DEADLINE_S * 1000 },
     aiDailyCapInr: env.PGN_AI_DAILY_CAP_INR,
+    newsAi: env.PGN_NEWS_AI === "on",
     logLevel: env.PGN_LOG_LEVEL,
     allowedOrigins: env.PGN_ALLOWED_ORIGINS,
     rateLimitPerMinute: env.PGN_RATE_LIMIT_PER_MINUTE,

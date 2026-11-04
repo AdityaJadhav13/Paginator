@@ -89,7 +89,7 @@ describe("news.collect", () => {
     expect(event.sources).toEqual([
       { id: SRC_MR, ok: true, error: null },
       { id: SRC_EN, ok: true, error: null },
-      { id: SRC_BAD, ok: false, error: "this address is not an RSS or Atom feed" },
+      { id: SRC_BAD, ok: false, error: "feed.not_a_feed" },
     ]);
     expect(event.groups).toEqual([
       {
@@ -126,6 +126,13 @@ describe("news.collect", () => {
       const failed = await run(new FakeAiClient({ group: new AiStop(code, "x") }));
       expect([failed.ai, failed.items.length, failed.groups], code).toEqual(["failed", 4, []]);
     }
+  });
+
+  it("reports a feed that cannot be fetched by the guard's code, never its words", async () => {
+    const { f } = fetcher(FEEDS);
+    const gone = { id: SRC_BAD, url: "https://missing.example/rss", language: "en" as const };
+    const event = await collect({ ...collectPayload, sources: [gone] }, { ai: null, fetcher: f }, false);
+    expect(event.sources).toEqual([{ id: SRC_BAD, ok: false, error: "fetch.status" }]);
   });
 
   it("asks Claude nothing when nothing is new", async () => {

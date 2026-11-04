@@ -239,7 +239,7 @@ describe("a collection", () => {
       run_id: runId,
       sources: [
         { id: en, ok: true, error: null },
-        { id: mr, ok: false, error: "the feed answered 503" },
+        { id: mr, ok: false, error: "fetch.status" },
       ],
       items: [
         item(en, links[0] as string, "A fictional bridge opens"),
@@ -300,7 +300,7 @@ describe("a collection", () => {
     ).toBe(404);
 
     const sources = (await call("GET", `${news()}/sources`, chief.cookie)).json().items;
-    expect(sources.find((s: { id: string }) => s.id === mr)).toMatchObject({ lastError: "the feed answered 503" });
+    expect(sources.find((s: { id: string }) => s.id === mr)).toMatchObject({ lastError: "fetch.status" });
     expect(sources.find((s: { id: string }) => s.id === en).lastFetchAt).not.toBeNull();
     const settings = (await call("GET", `${news()}/settings`, chief.cookie)).json();
     expect(settings.ai).toMatchObject({ state: "on", spentTodayInr: 2.5, spentMonthInr: 2.5 });
@@ -699,5 +699,111 @@ describe("a found photo", () => {
     );
     expect(audit.rows).toEqual([{ actor_id: editor.id }]);
     expect((await attach()).statusCode).toBe(200);
+  });
+});
+
+describe("the suggested sources", () => {
+  it("are added by the Chief Editor once each, on, beside the paper's own", async () => {
+    const url = `${news(b)}/sources/suggested`;
+    expect((await call("POST", `${news()}/sources/suggested`, editor.cookie)).statusCode).toBe(403);
+    const first = await call("POST", url, b.ownerCookie);
+    expect(first.statusCode, first.body).toBe(200);
+    const items = first.json().items as { name: string; url: string; language: string; enabled: boolean }[];
+    expect(items.map((s) => [s.name, s.language, s.enabled]).sort()).toEqual(
+      [
+        ["ABP Majha", "mr", true],
+        ["Hindustan Times", "en", true],
+        ["NDTV", "en", true],
+        ["Sakal", "mr", true],
+        ["TV9 Marathi", "mr", true],
+        ["The Hindu", "en", true],
+        ["The Indian Express", "en", true],
+      ].sort(),
+    );
+    // one deleted is added back; the others are not added twice
+    const sakal = first.json().items.find((s: { name: string }) => s.name === "Sakal").id as string;
+    expect((await call("DELETE", `${news(b)}/sources/${sakal}`, b.ownerCookie)).statusCode).toBe(204);
+    const again = await call("POST", url, b.ownerCookie);
+    expect(again.json().items).toHaveLength(7);
+    const audit = await su.query(
+      "select count(*)::int as n from app.audit_event where action = 'news.source_create' and publication_id = $1",
+      [b.pubId],
+    );
+    expect(audit.rows[0].n).toBe(8);
+  });
+});
+
+describe("with the AI part off (PGN_NEWS_AI)", () => {
+  let off: IdentityApp;
+  let on: IdentityApp;
+  beforeAll(async () => {
+    on = it_;
+    off = await identityApp(db, { PGN_NEWS_AI: "off" });
+    it_ = off;
+  });
+  afterAll(async () => {
+    it_ = on;
+    await off.close();
+  });
+
+  it("says so before any collection, and refuses a pick without queueing a draft", async () => {
+    expect((await call("GET", `${news(b)}/settings`, b.ownerCookie)).json().ai.state).toBe("off");
+    const drafts = async () =>
+      (await su.query("select count(*)::int as n from app.news_draft_job where publication_id = $1", [a.pubId])).rows[0]
+        .n;
+    const before = await drafts();
+    const res = await change("POST", `${news()}/topics/${await bridge()}/pick`, sub.cookie, {
+      language: "en",
+      length: "short",
+      findPhoto: false,
+    });
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json().error.code).toBe("ai_off");
+    expect(await drafts()).toBe(before);
+  });
+
+  it("stores a collection's items as headlines, newest first, and makes no topic of each", async () => {
+    const sources = (await call("GET", `${news(b)}/sources`, b.ownerCookie)).json().items as {
+      id: string;
+      name: string;
+    }[];
+    const named = (name: string) => sources.find((s) => s.name === name)!.id;
+    const [mr, en] = [named("Sakal"), named("Hindustan Times")];
+    const runId = randomUUID().replace(/^(.{14})./, "$17");
+    const older = {
+      ...item(en, "https://news.example.test/b/older", "An older fictional report"),
+      published_at: "2026-11-04T06:00:00Z",
+    };
+    const newer = {
+      ...item(mr, "https://news.example.test/b/newer", "नवी काल्पनिक बातमी"),
+      published_at: "2026-11-04T09:00:00Z",
+    };
+    const jobId = await report(
+      {
+        kind: "news.collected",
+        org_id: b.orgId,
+        pub_id: b.pubId,
+        run_id: runId,
+        sources: [],
+        items: [older, newer],
+        groups: [],
+        ai: "off",
+        usage: [],
+      },
+      runId,
+    );
+    await drain();
+    expect(await outcomeOf(jobId)).toBe("applied");
+    expect((await call("GET", `${news(b)}/topics`, b.ownerCookie)).json().items).toEqual([]);
+    const all = await call("GET", `${news(b)}/headlines`, b.ownerCookie);
+    expect(all.statusCode, all.body).toBe(200);
+    expect(all.json().items.map((i: { title: string; sourceName: string }) => [i.title, i.sourceName])).toEqual([
+      ["नवी काल्पनिक बातमी", "Sakal"],
+      ["An older fictional report", "Hindustan Times"],
+    ]);
+    const english = (await call("GET", `${news(b)}/headlines?language=en`, b.ownerCookie)).json().items;
+    expect(english.map((i: { link: string }) => i.link)).toEqual(["https://news.example.test/b/older"]);
+    expect((await call("GET", `${news(b)}/headlines`, a.ownerCookie)).statusCode).toBe(404);
+    expect((await call("GET", `${news()}/headlines`, reporter.cookie)).statusCode).toBe(403);
   });
 });
