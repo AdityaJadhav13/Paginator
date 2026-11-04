@@ -7,7 +7,7 @@ import { createMockApplicationEnvironment, type MockApplicationEnvironment, type
 export function renderUi004(path: string, preset?: MockSessionPreset, environment: MockApplicationEnvironment = createMockApplicationEnvironment()) {
   if (preset) environment.sessionController.setPreset(preset);
   window.history.pushState(null, "", path);
-  return { environment, ...render(<BrowserRouter><Ui004Routes environment={environment} /></BrowserRouter>) };
+  return { environment, ...render(<BrowserRouter useTransitions={false}><Ui004Routes environment={environment} /></BrowserRouter>) };
 }
 
 /** Signs in through the real sign-in form, as a person would. */
