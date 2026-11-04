@@ -115,7 +115,7 @@ describe("Focus after navigation (AC-16)", () => {
     window.history.pushState(null, "", "/security");
     render(
       <StrictMode>
-        <BrowserRouter>
+        <BrowserRouter useTransitions={false}>
           <Ui004Routes environment={createMockApplicationEnvironment()} />
         </BrowserRouter>
       </StrictMode>

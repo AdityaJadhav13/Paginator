@@ -143,7 +143,7 @@ describe("WorkspaceRouteProvider stale side-effect protection", () => {
     }
 
     render(
-      <BrowserRouter>
+      <BrowserRouter useTransitions={false}>
         <SessionProvider
           session={environment.session}
           access={environment.access}

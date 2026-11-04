@@ -150,7 +150,7 @@ describe("Filters in the address", () => {
       return <button onClick={() => void navigate(-1)}>Go back</button>;
     }
     render(
-      <MemoryRouter initialEntries={[`${AUDIT}?action=story.revise`]}>
+      <MemoryRouter useTransitions={false} initialEntries={[`${AUDIT}?action=story.revise`]}>
         <AppRoutes environment={environment} />
         <Back />
       </MemoryRouter>,

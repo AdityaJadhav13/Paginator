@@ -194,5 +194,7 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
 }
 
 export function AppRoot() {
-  return <BrowserRouter><AppRoutes /></BrowserRouter>;
+  // no transitions: in one the old screen stays up and takes input for a moment after a link click (a typed email
+  // went into the sign-in field, and the forgot-password form that replaced it was empty)
+  return <BrowserRouter useTransitions={false}><AppRoutes /></BrowserRouter>;
 }

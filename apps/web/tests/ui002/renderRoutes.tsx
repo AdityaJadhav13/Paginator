@@ -21,7 +21,7 @@ import { createMockApplicationEnvironment } from "../../src/mocks/index.ts";
 export function renderAt(path: string) {
   window.history.pushState(null, "", path);
   return render(
-    <BrowserRouter>
+    <BrowserRouter useTransitions={false}>
       <Ui004Routes environment={createMockApplicationEnvironment()} />
     </BrowserRouter>
   );
