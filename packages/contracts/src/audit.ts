@@ -17,6 +17,12 @@ export const AUDIT_ACTIONS = {
   /** A refusal: authorize()'s, or a service rule's (with the reason). On a publication's route it names the
    * publication; elsewhere it has none, and only Owner and Admin see it. */
   "access.denied": { scope: "publication" },
+  /** A Word file's import asked for ({upload, bytes, edition}); done ({job, created, skipped}: the stories made, each
+   * also recorded as story.create by the importer) or failed ({job, code}: the Desk refused the file, or the job
+   * failed), from the engine's inbox (actor: the system). */
+  "import.create": { scope: "publication" },
+  "import.done": { scope: "publication" },
+  "import.fail": { scope: "publication" },
   /** A comment written ({story, parent}); a send-back's is recorded with the move (story.status_change). */
   "comment.create": { scope: "publication" },
   "comment.edit": { scope: "publication" },

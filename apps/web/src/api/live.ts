@@ -88,6 +88,10 @@ export function liveEventOf(type: string, data: unknown): LiveEventDto | null {
       return isId(data["publicationId"]) && isId(data["editionId"])
         ? { type, publicationId: data["publicationId"], editionId: data["editionId"] }
         : null;
+    case "import":
+      return isId(data["publicationId"]) && isId(data["importId"])
+        ? { type, publicationId: data["publicationId"], importId: data["importId"] }
+        : null;
     case "resync":
       return { type };
     default:

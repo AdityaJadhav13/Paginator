@@ -1,11 +1,13 @@
 """The worker's job runner, whatever queue drives it (l22-plan W6; D-8 is open): one job in, one result out.
 
-    job    {"format": "pageinator.worker-job/1", "id": "<the queue's job id>", "kind": "media.ingest", "args": {…}}
+    job    {"format": "pageinator.worker-job/1", "id": "<the queue's job id>", "kind": "media.ingest" | "docx.import",
+            "args": {…}}
     result {"format": "pageinator.worker-result/1", "job": id, "kind": kind, "outcome": "done" | "retry" | "failed",
             "event": {…} (done), "error": {"code", "message"} (retry, failed)}
 
 - **done**: the task ran to its answer, which is the event for the API's inbox: `media.ready`, or `media.rejected`
-  (a photo the Desk refuses is a finished job, not a failure).
+  (a photo the Desk refuses is a finished job, not a failure); for docx.import, `import.parsed` or `import.rejected`
+  (pgn_worker/docx_import.py).
 - **retry**: nothing was decided and the job may be run again as it is: the colour profile cannot be read or the
   conversion's environment failed (`worker.profile`), the store failed or could not be reached (`worker.store`), or it
   ran out of memory (`worker.memory`).
@@ -24,7 +26,7 @@ from __future__ import annotations
 import re
 from typing import Any, Callable
 
-from . import media
+from . import docx_import, media
 from .keys import KeyGuard, KeyRefused
 from .params import ProfileError, ProfileMismatch
 from .storage import MissingObject, Storage
@@ -34,7 +36,8 @@ from .desk import util
 JOB_FORMAT = "pageinator.worker-job/1"
 RESULT_FORMAT = "pageinator.worker-result/1"
 JOB_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", re.ASCII)
-KINDS = {"media.ingest": media.ARGS}
+KINDS = {"media.ingest": media.ARGS, "docx.import": docx_import.ARGS}
+CHECKS = {"media.ingest": media.check_args, "docx.import": docx_import.check_args}
 RETRY, FAILED, DONE = "retry", "failed", "done"
 MAX_MESSAGE = 2000
 
@@ -64,7 +67,7 @@ def check(job: Any) -> dict:
     if not all(isinstance(v, str) and 0 < len(v) <= 1024 and _utf8(v) for v in args.values()):
         raise JobRefused(f"{job['kind']}'s arguments are text")
     try:
-        media.check_args(args)
+        CHECKS[job["kind"]](args)
     except ValueError as e:
         raise JobRefused(str(e)) from None
     return job
@@ -96,7 +99,10 @@ def run(job: Any, storage_for: Callable[[KeyGuard], Storage], icc_sha256: str) -
     try:
         job = check(job)
         guard = KeyGuard(job["args"]["org_id"], job["args"]["pub_id"])
-        event = media.ingest(storage_for(guard), job["args"], icc_sha256)
+        if job["kind"] == "docx.import":
+            event = docx_import.read(storage_for(guard), job["args"])
+        else:
+            event = media.ingest(storage_for(guard), job["args"], icc_sha256)
         return result(job, DONE, event=event)
     except JobRefused as e:
         return result(job, FAILED, code="worker.job", message=str(e))

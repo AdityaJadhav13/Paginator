@@ -132,6 +132,28 @@ export interface AppIdempotencyKey {
   user_id: string;
 }
 
+export interface AppImportJob {
+  bytes: number;
+  created: Generated<Json>;
+  created_at: Generated<Timestamp>;
+  edition_id: string | null;
+  id: Generated<string>;
+  kind: Generated<string>;
+  message: string | null;
+  notes: Generated<Json>;
+  org_id: string;
+  original_key: GeneratedAlways<string>;
+  problem: string | null;
+  publication_id: string;
+  sha256: string;
+  skipped: Generated<number>;
+  state: Generated<string>;
+  updated_at: Generated<Timestamp>;
+  upload_id: string;
+  user_id: string;
+  version_id: string | null;
+}
+
 export interface AppInvitationGrant {
   applied_at: Timestamp | null;
   created_at: Generated<Timestamp>;
@@ -293,6 +315,7 @@ export interface AppUpload {
   declared_type: string;
   expires_at: Timestamp;
   id: Generated<string>;
+  import_id: string | null;
   key: GeneratedAlways<string>;
   org_id: string;
   publication_id: string;
@@ -316,6 +339,7 @@ export interface DB {
   "app.edition": AppEdition;
   "app.engine_event": AppEngineEvent;
   "app.idempotency_key": AppIdempotencyKey;
+  "app.import_job": AppImportJob;
   "app.invitation_grant": AppInvitationGrant;
   "app.notification": AppNotification;
   "app.org_settings": AppOrgSettings;

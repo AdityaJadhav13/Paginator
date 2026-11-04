@@ -62,6 +62,25 @@ grant execute on function app.enqueue_media_ingest(uuid, uuid, uuid, text, text)
 revoke execute on all functions in schema queue from public;
 `;
 
+/** docx.import's enqueue (L2.2), made by migration 2026_11_30_0001 as APP_ENQUEUE is: SECURITY DEFINER, pgn_app's
+ * only, ids-only payload, only for app.current_org(); job key import:<id>, so an import has one job. */
+export const APP_ENQUEUE_DOCX = `
+create function app.enqueue_docx_import(org_id uuid, pub_id uuid, import_id uuid, version_id text, sha256 text)
+returns bigint language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+begin
+  if org_id is null or org_id is distinct from app.current_org() then
+    raise exception 'a job for another organisation' using errcode = 'insufficient_privilege';
+  end if;
+  return (queue.add_job('docx.import',
+    json_build_object('org_id', org_id, 'pub_id', pub_id, 'import_id', import_id, 'version_id', version_id,
+                      'sha256', sha256),
+    max_attempts => ${MAX_ATTEMPTS}, job_key => 'import:' || import_id)).id;
+end
+$$;
+revoke execute on function app.enqueue_docx_import(uuid, uuid, uuid, text, text) from public;
+grant execute on function app.enqueue_docx_import(uuid, uuid, uuid, text, text) to pgn_app;
+`;
+
 export type ExhaustedJob = {
   id: string;
   task_identifier: string;

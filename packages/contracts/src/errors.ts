@@ -19,6 +19,7 @@ export const ERROR_CODES = [
   "idempotency_key_reused",
   "file_too_large",
   "not_a_picture",
+  "docx_refused",
   "bundle_refused",
   "request_too_large",
   "not_json",

@@ -11,13 +11,23 @@ export const MAX_PICTURE_BYTES = 41_943_040;
 export const PICTURE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export const PictureType = z.enum(PICTURE_TYPES);
 
-export const UploadRequest = z.strictObject({
-  /** story_photo: for a story's photo; library: straight into the media library (L2.2) */
-  purpose: z.enum(["story_photo", "library"]),
-  filename: z.string().min(1).max(255),
-  contentType: PictureType,
-  bytes: z.number().int().min(1),
-});
+/** A Word file's type, and the most bytes of one (10 MiB) an import takes (L2.2, Stories → Import Word file). */
+export const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+export const MAX_DOCX_BYTES = 10_485_760;
+
+export const UploadRequest = z
+  .strictObject({
+    /** story_photo: for a story's photo; library: straight into the media library (L2.2); docx: a Word file to import
+     * as stories (POST …/imports/docx) */
+    purpose: z.enum(["story_photo", "library", "docx"]),
+    filename: z.string().min(1).max(255),
+    contentType: z.enum([...PICTURE_TYPES, DOCX_TYPE]),
+    bytes: z.number().int().min(1),
+  })
+  .refine((u) => (u.purpose === "docx") === (u.contentType === DOCX_TYPE), {
+    path: ["contentType"],
+    message: "A Word file is uploaded as docx, and a picture as a picture.",
+  });
 export type UploadRequest = z.infer<typeof UploadRequest>;
 
 /** A presigned POST: the browser sends `fields`, then the file, to `url`, before `expiresAt`. */

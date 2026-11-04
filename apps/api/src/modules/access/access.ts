@@ -87,7 +87,7 @@ export type OrgView = {
  * they are not a member (or the organisation was never set up in app). */
 export async function orgView(
   database: Database,
-  actor: Actor,
+  actor: Pick<Actor, "userId">,
   orgId: string,
   requestId: string,
 ): Promise<OrgView | null> {

@@ -35,7 +35,7 @@ export async function createUpload(
   tx: Tx,
   who: Who,
   publicationId: string,
-  upload: { purpose: "story_photo" | "library"; type: string; bytes: number; expiresSeconds: number },
+  upload: { purpose: "story_photo" | "library" | "docx"; type: string; bytes: number; expiresSeconds: number },
 ) {
   return tx
     .insertInto("app.upload")
@@ -55,7 +55,7 @@ export async function createUpload(
 export async function findUpload(tx: Tx, publicationId: string, uploadId: string, lock = false) {
   const query = tx
     .selectFrom("app.upload")
-    .select(["id", "user_id", "key", "status", "asset_id", "declared_type", "declared_bytes"])
+    .select(["id", "user_id", "purpose", "key", "status", "asset_id", "import_id", "declared_type", "declared_bytes"])
     .where("publication_id", "=", publicationId)
     .where("id", "=", uploadId);
   return (lock ? query.forUpdate() : query).executeTakeFirst();

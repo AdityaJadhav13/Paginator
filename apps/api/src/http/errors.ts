@@ -37,6 +37,8 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     status: 422,
     message: "This file is not a picture Pageinator can read. Use a JPEG, PNG or WebP file.",
   },
+  // the Desk's own words (deskserver/docx.py NOT_WORD); details say more (too large)
+  docx_refused: { status: 422, message: "This is not a Word (.docx) file. Save it as .docx and try again." },
   bundle_refused: {
     status: 409,
     message: "Some stories cannot be sent to the Desk as they are. Change them, then send again.",

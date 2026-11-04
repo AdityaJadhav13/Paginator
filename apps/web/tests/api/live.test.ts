@@ -300,6 +300,8 @@ describe("What an event may carry", () => {
     expect(liveEventOf("story", { publicationId: PUB, storyId: "<script>" })).toBeNull();
     expect(liveEventOf("notification", { id: STORY })).toEqual({ type: "notification", id: STORY });
     expect(liveEventOf("audit", { id: STORY })).toBeNull();
+    expect(liveEventOf("import", { publicationId: PUB, importId: STORY })).toEqual({ type: "import", publicationId: PUB, importId: STORY });
+    expect(liveEventOf("import", { publicationId: PUB, importId: "import-1" })).toBeNull();
     expect(liveEventOf("edition", { publicationId: PUB, editionId: STORY })).toEqual({ type: "edition", publicationId: PUB, editionId: STORY });
     expect(liveEventOf("edition", { publicationId: PUB })).toBeNull();
     expect(liveEventOf("resync", {})).toEqual({ type: "resync" });

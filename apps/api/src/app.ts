@@ -31,6 +31,7 @@ import { photoRoutes } from "./modules/media/photos.ts";
 import { startEngineInbox } from "./modules/media/engine-inbox.ts";
 import { libraryRoutes } from "./modules/media/library.ts";
 import { uploadRoutes } from "./modules/media/uploads.ts";
+import { importRoutes } from "./modules/media/imports.ts";
 import { contactRoutes } from "./modules/contact/routes.ts";
 import { closeWhenStopping } from "./shutdown.ts";
 import type { ObjectStore } from "./storage/object-store.ts";
@@ -156,16 +157,16 @@ export async function buildApp(deps: AppDeps) {
       sendAll(mailer, outbox, (kind) => fastify.log.warn({ kind }, "an email was not sent: its address is refused"));
     people = { auth, mailer, database, notify, mail };
     live = startLive(fastify, database);
-    if (deps.engineInbox) {
-      const inbox = startEngineInbox(database, fastify.log, config.engineSweep);
-      fastify.addHook("preClose", () => inbox.close()); // before the database closes (onClose)
-    }
+  }
+  const store = deps.store ?? (config.storage ? s3Store(config.storage) : undefined);
+  if (database && people && deps.engineInbox) {
+    const inbox = startEngineInbox(database, fastify.log, store, config.engineSweep);
+    fastify.addHook("preClose", () => inbox.close()); // before the database closes (onClose)
   }
 
   const app = fastify.withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
-  const store = deps.store ?? (config.storage ? s3Store(config.storage) : undefined);
   await app.register(health, {
     checks: { ...(store ? { storage: () => store.ready() } : {}), ...deps.checks },
   });
@@ -195,6 +196,7 @@ export async function buildApp(deps: AppDeps) {
       await app.register(photoRoutes, { database: people.database, store });
       await app.register(libraryRoutes, { database: people.database, store });
       await app.register(deskBundleRoutes, { database: people.database, store });
+      await app.register(importRoutes, { database: people.database, store });
     }
   }
   return app;

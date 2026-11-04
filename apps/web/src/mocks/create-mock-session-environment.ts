@@ -35,7 +35,7 @@ import type {
 import { grantsOf } from "../services/index.ts";
 import type { MockOperation } from "./scenarios.ts";
 import { createCanonicalSeed } from "./seed.ts";
-import { createMockStories, type MockStoryOperation } from "./create-mock-stories.ts";
+import { createMockStories, type MockImportOutcome, type MockStoryOperation } from "./create-mock-stories.ts";
 import { createMockLive, type MockLiveController } from "./create-mock-live.ts";
 import { createMockAudit, type MockAuditOperation } from "./create-mock-audit.ts";
 import { createMockNotifications, type MockNotificationOperation, type MockOrgStanding } from "./create-mock-notifications.ts";
@@ -150,6 +150,8 @@ export interface MockSessionController {
   actAs<T>(preset: MockSessionPreset, run: () => Promise<T>): Promise<T>;
   /** The engine's answer for a picture (ready, refused, failed); its stories hear it live. */
   prepareAsset(assetId: string, status: "received" | "ready" | "rejected" | "failed", problem?: string | null): void;
+  /** The engine's answer for a Word import: its stories made, or its failure; the importer hears it live. */
+  finishImport(importId: string, outcome?: MockImportOutcome): Promise<void>;
   readonly fixtures: MockSessionFixtures;
 }
 
@@ -1023,6 +1025,7 @@ export function createMockSessionEnvironment(
     },
     twoStepState: () => ({ sessionTwoStep, trustedDevice }),
     prepareAsset: (assetId, status, problem) => storyDouble.prepare(assetId, status, problem),
+    finishImport: (importId, outcome) => storyDouble.finishImport(importId, outcome),
     async actAs(other, run) {
       const was = { preset, signedInUserId, sessionTwoStep };
       preset = other;

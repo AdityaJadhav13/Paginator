@@ -69,7 +69,9 @@ export {
   AssetStatus,
   AssetUse,
   CompletedUpload,
+  DOCX_TYPE,
   FileQuery,
+  MAX_DOCX_BYTES,
   MAX_PICTURE_BYTES,
   MediaItem,
   MediaList,
@@ -112,7 +114,13 @@ export {
   hasControlCharacters,
 } from "./contact.ts";
 export {
+  DOCX_RESULT_FORMAT,
+  DocxImportPayload,
+  DocxResult,
   EngineEvent,
+  ImportParsed,
+  ImportRejected,
+  JOB_KINDS,
   JobFailed,
   MediaIngestPayload,
   MediaReady,
@@ -125,3 +133,4 @@ export {
   WorkerJob,
   WorkerResult,
 } from "./engine.ts";
+export { DocxImport, DocxImportRequest, IMPORT_STATES, ImportAccepted, ImportNote, ImportState } from "./imports.ts";

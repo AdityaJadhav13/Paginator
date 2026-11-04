@@ -14,7 +14,9 @@ import { reportToInbox, runnerEnv, startQueue } from "@pageinator/engine-queue";
 import type { FastifyBaseLogger } from "fastify";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
+import { strToU8, zipSync } from "fflate";
 import { drainInbox } from "../../src/modules/media/engine-inbox.ts";
+import { s3Store } from "../../src/storage/s3.ts";
 import { freshDatabase } from "./helpers.ts";
 import { type IdentityApp, identityApp } from "./identity-app.ts";
 import { type Org, newsroom } from "./newsroom.ts";
@@ -49,26 +51,8 @@ describe.runIf(PYTHON)("a photo through the engine's queue, end to end", () => {
     await db?.drop();
   });
 
-  it("uploads, runs the runner, applies media.ready, and serves the preview", async () => {
-    const base = `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}`;
-    const file = realPng(300, 200);
-    const presigned = await n.change("POST", `${base}/uploads`, a.ownerCookie, {
-      purpose: "story_photo",
-      filename: "photo.png",
-      contentType: "image/png",
-      bytes: file.length,
-    });
-    expect(presigned.statusCode, presigned.body).toBe(201);
-    const policy = presigned.json();
-    const form = new FormData();
-    for (const [name, value] of Object.entries(policy.fields as Record<string, string>)) form.append(name, value);
-    form.append("file", new Blob([file]));
-    expect((await fetch(policy.url, { method: "POST", body: form })).status).toBe(204);
-    const done = await n.call("POST", `${base}/uploads/${policy.uploadId}/complete`, a.ownerCookie);
-    expect(done.statusCode, done.body).toBe(200);
-    const asset = done.json().asset as { id: string; status: string };
-    expect(asset.status).toBe("received");
-
+  /** Runs the queue (as pgn_engine, the real runner) until the target's event reaches the inbox. */
+  async function runQueueUntil(target: string) {
     const run = inject("database");
     const storage = inject("storage");
     const folder = mkdtempSync(join(tmpdir(), "pgn-e2e-"));
@@ -110,7 +94,7 @@ describe.runIf(PYTHON)("a photo through the engine's queue, end to end", () => {
     try {
       const end = Date.now() + 60_000;
       for (;;) {
-        const { rowCount } = await su.query("select 1 from app.engine_event where asset_id = $1", [asset.id]);
+        const { rowCount } = await su.query("select 1 from app.engine_event where asset_id = $1", [target]);
         if (rowCount) break;
         if (Date.now() > end) throw new Error("no event reached the inbox");
         await new Promise((r) => setTimeout(r, 200));
@@ -119,6 +103,29 @@ describe.runIf(PYTHON)("a photo through the engine's queue, end to end", () => {
       await queue.stop();
       await queue.promise;
     }
+  }
+
+  it("uploads, runs the runner, applies media.ready, and serves the preview", async () => {
+    const base = `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}`;
+    const file = realPng(300, 200);
+    const presigned = await n.change("POST", `${base}/uploads`, a.ownerCookie, {
+      purpose: "story_photo",
+      filename: "photo.png",
+      contentType: "image/png",
+      bytes: file.length,
+    });
+    expect(presigned.statusCode, presigned.body).toBe(201);
+    const policy = presigned.json();
+    const form = new FormData();
+    for (const [name, value] of Object.entries(policy.fields as Record<string, string>)) form.append(name, value);
+    form.append("file", new Blob([file]));
+    expect((await fetch(policy.url, { method: "POST", body: form })).status).toBe(204);
+    const done = await n.call("POST", `${base}/uploads/${policy.uploadId}/complete`, a.ownerCookie);
+    expect(done.statusCode, done.body).toBe(200);
+    const asset = done.json().asset as { id: string; status: string };
+    expect(asset.status).toBe("received");
+
+    await runQueueUntil(asset.id);
     expect((await su.query("select count(*)::int as n from queue._private_jobs")).rows).toEqual([{ n: 0 }]);
     await drainInbox(it_.database, quiet);
     const { rows } = await su.query("select status, problem from app.asset where id = $1", [asset.id]);
@@ -133,5 +140,36 @@ describe.runIf(PYTHON)("a photo through the engine's queue, end to end", () => {
     expect(got.status).toBe(200);
     const bytes = new Uint8Array(await got.arrayBuffer());
     expect([bytes[0], bytes[1]]).toEqual([0xff, 0xd8]); // a JPEG
+  }, 120_000);
+
+  it("imports a Word file: the runner reads it with the Desk's code, and the API makes its stories", async () => {
+    const base = `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}`;
+    const xml =
+      '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/' +
+      '2006/main"><w:body><w:p><w:r><w:t>काल्पनिक मथळा</w:t></w:r></w:p><w:p><w:r><w:t>Byline: A. Writer</w:t></w:r>' +
+      "</w:p><w:p><w:r><w:t>Fictional text.</w:t></w:r></w:p></w:body></w:document>";
+    const file = zipSync({ "[Content_Types].xml": strToU8("<Types/>"), "word/document.xml": strToU8(xml) });
+    const presigned = await n.change("POST", `${base}/uploads`, a.ownerCookie, {
+      purpose: "docx",
+      filename: "fictional.docx",
+      contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      bytes: file.length,
+    });
+    expect(presigned.statusCode, presigned.body).toBe(201);
+    const policy = presigned.json();
+    const form = new FormData();
+    for (const [name, value] of Object.entries(policy.fields as Record<string, string>)) form.append(name, value);
+    form.append("file", new Blob([file]));
+    expect((await fetch(policy.url, { method: "POST", body: form })).status).toBe(204);
+    const started = await n.change("POST", `${base}/imports/docx`, a.ownerCookie, { uploadId: policy.uploadId });
+    expect(started.statusCode, started.body).toBe(202);
+    const importId = started.json().importId as string;
+    await runQueueUntil(importId);
+    await drainInbox(it_.database, quiet, s3Store(it_.config.storage!));
+    const got = (await n.call("GET", `${base}/imports/${importId}`, a.ownerCookie)).json();
+    expect(got).toMatchObject({ state: "done", skipped: 0, notes: [], error: null });
+    expect(got.created.map((c: { headline: string }) => c.headline)).toEqual(["काल्पनिक मथळा"]);
+    const story = (await n.call("GET", `${base}/stories/${got.created[0].storyId}`, a.ownerCookie)).json();
+    expect(story).toMatchObject({ byline: "A. Writer", body: "Fictional text.", status: "draft" });
   }, 120_000);
 });

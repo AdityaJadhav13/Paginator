@@ -55,6 +55,9 @@ export const AUDIT_ACTION_KEYS = [
   "auditLog.action.edition.create",
   "auditLog.action.engine.event_ignore",
   "auditLog.action.engine.event_refuse",
+  "auditLog.action.import.create",
+  "auditLog.action.import.done",
+  "auditLog.action.import.fail",
   "auditLog.action.invitation.accept",
   "auditLog.action.invitation.cancel",
   "auditLog.action.invitation.create",
@@ -100,10 +103,13 @@ const TARGET_KEYS: Readonly<Record<string, PlainKey>> = {
   organization: "auditLog.target.organization",
   edition: "auditLog.target.edition",
   route: "auditLog.target.route",
+  import: "auditLog.target.import",
 };
 
-/** An action's plain name; one of a newer API than this screen is shown by its code. */
-export function actionName(action: string, t: Translate): string {
+/** An action's plain name; one of a newer API than this screen is shown by its code. An upload is named by its
+ * purpose (data.purpose: a Word file's, or a picture's). */
+export function actionName(action: string, t: Translate, data?: Readonly<Record<string, unknown>>): string {
+  if (action === "upload.presign" && data?.["purpose"] === "docx") return t("auditLog.action.uploadWord");
   const key = `auditLog.action.${action}`;
   return (AUDIT_ACTION_KEYS as readonly string[]).includes(key) ? t(key as PlainKey) : t("auditLog.action.unknown", { action });
 }
@@ -319,7 +325,7 @@ function AuditContent({ org }: { readonly org: OrgAccessDto }) {
                       </span>
                     </TableCell>
                     <TableCell className="pg-people-audit__action">
-                      <strong>{actionName(event.action, t)}</strong>
+                      <strong>{actionName(event.action, t, event.data)}</strong>
                     </TableCell>
                     <TableCell className="pg-people-audit__about">
                       <span className="pg-people-audit__target">{targetText(event.target, t)}</span>

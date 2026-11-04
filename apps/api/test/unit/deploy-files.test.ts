@@ -73,6 +73,8 @@ describe("the pilot's deployment files", () => {
     expect(policy.Statement.map((st) => [st.Effect, [st.Action].flat().sort(), st.Resource])).toEqual([
       ["Allow", ["s3:GetObject", "s3:GetObjectVersion"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*"],
       ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/assets/*/r/*"],
+      // a Word import's result file only, never its original (imports/<id>/original)
+      ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/imports/*/result-*.json"],
     ]);
   });
 });

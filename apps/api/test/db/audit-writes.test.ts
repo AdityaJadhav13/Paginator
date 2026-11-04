@@ -277,7 +277,7 @@ describe("a story's life, one event per change", () => {
     expect(refused.done.statusCode).toBe(422);
     const uploadRows = await events("action like 'upload.%'");
     expect(uploadRows.map((row) => [row.action, row.target_type, row.target_id, row.data])).toEqual([
-      ["upload.presign", "upload", first.uploadId, { bytes: first.bytes }],
+      ["upload.presign", "upload", first.uploadId, { bytes: first.bytes, purpose: "story_photo" }],
       [
         "upload.complete",
         "asset",
@@ -291,7 +291,7 @@ describe("a story's life, one event per change", () => {
           heightPx: 800,
         },
       ],
-      ["upload.presign", "upload", second.uploadId, { bytes: second.bytes }],
+      ["upload.presign", "upload", second.uploadId, { bytes: second.bytes, purpose: "story_photo" }],
       [
         "upload.complete",
         "asset",
@@ -305,7 +305,7 @@ describe("a story's life, one event per change", () => {
           heightPx: 900,
         },
       ],
-      ["upload.presign", "upload", refused.uploadId, { bytes: refused.bytes }],
+      ["upload.presign", "upload", refused.uploadId, { bytes: refused.bytes, purpose: "story_photo" }],
       ["upload.reject", "upload", refused.uploadId, {}],
     ]);
     expect(uploadRows.every((row) => row.publication_id === a.pubId && row.actor_id === P("photo").id)).toBe(true);

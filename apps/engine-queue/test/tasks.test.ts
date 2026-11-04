@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 import { EngineEvent, WorkerResult } from "@pageinator/contracts";
 import type { JobHelpers } from "graphile-worker";
 import type { RunOutcome } from "../src/runner.ts";
-import { MAX_GIVEN_BACK, mediaIngest, RetryLater, type Report } from "../src/tasks.ts";
+import { engineTask, MAX_GIVEN_BACK, mediaIngest, RetryLater, type Report } from "../src/tasks.ts";
 
 const results = JSON.parse(
   readFileSync(new URL("../../../packages/contracts/test/fixtures/worker-results.json", import.meta.url), "utf8"),
 ) as unknown[];
 const ready = WorkerResult.parse(results[0]);
-if (ready.outcome !== "done") throw new Error("the fixture's first result is a ready photo");
+if (ready.outcome !== "done" || ready.event.kind !== "media.ready")
+  throw new Error("the fixture's first result is a ready photo");
 const payload = {
   org_id: ready.event.org_id,
   pub_id: ready.event.pub_id,
@@ -42,7 +43,12 @@ function helpers(attempts = 1, max = 3, givenBack: 0 | 1 | "error" = 1) {
 
 type Options = { attempts?: number; max?: number; givenBack?: 0 | 1 | "error"; report?: Report };
 
-async function task(out: RunOutcome, payloadGiven: unknown = payload, options: Options = {}) {
+async function task(
+  out: RunOutcome,
+  payloadGiven: unknown = payload,
+  options: Options = {},
+  kind: "media.ingest" | "docx.import" = "media.ingest",
+) {
   const reported: EngineEvent[] = [];
   const ids: string[] = [];
   const jobs: unknown[] = [];
@@ -55,7 +61,10 @@ async function task(out: RunOutcome, payloadGiven: unknown = payload, options: O
       reported.push(EngineEvent.parse(e));
       ids.push(id);
     });
-  const t = mediaIngest(settings, report, () => (stops += 1), run);
+  const t =
+    kind === "media.ingest"
+      ? mediaIngest(settings, report, () => (stops += 1), run)
+      : engineTask(kind, settings, report, () => (stops += 1), run);
   const thrown = await Promise.resolve(t(payloadGiven as never, h)).then(
     () => null,
     (e: unknown) => e,
@@ -101,7 +110,8 @@ describe("media.ingest in the queue", () => {
 
   it("never reports an event for another asset", async () => {
     const other = structuredClone(ready);
-    if (other.outcome === "done") other.event.asset_id = "01890a5d-ac96-774b-bcce-b302099a8060";
+    if (other.outcome === "done" && other.event.kind === "media.ready")
+      other.event.asset_id = "01890a5d-ac96-774b-bcce-b302099a8060";
     const { reported } = await task({ outcome: "done", result: other as typeof ready });
     expect(reported.map((e) => e.kind === "job.failed" && [e.code, e.target_id])).toEqual([
       ["worker.output", payload.asset_id],
@@ -190,4 +200,48 @@ describe("media.ingest in the queue", () => {
     });
     expect([(lost.thrown as Error).message, calls]).toEqual(["the inbox is down", 3]);
   }, 20_000);
+});
+
+const docxResults = JSON.parse(
+  readFileSync(new URL("../../../packages/contracts/test/fixtures/docx-results.json", import.meta.url), "utf8"),
+) as unknown[];
+const docxParsed = WorkerResult.parse(docxResults[0]);
+if (docxParsed.outcome !== "done" || docxParsed.event.kind !== "import.parsed")
+  throw new Error("the docx fixture's first result is a parsed file");
+const docxPayload = {
+  org_id: docxParsed.event.org_id,
+  pub_id: docxParsed.event.pub_id,
+  import_id: docxParsed.event.import_id,
+  version_id: "v1",
+  sha256: docxParsed.event.sha256,
+};
+
+describe("docx.import in the queue", () => {
+  it("gives the runner a docx.import job and reports its event", async () => {
+    const { reported, jobs } = await task({ outcome: "done", result: docxParsed }, docxPayload, {}, "docx.import");
+    expect(jobs).toEqual([{ format: "pageinator.worker-job/1", id: "7", kind: "docx.import", args: docxPayload }]);
+    expect(reported).toEqual([docxParsed.event]);
+  });
+
+  it("never reports an event for another import, nor a photo's event", async () => {
+    const other = { ...docxPayload, import_id: "01890a5d-ac96-774b-bcce-b302099a8060" };
+    const wrong = await task({ outcome: "done", result: docxParsed }, other, {}, "docx.import");
+    expect(wrong.reported.map((e) => e.kind === "job.failed" && [e.code, e.job_kind, e.target_id])).toEqual([
+      ["worker.output", "docx.import", other.import_id],
+    ]);
+    const photo = await task({ outcome: "done", result: ready }, docxPayload, {}, "docx.import");
+    expect(photo.reported.map((e) => e.kind === "job.failed" && e.code)).toEqual(["worker.output"]);
+  });
+
+  it("settles a payload that drifted as a failed import", async () => {
+    const { reported } = await task(
+      { outcome: "done", result: docxParsed },
+      { ...docxPayload, extra: 1 },
+      {},
+      "docx.import",
+    );
+    expect(reported.map((e) => e.kind === "job.failed" && [e.code, e.target_id])).toEqual([
+      ["worker.job", docxPayload.import_id],
+    ]);
+  });
 });

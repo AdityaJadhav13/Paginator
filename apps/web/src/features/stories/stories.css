@@ -382,3 +382,66 @@
 .pg-editor__inspector .pg-panel__body > p {
   margin: 0;
 }
+
+/* Import a Word file (ImportWordDrawer): the file pick as the kit's button, the steps, the stories made and the notes */
+.pg-word-import__pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-3);
+}
+
+/* the input is visually hidden but keeps the focus: its button shows it */
+.pg-word-import__pick input:focus-visible + .pg-button {
+  outline: 2px solid var(--pg-color-focus);
+  outline-offset: 2px;
+}
+
+.pg-word-import__name {
+  overflow-wrap: anywhere;
+  color: var(--pg-color-text-muted);
+}
+
+.pg-word-import__steps,
+.pg-word-import__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-word-import__steps li,
+.pg-word-import__list li {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-2);
+  overflow-wrap: anywhere;
+}
+
+.pg-word-import__steps li {
+  color: var(--pg-color-text-muted);
+}
+
+.pg-word-import__steps li.is-now {
+  color: inherit;
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-word-import__steps li.is-done svg {
+  color: var(--pg-color-success);
+}
+
+.pg-word-import__notes li {
+  align-items: flex-start;
+}
+
+.pg-word-import__status,
+.pg-word-import__heading {
+  margin: 0;
+}
+
+.pg-word-import__heading {
+  font-weight: var(--pg-font-weight-semibold);
+}

@@ -170,7 +170,7 @@ export type NewStory = Text & {
   pagePin: number | null;
   editionId: string | null;
   deskNote: string;
-  origin: "typed" | "pasted";
+  origin: "typed" | "pasted" | "word";
 };
 
 async function openRevision(tx: Tx, who: Who, publicationId: string, storyId: string, rev: number, text: Text) {

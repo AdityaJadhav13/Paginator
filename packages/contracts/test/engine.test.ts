@@ -1,6 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { EngineEvent, MediaIngestPayload, WORKER_JOB_FORMAT, WorkerJob, WorkerResult } from "../src/index.ts";
+import {
+  DocxResult,
+  EngineEvent,
+  MediaIngestPayload,
+  UploadRequest,
+  WORKER_JOB_FORMAT,
+  WorkerJob,
+  WorkerResult,
+} from "../src/index.ts";
 
 // What the Python runner really wrote (apps/engine-worker test_jobs.py ContractTests, on fictional pictures), one result
 // of each kind: a ready photo, refused ones, and every error code (a long store message cut to the contract's length).
@@ -99,5 +107,36 @@ describe("the engine's contracts", () => {
       { ...job, args: { ...args, original_key: "orgs/x" } },
     ])
       expect(WorkerJob.safeParse(bad).success).toBe(false);
+  });
+
+  it("read docx.import's own results (apps/engine-worker test_docx_import.py ContractTests)", () => {
+    const docx = JSON.parse(
+      readFileSync(new URL("./fixtures/docx-results.json", import.meta.url), "utf8"),
+    ) as unknown[];
+    const kinds = docx.map((r) => WorkerResult.parse(r)).map((r) => (r.outcome === "done" ? r.event.kind : null));
+    expect(kinds).toEqual(["import.parsed", "import.rejected"]);
+    const parsed = structuredClone(docx[0]) as { event: Record<string, unknown> };
+    parsed.event["headline"] = "story text never rides in the event";
+    expect(WorkerResult.safeParse(parsed).success).toBe(false);
+    const args = { org_id: ORG, pub_id: ORG, import_id: ORG, version_id: "v1", sha256: "a".repeat(64) };
+    expect(WorkerJob.safeParse({ format: WORKER_JOB_FORMAT, id: "1", kind: "docx.import", args }).success).toBe(true);
+    // a docx job never carries an asset's arguments, nor a photo's job a docx's
+    expect(WorkerJob.safeParse({ format: WORKER_JOB_FORMAT, id: "1", kind: "media.ingest", args }).success).toBe(false);
+    expect(
+      DocxResult.safeParse({
+        format: "pageinator.docx-result/1",
+        articles: [{ headline: "H", byline: "", body: "B" }],
+        notes: [{ code: "docx.tables", count: 1, text: "1 table was not imported." }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("take a Word file's upload only as docx, and a picture's never as docx", () => {
+    const docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const up = { filename: "fictional.docx", bytes: 10 };
+    expect(UploadRequest.safeParse({ ...up, purpose: "docx", contentType: docx }).success).toBe(true);
+    expect(UploadRequest.safeParse({ ...up, purpose: "docx", contentType: "image/jpeg" }).success).toBe(false);
+    expect(UploadRequest.safeParse({ ...up, purpose: "library", contentType: docx }).success).toBe(false);
+    expect(UploadRequest.safeParse({ ...up, purpose: "library", contentType: "image/png" }).success).toBe(true);
   });
 });

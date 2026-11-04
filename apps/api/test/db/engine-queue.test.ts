@@ -473,6 +473,7 @@ describe("the consumer", () => {
     const inbox = startEngineInbox(
       it_.database,
       log,
+      undefined,
       { staleMs: STALE_MS, deadlineMs: DEADLINE_MS },
       {
         pollMs: 100,

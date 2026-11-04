@@ -21,6 +21,7 @@ export type {
 } from "./team-service.ts";
 export type { AccountService, InvitationDto, SignUpInput } from "./account-service.ts";
 export type {
+  DocxImportDto,
   PasteResultDto,
   StoryDto,
   StoryFilterDto,

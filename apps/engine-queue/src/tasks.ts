@@ -4,7 +4,15 @@
 // worker (`worker.config`: the operator's fault, not the photo's) give the attempt back, are never reported as a
 // failure, and the latter stops the queue (startQueue). What still cannot settle here (the process dies on the last
 // attempt, or the inbox refuses every report) the API's sweep settles (plan §2.2, exhaustedJobs).
-import { MediaIngestPayload, OrgId, Uuid7, WORKER_JOB_FORMAT, type EngineEvent } from "@pageinator/contracts";
+import {
+  DocxImportPayload,
+  MediaIngestPayload,
+  OrgId,
+  Uuid7,
+  WORKER_JOB_FORMAT,
+  type EngineEvent,
+  type WorkerJob,
+} from "@pageinator/contracts";
 import type { JobHelpers, Task, TaskList } from "graphile-worker";
 import { z } from "zod";
 import { runJob, type RunOutcome, type RunnerSettings } from "./runner.ts";
@@ -30,38 +38,55 @@ export class RetryLater extends Error {
   }
 }
 
-/** What a payload that is not ids-only must still name for its asset to settle. */
-const Target = z.object({ org_id: OrgId, pub_id: Uuid7, asset_id: Uuid7 });
+/** Each kind: its ids-only payload, and the payload's field that names its target (an asset, an import). */
+const KINDS = {
+  "media.ingest": { payload: MediaIngestPayload, target: "asset_id", events: ["media.ready", "media.rejected"] },
+  "docx.import": { payload: DocxImportPayload, target: "import_id", events: ["import.parsed", "import.rejected"] },
+} as const;
+type Kind = keyof typeof KINDS;
+
+/** What a payload that is not ids-only must still name for its target to settle. */
+const Target = z.object({ org_id: OrgId, pub_id: Uuid7, target_id: Uuid7 });
 type Target = z.infer<typeof Target>;
 
-export function mediaIngest(
+/** The target an event names (its asset, or its import). */
+export const targetOf = (event: EngineEvent): string =>
+  event.kind === "job.failed" ? event.target_id : "asset_id" in event ? event.asset_id : event.import_id;
+
+export function engineTask(
+  kind: Kind,
   settings: RunnerSettings,
   report: Report,
   misconfigured: () => void = () => {},
   run: Run = runJob,
 ): Task {
+  const { payload: Payload, target: field, events } = KINDS[kind];
   return async (payload, helpers) => {
     const settle = (event: EngineEvent) => reportWithRetries(report, event, helpers);
-    const args = MediaIngestPayload.safeParse(payload);
+    const args = Payload.safeParse(payload);
     if (!args.success) {
-      const target = Target.safeParse(payload);
-      // the API enqueues only through its wrapper; a payload that drifted from it still settles its asset
+      const named = payload as Record<string, unknown> | null;
+      const target = Target.safeParse({ ...named, target_id: named?.[field] });
+      // the API enqueues only through its wrapper; a payload that drifted from it still settles its target
       if (target.success)
-        return settle(failed(target.data, "worker.job", "the job's payload is not the queue's ids-only payload"));
-      helpers.logger.error("media.ingest: a payload that names no asset; the job is dropped");
+        return settle(failed(kind, target.data, "worker.job", "the job's payload is not the queue's ids-only payload"));
+      helpers.logger.error(`${kind}: a payload that names no ${field}; the job is dropped`);
       return;
     }
-    const job = { format: WORKER_JOB_FORMAT, id: helpers.job.id, kind: "media.ingest", args: args.data } as const;
+    const data = args.data as Record<string, string>;
+    const target = { org_id: data["org_id"] ?? "", pub_id: data["pub_id"] ?? "", target_id: data[field] ?? "" };
+    const job = { format: WORKER_JOB_FORMAT, id: helpers.job.id, kind, args: args.data } as WorkerJob;
     const out: RunOutcome = await run(job, settings, helpers.abortSignal);
     if (out.outcome === "done") {
       const event = out.result.event;
       if (
-        event.org_id !== args.data.org_id ||
-        event.pub_id !== args.data.pub_id ||
-        event.asset_id !== args.data.asset_id ||
-        event.sha256 !== args.data.sha256
+        !(events as readonly string[]).includes(event.kind) ||
+        event.org_id !== target.org_id ||
+        event.pub_id !== target.pub_id ||
+        targetOf(event) !== target.target_id ||
+        event.sha256 !== data["sha256"]
       )
-        return settle(failed(args.data, "worker.output", "the runner's event is for another asset"));
+        return settle(failed(kind, target, "worker.output", `the runner's event is for another ${field.slice(0, -3)}`));
       return settle(event);
     }
     const notThePhotos = out.code === "worker.cancelled" || out.code === "worker.config";
@@ -69,9 +94,13 @@ export function mediaIngest(
     if (notThePhotos && (await giveBack(helpers))) throw new RetryLater(out.code);
     if ((out.outcome === "retry" || notThePhotos) && helpers.job.attempts < helpers.job.max_attempts)
       throw new RetryLater(out.code);
-    return settle(failed(args.data, out.code, out.message));
+    return settle(failed(kind, target, out.code, out.message));
   };
 }
+
+/** media.ingest: an uploaded photo's print versions. */
+export const mediaIngest = (settings: RunnerSettings, report: Report, misconfigured?: () => void, run: Run = runJob) =>
+  engineTask("media.ingest", settings, report, misconfigured, run);
 
 /** Gives the attempt back (one more allowed) while this queue still holds the job's lock: true when it did. */
 async function giveBack(helpers: JobHelpers): Promise<boolean> {
@@ -98,19 +127,19 @@ async function reportWithRetries(report: Report, event: EngineEvent, helpers: Jo
     } catch (e) {
       const wait = REPORT_WAITS_MS[i];
       if (wait === undefined) throw e; // the job fails: run again, or, out of attempts, left to the API's sweep
-      helpers.logger.warn(`media.ingest: the report failed; trying again in ${wait} ms`);
+      helpers.logger.warn(`${helpers.job.task_identifier}: the report failed; trying again in ${wait} ms`);
       await new Promise((r) => setTimeout(r, wait));
     }
   }
 }
 
-function failed(target: Target, code: string, message: string): EngineEvent {
+function failed(kind: Kind, target: Target, code: string, message: string): EngineEvent {
   return {
     kind: "job.failed",
     org_id: target.org_id,
     pub_id: target.pub_id,
-    job_kind: "media.ingest",
-    target_id: target.asset_id,
+    job_kind: kind,
+    target_id: target.target_id,
     code,
     message,
   };
@@ -122,5 +151,8 @@ export function taskList(
   misconfigured?: () => void,
   run: Run = runJob,
 ): TaskList {
-  return { "media.ingest": mediaIngest(settings, report, misconfigured, run) };
+  return {
+    "media.ingest": engineTask("media.ingest", settings, report, misconfigured, run),
+    "docx.import": engineTask("docx.import", settings, report, misconfigured, run),
+  };
 }

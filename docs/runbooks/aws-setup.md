@@ -117,7 +117,8 @@ then each key belongs to an IAM user that may do only what the policy below says
 - [ ] IAM user `pgn-pilot-api` (no console), policy `infra/aws/iam-api-policy.json` (the work bucket only); one access
   key, into SSM.
 - [ ] IAM user `pgn-pilot-engine` (no console), policy `infra/aws/iam-engine-policy.json`: read a named version
-  only under `orgs/` in the work bucket, write only an asset's renditions (`orgs/*/pubs/*/assets/*/r/*`) and delete
+  only under `orgs/` in the work bucket, write only an asset's renditions (`orgs/*/pubs/*/assets/*/r/*`) and a Word import's result file
+  (`orgs/*/pubs/*/imports/*/result-*.json`) and delete
   nothing (never `uploads/`, never another bucket), so a key guard bug or a decoder exploit in the worker still cannot
   overwrite or delete a paper's originals, nor reach the quarantine or the archive. One access key, into SSM.
 - [ ] IAM user `pgn-pilot-backup` (no console), policy `infra/aws/iam-backup-policy.json`: write dumps and their

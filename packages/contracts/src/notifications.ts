@@ -90,6 +90,7 @@ export const NotificationsRead = z.union([
  *   - comment {publicationId, storyId, commentId}: a comment on it was written or changed;
  *   - notification {id}: a new notification (fetch the list);
  *   - edition {publicationId, editionId}: an edition was made or changed (fetch the editions again);
+ *   - import {publicationId, importId}: the person's own Word import finished (fetch GET …/imports/:id);
  *   - resync {}: updates may have been missed (after a reconnect): fetch what is on the screen afresh.
  * A comment line comes every 25 s to keep the connection open. */
-export const LIVE_EVENTS = ["story", "comment", "notification", "edition", "resync"] as const;
+export const LIVE_EVENTS = ["story", "comment", "notification", "edition", "import", "resync"] as const;

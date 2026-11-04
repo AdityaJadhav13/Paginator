@@ -89,6 +89,8 @@ CMD ["node", "/opt/pageinator/apps/engine-queue/src/main.ts"]
 FROM worker AS test
 COPY --chown=10001:10001 apps/engine-worker/test /opt/pageinator/apps/engine-worker/test
 COPY --chown=10001:10001 packages/contracts/test/fixtures /opt/pageinator/packages/contracts/test/fixtures
+# the Desk's fictional .docx builders (test_docx_import.py uses them)
+COPY --chown=10001:10001 tools/desk/test/test_docx.py /opt/pageinator/tools/desk/test/test_docx.py
 RUN python -B -m unittest discover -s /opt/pageinator/apps/engine-worker/test \
  && node --version | grep -qx v24.22.0 \
  && ! find /opt/pageinator/node_modules -name typescript -o -name '@typescript' | grep -q . \

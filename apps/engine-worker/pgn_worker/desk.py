@@ -10,6 +10,6 @@ DESK = REPO / "tools" / "desk"
 if str(DESK) not in sys.path:
     sys.path.insert(0, str(DESK))
 
-from deskserver import images, util  # noqa: E402
+from deskserver import docx, images, util  # noqa: E402
 
-__all__ = ["DESK", "REPO", "images", "util"]
+__all__ = ["DESK", "REPO", "docx", "images", "util"]

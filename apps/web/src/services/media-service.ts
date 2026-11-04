@@ -37,10 +37,11 @@ export interface MediaService {
   presign(
     input: Where & {
       readonly filename: string;
-      readonly contentType: PictureTypeDto;
+      /** A picture's type, or DOCX_TYPE for a Word file (purpose docx). */
+      readonly contentType: UploadRequest["contentType"];
       readonly bytes: number;
       readonly idempotencyKey: string;
-      /** A story's photo (the default), or a picture straight into the library. */
+      /** A story's photo (the default), a picture straight into the library, or a Word file to import (docx). */
       readonly purpose?: UploadPurposeDto;
     },
   ): Promise<ServiceResult<PresignedUploadDto, ApiProblem>>;

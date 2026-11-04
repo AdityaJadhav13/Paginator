@@ -12,6 +12,12 @@
       "Effect": "Allow",
       "Action": ["s3:PutObject"],
       "Resource": "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/assets/*/r/*"
+    },
+    {
+      "Sid": "WorkBucketImportResultsWriteOnly",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject"],
+      "Resource": "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/imports/*/result-*.json"
     }
   ]
 }

@@ -3,7 +3,7 @@
  * the API's own schema (@pageinator/contracts), so a change of shape shows as an error, never as a wrong screen. A
  * 409 story_changed keeps the story as it is now in the problem's `current`, when it is one.
  */
-import { PasteResult, Story, StoryList } from "@pageinator/contracts";
+import { DocxImport, ImportAccepted, PasteResult, Story, StoryList } from "@pageinator/contracts";
 import type { ApiProblem, ServiceResult, StoryService } from "../services/index.ts";
 import type { ApiClient, ApiResult } from "./client.ts";
 
@@ -25,8 +25,8 @@ function withCurrent(problem: ApiProblem): ApiProblem {
   return story.success ? { ...rest, current: story.data } : rest;
 }
 
-const base = (orgId: string, pubId: string) =>
-  `/api/v1/orgs/${encodeURIComponent(orgId)}/pubs/${encodeURIComponent(pubId)}/stories`;
+const pub = (orgId: string, pubId: string) => `/api/v1/orgs/${encodeURIComponent(orgId)}/pubs/${encodeURIComponent(pubId)}`;
+const base = (orgId: string, pubId: string) => `${pub(orgId, pubId)}/stories`;
 const one = (orgId: string, pubId: string, storyId: string) => `${base(orgId, pubId)}/${encodeURIComponent(storyId)}`;
 
 export function createApiStoryService(client: ApiClient): StoryService {
@@ -68,6 +68,13 @@ export function createApiStoryService(client: ApiClient): StoryService {
     async paste({ orgId, pubId, text, editionId, idempotencyKey }) {
       const body = { text, ...(editionId ? { editionId } : {}) };
       return read(PasteResult, await client.post(`${base(orgId, pubId)}/paste`, body, { idempotencyKey }));
+    },
+    async importDocx({ orgId, pubId, uploadId, editionId, idempotencyKey }) {
+      const body = { uploadId, ...(editionId ? { editionId } : {}) };
+      return read(ImportAccepted, await client.post(`${pub(orgId, pubId)}/imports/docx`, body, { idempotencyKey }));
+    },
+    async getImport({ orgId, pubId, importId }) {
+      return read(DocxImport, await client.get(`${pub(orgId, pubId)}/imports/${encodeURIComponent(importId)}`));
     },
   };
 }

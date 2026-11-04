@@ -42,8 +42,14 @@ describe("Plain action names", () => {
       }
       expect(new Set(names).size, language).toBe(AUDIT_ACTION_NAMES.length);
     }
-    expect(AUDIT_ACTION_NAMES).toHaveLength(44);
+    expect(AUDIT_ACTION_NAMES).toHaveLength(47);
     expect(CATALOGUES.mr["auditLog.action.story.status_change"]).not.toBe(CATALOGUES.en["auditLog.action.story.status_change"]);
+  });
+
+  it("name an upload by its purpose: a Word file's, or a picture's", () => {
+    expect(actionName("upload.presign", translator("en"), { purpose: "docx" })).toBe("Started uploading a Word file");
+    expect(actionName("upload.presign", translator("mr"), { purpose: "docx" })).toBe("Word फाइलचे अपलोड सुरू केले");
+    expect(actionName("upload.presign", translator("en"), { purpose: "story_photo" })).toBe("Started uploading a picture");
   });
 
   it("show an action this screen does not know by its code", () => {

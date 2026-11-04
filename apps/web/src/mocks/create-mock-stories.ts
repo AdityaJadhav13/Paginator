@@ -32,12 +32,17 @@
  * counted; made by a full edition.create (one a date: 409 edition_exists with it as `current`; an Idempotency-Key
  * replaying its first answer); a story put in or taken out by its PATCH (`editionId`, the desk's); and "Send to the
  * Desk" (a full desk.export) answering a fictional ZIP of the edition's Ready stories, never a spiked one.
+ * Word imports (L2.2) as the API's: a Word file uploaded (purpose docx, up to 10 MiB, by whoever may create a story),
+ * then POST …/imports/docx (202, an Idempotency-Key replaying its first answer; a file whose first bytes are not a ZIP's
+ * is 422 docx_refused), queued until `finishImport` stands in for the engine: its stories are made by the importer, or
+ * it fails with the Desk's code; then the importer alone hears `import` live. GET …/imports/:id is the importer's only.
  * Fictional data only; deterministic (no clock, no randomness).
  */
 import type {
   CommentDto,
   CommentService,
   DeskBundleDto,
+  DocxImportDto,
   EditionService,
   PubEditionDto,
   LiveEventDto,
@@ -64,6 +69,8 @@ export type MockStoryOperation =
   | "stories.assign"
   | "stories.paste"
   | "stories.photo"
+  | "imports.create"
+  | "imports.get"
   | "media.presign"
   | "media.send"
   | "media.complete"
@@ -369,7 +376,7 @@ interface MockUpload {
   readonly orgId: string;
   readonly pubId: string;
   readonly userId: string;
-  readonly contentType: AssetDto["mime"];
+  readonly contentType: string;
   readonly bytes: number;
   file?: Blob;
   status: "presigned" | "completed" | "rejected";
@@ -410,6 +417,23 @@ function sniff(head: Uint8Array): { mime: AssetDto["mime"]; widthPx: number; hei
   return undefined;
 }
 
+/** How a Word import ends: the articles found (with the Desk's notes), or the Desk's refusal. */
+export type MockImportOutcome =
+  | { readonly headlines: readonly string[]; readonly skipped?: number; readonly notes?: DocxImportDto["notes"] }
+  | { readonly error: { readonly code: string; readonly message: string } };
+
+interface ImportRow {
+  readonly userId: string;
+  readonly orgId: string;
+  readonly pubId: string;
+  value: DocxImportDto;
+}
+
+// the contracts' DOCX_TYPE and MAX_DOCX_BYTES (the doubles import only the services)
+const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const MAX_DOCX_BYTES = 10_485_760;
+const NOT_WORD = "This is not a Word (.docx) file. Save it as .docx and try again.";
+
 export function createMockStories(deps: MockStoryDeps): {
   stories: StoryService;
   editions: EditionService;
@@ -421,6 +445,8 @@ export function createMockStories(deps: MockStoryDeps): {
   shown(userId: string, orgId: string, storyId: string): { headline: string; status: StoryStatusDto } | null;
   /** The engine's answer for a picture: ready, refused (with the Desk's code) or failed. */
   prepare(assetId: string, status: AssetDto["status"], problem?: string | null): void;
+  /** The engine's answer for a Word import: its stories made (headlines, in order), or its failure. */
+  finishImport(importId: string, outcome?: MockImportOutcome): Promise<void>;
   reset(): void;
   all(): readonly Row[];
 } {
@@ -488,6 +514,7 @@ export function createMockStories(deps: MockStoryDeps): {
   let uploadCount = new Map<string, number>();
   let orgBytes = new Map<string, number>();
   let assetCounter = 0;
+  let imports = new Map<string, ImportRow>();
 
   const has = (standing: MockStanding, ...roles: string[]) =>
     roles.some((role) => (standing.access.roles as readonly string[]).includes(role));
@@ -901,6 +928,48 @@ export function createMockStories(deps: MockStoryDeps): {
       keep(idempotencyKey, "paste", { text, editionId }, result);
       return success(result);
     },
+
+    async importDocx({ orgId, pubId, uploadId, editionId, idempotencyKey }) {
+      const checked = await check<{ importId: string }>("imports.create", orgId, pubId, "story.create");
+      if (refused(checked)) return checked;
+      const { person, s } = checked;
+      const replayed = replay<{ importId: string }>(idempotencyKey, "import", { uploadId, editionId });
+      if (replayed && isReused(replayed)) return failure(replayed);
+      if (replayed) return success(replayed.value);
+      const upload = uploads.get(uploadId);
+      if (!upload || upload.userId !== person.userId || upload.pubId !== pubId || upload.contentType !== DOCX_TYPE) return failure(NOT_FOUND);
+      if (!upload.file) return failure(invalid("body.uploadId", "The file has not arrived yet."));
+      if (editionId !== undefined && !isDesk(s)) return failure(NOT_ALLOWED);
+      if (editionId !== undefined && !placement(orgId, pubId, editionId)) return failure(NOT_FOUND);
+      const head = await headOf(upload.file);
+      if (!(head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04)) return failure(answer(422, "docx_refused", NOT_WORD));
+      const id = `import-${String(imports.size + 1).padStart(3, "0")}`;
+      clock += 1;
+      const at = `2026-10-22T11:${String(clock).padStart(2, "0")}:00.000Z`;
+      const value: DocxImportDto = {
+        id,
+        state: "queued",
+        editionId: editionId ?? null,
+        created: [],
+        skipped: 0,
+        notes: [],
+        error: null,
+        createdAt: at,
+        updatedAt: at,
+      };
+      imports = new Map(imports).set(id, { userId: person.userId, orgId, pubId, value });
+      keep(idempotencyKey, "import", { uploadId, editionId }, { importId: id });
+      return success({ importId: id });
+    },
+
+    async getImport({ orgId, pubId, importId }) {
+      const checked = await check<DocxImportDto>("imports.get", orgId, pubId, "story.view");
+      if (refused(checked)) return checked;
+      const kept = imports.get(importId);
+      const theirs = kept?.userId === checked.person.userId || canAssign(checked.s);
+      if (!kept || !theirs || kept.orgId !== orgId || kept.pubId !== pubId) return failure(NOT_FOUND);
+      return success(structuredClone(kept.value));
+    },
   };
 
 
@@ -1118,6 +1187,7 @@ export function createMockStories(deps: MockStoryDeps): {
   /** The API's messageFor: a story's update to whoever sees it; a comment's also needs comment.read. */
   function hears(userId: string, orgId: string, event: LiveEventDto): boolean {
     if (event.type === "resync" || event.type === "notification") return true;
+    if (event.type === "import") return imports.get(event.importId)?.userId === userId;
     if (event.type === "edition") {
       const standing = deps.standing(userId, orgId, event.publicationId);
       return standing !== undefined && reach("edition.view", standing.orgRole, standing.access) !== null;
@@ -1205,15 +1275,20 @@ export function createMockStories(deps: MockStoryDeps): {
   };
 
   const media: MediaService = {
-    async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey }) {
-      const checked = await check<never>("media.presign", orgId, pubId, "media.upload");
+    async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey, purpose = "story_photo" }) {
+      const docx = purpose === "docx";
+      const checked = await check<never>("media.presign", orgId, pubId, docx ? "story.create" : "media.upload");
       if (refused(checked)) return checked;
       const { person } = checked;
       const body = { filename, contentType, bytes };
       const replayed = replay<{ uploadId: string; url: string; fields: Record<string, string>; expiresAt: string }>(idempotencyKey, "presign", body);
       if (replayed && isReused(replayed)) return failure(replayed);
       if (replayed) return success(replayed.value);
-      if (!(TYPES as readonly string[]).includes(contentType)) return failure(invalid("body.contentType", "must be JPEG, PNG or WebP"));
+      if (docx !== (contentType === DOCX_TYPE)) return failure(invalid("body.contentType", "A Word file is uploaded as docx, and a picture as a picture."));
+      if (!docx && !(TYPES as readonly string[]).includes(contentType)) return failure(invalid("body.contentType", "must be JPEG, PNG or WebP"));
+      if (docx && bytes > MAX_DOCX_BYTES) {
+        return failure({ ...answer(422, "docx_refused", NOT_WORD), details: [{ field: "body.bytes", message: "This Word file is larger than 10 MB." }] });
+      }
       if (bytes > MAX_BYTES) return failure(answer(413, "file_too_large", "This picture is larger than 40 MB."));
       const used = orgBytes.get(orgId) ?? 0;
       const count = uploadCount.get(person.userId) ?? 0;
@@ -1448,7 +1523,34 @@ export function createMockStories(deps: MockStoryDeps): {
         deps.emit?.(story.orgId, { type: "story", publicationId: story.publicationId, storyId: story.id });
       }
     },
+    async finishImport(importId, outcome = { headlines: ["Fictional ward meeting", "Fictional library opens"] }) {
+      const kept = imports.get(importId);
+      if (!kept) return;
+      const { orgId, pubId } = kept;
+      const created: DocxImportDto["created"] = [];
+      if ("headlines" in outcome) {
+        for (const headline of outcome.headlines) {
+          const made = await stories.create({
+            orgId,
+            pubId,
+            input: { headline, body: "Fictional text from a Word file.", ...(kept.value.editionId ? { editionId: kept.value.editionId } : {}) },
+            idempotencyKey: `${importId}:${created.length}`,
+          });
+          if (made.ok) created.push({ storyId: made.value.id, headline: made.value.headline });
+        }
+      }
+      kept.value = {
+        ...kept.value,
+        state: "error" in outcome ? "failed" : "done",
+        created,
+        skipped: "headlines" in outcome ? (outcome.skipped ?? 0) : 0,
+        notes: "headlines" in outcome ? [...(outcome.notes ?? [])] : [],
+        error: "error" in outcome ? { ...outcome.error } : null,
+      };
+      deps.emit?.(orgId, { type: "import", publicationId: pubId, importId });
+    },
     reset() {
+      imports = new Map();
       comments = commentFixtures();
       commentCounter = 0;
       assets = fixtureAssets();

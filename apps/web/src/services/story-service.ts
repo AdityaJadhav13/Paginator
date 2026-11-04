@@ -1,4 +1,4 @@
-import type { PasteResult, Story, StoryInput, StoryListItem, StoryPatch, StoryStatus, TransitionTarget } from "@pageinator/contracts";
+import type { DocxImport, PasteResult, Story, StoryInput, StoryListItem, StoryPatch, StoryStatus, TransitionTarget } from "@pageinator/contracts";
 import type { ApiProblem } from "./problem.ts";
 import type { ServiceResult } from "./result.ts";
 
@@ -11,6 +11,8 @@ export type StoryPatchDto = StoryPatch;
 export type StoryStatusDto = StoryStatus;
 export type TransitionTargetDto = TransitionTarget;
 export type PasteResultDto = ReturnType<typeof PasteResult.parse>;
+/** A Word import (L2.2): its state, the stories it made, what it skipped and why it failed. */
+export type DocxImportDto = DocxImport;
 
 /** The list's filters (GET …/stories): every one optional; `cursor` is the API's, from the previous page. */
 export interface StoryFilterDto {
@@ -61,6 +63,12 @@ export interface StoryService {
   paste(
     input: Where & { readonly text: string; readonly editionId?: string; readonly idempotencyKey: string },
   ): Promise<ServiceResult<PasteResultDto, ApiProblem>>;
+  /** A Word file already uploaded (purpose docx) read as stories (POST …/imports/docx, 202): the engine reads it later. */
+  importDocx(
+    input: Where & { readonly uploadId: string; readonly editionId?: string; readonly idempotencyKey: string },
+  ): Promise<ServiceResult<{ readonly importId: string }, ApiProblem>>;
+  /** How the import stands (GET …/imports/:id). */
+  getImport(input: Where & { readonly importId: string }): Promise<ServiceResult<DocxImportDto, ApiProblem>>;
   /** The story's photo (plan §5.2): set or replace it, change its caption or credit, take it off; each on the story's
    * version, as a change of the story (409 story_changed with `current`). */
   attachPhoto(

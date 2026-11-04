@@ -214,6 +214,19 @@ export const FIXTURES: Fixture[] = [
       expires_at: "2026-11-01T00:15:00Z",
     }),
   },
+  // a Word import (migration 2026_11_30_0001), of the publication's upload
+  {
+    table: "import_job",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      id: childId(pub, 10),
+      user_id: org.user,
+      upload_id: childId(pub, 7),
+      sha256: "3".repeat(64),
+      bytes: 1024,
+    }),
+  },
   { table: "upload_quota", per: "org", row: (org) => ({ org_id: org.id, day: "2026-11-01", bytes: 1024 }) },
   {
     table: "story_photo",

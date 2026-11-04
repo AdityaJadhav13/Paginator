@@ -130,10 +130,11 @@ export function spentJobs(tx: SystemTx, staleMs: number): Promise<ExhaustedJob[]
   }, staleMs);
 }
 
-/** The assets that still have a job in the queue (job key asset:<id>), of every organisation: ids only. */
+/** The assets and imports that still have a job in the queue (job key asset:<id> or import:<id>), of every
+ * organisation: ids only. */
 export async function jobAssets(tx: SystemTx): Promise<Set<string>> {
   const { rows } = await sql<{ id: string }>`
-    select substr(key, 7) as id from queue._private_jobs where key ~ '^asset:[0-9a-f-]{36}$'`.execute(tx);
+    select right(key, 36) as id from queue._private_jobs where key ~ '^(asset|import):[0-9a-f-]{36}$'`.execute(tx);
   return new Set(rows.map((row) => row.id));
 }
 

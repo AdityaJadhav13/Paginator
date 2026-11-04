@@ -66,7 +66,8 @@ const results = JSON.parse(
   readFileSync(new URL("../../../packages/contracts/test/fixtures/worker-results.json", import.meta.url), "utf8"),
 ) as unknown[];
 const ready = WorkerResult.parse(results[0]);
-if (ready.outcome !== "done") throw new Error("the fixture's first result is a ready photo");
+if (ready.outcome !== "done" || ready.event.kind !== "media.ready")
+  throw new Error("the fixture's first result is a ready photo");
 const misconfigured = results.find(
   (r) => WorkerResult.parse(r).outcome === "failed" && JSON.stringify(r).includes('"worker.config"'),
 );

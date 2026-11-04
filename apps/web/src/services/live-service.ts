@@ -9,6 +9,8 @@ export type LiveEventDto =
   | { readonly type: "notification"; readonly id: string }
   /** An edition of the publication was made or changed (its list and counts are fetched again). */
   | { readonly type: "edition"; readonly publicationId: string; readonly editionId: string }
+  /** The person's own Word import finished (GET …/imports/:id tells how). */
+  | { readonly type: "import"; readonly publicationId: string; readonly importId: string }
   | { readonly type: "resync" };
 
 export interface LiveService {

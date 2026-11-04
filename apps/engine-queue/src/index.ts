@@ -1,7 +1,17 @@
 export { healthy, read, runJob, runnerEnv, type RunOutcome, type RunnerSettings } from "./runner.ts";
-export { MAX_GIVEN_BACK, mediaIngest, REPORT_WAITS_MS, RetryLater, taskList, type Report } from "./tasks.ts";
+export {
+  engineTask,
+  MAX_GIVEN_BACK,
+  mediaIngest,
+  REPORT_WAITS_MS,
+  RetryLater,
+  targetOf,
+  taskList,
+  type Report,
+} from "./tasks.ts";
 export {
   APP_ENQUEUE,
+  APP_ENQUEUE_DOCX,
   ENGINE_GRANTS,
   exhaustedJobs,
   LOCK_CHECK_MS,

@@ -3,6 +3,7 @@
 // (src/db/events.ts) hands it here. A hint is untrusted: it is parsed strictly (ids only, or it is dropped), and each
 // open stream decides from its own person's access, not from the hint, whether to pass it on:
 //   - a notification: to its own person only, in its own organisation;
+//   - a Word import settled: to its importer only, in its own organisation, while they still reach its publication;
 //   - an edition: to people of its organisation who may view its publication's editions (edition.view);
 //   - a story, or a comment on one: to people of its organisation who reach its publication and see the story; a
 //     comment also needs comment.read. A Reporter sees their own stories only: the hint's people (the story's reporter
@@ -37,6 +38,7 @@ export const AppEvent = z.discriminatedUnion("type", [
   }),
   z.strictObject({ v: z.literal(1), type: z.literal("notification"), org: Id, user: Id, notification: Id }),
   z.strictObject({ v: z.literal(1), type: z.literal("edition"), org: Id, pub: Id, edition: Id }),
+  z.strictObject({ v: z.literal(1), type: z.literal("import"), org: Id, pub: Id, import: Id, user: Id }),
 ]);
 export type AppEvent = z.infer<typeof AppEvent>;
 
@@ -58,6 +60,10 @@ export function messageFor(listener: Listener, event: AppEvent): Message | null 
   }
   const access = listener.access as Access;
   if (!access.publications.has(event.pub)) return null;
+  if (event.type === "import") {
+    if (event.user !== listener.userId) return null;
+    return { event: "import", data: { publicationId: event.pub, importId: event.import } };
+  }
   if (event.type === "edition") {
     const here = access.publications.get(event.pub) ?? { roles: [], grants: [] };
     if (reach("edition.view", access.orgRole, here) === null) return null;

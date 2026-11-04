@@ -15,7 +15,15 @@
 //     refused, every version of the quarantine key is deleted by its version id (a file sent twice under one policy
 //     leaves two); the bucket's lifecycle rule removes whatever is sent after that (scripts/dev-buckets.ts).
 import { createHash } from "node:crypto";
-import { Asset, CompletedUpload, MAX_PICTURE_BYTES, PresignedUpload, UploadRequest } from "@pageinator/contracts";
+import {
+  Asset,
+  CompletedUpload,
+  MAX_DOCX_BYTES,
+  MAX_PICTURE_BYTES,
+  PresignedUpload,
+  UploadRequest,
+  reach,
+} from "@pageinator/contracts";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -36,7 +44,7 @@ import { recordAudit } from "../../db/audit.ts";
 import type { Database } from "../../db/pools.ts";
 import { ApiError } from "../../http/errors.ts";
 import type { ObjectStore } from "../../storage/object-store.ts";
-import { accessOf, actorOf } from "../access/access.ts";
+import { accessOf, actorOf, auditRefusals, refused } from "../access/access.ts";
 import { idempotent } from "../requests/idempotency.ts";
 import { HEADER_BYTES, JpegScan, NotAPicture, picture } from "./picture.ts";
 
@@ -85,7 +93,16 @@ async function readAll(store: ObjectStore, key: string, versionId: string) {
   return { sha256: hash.digest("hex"), bytes, head: Buffer.concat(head), scan };
 }
 
+/** A Word file refused: the reason, when there is one, is the answer's message too (not the general "not a Word
+ * file"). */
+export function docxRefused(field: string, message?: string): ApiError {
+  const error = new ApiError("docx_refused", message ? [{ field, message }] : undefined);
+  if (message) error.message = message;
+  return error;
+}
+
 export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { database, store }) => {
+  auditRefusals(app, database);
   app.post(
     "/api/v1/orgs/:o/pubs/:p/uploads",
     {
@@ -96,7 +113,12 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
       const access = accessOf(request);
       const pub = request.params.p;
       const input = request.body;
-      if (input.bytes > MAX_PICTURE_BYTES) throw new ApiError("file_too_large");
+      if (input.purpose === "docx") {
+        // a Word file is for stories (POST …/imports/docx): story.create, at most 10 MiB
+        if (reach("story.create", access.orgRole, access.publications.get(pub) ?? { roles: [], grants: [] }) === null)
+          throw refused("a Word file is imported as stories: story.create");
+        if (input.bytes > MAX_DOCX_BYTES) throw docxRefused("body.bytes", "This Word file is larger than 10 MB.");
+      } else if (input.bytes > MAX_PICTURE_BYTES) throw new ApiError("file_too_large");
       const answer = await idempotent(
         database,
         request,
@@ -120,7 +142,7 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
             targetType: "upload",
             targetId: upload.id,
             publicationId: pub,
-            data: { bytes: input.bytes },
+            data: { bytes: input.bytes, purpose: input.purpose },
           });
           const post = await store.presignPost({
             key: upload.key,
@@ -158,6 +180,8 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
         : undefined;
       // someone else's upload is not theirs to complete: the same answer as none at all
       if (!upload || upload.user_id !== userId) throw new ApiError("not_found");
+      // a Word file is completed by its import (POST …/imports/docx), never as a picture
+      if (upload.purpose === "docx") throw new ApiError("not_a_picture");
       if (upload.status === "completed" && upload.asset_id) {
         const assetId = upload.asset_id;
         const asset = await database.withTenant(access.tenant, (tx) => findAsset(tx, pub, assetId));

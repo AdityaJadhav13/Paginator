@@ -93,6 +93,31 @@ describe("The real story service", () => {
     ]);
   });
 
+  it("imports a Word file with an Idempotency-Key, and reads the import with the API's schema", async () => {
+    const IMPORT = "9a1b2c3d-4e5f-4061-8a72-b3c4d5e6f708";
+    const UPLOAD = "1f2e3d4c-5b6a-4978-8695-a4b3c2d1e0f9";
+    const done = {
+      id: IMPORT,
+      state: "done",
+      editionId: null,
+      created: [{ storyId: STORY_ID, headline: "Fictional fair opens" }],
+      skipped: 0,
+      notes: [{ code: "docx.tables", count: 1, text: "1 table was left out." }],
+      error: null,
+      createdAt: "2026-10-22T04:00:00.000Z",
+      updatedAt: "2026-10-22T04:01:00.000Z",
+    };
+    const { stories, calls } = service((call) => (call.method === "POST" ? json(202, { importId: IMPORT }) : json(200, done)));
+    expect(await stories.importDocx({ orgId: ORG, pubId: PUB, uploadId: UPLOAD, idempotencyKey: "k-import" })).toEqual({ ok: true, value: { importId: IMPORT } });
+    expect(await stories.getImport({ orgId: ORG, pubId: PUB, importId: IMPORT })).toEqual({ ok: true, value: done });
+    expect(calls.map((call) => [call.method, call.url, call.body, call.headers.get("Idempotency-Key")])).toEqual([
+      ["POST", `/api/v1/orgs/${ORG}/pubs/${PUB}/imports/docx`, { uploadId: UPLOAD }, "k-import"],
+      ["GET", `/api/v1/orgs/${ORG}/pubs/${PUB}/imports/${IMPORT}`, undefined, null],
+    ]);
+    const odd = service(() => json(200, { ...done, state: "lost" }));
+    expect(await odd.stories.getImport({ orgId: ORG, pubId: PUB, importId: IMPORT })).toMatchObject({ ok: false, error: { code: "unexpected_answer" } });
+  });
+
   it("keeps no answer in the browser's HTTP cache, and lets a save outlive the page when asked", async () => {
     const { stories, calls } = service(() => json(200, STORY));
     await stories.get({ orgId: ORG, pubId: PUB, storyId: STORY_ID });

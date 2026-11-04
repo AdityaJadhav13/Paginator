@@ -9,7 +9,7 @@
  *
  * The edition filter (and the paste dialog's edition) offers the publication's editions to whoever may see them
  * (edition.view); for anyone else (a Reporter), the editions of the stories seen so far. Editions are made on the
- * Editions screen.
+ * Editions screen. "Import Word file" (L2.2) makes stories of a .docx, in a side sheet (ImportWordDrawer).
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -41,6 +41,7 @@ import { ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useSession } from "../auth/SessionProvider.tsx";
 import { isDesk, mayCreate, mayViewEditions, storyScope } from "./access.ts";
 import { usePublicationEditions } from "../editions/editions-context.tsx";
+import { ImportWordDrawer } from "./ImportWordDrawer.tsx";
 import { PasteDialog } from "./PasteDialog.tsx";
 import { StatusChip, statusKey } from "./StatusChip.tsx";
 import { useLiveEvents } from "../live/live-context.tsx";
@@ -134,6 +135,7 @@ function StoriesContent({
   const [more, setMore] = useState<{ pending: boolean; problem: ApiProblem | null }>({ pending: false, problem: null });
   const [search, setSearch] = useState(filter.q ?? "");
   const [pasting, setPasting] = useState(false);
+  const [importing, setImporting] = useState(false);
   /** A live update says the list has changed since it was fetched. */
   const [changed, setChanged] = useState(false);
   /** Live updates heard: one heard while the list was being fetched keeps the notice. */
@@ -220,6 +222,9 @@ function StoriesContent({
     </Link>
   );
 
+  // stable: the import drawer's polling depends on it
+  const refresh = useCallback(() => void fetchFirst(true), [fetchFirst]);
+
   return (
     <Stack gap="5" className="pg-stories">
       <PageHeader
@@ -232,6 +237,10 @@ function StoriesContent({
               <Button variant="secondary" onClick={() => setPasting(true)}>
                 <Icon name="copy" size={16} />
                 {t("stories.paste")}
+              </Button>
+              <Button variant="secondary" onClick={() => setImporting(true)}>
+                <Icon name="file-text" size={16} />
+                {t("stories.importWord")}
               </Button>
               {newStory}
             </>
@@ -429,6 +438,16 @@ function StoriesContent({
           editions={desk ? editions : new Map()}
           onClose={() => setPasting(false)}
           onAdded={() => void fetchFirst(true)}
+        />
+      )}
+      {create && (
+        <ImportWordDrawer
+          orgId={orgId}
+          pubId={pubId}
+          open={importing}
+          editions={desk ? editions : new Map()}
+          onClose={() => setImporting(false)}
+          onAdded={refresh}
         />
       )}
     </Stack>

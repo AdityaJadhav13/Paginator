@@ -47,6 +47,17 @@ describe("messageFor", () => {
     expect(messageFor(listener("owner"), { ...edition(), org: id(9) })).toBeNull();
   });
 
+  const imported = (user = ME, pub = PUB) => ({ v: 1, type: "import", org: ORG, pub, import: id(10), user }) as const;
+  it("a Word import is heard by its importer only, while they reach its publication", () => {
+    expect(messageFor(listener("member", ["reporter"]), imported())).toEqual({
+      event: "import",
+      data: { publicationId: PUB, importId: id(10) },
+    });
+    expect(messageFor(listener("owner"), imported(SOMEONE))).toBeNull(); // not even the Owner hears another's
+    expect(messageFor(listener("member", ["reporter"], OTHER_PUB), imported())).toBeNull();
+    expect(messageFor(listener("member", ["reporter"]), { ...imported(), org: id(9) })).toBeNull();
+  });
+
   it.each([
     ["the Owner", listener("owner"), true],
     ["an Editor", listener("member", ["editor"]), true],

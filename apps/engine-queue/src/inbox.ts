@@ -2,7 +2,7 @@
 // (as pgn_engine, which may only insert there), with the queue's job id as its unique key: a job reports one event, so a
 // repeat (a job run again after its report, when finishing it was lost) is dropped. The NOTIFY that wakes the API's
 // consumer goes in the same statement; the consumer also polls, so a lost wake-up only delays.
-import type { Report } from "./tasks.ts";
+import { targetOf, type Report } from "./tasks.ts";
 
 export const INBOX_CHANNEL = "engine_events";
 
@@ -12,7 +12,7 @@ const INSERT = `with added as (
 ) select pg_notify('${INBOX_CHANNEL}', $2)`;
 
 export const reportToInbox: Report = async (event, jobId, helpers) => {
-  const asset = event.kind === "job.failed" ? event.target_id : event.asset_id;
+  const asset = targetOf(event); // the inbox's asset_id column holds an import's id for docx.import's events
   await helpers.withPgClient((client) =>
     client.query(INSERT, [event.org_id, jobId, event.kind, asset, JSON.stringify(event)]),
   );

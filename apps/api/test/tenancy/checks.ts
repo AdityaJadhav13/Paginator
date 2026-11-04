@@ -45,6 +45,8 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   asset: ["INSERT", "SELECT", "UPDATE"],
   upload: ["INSERT", "SELECT", "UPDATE"],
   upload_quota: ["INSERT", "SELECT", "UPDATE"],
+  // Word imports (migration 2026_11_30_0001): an import only changes state, never removed
+  import_job: ["INSERT", "SELECT", "UPDATE"],
   // notifications (migration 2026_11_24_0001): never deleted; only read_at and emailed_at change (COLUMN_RIGHTS)
   notification: ["INSERT", "SELECT"],
   publication_grant: ["DELETE", "INSERT", "SELECT", "UPDATE"],
@@ -81,7 +83,7 @@ export const OPENINGS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /** The SECURITY DEFINER functions there may be, each executable by pgn_app alone: the enqueue wrapper. */
-export const DEFINERS = ["app.enqueue_media_ingest"];
+export const DEFINERS = ["app.enqueue_media_ingest", "app.enqueue_docx_import"];
 
 /** The column-level grants allowed, as `schema.table role RIGHT (columns)`: any other is a problem. */
 export const COLUMN_RIGHTS: readonly string[] = [
