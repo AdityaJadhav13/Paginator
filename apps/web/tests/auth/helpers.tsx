@@ -34,7 +34,7 @@ export function renderAuth(path: string, options: RenderAuthOptions = {}) {
   window.localStorage.setItem(LANGUAGE_STORAGE_KEY, options.language ?? "en");
   const [pathname, search = ""] = path.split("?");
   const view = render(
-    <MemoryRouter initialEntries={[{ pathname: pathname!, search: search ? `?${search}` : "", state: options.state ?? null }]}>
+    <MemoryRouter useTransitions={false} initialEntries={[{ pathname: pathname!, search: search ? `?${search}` : "", state: options.state ?? null }]}>
       <AppRoutes environment={environment} />
       <LocationProbe />
     </MemoryRouter>

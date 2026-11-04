@@ -42,7 +42,7 @@ export function renderPublic(path: string, preset?: MockSessionPreset, language:
   return {
     environment,
     ...render(
-      <BrowserRouter>
+      <BrowserRouter useTransitions={false}>
         <Ui004Routes environment={environment} />
       </BrowserRouter>,
     ),
