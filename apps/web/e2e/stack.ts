@@ -5,7 +5,8 @@
 // and removes the project with its volumes. Nothing reads .env.dev: every secret is random, made here.
 //   PGN_E2E_WORKER_PY  the engine worker's Python (a venv from apps/engine-worker/requirements.lock); required
 //   PGN_E2E_ICC        a CMYK colour profile (default: macOS's Generic CMYK; never the private newsprint one)
-//   PGN_E2E_PORT_BASE  62000 by default: Postgres +432, S3 +333, Mailpit +25, SMTP +125, API +780, web +180
+//   PGN_E2E_PORT_BASE  62000 by default: Postgres +432, S3 +333, Mailpit +25, SMTP +125, API +780, web +180,
+//                      the page editor's edit gateway +790
 //   PGN_E2E_KEEP=1     keeps the logs folder (its path is printed)
 // Of a shell's other PGN_* settings only these reach the processes, so a real layout can run (without them the engine's
 // jobs refuse): PGN_ENGINE_PYTHON (the engine environment's Python), PGN_ENGINE_STALL_S, PGN_LAYOUT_TIMEOUT_S.
@@ -26,6 +27,7 @@ export const PORTS = {
   smtp: BASE + 125,
   api: BASE + 780,
   web: BASE + 180,
+  gateway: BASE + 790,
 };
 export const WEB = `http://127.0.0.1:${PORTS.web}`;
 export const MAILPIT = `http://127.0.0.1:${PORTS.mail}/api/v1`;
@@ -194,7 +196,19 @@ export default async function stack(): Promise<() => Promise<void>> {
     const ids = /Organisation ([0-9a-f-]{36}), publication ([0-9a-f-]{36})/.exec(made);
     if (!ids) throw new Error(`bootstrap-org said: ${made}`);
     const [, orgId, pubId] = ids;
-    const api = start("api", process.execPath, ["src/main.ts"], join(REPO, "apps/api"));
+    // the page editor's edit gateway, on the engine's homes (as compose.pilot.yml shares them), and the API signed to it
+    const gateway = {
+      PGN_GATEWAY_URL: `http://127.0.0.1:${PORTS.gateway}`,
+      PGN_GATEWAY_SECRET: hex(32),
+    };
+    const editGateway = start("gateway", python, ["-B", "-m", "pgn_worker.gateway"], join(REPO, "apps/engine-worker"), {
+      PGN_GATEWAY_SECRET: gateway.PGN_GATEWAY_SECRET,
+      PGN_GATEWAY_PORT: String(PORTS.gateway),
+      PGN_WORKER_HOMES: homes,
+    });
+    // it refuses an unsigned request (401) once it listens
+    await until("the edit gateway", async () => (await fetch(`${gateway.PGN_GATEWAY_URL}/v1/call`)).status === 401, editGateway);
+    const api = start("api", process.execPath, ["src/main.ts"], join(REPO, "apps/api"), gateway);
     await until("the API", async () => (await fetch(`http://127.0.0.1:${PORTS.api}/readyz`)).ok, api);
     const profile = readFileSync(icc);
     const queue = start("queue", process.execPath, ["src/main.ts"], join(REPO, "apps/engine-queue"), {
@@ -210,6 +224,7 @@ export default async function stack(): Promise<() => Promise<void>> {
     });
     await until("the web app", async () => (await fetch(WEB)).ok, web);
     if (queue.exitCode !== null) throw new Error(`the engine queue stopped: see ${join(folder, "queue.log")}`);
+    if (editGateway.exitCode !== null) throw new Error(`the edit gateway stopped: see ${join(folder, "gateway.log")}`);
 
     Object.assign(process.env, {
       PGN_E2E_ORG: orgId,

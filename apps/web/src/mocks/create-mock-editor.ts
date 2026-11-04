@@ -127,7 +127,10 @@ export function createMockEditor(
   const approved = (runId: string, page: number): { ok: false; error: ApiProblem } | null => {
     const approval = approvalOf(runId, page);
     return approval
-      ? { ok: false, error: { kind: "answer", status: 409, code: "page_approved", message: "", current: approval } }
+      ? {
+          ok: false,
+          error: { kind: "answer", status: 409, code: "page_approved", message: "", current: { ...approval, page } },
+        }
       : null;
   };
   const stale = (runId: string, page: number): ApiProblem => ({

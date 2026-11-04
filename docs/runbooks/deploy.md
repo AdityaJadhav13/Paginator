@@ -1,10 +1,13 @@
 # Deploy the pilot
 
 The app host runs `infra/docker/compose.pilot.yml` (profile `pilot`): Caddy with the web app (`pageinator-web`), the API
-(`pageinator-api`), the nightly backup (`pageinator-backup`), the engine's queue (`pageinator-engine-worker`: photo
-conversions; the newsprint colour profile at `PGN_ICC_FILE` on the host, checked against `PGN_ICC_SHA256`), and the
-one-shot migration step. The engine's 2 GB (two jobs at once, L2.3) makes the host's containers 3 GB in all: a t3.medium (4 GB). `infra/deploy/deploy.sh`
-does every step; AWS setup is `aws-setup.md`.
+(`pageinator-api`, which also runs the news finder's schedule, the ads' cut-off alert and the background measuring),
+the nightly backup (`pageinator-backup`), the engine's queue (`pageinator-engine-worker`: photo conversions, Word
+imports, engine profiles, layout runs, the news finder's collections; the newsprint colour profile at `PGN_ICC_FILE`
+on the host, checked against `PGN_ICC_SHA256`), the page editor's edit gateway (the same image, `gateway`: it shares
+the engine's homes volume, and only the API reaches it, signed with `PGN_GATEWAY_SECRET`), and the one-shot migration
+step. The engine's 2 GB and the gateway's 1 GB make the host's containers 4 GB in all: a t3.large (8 GB).
+`infra/deploy/deploy.sh` does every step; AWS setup is `aws-setup.md`.
 
 ## When
 
@@ -37,12 +40,14 @@ What it does, in order (it stops at the first failure; one deploy or rollback at
 2. notes `<tag>` in `/var/lib/pageinator/attempt`; logs in to ECR, pulls the four images of `<tag>`, and logs out;
 3. `docker compose run --rm migrate`: the pending migrations, as pgn_migrator (they are expand/contract, so the version
    still running keeps working while they run; they also install and upgrade Graphile Worker's schema `queue`);
-4. `docker compose up -d --wait`: each service is replaced; the API is sent SIGTERM and has 20 s (it needs at most
+4. `docker compose up -d --wait`: each service is replaced, and the step fails unless every one with a health check
+   (Caddy, the API, the engine's queue, the edit gateway) is healthy; the API is sent SIGTERM and has 20 s (it needs at most
    15: `PGN_SHUTDOWN_GRACE_S` 10 + 5); the engine is sent SIGTERM and has 200 s: it takes no new job and lets a running
    one finish (at most `PGN_RUNNER_TIMEOUT_S`, 180 s), so a deploy may wait that long; a job cut short is run again
    (or, on its last attempt, settled by the API's sweep within its 2-hour staleness); Caddy keeps its certificates in
    its volume;
-5. `/readyz` through the health listener must say `ready`;
+5. `/readyz` through the health listener must say `ready` (the database and the work bucket), and the API must reach
+   the edit gateway, which refuses its unsigned test call (401);
 6. records the tag in `/var/lib/pageinator/current`, and the one before in `previous`, and removes `attempt`.
 
 If it stops part way, `attempt` stays: `rollback.md` then starts the release that was running before it.
@@ -84,28 +89,54 @@ docker build -f infra/docker/api.Dockerfile -t pgn-plocal/pageinator-api:local-1
 docker build -f infra/docker/api.Dockerfile --target backup -t pgn-plocal/pageinator-backup:local-1 .
 docker build -f infra/docker/web.Dockerfile -t pgn-plocal/pageinator-web:local-1 .
 docker build --platform linux/amd64 -f infra/docker/engine-worker.Dockerfile -t pgn-plocal/pageinator-engine-worker:local-1 .
+# (the worker image runs both the engine's queue and the edit gateway)
 # an env file of its own, with every name the compose file asks for:
 # PGN_REGISTRY=pgn-plocal, PGN_DOMAIN=localhost, PGN_TLS_ISSUER=internal, PGN_APP_ORIGIN=https://app.localhost:59443,
 # PGN_HTTP_PORT=59080, PGN_HTTPS_PORT=59443, PGN_HEALTH_PORT=59781, PGN_HEALTH_BIND=127.0.0.1,
 # PGN_NET_SUBNET=10.241.0.0/24, PGN_CADDY_IP=10.241.0.10, PGN_DB_HOST=db-local, PGN_DB_NAME=pageinator,
 # PGSSLMODE=disable (allowed for db-local only), PGN_S3_ENDPOINT=https://s3.localhost:59443,
 # PGN_S3_PUBLIC_ORIGIN=https://<work bucket>.s3.localhost:59443, PGN_S3_{WORK,ARCHIVE,BACKUPS}_BUCKET=<names>,
-# PGN_SMTP_HOST=mail.invalid, PGN_SMTP_USER=x, PGN_SMTP_PASSWORD=x, PGN_MAIL_FROM=no-reply@example.test;
-# random hex for PGN_POSTGRES_PASSWORD, PGN_{MIGRATOR,APP,AUTH,ENGINE,LISTEN,BACKUP}_PASSWORD and PGN_AUTH_SECRET
-# (64), and for PGN_S3_ACCESS_KEY_ID and PGN_S3_SECRET_ACCESS_KEY (SeaweedFS's one key pair). SeaweedFS knows no other
+# PGN_SMTP_HOST=mail.invalid, PGN_SMTP_USER=x, PGN_SMTP_PASSWORD=x (api-local sends every email to mail-local's
+# Mailpit instead: read them at http://127.0.0.1:<PGN_MAIL_UI_PORT>, 59025 by default), PGN_MAIL_FROM=no-reply@example.test,
+# PGN_CONTACT_TO=contact@example.test; random hex for PGN_POSTGRES_PASSWORD,
+# PGN_{MIGRATOR,APP,AUTH,ENGINE,LISTEN,BACKUP}_PASSWORD, and PGN_AUTH_SECRET and PGN_GATEWAY_SECRET (64 hex
+# characters each: `openssl rand -hex 32`), and
+# for PGN_S3_ACCESS_KEY_ID and PGN_S3_SECRET_ACCESS_KEY (SeaweedFS's one key pair). SeaweedFS knows no other
 # key, so PGN_BACKUP_S3_ACCESS_KEY_ID and PGN_BACKUP_S3_SECRET_ACCESS_KEY, and PGN_ENGINE_S3_ACCESS_KEY_ID and
 # PGN_ENGINE_S3_SECRET_ACCESS_KEY, must be the same two values; PGN_ICC_FILE=<a CMYK printer profile on this machine>
 # and PGN_ICC_SHA256=<its sha256sum> (a fictional or public profile: the newsprint one stays in ~/PageinatorPrivate).
 # Docker Desktop mounts only shared folders: a profile under /System/Library (macOS's Generic CMYK) fails with "mounts
 # denied"; copy it into a shared folder (your home, for example) and name the copy.
 export PGN_IMAGE_TAG=local-1   # compose needs a tag for every command; deploy.sh sets its own
-c="docker compose -p pgn-pilot-local --profile pilot-local --env-file <file> -f infra/docker/compose.pilot.yml"
-$c up -d --wait db-local s3-local caddy-local
-$c up ca-local
-$c run --rm --no-deps -e PGN_S3_CORS_ORIGIN=https://app.localhost:59443 -e PGN_S3_BACKUPS_BUCKET=<backups bucket> \
+# a function, not a variable: zsh (macOS's shell) does not split "$c" into words
+c() { docker compose -p pgn-pilot-local --profile pilot-local --env-file <file> -f infra/docker/compose.pilot.yml "$@"; }
+c up -d --wait db-local s3-local caddy-local mail-local
+c up ca-local
+c run --rm --no-deps -e PGN_S3_CORS_ORIGIN=https://app.localhost:59443 -e PGN_S3_BACKUPS_BUCKET=<backups bucket> \
   api-local node scripts/dev-buckets.ts
 PGN_PROFILE=pilot-local PGN_PROJECT=pgn-pilot-local PGN_ENV_FILE=<file> PGN_STATE_DIR=<folder> \
   infra/deploy/deploy.sh deploy local-1
 # afterwards
-$c --profile pilot-local-migrate down --volumes --remove-orphans
+c --profile pilot-local-migrate down --volumes --remove-orphans
 ```
+
+The newsroom's first organisation and its Owner (on the pilot too, with `api` and the real names, D-3): the Owner gets
+two emails, to confirm the address and to choose a password (pilot-local: in Mailpit).
+
+```sh
+c run --rm --no-deps api-local node scripts/bootstrap-org.ts --owner-name "<name>" --owner-email <address> \
+  --org-name "<newspaper>" --org-slug <slug> --pub-name "<title>" --pub-slug <slug> --languages mr,en --primary mr \
+  --digits devanagari
+```
+
+Then the whole day can be rehearsed in a browser at `https://app.localhost:<PGN_HTTPS_PORT>` (Caddy's local CA:
+accept it, or trust its certificate:
+`docker run --rm -v pgn-pilot-local_local-ca:/ca pgn-plocal/pageinator-web:local-1 cat /ca/root.crt > root.crt`, which
+`NODE_EXTRA_CA_CERTS=root.crt` also gives `tools/ts/check-headers.ts`): the Owner confirms, chooses a password and
+turns on two-step sign-in; invites the team (Team); a Reporter files a story with a photo (the engine converts it); Stories → "Import
+Word file"; the desk readies stories; Engine profile → upload the paper's dataset bundle (private: never from the
+repository); Editions → create; Ads → advertisers, bookings, artwork; the edition's Plan, Layout, Pages and the page
+editor (save); Release → issue number, approve pages, press test, approve release, download, mark sent, the press's
+confirmation; Sources → Collect now (the AI part is off without `PGN_ANTHROPIC_API_KEY`). The restore drill
+(`restore.md`) runs against it as `backup-local`. pilot-local gives its engine 4 GB, its file store 1 GB and its Caddy
+256 MB (a developer's machine has more cores than the pilot's host, and Caddy carries the file store's traffic there).

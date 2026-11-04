@@ -1,9 +1,11 @@
 # The pilot (docs/product/10-l2-newsroom-plan.md §8.2; PR 25), and a copy of it on one machine (profile pilot-local).
 # infra/deploy/deploy.sh runs it; docs/runbooks/deploy.md says how. Two profiles; one is always named:
-#   pilot        on the EC2 app host: Caddy, the API, the migration step, the nightly backup and the engine's queue
-#                (the worker image), against RDS, S3 and SES. Logs go to CloudWatch (awslogs; the instance role may write them).
+#   pilot        on the EC2 app host: Caddy, the API, the migration step, the nightly backup, the engine's queue and the
+#                page editor's edit gateway (both from the worker image), against RDS, S3 and SES. Logs go to
+#                CloudWatch (awslogs; the instance role may write them).
 #   pilot-local  the same images and settings on a developer's machine, with a scratch Postgres and SeaweedFS of its
-#                own: Caddy's local CA on app.localhost, local logs. It must run under its own project name
+#                own: Caddy's local CA on app.localhost, a Mailpit that catches every email (mail-local), local logs.
+#                It must run under its own project name
 #                (-p pgn-pilot-local), never the development stack's (pageinator).
 # Every setting comes from one env file (--env-file): in the pilot /etc/pageinator/pilot.env, root-only, which deploy.sh
 # writes from SSM Parameter Store (docs/runbooks/aws-setup.md lists every name). Each service gets only the settings
@@ -17,9 +19,10 @@
 # so compose waits 20 s before it kills it. init: true puts tini in front, so a second stop signal still kills it.
 # Memory: every container has a ceiling (mem_limit), so one that grows cannot take the host down with it: Caddy 128 MB,
 # the API 640 MB, the backup 256 MB, the engine 2 GB (two jobs at once, PGN_QUEUE_CONCURRENCY 2, so photos are not held
-# behind a layout: 1 GB each, a 100-megapixel photo's conversion), 3 GB together, and the
-# migration step's 384 MB while it runs: the host must be a t3.medium (4 GB) once the engine runs on it (plan §8.1 puts
-# it on an engine host of its own later). pilot-local's scratch database and file store get 512 MB each.
+# behind a layout: 1 GB each, a 100-megapixel photo's conversion), the edit gateway 1 GB (one Desk edit session per
+# publication), 4 GB together, and the migration step's 384 MB while it runs: the host must be a t3.large (8 GB) once
+# the engine and the gateway run on it (plan §8.1 puts them on an engine host of their own later). pilot-local's
+# scratch database gets 512 MB, its file store 1 GB.
 # The engine (the queue, apps/engine-queue/src/main.ts) stops only after its running jobs end: at most
 # PGN_RUNNER_TIMEOUT_S (180 s), then 5 s; a layout run still going then gets SIGTERM and 10 s more (L2.3: it is failed
 # with the Desk's RESTARTED message), so compose waits 210 s before it kills it (a job killed mid-run stays locked
@@ -74,6 +77,8 @@ x-api-environment: &api-environment
   PGN_SMTP_USER: ${PGN_SMTP_USER:?}
   PGN_SMTP_PASSWORD: ${PGN_SMTP_PASSWORD:?}
   PGN_MAIL_FROM: ${PGN_MAIL_FROM:?}
+  # the public website's contact form sends its messages here (owner's choice, D-2; the deploy stops without it)
+  PGN_CONTACT_TO: ${PGN_CONTACT_TO:?}
   PGN_S3_ENDPOINT: ${PGN_S3_ENDPOINT:?}
   PGN_S3_REGION: ap-south-1
   PGN_S3_ACCESS_KEY_ID: ${PGN_S3_ACCESS_KEY_ID:?}
@@ -82,6 +87,9 @@ x-api-environment: &api-environment
   PGN_S3_ARCHIVE_BUCKET: ${PGN_S3_ARCHIVE_BUCKET:?}
   # on exactly when the engine has a Claude key: the API never sees the key itself
   PGN_NEWS_AI: ${PGN_ANTHROPIC_API_KEY:+on}
+  # the page editor's edit gateway (below): plain http to that service name only, on this host's own network
+  PGN_GATEWAY_URL: http://gateway:8790
+  PGN_GATEWAY_SECRET: ${PGN_GATEWAY_SECRET:?}
   NODE_EXTRA_CA_CERTS: /etc/pageinator/ca.pem
 
 x-api: &api
@@ -170,6 +178,47 @@ x-engine: &engine
   stop_grace_period: 210s
   restart: unless-stopped
 
+# The page editor's edit gateway (L2.4, plan §2.4; apps/engine-worker/pgn_worker/gateway.py): the worker image, its own
+# process, the engine's homes volume shared with the queue (a publication's home holds its engine profile and its
+# layout runs: the gateway edits them where the queue laid them out), and the engine's own S3 key. The API signs every
+# call with PGN_GATEWAY_SECRET (64 or more hex characters; neither side starts without it). No port is published: only
+# the API reaches it, as http://gateway:8790 on this host's network. It has no database password and no Claude key. A
+# stop ends it at once: a save cut short is refused to the editor, who saves again (Postgres keeps every page's state).
+x-gateway-environment: &gateway-environment
+  PGN_GATEWAY_HOST: 0.0.0.0
+  PGN_GATEWAY_PORT: "8790"
+  PGN_GATEWAY_SECRET: ${PGN_GATEWAY_SECRET:?}
+  PGN_S3_ENDPOINT: ${PGN_S3_ENDPOINT:?}
+  PGN_S3_REGION: ap-south-1
+  PGN_S3_ACCESS_KEY_ID: ${PGN_ENGINE_S3_ACCESS_KEY_ID:?}
+  PGN_S3_SECRET_ACCESS_KEY: ${PGN_ENGINE_S3_SECRET_ACCESS_KEY:?}
+  PGN_S3_WORK_BUCKET: ${PGN_S3_WORK_BUCKET:?}
+
+x-gateway: &gateway
+  <<: *hardened
+  image: ${PGN_REGISTRY:?}/pageinator-engine-worker:${PGN_IMAGE_TAG:?}
+  platform: linux/amd64
+  command: ["python", "-B", "-m", "pgn_worker.gateway"]
+  environment: *gateway-environment
+  mem_limit: 1g
+  stop_grace_period: 10s
+  restart: unless-stopped
+  healthcheck:
+    # it answers, and refuses an unsigned request (401); the image's own check is the queue's
+    test:
+      [
+        "CMD",
+        "python",
+        "-B",
+        "-c",
+        "import urllib.request as u, urllib.error as e\ntry: u.urlopen('http://127.0.0.1:8790/v1/health', timeout=3)\nexcept e.HTTPError as x: raise SystemExit(x.code != 401)\nelse: raise SystemExit(1)",
+      ]
+    interval: 30s
+    start_interval: 1s
+    start_period: 30s
+    timeout: 5s
+    retries: 3
+
 x-caddy: &caddy
   <<: *hardened
   image: ${PGN_REGISTRY:?}/pageinator-web:${PGN_IMAGE_TAG:?}
@@ -245,6 +294,14 @@ services:
     networks: [pilot]
     logging: *aws-logs
 
+  gateway:
+    <<: *gateway
+    profiles: [pilot]
+    volumes:
+      - engine-homes:/var/lib/pageinator/homes
+    networks: [pilot]
+    logging: *aws-logs
+
   # ---- pilot-local ---------------------------------------------------------------------------------------------------
   # The same services, and a scratch database and file store. Caddy listens inside on the same ports as outside
   # (PGN_HTTPS_PORT), so every address works from the browser and from the API alike. The API reaches the store's
@@ -254,22 +311,23 @@ services:
   caddy-local:
     <<: *caddy
     profiles: [pilot-local]
+    mem_limit: 256m # it also carries the local file store's traffic (in the pilot the browser reaches S3 itself)
     environment:
       PGN_DOMAIN: localhost
       PGN_TLS_ISSUER: internal
       PGN_S3_PUBLIC_ORIGIN: ${PGN_S3_PUBLIC_ORIGIN:?}
       PGN_S3_LOCAL_HOST: "*.s3.localhost"
-      PGN_HTTP_PORT: ${PGN_HTTP_PORT:?}
-      PGN_HTTPS_PORT: ${PGN_HTTPS_PORT:?}
-      PGN_HEALTH_PORT: ${PGN_HEALTH_PORT:?}
+      PGN_HTTP_PORT: ${PGN_HTTP_PORT:-59080}
+      PGN_HTTPS_PORT: ${PGN_HTTPS_PORT:-59443}
+      PGN_HEALTH_PORT: ${PGN_HEALTH_PORT:-59781}
     volumes:
       - caddy-data:/data
       - caddy-config:/config
       - ../caddy/local-s3.caddy:/etc/caddy/local/local-s3.caddy:ro
     ports:
-      - "127.0.0.1:${PGN_HTTP_PORT:?}:${PGN_HTTP_PORT:?}"
-      - "127.0.0.1:${PGN_HTTPS_PORT:?}:${PGN_HTTPS_PORT:?}"
-      - "127.0.0.1:${PGN_HEALTH_PORT:?}:${PGN_HEALTH_PORT:?}"
+      - "127.0.0.1:${PGN_HTTP_PORT:-59080}:${PGN_HTTP_PORT:-59080}"
+      - "127.0.0.1:${PGN_HTTPS_PORT:-59443}:${PGN_HTTPS_PORT:-59443}"
+      - "127.0.0.1:${PGN_HEALTH_PORT:-59781}:${PGN_HEALTH_PORT:-59781}"
     networks:
       pilot:
         ipv4_address: ${PGN_CADDY_IP:?}
@@ -314,11 +372,14 @@ services:
     environment:
       <<: *api-environment
       NODE_EXTRA_CA_CERTS: /etc/pageinator/ca/root.crt
-      # the scratch stack sends no email: Caddy's network has no mail server, and the API logs each email it could
-      # not send (without its address)
+      # every email goes to mail-local's Mailpit (in the clear, on this network only: the API allows that name only)
+      PGN_SMTP_HOST: mail-local
+      PGN_SMTP_PORT: "1025"
+      PGN_SMTP_TLS: none
     depends_on:
       ca-local: { condition: service_completed_successfully }
       db-local: { condition: service_healthy }
+      mail-local: { condition: service_healthy }
     networks:
       pilot:
         aliases: [api]
@@ -362,6 +423,9 @@ services:
   engine-local:
     <<: *engine
     profiles: [pilot-local]
+    # the Desk's engine lays pages out in one process per core but one (desk_engine.py): 1 on the pilot's 2-vCPU host,
+    # but up to 4 (an edition's pages) on a developer's machine, which 2 GB does not hold
+    mem_limit: 4g
     volumes:
       - local-ca:/etc/pageinator/ca:ro
       - ${PGN_ICC_FILE:?}:/run/pageinator/newsprint.icc:ro
@@ -377,13 +441,43 @@ services:
     networks: [pilot]
     logging: *local-logs
 
+  gateway-local:
+    <<: *gateway
+    profiles: [pilot-local]
+    volumes:
+      - local-ca:/etc/pageinator/ca:ro
+      - engine-homes:/var/lib/pageinator/homes
+    environment:
+      <<: *gateway-environment
+      AWS_CA_BUNDLE: /etc/pageinator/ca/root.crt # boto3 trusts Caddy's local CA, as the engine's runner does
+    depends_on:
+      ca-local: { condition: service_completed_successfully }
+    networks:
+      pilot:
+        aliases: [gateway]
+    logging: *local-logs
+
+  # every email the scratch stack sends, read at http://127.0.0.1:<PGN_MAIL_UI_PORT> (Mailpit's page and its API; 59025 by default)
+  mail-local:
+    image: axllent/mailpit@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387 # axllent/mailpit:v1.31.6
+    profiles: [pilot-local]
+    mem_limit: 128m
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1" # the API signs in with PGN_SMTP_USER and PGN_SMTP_PASSWORD, whatever they are
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:${PGN_MAIL_UI_PORT:-59025}:8025"
+    networks: [pilot]
+    logging: *local-logs
+
   db-local:
     image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # postgres:18.6-trixie
     profiles: [pilot-local]
     mem_limit: 512m
     environment:
       POSTGRES_DB: ${PGN_DB_NAME:?}
-      POSTGRES_PASSWORD: ${PGN_POSTGRES_PASSWORD:?}
+      # (pilot-local only: not :?, which the pilot's settings would then need too; empty, Postgres refuses to start)
+      POSTGRES_PASSWORD: ${PGN_POSTGRES_PASSWORD:-}
       PGN_MIGRATOR_PASSWORD: ${PGN_MIGRATOR_PASSWORD:?}
       PGN_APP_PASSWORD: ${PGN_APP_PASSWORD:?}
       PGN_AUTH_PASSWORD: ${PGN_AUTH_PASSWORD:?}
@@ -411,7 +505,7 @@ services:
   s3-local:
     image: chrislusf/seaweedfs@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d # chrislusf/seaweedfs:4.48
     profiles: [pilot-local]
-    mem_limit: 512m
+    mem_limit: 1g # an engine profile's dataset bundle (hundreds of MB) passes through it
     # virtual-hosted buckets (<bucket>.s3.localhost), as S3 serves them; CORS from each bucket's own rule
     command:
       ["server", "-s3", "-ip.bind=0.0.0.0", "-s3.port.iceberg=0", "-s3.port.lance=0", "-s3.domainName=s3.localhost"]

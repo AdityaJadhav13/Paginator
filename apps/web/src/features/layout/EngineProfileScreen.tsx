@@ -5,7 +5,8 @@
  * engine's words), and the earlier versions. Whoever may change the settings (settings.edit) uploads a new bundle: a
  * ZIP of at most 4 GiB, sent straight to the store with its progress (POST …/uploads, purpose engine_dataset), then
  * made a profile (POST …/engine-profiles, an Idempotency-Key kept for a retry). A live `profile` update, a `resync` or,
- * while one is setting up, a fetch every 3 s shows when the engine is done.
+ * while one is setting up, a fetch every 3 s shows when the engine is done. Below it, the publication's sections
+ * (SectionsPanel).
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useParams } from "react-router";
@@ -40,6 +41,7 @@ import { layoutAccess } from "./access.ts";
 import { DeskWords } from "./desk-text.tsx";
 import { useLayout } from "./layout-context.tsx";
 import { POLL_MS } from "./EditionLayoutScreen.tsx";
+import { SectionsPanel } from "./SectionsPanel.tsx";
 import "./layout.css";
 
 type Load =
@@ -66,6 +68,7 @@ export function EngineProfileScreen() {
       />
       <OfflineNotice />
       {access.settings && <ProfileContent orgId={orgId} pubId={pubId} edit={access.settingsEdit} />}
+      {access.settings && <SectionsPanel orgId={orgId} pubId={pubId} edit={access.settingsEdit} />}
     </Stack>
   );
 }

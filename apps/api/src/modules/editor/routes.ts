@@ -22,7 +22,7 @@
 //     through the gateway, kept by the browser (private, immutable: a font instance or a raster never changes).
 // Pages are changed only once their layout run and the page are done (409 not_editable). An approved page (L2.5) is
 // locked: a change or a save of it, a move to it, and a save that takes a story off it answer 409 page_approved with
-// its approval until it is unlocked (checked in the run's or the page's turn, which approve and unlock take too).
+// its approval and page number until it is unlocked (checked in the run's or the page's turn, which approve and unlock take too).
 // layout.edit's ◐ cells (text only, images only, ads only) are not applied yet: only those who hold it fully may
 // change a page. Without the gateway's settings every route answers 503 editor_unavailable.
 import {
@@ -140,14 +140,14 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
     return { run, pages };
   }
 
-  /** An approved page is locked (L2.5): 409 page_approved, with its approval, when one of these pages has one that
-   * counts (a change or a save of it, or a move to it). */
+  /** An approved page is locked (L2.5): 409 page_approved, with its approval and its page number (ApprovedPage), when
+   * one of these pages has one that counts (a change or a save of it, a move to it, or a save that takes a story off it). */
   async function notApproved(tx: Tx, pub: string, r: string, pages: readonly EditPageRow[], ns: readonly number[]) {
     const approvals = await standingApprovals(tx, pub, r);
     for (const n of ns) {
       const row = pages.find((p) => p.page_no === n);
       const approval = row ? approvalOf(row, approvals) : null;
-      if (approval) throw new ApiError("page_approved", undefined, approval);
+      if (approval) throw new ApiError("page_approved", undefined, { ...approval, page: n });
     }
   }
 

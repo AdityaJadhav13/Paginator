@@ -5,7 +5,8 @@
  * set and cleared (layout.generate or ads.manage), runs started and cancelled (layout.generate; 409 run_active,
  * layout_refused, run_finished) and a run's files by link (previews pages.view, PDFs proof.view, the press ZIP
  * export.press). The engine is the controller: tests (and the demo) move a run on, finish it, fit an ad and finish a
- * profile's setup; each change is heard live (`layout`, `profile`). Fictional data only.
+ * profile's setup; each change is heard live (`layout`, `profile`). The publication's sections (publication.view to list,
+ * settings.edit to make, rename, move, archive; 409 section_exists), as the sections routes. Fictional data only.
  */
 import type {
   AdSlotDto,
@@ -17,6 +18,7 @@ import type {
   LayoutRunDto,
   LayoutService,
   LiveEventDto,
+  SectionDto,
   ServiceResult,
 } from "../services/index.ts";
 import { reach, type Permission } from "../services/permissions.ts";
@@ -29,7 +31,8 @@ export type MockLayoutOperation =
   | "layout.ads"
   | "layout.run"
   | "layout.cancel"
-  | "layout.files";
+  | "layout.files"
+  | "layout.sections";
 
 /** What the double needs of the stories double: the edition, its stories, a picture and an upload. */
 export interface MockLayoutDeps {
@@ -103,6 +106,7 @@ const answer = (status: number, code: string, message: string): Answer => ({
 const NOT_FOUND = answer(404, "not_found", "There is nothing here, or you do not have access to it.");
 const NOT_ALLOWED = answer(403, "not_allowed", "Your role cannot do this. Ask an editor or the owner.");
 const TWO_STEP = answer(403, "two_step_required", "Your role needs two-step sign-in. Set it up in Account → Security.");
+const SECTION_EXISTS = answer(409, "section_exists", "This paper already has a section of that name.");
 const KEY_REUSED = answer(422, "idempotency_key_reused", "This key was already used with a different request.");
 const success = <T>(value: T): ServiceResult<T, ApiProblem> => ({ ok: true, value });
 const failure = <T>(problem: ApiProblem): ServiceResult<T, ApiProblem> => ({ ok: false, error: { ...problem } });
@@ -214,6 +218,8 @@ export function createMockLayout(deps: MockLayoutDeps): {
   let runs = new Map<string, RunRow>();
   let slots = new Map<string, Map<string, SlotRow>>();
   let keys = new Map<string, { body: string; value: unknown }>();
+  /** each publication's sections: in use first, in their order, then the archived */
+  let sections = new Map<string, SectionDto[]>();
   let counter = 0;
   let clock = 0;
   const now = () => {
@@ -413,7 +419,50 @@ export function createMockLayout(deps: MockLayoutDeps): {
         ? "proof.view"
         : "pages.view";
 
+  const sectionsOf = (orgId: string, pubId: string) => {
+    const key = `${orgId}/${pubId}`;
+    if (!sections.has(key)) sections.set(key, []);
+    return sections.get(key)!;
+  };
+  const sectionList = (list: SectionDto[]) => {
+    list.sort((x, y) => Number(x.archived) - Number(y.archived)); // stable: the order in use is kept
+    return success({ items: list.map((section) => ({ ...section })) });
+  };
+  const named = (list: readonly SectionDto[], name: string, except?: string) =>
+    list.some((s) => !s.archived && s.id !== except && s.name.toLowerCase() === name.toLowerCase());
+
   const layout: LayoutService = {
+    async listSections({ orgId, pubId }) {
+      const checked = await check("layout.sections", orgId, pubId, can("publication.view"));
+      if ("problem" in checked) return checked.problem;
+      return sectionList(sectionsOf(orgId, pubId));
+    },
+    async addSection({ orgId, pubId, name }) {
+      const checked = await check("layout.sections", orgId, pubId, can("settings.edit"));
+      if ("problem" in checked) return checked.problem;
+      const list = sectionsOf(orgId, pubId);
+      if (named(list, name.trim())) return failure(SECTION_EXISTS);
+      counter += 1;
+      list.push({ id: `section-new-${String(counter).padStart(3, "0")}`, name: name.trim(), archived: false, stories: 0 });
+      return sectionList(list);
+    },
+    async changeSection({ orgId, pubId, id, change }) {
+      const checked = await check("layout.sections", orgId, pubId, can("settings.edit"));
+      if ("problem" in checked) return checked.problem;
+      const list = sectionsOf(orgId, pubId);
+      const at = list.findIndex((s) => s.id === id);
+      const section = list[at];
+      if (!section) return failure(NOT_FOUND);
+      const name = change.name?.trim() ?? section.name;
+      const archived = change.archived ?? section.archived;
+      if (!archived && named(list, name, id)) return failure(SECTION_EXISTS);
+      const wasArchived = section.archived;
+      list.splice(at, 1);
+      const inUse = list.filter((s) => !s.archived).length;
+      const place = archived ? list.length : Math.min(change.position ?? (wasArchived ? inUse : at), inUse);
+      list.splice(place, 0, { ...section, name, archived });
+      return sectionList(list);
+    },
     async listProfiles({ orgId, pubId }) {
       const checked = await check("layout.profiles", orgId, pubId, can("settings.view"));
       if ("problem" in checked) return checked.problem;
@@ -711,6 +760,7 @@ export function createMockLayout(deps: MockLayoutDeps): {
       runs = new Map([["run-demo-001", boardFixture()]]);
       slots = new Map();
       keys = new Map();
+      sections = new Map();
       counter = 0;
       clock = 0;
     },

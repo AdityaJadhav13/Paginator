@@ -75,9 +75,7 @@ export function WorkspaceShell() {
   const hears = Boolean(access && !blocked && may(access, "publication.view"));
 
   const breadcrumbItems: BreadcrumbItem[] = [{ label: organization.name, to: paths.orgHome(organization.id) }];
-  // a publication's built page is its Stories; its overview is a development placeholder
-  const publicationHome = (pubId: string) =>
-    DEVELOPMENT ? paths.pubOverview(organization.id, pubId) : paths.pubStories(organization.id, pubId);
+  const publicationHome = (pubId: string) => paths.pubOverview(organization.id, pubId);
   if (publication) breadcrumbItems.push({ label: publication.name, to: publicationHome(publication.id) });
   if (resolution.edition && publication) {
     breadcrumbItems.push({

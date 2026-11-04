@@ -274,8 +274,10 @@ describe("config: sign-in and email settings", () => {
       tls: "implicit",
     });
     expect(problems({ PGN_SMTP_HOST: "smtp.example.test", PGN_SMTP_TLS: "none" })).toContain(
-      "  - PGN_SMTP_TLS may be none only for a server on this machine",
+      "  - PGN_SMTP_TLS may be none only for a server on this machine (or pilot-local's mail-local)",
     );
+    expect(load({ PGN_SMTP_HOST: "mail-local", PGN_SMTP_TLS: "none" }).mail).toMatchObject({ tls: "none" });
+    expect(problems({ PGN_SMTP_HOST: "mail-localx", PGN_SMTP_TLS: "none" })).toContain("PGN_SMTP_TLS may be none only");
   });
 
   it("takes a mail server's user and password together, and never shows the password", () => {

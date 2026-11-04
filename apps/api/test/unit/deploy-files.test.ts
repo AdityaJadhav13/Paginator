@@ -118,6 +118,40 @@ describe("the pilot's deployment files", () => {
   });
 });
 
+describe("the pilot compose and its settings", () => {
+  it("needs, in the pilot, only settings that docs/runbooks/aws-setup.md lists (pilot-local's own have defaults)", () => {
+    const compose = read("infra/docker/compose.pilot.yml");
+    const setup = read("docs/runbooks/aws-setup.md");
+    // compose interpolates every service, whatever its profile: a pilot-local-only :? would stop the pilot
+    const required = new Set([...compose.matchAll(/\$\{([A-Z0-9_]+):\?/g)].map((m) => m[1] ?? ""));
+    required.delete("PGN_IMAGE_TAG"); // deploy.sh sets it
+    for (const name of required) expect(setup, name).toContain(`\`${name}\``);
+  });
+
+  it("runs the edit gateway hardened on the engine's homes, with the engine's S3 key and no database or Claude key", () => {
+    const compose = read("infra/docker/compose.pilot.yml");
+    const gateway = compose.slice(compose.indexOf("x-gateway-environment:"), compose.indexOf("x-caddy:"));
+    expect(gateway).toMatch(/<<: \*hardened/);
+    expect(gateway).toMatch(/mem_limit: \d+[mg]/);
+    expect(gateway).toContain('command: ["python", "-B", "-m", "pgn_worker.gateway"]');
+    const secrets = [...gateway.matchAll(/\$\{(PGN_[A-Z0-9_]+)/g)].map((m) => m[1]);
+    expect(secrets).toContain("PGN_GATEWAY_SECRET");
+    expect(secrets).toContain("PGN_ENGINE_S3_SECRET_ACCESS_KEY");
+    for (const name of secrets) expect(name).not.toMatch(/PASSWORD|^PGN_AUTH_SECRET$|ANTHROPIC|^PGN_S3_SECRET/);
+    const service = compose.slice(compose.indexOf("\n  gateway:\n"), compose.indexOf("# ---- pilot-local"));
+    expect(service).toContain("engine-homes:/var/lib/pageinator/homes");
+    expect(service).not.toMatch(/ports:/); // only the API reaches it
+    // the API is signed to it, at the one http address its settings allow
+    const config = loadConfig({
+      ...PASSWORDS,
+      PGN_GATEWAY_URL: "http://gateway:8790",
+      PGN_GATEWAY_SECRET: "ab".repeat(32),
+    });
+    expect(compose).toContain("PGN_GATEWAY_URL: http://gateway:8790");
+    expect(config.gateway?.url).toBe("http://gateway:8790");
+  });
+});
+
 // infra/deploy/deploy.sh with fake docker, curl, aws, id and flock on PATH: what it starts, in which order, and what
 // it records. Each fake logs its arguments, with the image tag in force, to one file.
 describe("deploy.sh", () => {
@@ -166,6 +200,16 @@ describe("deploy.sh", () => {
   const state = (name: string) => readFileSync(join(dir, "state", name), "utf8").trim();
   const started = (log: string) => [...log.matchAll(/^docker (\S+) .* up -d --wait/gm)].map((m) => m[1]);
   const migrated = (log: string) => [...log.matchAll(/^docker (\S+) .* run --rm migrate/gm)].map((m) => m[1]);
+
+  it("checks, after the services are up, that the API reaches the edit gateway", () => {
+    const { status, log } = deploy(["deploy", "t1"]);
+    expect(status).toBe(0);
+    const up = log.indexOf(" up -d --wait");
+    const exec = log.indexOf(" exec -T api-local node -e");
+    expect(up).toBeGreaterThan(-1);
+    expect(exec).toBeGreaterThan(up);
+    expect(log).toContain("http://gateway:8790/v1/call");
+  });
 
   it("after a deploy that failed at the start, a rollback starts the release that ran before it, not the one before that", () => {
     expect(deploy(["deploy", "r1"]).status).toBe(0);

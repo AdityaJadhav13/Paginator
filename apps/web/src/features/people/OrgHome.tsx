@@ -8,6 +8,7 @@ import { Link, useParams } from "react-router";
 import { Icon, PageHeader, Stack, type IconName } from "../../ui/index.ts";
 import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { useI18n } from "../../i18n/index.ts";
+import type { OrgAccessDto } from "../../services/index.ts";
 import { useSession } from "../auth/SessionProvider.tsx";
 import { may } from "./navigation.ts";
 import { roleName, rolesAndGrants } from "./roles.ts";
@@ -43,10 +44,7 @@ export function OrgHome() {
           <p className="pg-org-home__empty">{t("orgHome.noPublications")}</p>
         ) : (
           <ul className="pg-org-home__cards">
-            {org.publications.map((publication) => {
-              const stories = !blocked && storyScope(org, publication.id) !== "none";
-              const editions = !blocked && mayViewEditions(org, publication.id);
-              return (
+            {org.publications.map((publication) => (
                 <li key={publication.id} className="pg-org-home__card">
                   <div className="pg-org-home__card-head">
                     <span className="pg-org-home__card-icon">
@@ -59,26 +57,9 @@ export function OrgHome() {
                       {t("orgHome.yourRoles", { roles: rolesAndGrants(publication, language, t) })}
                     </p>
                   )}
-                  {(stories || editions) && (
-                    <div className="pg-org-home__card-links">
-                      {stories && (
-                        <Link to={paths.pubStories(org.org.id, publication.id)}>
-                          <Icon name="file-text" size={16} />
-                          {t("orgHome.stories", { publication: publication.name })}
-                        </Link>
-                      )}
-                      {editions && (
-                        <Link to={paths.pubEditions(org.org.id, publication.id)}>
-                          <Icon name="calendar-days" size={16} />
-                          {t("editions.list", { publication: publication.name })}
-                        </Link>
-                      )}
-                    </div>
-                  )}
-                  {editions && <TodayCard org={org} pubId={publication.id} />}
+                  <PublicationLinks org={org} publication={publication} />
                 </li>
-              );
-            })}
+            ))}
           </ul>
         )}
       </section>
@@ -107,5 +88,41 @@ export function OrgHome() {
         {t("orgHome.next")}
       </p>
     </Stack>
+  );
+}
+
+/** A publication's Stories and Editions, when the person may see them, and its Today card (the organisation's home
+ * card and the publication's Overview). */
+export function PublicationLinks({
+  org,
+  publication,
+}: {
+  readonly org: OrgAccessDto;
+  readonly publication: OrgAccessDto["publications"][number];
+}) {
+  const { t } = useI18n();
+  const blocked = org.twoStep.required && !org.twoStep.satisfied;
+  const stories = !blocked && storyScope(org, publication.id) !== "none";
+  const editions = !blocked && mayViewEditions(org, publication.id);
+  return (
+    <>
+      {(stories || editions) && (
+        <div className="pg-org-home__card-links">
+          {stories && (
+            <Link to={paths.pubStories(org.org.id, publication.id)}>
+              <Icon name="file-text" size={16} />
+              {t("orgHome.stories", { publication: publication.name })}
+            </Link>
+          )}
+          {editions && (
+            <Link to={paths.pubEditions(org.org.id, publication.id)}>
+              <Icon name="calendar-days" size={16} />
+              {t("editions.list", { publication: publication.name })}
+            </Link>
+          )}
+        </div>
+      )}
+      {editions && <TodayCard org={org} pubId={publication.id} />}
+    </>
   );
 }

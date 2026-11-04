@@ -54,6 +54,8 @@ export const AUDIT_ACTION_KEYS = [
   "auditLog.action.plan.page",
   "auditLog.action.plan.copy",
   "auditLog.action.ad_settings.set",
+  "auditLog.action.section.create",
+  "auditLog.action.section.edit",
   "auditLog.action.ad_cutoff.alert",
   "auditLog.action.editor.page_save",
   "auditLog.action.editor.page_takeover",
@@ -152,6 +154,7 @@ const TARGET_KEYS: Readonly<Record<string, PlainKey>> = {
   edition: "auditLog.target.edition",
   route: "auditLog.target.route",
   import: "auditLog.target.import",
+  section: "auditLog.target.section",
 };
 
 /** An action's plain name; one of a newer API than this screen is shown by its code. An upload is named by its

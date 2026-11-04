@@ -160,6 +160,14 @@ describe("the gateway's settings", () => {
     );
     // plain http only to this machine
     expect(() => load({ PGN_GATEWAY_URL: "http://10.0.1.5:8790", PGN_GATEWAY_SECRET: V.secret })).toThrow(ConfigError);
+    // and to compose's gateway service on the host's own network (compose.pilot.yml), by that name only
+    expect(load({ PGN_GATEWAY_URL: "http://gateway:8790", PGN_GATEWAY_SECRET: V.secret }).gateway?.url).toBe(
+      "http://gateway:8790",
+    );
+    expect(() => load({ PGN_GATEWAY_URL: "http://gateway.example.test:8790", PGN_GATEWAY_SECRET: V.secret })).toThrow(
+      ConfigError,
+    );
+    expect(() => load({ PGN_GATEWAY_URL: "http://gatewayx:8790", PGN_GATEWAY_SECRET: V.secret })).toThrow(ConfigError);
     expect(load({ PGN_GATEWAY_URL: "https://10.0.1.5:8790", PGN_GATEWAY_SECRET: V.secret }).gateway?.url).toBe(
       "https://10.0.1.5:8790",
     );

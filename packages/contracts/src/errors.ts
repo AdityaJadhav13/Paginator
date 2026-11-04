@@ -42,6 +42,7 @@ export const ERROR_CODES = [
   "receipt_failed",
   "advertiser_exists",
   "slot_booked",
+  "section_exists",
   "request_too_large",
   "not_json",
   "slow_down",
@@ -69,7 +70,7 @@ export const ErrorEnvelope = z.strictObject({
      * stale: the page in the editor (EditorPage) as it is now; with page_locked: the page's lock (PageLock); with
      * edit_refused: the engine's refusal in the Desk's words (DeskText); with approval_stale: the page (ReleasePage)
      * or the release candidate (ReleaseCandidate or null) as it is now; with page_approved: the page's approval
-     * (PageApproval). */
+     * and its page number (ApprovedPage). */
     current: z.unknown().optional(),
     requestId: z.string().min(1),
   }),

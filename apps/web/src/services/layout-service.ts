@@ -6,6 +6,8 @@ import type {
   EngineProfileList,
   FileLink,
   LayoutRun,
+  SectionList,
+  SectionPatch,
 } from "@pageinator/contracts";
 import type { ApiProblem } from "./problem.ts";
 import type { ServiceResult } from "./result.ts";
@@ -19,6 +21,8 @@ export type LayoutRunDto = LayoutRun;
 export type LayoutPageDto = LayoutRun["pages"][number];
 export type FileLinkDto = FileLink;
 export type DeskTextDto = DeskText;
+export type SectionListDto = SectionList;
+export type SectionDto = SectionList["items"][number];
 
 interface Where {
   readonly orgId: string;
@@ -57,4 +61,11 @@ export interface LayoutService {
   loadFile(
     input: Where & { readonly runId: string; readonly name: string; readonly signal?: AbortSignal },
   ): Promise<ServiceResult<Blob, ApiProblem>>;
+  /** The publication's sections (publication.view); made, renamed, moved, archived or brought back (settings.edit;
+   * 409 section_exists). Each change answers the whole list. */
+  listSections(input: Where): Promise<ServiceResult<SectionListDto, ApiProblem>>;
+  addSection(input: Where & { readonly name: string }): Promise<ServiceResult<SectionListDto, ApiProblem>>;
+  changeSection(
+    input: Where & { readonly id: string; readonly change: SectionPatch },
+  ): Promise<ServiceResult<SectionListDto, ApiProblem>>;
 }

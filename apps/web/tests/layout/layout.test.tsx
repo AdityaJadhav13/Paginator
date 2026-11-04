@@ -496,6 +496,19 @@ describe("The Today card", () => {
     expect(card.queryByText(/independent PDF\/X-1a check/)).not.toBeInTheDocument();
   });
 
+  it("is the publication's Overview too, with its Stories and Editions (no placeholder)", async () => {
+    const { container } = renderAuth(`/org/${ORG}/pub/${PUB}/overview`, { preset: "sahyadri-editor" });
+    expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
+    const today = await screen.findByRole("region", { name: "Today's edition" });
+    expect(await within(today).findByText("No edition for today.")).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByRole("link", { name: /stories/i })).toHaveAttribute(
+      "href",
+      `/org/${ORG}/pub/${PUB}/stories`,
+    );
+    expect(screen.queryByText(/UI00\d/)).not.toBeInTheDocument();
+    expect(await seriousViolations(container)).toEqual([]);
+  });
+
   it("opens the Create edition sheet from the card's link", async () => {
     renderAuth(`/org/${ORG}/pub/${PUB}/editions?create=1`, { preset: "sahyadri-editor" });
     expect(await screen.findByRole("dialog", { name: "Create edition" })).toBeInTheDocument();
@@ -583,5 +596,53 @@ describe("The engine profile", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "इंजिन प्रोफाइल" })).toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "वापरात: आवृत्ती 2" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "इंजिन प्रोफाइल" }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("The publication's sections", () => {
+  it("are added, moved, renamed, archived and brought back by the Chief Editor; a name is one section's", async () => {
+    const { container } = renderAuth(PROFILE, { preset: "sahyadri-chief-editor" });
+    const user = userEvent.setup();
+    const panel = within(await screen.findByRole("region", { name: "Sections" }));
+    expect(await panel.findByText("No sections yet.")).toBeInTheDocument();
+    for (const name of ["Example City", "Example Sport"]) {
+      await user.type(panel.getByLabelText("New section"), name);
+      await user.click(panel.getByRole("button", { name: "Add section" }));
+      expect(await panel.findByText(name)).toBeInTheDocument();
+    }
+    const order = () => panel.getAllByRole("listitem").map((item) => item.querySelector(".pg-sections__name")?.textContent);
+    expect(order()).toEqual(["Example City", "Example Sport"]);
+    await user.click(panel.getByRole("button", { name: "Move Example Sport up" }));
+    await waitFor(() => expect(order()).toEqual(["Example Sport", "Example City"]));
+
+    await user.type(panel.getByLabelText("New section"), "example city");
+    await user.click(panel.getByRole("button", { name: "Add section" }));
+    expect(await panel.findByText("This paper already has a section of that name. Use another name.")).toBeInTheDocument();
+
+    await user.click(panel.getByRole("button", { name: "Rename Example City" }));
+    const renamed = panel.getByLabelText("New name for Example City");
+    await user.clear(renamed);
+    await user.type(renamed, "Example Town");
+    await user.click(panel.getByRole("button", { name: "Save" }));
+    expect(await panel.findByText("Example Town")).toBeInTheDocument();
+
+    await user.click(panel.getByRole("button", { name: "Archive Example Sport" }));
+    expect(await panel.findByRole("heading", { name: "Archived sections" })).toBeInTheDocument();
+    await user.click(panel.getByRole("button", { name: "Bring back Example Sport" }));
+    await waitFor(() => expect(order()).toEqual(["Example Town", "Example Sport"]));
+    expect(await seriousViolations(container)).toEqual([]);
+  });
+
+  it("are in Marathi too", async () => {
+    renderAuth(PROFILE, { preset: "sahyadri-editor", language: "mr" });
+    const panel = within(await screen.findByRole("region", { name: "विभाग" }));
+    expect(await panel.findByText("अजून कोणतेही विभाग नाहीत.")).toBeInTheDocument();
+    expect(panel.getByRole("button", { name: "विभाग जोडा" })).toBeDisabled();
+  });
+
+  it("are not offered to a role without settings.view", async () => {
+    renderAuth(PROFILE, { preset: "sahyadri-subeditor" });
+    expect(await screen.findByRole("heading", { level: 1, name: "Engine profile" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Sections" })).not.toBeInTheDocument();
   });
 });

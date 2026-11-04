@@ -25,6 +25,7 @@ import { formatDateTime } from "../../i18n/dates.ts";
 import { useI18n, type PlainKey } from "../../i18n/index.ts";
 import type {
   ApiProblem,
+  ApprovedPageDto,
   DeskTextDto,
   EditChangeDto,
   EditorPageDto,
@@ -282,7 +283,13 @@ function PageEditor({
       setNotice(t("pageEditor.pageLocked"));
       await reload();
     } else if (code === "page_approved") {
-      setNotice(t("pageEditor.approvedRefused"));
+      // the approved page may be another one, a save would take a story off (the 409 names it)
+      const other = error.kind === "answer" ? (error.current as ApprovedPageDto | undefined)?.page : undefined;
+      setNotice(
+        other !== undefined && other !== where.page
+          ? t("pageEditor.approvedOther", { page: other })
+          : t("pageEditor.approvedRefused"),
+      );
       await reload();
     } else {
       setProblem(error);

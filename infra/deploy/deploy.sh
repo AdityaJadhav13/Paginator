@@ -10,8 +10,10 @@
 #   1. settings: every parameter under /pageinator/pilot/ in SSM Parameter Store, written to the root-only env file;
 #   2. images: an ECR login, then `docker compose pull` of ${PGN_REGISTRY}/pageinator-{api,web,backup,engine-worker}:<tag>;
 #   3. `docker compose run --rm migrate` (expand/contract migrations: the running version keeps working);
-#   4. `docker compose up -d --wait` (the API stops within 20 s of its signal, the engine within 200 s: its running job
-#      finishes first), then /readyz through the monitor port;
+#   4. `docker compose up -d --wait`: it fails unless every service with a health check is healthy (Caddy, the API,
+#      the engine's queue, the edit gateway; the API stops within 20 s of its signal, the engine within 200 s: its
+#      running job finishes first), then /readyz through the monitor port (the database and the work bucket), and the
+#      API's own way to the edit gateway (an unsigned call must be refused, 401);
 #   5. the tag is recorded, and the one before it kept for a rollback.
 # The tag being deployed is written to $STATE_DIR/attempt before step 2 and removed after step 5, so a rollback knows
 # a deploy failed part way: it then starts the current tag (the release that ran before the attempt) again. Otherwise
@@ -148,6 +150,14 @@ check_ready() {
   [ "$DRY_RUN" = 1 ] || say ""
 }
 
+# The page editor: the API reaches the edit gateway (http://gateway:8790), which refuses a call that is not signed.
+check_gateway() {
+  compose exec -T "api$SUFFIX" node -e "fetch('http://gateway:8790/v1/call', { method: 'POST', \
+signal: AbortSignal.timeout(5000) }).then((r) => process.exit(r.status === 401 ? 0 : 1), () => process.exit(1))" ||
+    fail "the API cannot reach the edit gateway"
+  [ "$DRY_RUN" = 1 ] || say "gateway: reachable from the API, and refuses an unsigned call"
+}
+
 # The RDS certificate bundle must be a file: Docker would make a missing one into an empty folder, and every database
 # connection (verify-full) would then fail.
 check_ca() {
@@ -164,6 +174,7 @@ start() { # <tag> <migrate: 1 or 0>
   if [ "$2" = 1 ]; then compose run --rm "migrate$SUFFIX"; else say "migrations: none (a rollback never migrates)"; fi
   compose up -d --wait --remove-orphans
   check_ready
+  check_gateway
 }
 
 record() { # <tag>: the current tag becomes the previous one

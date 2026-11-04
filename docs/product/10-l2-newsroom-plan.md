@@ -938,7 +938,7 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 | GET `/invitations/{id}` | public, rate-limited | → {organization {name}, inviter {name}, roles[], expiresAt, state} |
 | POST `/invitations/{id}/accept` | signed in, verified | → {orgId, publications[]} |
 | GET `/orgs/{o}/pubs` · GET/PATCH `/orgs/{o}/pubs/{p}` | publication.view / settings.edit | Publication {id, name, languages[], primaryLanguage, digitStyle, timezone} |
-| GET / PUT `/orgs/{o}/pubs/{p}/sections` | view / settings.edit | [{id?, name, colorTag}] (PUT replaces the ordered list) |
+| GET / POST `/orgs/{o}/pubs/{p}/sections`, PATCH `…/sections/{id}` | publication.view / settings.edit | SectionList; POST {name}; PATCH {name?, position?, archived?}: a section is archived, never deleted (`packages/contracts/src/sections.ts`) |
 | GET `/orgs/{o}/pubs/{p}/editions?from&to` | edition.view | → {items: [{id, date, pages, status, counts {stories, ready}}]} |
 | POST `/orgs/{o}/pubs/{p}/editions` | edition.create | {date, pages: 4\|8\|16, backPageAds, volume?, issue?, price?} → 201 Edition; 409 `edition_exists` |
 | GET / PATCH `/orgs/{o}/pubs/{p}/editions/{e}` | view / edition.edit | Edition (the date is fixed, as in the Desk) |
@@ -1014,7 +1014,7 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
   - **Cursor:** newest first by `(at, id)`, base64url as on the stories and notifications lists. A cursor must name an event the reader may see, so another organisation's, or one out of a Chief Editor's view, is refused (400). Indexes on `(org_id, actor_id, at desc)` and `(org_id, publication_id, at desc)` serve the actor filter and a Chief Editor's view or the `publication` filter (migration `2026_11_26_0001`).
   - **Names** come from `app.person` when shown (an erased person's is the replaced name); `data` holds ids only. Sign-in events stay in `identity.auth_event`.
 - **Refusals name their publication:** `access.denied` rows written by `authorize()` and by the service rules (`auditRefusals`) now carry the route's `:p` as `publication_id`, so that publication's Chief Editor sees them; a refusal on an organisation route has none.
-- **`AUDIT_ACTIONS`** in `packages/contracts/src/audit.ts` lists every action the API writes, each with its scope: 93 actions, 82 at publication scope and 11 the organisation's (the unit test pins the counts; L2.3–L2.6 added the layout, editor, release and ads desk actions; L2.2 added asset.ready, asset.reject, asset.fail, engine.event_refuse and engine.event_ignore, and the media library asset.edit and asset.delete; the editions screen added edition.create; the Word import import.create, import.done and import.fail; the news finder (L2.7) news.source_create, news.source_edit, news.source_delete, news.settings_edit, news.collect, news.pick, news.draft_done, news.draft_fail, news.photo_choose and asset.rights_confirm). The log has one writer, `recordAudit()` (`src/db/audit.ts`), whose action is typed `AuditAction`; a unit test (`test/unit/audit-actions.test.ts`) reads the source, so an action without an entry, an entry nothing writes, or the table's name anywhere else (any spelling) fails CI.
+- **`AUDIT_ACTIONS`** in `packages/contracts/src/audit.ts` lists every action the API writes, each with its scope: 95 actions, 84 at publication scope and 11 the organisation's (the unit test pins the counts; the publication's sections section.create and section.edit; L2.3–L2.6 added the layout, editor, release and ads desk actions; L2.2 added asset.ready, asset.reject, asset.fail, engine.event_refuse and engine.event_ignore, and the media library asset.edit and asset.delete; the editions screen added edition.create; the Word import import.create, import.done and import.fail; the news finder (L2.7) news.source_create, news.source_edit, news.source_delete, news.settings_edit, news.collect, news.pick, news.draft_done, news.draft_fail, news.photo_choose and asset.rights_confirm). The log has one writer, `recordAudit()` (`src/db/audit.ts`), whose action is typed `AuditAction`; a unit test (`test/unit/audit-actions.test.ts`) reads the source, so an action without an entry, an entry nothing writes, or the table's name anywhere else (any spelling) fails CI.
 - **What is recorded** (closing L2-210 and L2-211), each event in the transaction of its change, so a refused or failed change leaves none, and a replayed request (the same Idempotency-Key) writes none again. `data` holds ids, numbers and state names, never text a person typed (headline, body, comment, caption, credit, desk note, file name):
   - stories: `story.create` ({rev, origin, edition, section, priority, pagePin}), `story.revise` (one per saved revision: {rev}), `story.status_change` ({from, to, comment}: every move, the desk's pick-up on its first edit included), `story.assign`, `story.unassign`, `story.due_change`, `story.edition_change`, `story.section_change`, `story.priority_change`, `story.page_pin_change`, `story.language_change` (each {from, to}), `story.desk_note_change` (that it changed), `story.delete`;
   - comments: `comment.create`, `comment.edit`, `comment.resolve`, `comment.reopen` ({story, parent});
@@ -1216,6 +1216,20 @@ The costs are 09 §3.1's estimates: one paper, about 20 staff, before GST.
 - **Deploy:** `docker compose pull`, then the migration step, then `up -d`.
 - **Rollback:** redeploy the previous image. Because migrations are expand/contract, the old version still runs against the new schema.
 - **The deployed app** serves the signed-in product and its sign-in pages only. The public website is a separate claims decision (03 §4).
+
+**As built (launch readiness, 2026-11-05), where it differs from this plan:** one app host runs everything for the
+pilot (`infra/docker/compose.pilot.yml`; the engine host of §8.1 comes later): Caddy with the web app, the API (which
+also runs the news finder's schedule, the ads' cut-off alert and the background measuring), the nightly backup, the
+engine's queue, and the page editor's edit gateway. The gateway is the worker image's second process (`gateway`): it
+shares the engine's homes volume with the queue, has the engine's S3 key and no database password, and publishes no
+port: the API reaches it as `http://gateway:8790` on the host's own Docker network (plain http is allowed for that name
+only), every call signed with `PGN_GATEWAY_SECRET`. Their memory ceilings add up to 4 GB, so the host is a t3.large
+(8 GB). `deploy.sh` migrates, then `up --wait` fails unless every service with a health check is healthy (Caddy, the
+API, the queue, the gateway), then checks `/readyz` and that the API reaches the gateway. The archive bucket carries
+Object Lock in governance mode, ten years by default (`s3-archive-object-lock.json`, D-20), as each released file's own
+retention. Settings added for L2.3–L2.7: `PGN_GATEWAY_SECRET`, `PGN_CONTACT_TO`, and the optional
+`PGN_ANTHROPIC_API_KEY` (the news finder's AI part is off without it). `pilot-local` adds a Mailpit (`mail-local`), so
+the whole newsroom day can be rehearsed on one machine (`docs/runbooks/deploy.md`, "On one machine").
 
 ### 8.3 Backups
 

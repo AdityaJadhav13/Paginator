@@ -97,6 +97,7 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
   },
   // the ads desk (L2.6)
   advertiser_exists: { status: 409, message: "This paper already has an advertiser of that name." },
+  section_exists: { status: 409, message: "This paper already has a section of that name." },
   slot_booked: { status: 409, message: "A booking holds this ad slot. Take the booking out of the slot first." },
   request_too_large: { status: 413, message: "This request is too large." },
   not_json: { status: 415, message: "This request must be sent as JSON." },

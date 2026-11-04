@@ -238,11 +238,12 @@ const Env = z
     if (env.PGN_PUBLIC_ORIGIN !== undefined && !env.PGN_ALLOWED_ORIGINS.includes(env.PGN_PUBLIC_ORIGIN)) {
       context.addIssue({ code: "custom", path: ["PGN_PUBLIC_ORIGIN"], message: "must be one of PGN_ALLOWED_ORIGINS" });
     }
-    if (env.PGN_SMTP_TLS === "none" && !LOOPBACK.has(env.PGN_SMTP_HOST)) {
+    // mail-local: pilot-local's Mailpit on its own Docker network (compose.pilot.yml), as db-local
+    if (env.PGN_SMTP_TLS === "none" && !LOOPBACK.has(env.PGN_SMTP_HOST) && env.PGN_SMTP_HOST !== "mail-local") {
       context.addIssue({
         code: "custom",
         path: ["PGN_SMTP_TLS"],
-        message: "may be none only for a server on this machine",
+        message: "may be none only for a server on this machine (or pilot-local's mail-local)",
       });
     }
     if ((env.PGN_SMTP_USER === undefined) !== (env.PGN_SMTP_PASSWORD === undefined)) {
@@ -259,11 +260,13 @@ const Env = z
       context.addIssue({ code: "custom", path: ["PGN_GATEWAY_URL"], message: "and PGN_GATEWAY_SECRET go together" });
     }
     const gateway = URL.canParse(env.PGN_GATEWAY_URL ?? "") ? new URL(env.PGN_GATEWAY_URL ?? "") : undefined;
-    if (gateway?.protocol === "http:" && !LOOPBACK.has(gateway.hostname.replace(/^\[|\]$/g, ""))) {
+    // "gateway" is compose.pilot.yml's service on the app host's own Docker network (as db-local above)
+    const gatewayHost = gateway?.hostname.replace(/^\[|\]$/g, "") ?? "";
+    if (gateway?.protocol === "http:" && !LOOPBACK.has(gatewayHost) && gatewayHost !== "gateway") {
       context.addIssue({
         code: "custom",
         path: ["PGN_GATEWAY_URL"],
-        message: "may be http only for a gateway on this machine",
+        message: "may be http only for a gateway on this machine (or compose's service named gateway)",
       });
     }
     // Object Lock on work files and the archive's Deny on deletes would break uploads' cleanup

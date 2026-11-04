@@ -113,6 +113,10 @@ export const PageApproval = z.strictObject({
   pdfSha256: Sha256,
 });
 export type PageApproval = z.infer<typeof PageApproval>;
+/** The page editor's 409 page_approved: the approval that refused the change, and the page it is on (the page edited,
+ * the page a move goes to, or another page a save would take a story off). */
+export const ApprovedPage = z.strictObject({ ...PageApproval.shape, page: PageNo });
+export type ApprovedPage = z.infer<typeof ApprovedPage>;
 
 export const ReleasePage = z.strictObject({
   runId: Id,

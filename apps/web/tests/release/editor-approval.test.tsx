@@ -148,4 +148,29 @@ describe("approving from the editor", () => {
     expect(screen.getByText(/^Approved by Sahyadri Demo Chief Editor, /)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save page" })).toBeDisabled();
   });
+
+  it("names the other, approved page a save would take a story off, and keeps undo (L2-489)", async () => {
+    const environment = createMockApplicationEnvironment();
+    const approval = { by: { id: "u-1", name: "Fictional Chief" }, at: "2026-10-24T09:00:00.000+05:30", rev: 0 };
+    vi.spyOn(environment.editor, "save").mockResolvedValue({
+      ok: false,
+      error: {
+        kind: "answer",
+        status: 409,
+        code: "page_approved",
+        message: "",
+        current: { ...approval, pdfSha256: SHA1, page: 2 },
+      },
+    });
+    renderAuth(EDIT, { preset: "sahyadri-editor", environment });
+    await ready();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Try another layout" })).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: "Try another layout" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: "Save page" }));
+    expect(
+      await screen.findByText(/^Page 2 is approved, and saving this page would take a story off it/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled());
+  });
 });

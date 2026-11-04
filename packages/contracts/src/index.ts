@@ -251,6 +251,7 @@ export {
   TextOverrides,
 } from "./editor.ts";
 export {
+  ApprovedPage,
   ArchiveCheck,
   ConfirmInput,
   Delivery,
@@ -308,3 +309,4 @@ export {
   UNPLACED_REASONS,
   UnplacedReason,
 } from "./ads.ts";
+export { Section, SectionInput, SectionList, SectionPatch } from "./sections.ts";

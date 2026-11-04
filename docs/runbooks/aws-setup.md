@@ -104,6 +104,9 @@ put PGN_APP_PASSWORD SecureString "$(openssl rand -hex 32)"
 | `PGN_ICC_SHA256` | String | the SHA-256 of the newsprint colour profile the engine is given (`sha256sum`; the file itself is never in SSM or an image: copy it to `PGN_ICC_FILE` on the host, root-owned, mode 0444) |
 | `PGN_ICC_FILE` | String | `/etc/pageinator/newsprint.icc` |
 | `PGN_SMTP_USER`, `PGN_SMTP_PASSWORD` | SecureString | the SES SMTP credentials (step 7) |
+| `PGN_GATEWAY_SECRET` | SecureString | random hex, 64 characters: the API signs every call to the page editor's edit gateway with it |
+| `PGN_CONTACT_TO` | String | **[D-2]** the one address the public website's contact form sends to |
+| `PGN_ANTHROPIC_API_KEY` | SecureString | optional (D-26): the news finder's Claude key, the engine's alone. Not set, its AI part is off and collection still works |
 
 Why static keys for S3: the API's settings require a key pair (`PGN_S3_ACCESS_KEY_ID`, `apps/api/src/config.ts`), so it
 cannot use the instance role yet. Letting it use the instance role is a small API change (11-fix-before-launch); until
@@ -186,7 +189,8 @@ aws iam add-role-to-instance-profile --instance-profile-name pgn-app-host --role
 
 ## 5. EC2 app host, with an Elastic IP
 
-- [ ] `t3.small` (x86_64; 2 GB) or larger, Ubuntu 24.04 LTS or Amazon Linux 2023, 30 GB gp3 encrypted, in a public
+- [ ] `t3.large` (x86_64; 8 GB): the containers' ceilings add up to 4 GB (the engine 2 GB, the edit gateway 1 GB;
+  `infra/docker/compose.pilot.yml`, "Memory"), Ubuntu 24.04 LTS or Amazon Linux 2023, 30 GB gp3 encrypted, in a public
   subnet, groups `pgn-app`, instance profile `pgn-app-host`. The instance metadata service: IMDSv2 only, **with a hop
   limit of 1** (`--metadata-options HttpTokens=required,HttpPutResponseHopLimit=1,HttpEndpoint=enabled`). The
   containers sit one hop behind the host (Docker's bridge), so with a hop limit of 1 they never get a metadata token,
@@ -225,6 +229,7 @@ for b in pgn-pilot-work pgn-pilot-archive pgn-pilot-backups; do
 done
 aws s3api put-bucket-lifecycle-configuration --bucket pgn-pilot-work --lifecycle-configuration file://infra/aws/s3-work-lifecycle.json
 aws s3api put-object-lock-configuration --bucket pgn-pilot-backups --object-lock-configuration file://infra/aws/s3-backups-object-lock.json
+aws s3api put-object-lock-configuration --bucket pgn-pilot-archive --object-lock-configuration file://infra/aws/s3-archive-object-lock.json
 aws s3api put-bucket-lifecycle-configuration --bucket pgn-pilot-backups --lifecycle-configuration file://infra/aws/s3-backups-lifecycle.json
 sed "s/\${PGN_DOMAIN}/$PGN_DOMAIN/g" infra/aws/s3-cors.json > /tmp/cors.json     # [D-2]
 aws s3api put-bucket-cors --bucket pgn-pilot-work --cors-configuration file:///tmp/cors.json
@@ -236,7 +241,8 @@ aws s3api put-bucket-cors --bucket pgn-pilot-work --cors-configuration file:///t
   and backups buckets get no CORS rule.
 - Backups bucket: Object Lock in governance mode, each dump kept 35 days (the default retention, and the backup
   script sets it on each dump too), then expired at 36 days.
-- Archive bucket: Object Lock enabled; its default retention waits for the owner (§8.5 item 9) and L2.5.
+- Archive bucket: Object Lock in governance mode, ten years by default (3653 days, D-20); the API also sets each
+  released file's retention itself (`PGN_ARCHIVE_RETAIN_DAYS`, 3653 by default). It is never expired.
 - [ ] Check what S3 itself does that SeaweedFS was only trusted for (plan §6.5, "one staging check on real S3"): the
   POST policy conditions, the checksum, the CORS headers on a refused upload (403 and 400), and that a preflight
   asking for a header (`X-Pageinator`) is refused (SeaweedFS 4.48 allowed one; S3 should not, with no AllowedHeaders).

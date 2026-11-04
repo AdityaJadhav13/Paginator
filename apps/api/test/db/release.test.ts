@@ -266,7 +266,7 @@ describe("approving a page", () => {
   it("locks the page in the editor: no change of it, no move to it", async () => {
     const changed = await call("POST", `${pagePath(1)}/edit/change`, designer.cookie, { kind: "refresh", rev: 0 });
     expect([changed.statusCode, err(changed).code]).toEqual([409, "page_approved"]);
-    expect(err(changed).current).toMatchObject({ by: { id: chief.id }, rev: 0 });
+    expect(err(changed).current).toMatchObject({ by: { id: chief.id }, rev: 0, page: 1 });
     const moved = await call("POST", `${pagePath(3)}/edit/change`, designer.cookie, {
       kind: "move",
       rev: 0,
@@ -508,7 +508,7 @@ describe("at the same time", () => {
     const saved = await call("POST", `${pagePath(4)}/edit/save`, designer.cookie, { rev: 0 });
     alsoOn = {};
     expect([saved.statusCode, err(saved).code]).toEqual([409, "page_approved"]);
-    expect(err(saved).current).toMatchObject({ by: { id: editor.id } }); // page 2's approval
+    expect(err(saved).current).toMatchObject({ by: { id: editor.id }, page: 2 }); // page 2's approval, named
     const marked = await su.query("select needs_save from app.run_page where run_id = $1 and page_no = 2", [runId]);
     expect(marked.rows[0]?.needs_save).toBe(false);
   });

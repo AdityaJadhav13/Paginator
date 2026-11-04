@@ -176,3 +176,26 @@
   border-radius: var(--pg-app-radius-md);
   padding-block: var(--pg-space-1);
 }
+
+/* The publication's sections (SectionsPanel). */
+.pg-sections {
+  display: grid;
+  gap: var(--pg-space-2);
+  margin: 0;
+  padding-inline-start: var(--pg-space-5);
+}
+
+.pg-sections__name {
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-sections__count {
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-200);
+}
+
+.pg-sections__heading {
+  margin: 0;
+  font-size: var(--pg-font-size-200);
+  font-weight: var(--pg-font-weight-semibold);
+}

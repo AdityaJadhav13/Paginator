@@ -69,6 +69,8 @@ export type {
   LayoutPageDto,
   LayoutRunDto,
   LayoutService,
+  SectionDto,
+  SectionListDto,
 } from "./layout-service.ts";
 export type {
   EditChangeDto,
@@ -80,6 +82,7 @@ export type {
   PageLockDto,
 } from "./editor-service.ts";
 export type {
+  ApprovedPageDto,
   ArchiveCheckDto,
   EditionReleaseDto,
   PageApprovalDto,

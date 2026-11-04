@@ -100,6 +100,9 @@ export const AUDIT_ACTIONS = {
   "plan.copy": { scope: "publication" },
   "ad_settings.set": { scope: "publication" },
   "ad_cutoff.alert": { scope: "publication" },
+  /** A section made ({name}), or renamed, moved, archived or brought back ({fields}: which changed). */
+  "section.create": { scope: "publication" },
+  "section.edit": { scope: "publication" },
   /** An engine event the inbox would not apply ({event, job, kind, reason}): not the contract's, or for an asset that
    * is not the organisation's and publication's it names, or one that still could not be applied after every try
    * (reason "error"). Only Owner and Admin see it (its publication is unchecked). */

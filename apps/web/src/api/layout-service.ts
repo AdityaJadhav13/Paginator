@@ -5,7 +5,15 @@
  * from that link at once, never kept in the HTTP cache (`cache: "no-store"`), and held in memory only. Following the
  * link from the page needs the store to allow this origin (CORS), as a photo's original does.
  */
-import { AdSlot, EditionLayout, EngineProfile, EngineProfileList, FileLink, LayoutRun } from "@pageinator/contracts";
+import {
+  AdSlot,
+  EditionLayout,
+  EngineProfile,
+  EngineProfileList,
+  FileLink,
+  LayoutRun,
+  SectionList,
+} from "@pageinator/contracts";
 import type { ApiProblem, LayoutService, ServiceResult } from "../services/index.ts";
 import type { ApiClient, ApiResult } from "./client.ts";
 
@@ -68,6 +76,15 @@ export function createApiLayoutService(
     },
     async fileLink({ orgId, pubId, runId, name }) {
       return read(FileLink, await client.get(`${run(orgId, pubId, runId)}/files/${encodeURIComponent(name)}`));
+    },
+    async listSections({ orgId, pubId }) {
+      return read(SectionList, await client.get(`${pub(orgId, pubId)}/sections`));
+    },
+    async addSection({ orgId, pubId, name }) {
+      return read(SectionList, await client.post(`${pub(orgId, pubId)}/sections`, { name }));
+    },
+    async changeSection({ orgId, pubId, id, change }) {
+      return read(SectionList, await client.patch(`${pub(orgId, pubId)}/sections/${encodeURIComponent(id)}`, change));
     },
     async loadFile({ orgId, pubId, runId, name, signal }) {
       const link = await service.fileLink({ orgId, pubId, runId, name });

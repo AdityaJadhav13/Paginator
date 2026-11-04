@@ -57,15 +57,17 @@ one (a run that fails after the backup leaves its dump too). It checks a restore
 for an already restored point-in-time target (A; 11-fix-before-launch L2-344).
 
 ```sh
-c="docker compose -p <project> --profile <profile> --env-file <file> -f infra/docker/compose.pilot.yml"
-$c run --rm -e PGN_RESTORE_ADMIN_PASSWORD=<superuser or RDS master password> -e PGN_S3_WORK_BUCKET=<work bucket> \
+c() { docker compose -p <project> --profile <profile> --env-file <file> -f infra/docker/compose.pilot.yml "$@"; }
+c run --rm -e PGN_RESTORE_ADMIN_PASSWORD=<superuser or RDS master password> -e PGN_S3_WORK_BUCKET=<work bucket> \
   backup<-local> node scripts/verify-restore.ts
 ```
 
-`PGN_RESTORE_ADMIN_USER` names the admin role (postgres by default). The backup's S3 key may not read the work bucket in
+`PGN_RESTORE_ADMIN_USER` names the admin role (postgres by default); on pilot-local the admin password is
+`PGN_POSTGRES_PASSWORD`, and `PGN_IMAGE_TAG` must be exported for compose, as in `deploy.md`. The backup's S3 key may not read the work bucket in
 the pilot: leave `PGN_S3_WORK_BUCKET` unset there (that check is then SKIP) or run with a key that may; a bucket the key
 cannot read, or that lacks the originals, makes that check FAIL.
 
-Verified on pilot-local only (PR 25), not yet on RDS and S3: one dump of the scratch database (139 KB) was uploaded under governance lock for
+Rehearsed again on pilot-local on 2026-11-05 after a whole newsroom day (11 PASS: 69 tables, 22 migrations, 108
+policies, the newest audit event, story text and photos). Verified on pilot-local only (PR 25), not yet on RDS and S3: one dump of the scratch database (139 KB) was uploaded under governance lock for
 35 days; a delete of its version was refused (AccessDenied); it was fetched back with the same SHA-256 and restored
 with `pg_restore --exit-on-error` into a new database, with its story, user and photo rows.

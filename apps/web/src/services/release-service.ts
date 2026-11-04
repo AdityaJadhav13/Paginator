@@ -1,4 +1,5 @@
 import type {
+  ApprovedPage,
   ArchiveCheck,
   EditionRelease,
   PageApproval,
@@ -15,6 +16,8 @@ export type EditionReleaseDto = EditionRelease;
 export type ReleasePageDto = ReleasePage;
 export type ReleaseItemDto = Release;
 export type PageApprovalDto = PageApproval;
+/** The page editor's 409 page_approved's `current`: the approval and the page it is on. */
+export type ApprovedPageDto = ApprovedPage;
 export type PressTestDto = PressTest;
 export type ArchiveCheckDto = ArchiveCheck;
 export type PreflightItemDto = EditionRelease["preflight"]["items"][number];

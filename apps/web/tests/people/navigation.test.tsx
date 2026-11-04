@@ -53,15 +53,18 @@ describe("Navigation from permissions", () => {
     expect(reporter).not.toContain("glossary.team /org/o/team");
     // in the deployed app a Reporter has their stories and their own pictures (media.view ◐; no edition.view)
     expect(labels(navigation(org("member", ["reporter"]), "p", false))).toEqual([
+      "glossary.overview /org/o/pub/p/overview",
       "glossary.stories /org/o/pub/p/stories",
       "nav.media /org/o/pub/p/media",
     ]);
     // Editions (L2.1) for whoever has edition.view, a ◐ one too; the ads desk (L2.6) for ads.view
     expect(labels(navigation(org("member", ["advertising"]), "p", false))).toEqual([
+      "glossary.overview /org/o/pub/p/overview",
       "nav.editions /org/o/pub/p/editions",
       "nav.ads /org/o/pub/p/ads",
     ]);
     expect(labels(navigation(org("member", ["photo_editor"]), "p", false))).toEqual([
+      "glossary.overview /org/o/pub/p/overview",
       "nav.editions /org/o/pub/p/editions",
       "glossary.stories /org/o/pub/p/stories",
       "nav.media /org/o/pub/p/media",
