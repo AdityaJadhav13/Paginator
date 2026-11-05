@@ -1,0 +1,102 @@
+{
+ "dumped_here": 3564,
+ "fonts": {
+  "Baloo2": {
+   "axes": {
+    "wght": 400.0
+   },
+   "family": "Baloo 2",
+   "weight": 400
+  },
+  "Hind": {
+   "axes": null,
+   "family": "Hind",
+   "weight": 400
+  },
+  "Khand": {
+   "axes": null,
+   "family": "Khand",
+   "weight": 400
+  },
+  "Martel": {
+   "axes": null,
+   "family": "Martel",
+   "weight": 400
+  },
+  "Mukta": {
+   "axes": null,
+   "family": "Mukta",
+   "weight": 400
+  },
+  "NotoSansDeva-w100": {
+   "axes": {
+    "wdth": 100.0
+   },
+   "family": "Noto Sans Devanagari",
+   "weight": 400
+  },
+  "NotoSansDeva-w87.5": {
+   "axes": {
+    "wdth": 87.5
+   },
+   "family": "Noto Sans Devanagari",
+   "weight": 400
+  },
+  "NotoSerifDeva-w100": {
+   "axes": {
+    "wdth": 100.0
+   },
+   "family": "Noto Serif Devanagari",
+   "weight": 400
+  },
+  "NotoSerifDeva-w87.5": {
+   "axes": {
+    "wdth": 87.5
+   },
+   "family": "Noto Serif Devanagari",
+   "weight": 400
+  },
+  "TiroDevaMarathi": {
+   "axes": null,
+   "family": "Tiro Devanagari Marathi",
+   "weight": 400
+  },
+  "Yantramanav": {
+   "axes": null,
+   "family": "Yantramanav",
+   "weight": 400
+  }
+ },
+ "policies": [
+  "C2_CONSTRAINED_c2.00",
+  "C2_FULL_rules_h1.75",
+  "C2_FULL_rules_h2.00",
+  "C2_HYBRID_h2.00",
+  "C2_HYBRID_rules_h2.00",
+  "C2_MEAS_uncapped",
+  "C2_MEAS_uncapped_rules",
+  "C2_RAGGED",
+  "C2_RAGGED_rules"
+ ],
+ "schema": "pageinator.golden.c2-grid/1",
+ "signatures": {
+  "c2_entries": 32076,
+  "file": "experiments/phase0/results/compose2/signatures.json",
+  "key": "text id|font label|size pt|width mm|policy name (C2_* = composer3 legacy policies)",
+  "sha256": "7eab9653263fa7d22e98960192d4b0ab5e80afbc395681cd1e1c482b74b8e63f"
+ },
+ "sizes_pt": [
+  "8.5",
+  "9.0",
+  "9.5"
+ ],
+ "texts": "fixtures/typeset/v1/corpus/texts.json (lang mr, script Deva)",
+ "widths_mm": [
+  "30.25",
+  "35.14",
+  "41.67",
+  "45.0",
+  "50.8",
+  "60.0"
+ ]
+}

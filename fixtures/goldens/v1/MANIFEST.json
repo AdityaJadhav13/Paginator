@@ -1,0 +1,456 @@
+{
+ "counts": {
+  "compose": {
+   "by_case": {
+    "C2": 3564,
+    "C3": 756,
+    "EN": 40,
+    "HEAD": 60,
+    "PROBE": 2145
+   },
+   "c2_signatures_checked_here": 3564,
+   "compositions": 6565,
+   "lines": 37788,
+   "policies": 37,
+   "prepared": 184,
+   "statuses": {
+    "OK": 5189,
+    "OVERSET": 1376
+   }
+  },
+  "fonts": {
+   "glyph_advances": 21543,
+   "instance_files": 13,
+   "instances": 19,
+   "licence_texts": 5,
+   "records": 23,
+   "requests": 24,
+   "sample_glyphs": 1008
+  },
+  "headline": {
+   "by_kind": {
+    "compose": 2200,
+    "copyfit": 220,
+    "n_lines": 110,
+    "ranked": 55
+   },
+   "corpus": 11,
+   "fictional": 44,
+   "headlines": 55,
+   "not_fitting": 70,
+   "policies": 6,
+   "records": 2585,
+   "relaxed": 28
+  },
+  "liang": {
+   "assertions": 35157,
+   "exceptions_en": 14,
+   "exceptions_mr": 0,
+   "patterns_en": 4938,
+   "patterns_mr": 70,
+   "words_en": 10958,
+   "words_mr": 761,
+   "words_with_breaks": 9280
+  },
+  "pdf": {
+   "by_kind": {
+    "cmyk": 5,
+    "name": 16,
+    "num": 1032,
+    "pdf_date": 207,
+    "ser": 1,
+    "subset_tag": 200,
+    "text_string": 10,
+    "tounicode": 6
+   },
+   "micro_files": 14,
+   "objects": 175,
+   "vectors": 1477
+  },
+  "press": {
+   "actualtext_spans": 4067,
+   "bytes": 150251,
+   "glyphs": 14633,
+   "lines": 646
+  },
+  "pyshim": {
+   "assertions": 616073,
+   "float": 30027,
+   "json": 136,
+   "median": 5000,
+   "pow3": 19424,
+   "records": 67587,
+   "sort": 3000,
+   "split": 3000,
+   "stable_id": 2000,
+   "sum": 5000
+  },
+  "rline": {
+   "by_case": {
+    "BODY": 281,
+    "BREAKS": 278,
+    "HEADLINE": 118,
+    "NATURAL": 36,
+    "TRACKING": 179
+   },
+   "glyphs": 24863,
+   "hyphenated": 88,
+   "lines": 892,
+   "tracked": 69
+  },
+  "unicode": {
+   "category_ranges": 3968,
+   "code_points": 1114112,
+   "hb_script_ranges": 1470,
+   "lower_entries": 1433
+  }
+ },
+ "environment": {
+  "fonttools": "4.63.0",
+  "harfbuzz": "14.3.0",
+  "machine": "arm64",
+  "oracle_manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05",
+  "platform": "macOS-27.0.1",
+  "python": "3.11.14",
+  "uharfbuzz": "0.56.0"
+ },
+ "files": {
+  "fixtures/fonts/v1/README.md": {
+   "bytes": 3356,
+   "generator": "fonts",
+   "sha256": "5b9e8fd4262d5a948dec8eaf46bae7db10da78e2a7d2584dd1c1b29cbcb35557"
+  },
+  "fixtures/fonts/v1/baloo2-OFL.txt": {
+   "bytes": 4384,
+   "generator": "fonts",
+   "sha256": "ad09b05dc8bc678c9daf7c4c5f7ef1f55e5726127f4330b2e98e40b9dffcb860"
+  },
+  "fixtures/fonts/v1/devanagari-notosansdevanagari-OFL.txt": {
+   "bytes": 4386,
+   "generator": "fonts",
+   "sha256": "a216f6f8d85c7228093e0ee5e258d9d377e6671f68acb4db1930b29583d0f331"
+  },
+  "fixtures/fonts/v1/devanagari-notoserifdevanagari-OFL.txt": {
+   "bytes": 4386,
+   "generator": "fonts",
+   "sha256": "a216f6f8d85c7228093e0ee5e258d9d377e6671f68acb4db1930b29583d0f331"
+  },
+  "fixtures/fonts/v1/instances/114c433019119e01d55e0853cf7498a7b5d7c6ad22bfe57fd530b275a3eebace.ttf": {
+   "bytes": 673484,
+   "generator": "fonts",
+   "sha256": "114c433019119e01d55e0853cf7498a7b5d7c6ad22bfe57fd530b275a3eebace"
+  },
+  "fixtures/fonts/v1/instances/25c65ce4c630d8d5765c4f012f9974aa5bc4866bee93dae63882632630482224.ttf": {
+   "bytes": 223128,
+   "generator": "fonts",
+   "sha256": "25c65ce4c630d8d5765c4f012f9974aa5bc4866bee93dae63882632630482224"
+  },
+  "fixtures/fonts/v1/instances/56bfcfe7e1fa22bb87a3fccbd67b776279f36a157238580600104ce828526158.ttf": {
+   "bytes": 223316,
+   "generator": "fonts",
+   "sha256": "56bfcfe7e1fa22bb87a3fccbd67b776279f36a157238580600104ce828526158"
+  },
+  "fixtures/fonts/v1/instances/5fd7a210bb8cc1035f28744fbc3aacae0ca3481795cfa3bf552e23ad579cdeac.ttf": {
+   "bytes": 257144,
+   "generator": "fonts",
+   "sha256": "5fd7a210bb8cc1035f28744fbc3aacae0ca3481795cfa3bf552e23ad579cdeac"
+  },
+  "fixtures/fonts/v1/instances/6ecbd045c5c25fceffb00b1117cfb2525e8a429dfe4a37616db68c99ffbd82b0.ttf": {
+   "bytes": 222764,
+   "generator": "fonts",
+   "sha256": "6ecbd045c5c25fceffb00b1117cfb2525e8a429dfe4a37616db68c99ffbd82b0"
+  },
+  "fixtures/fonts/v1/instances/716bf2b5d7a91cff679be0dea3000fde54b90bcbcee5378d6b0341d65fdafc57.ttf": {
+   "bytes": 223380,
+   "generator": "fonts",
+   "sha256": "716bf2b5d7a91cff679be0dea3000fde54b90bcbcee5378d6b0341d65fdafc57"
+  },
+  "fixtures/fonts/v1/instances/87a286ea3cc87f7c93cd5ec311ca542123639d2f1d2125da9552241eab5f9418.ttf": {
+   "bytes": 63748,
+   "generator": "fonts",
+   "sha256": "87a286ea3cc87f7c93cd5ec311ca542123639d2f1d2125da9552241eab5f9418"
+  },
+  "fixtures/fonts/v1/instances/ad722e48911259cbce9bf1f06dd7b84582c7a443878f6e96b7b897bfbac949d7.ttf": {
+   "bytes": 222768,
+   "generator": "fonts",
+   "sha256": "ad722e48911259cbce9bf1f06dd7b84582c7a443878f6e96b7b897bfbac949d7"
+  },
+  "fixtures/fonts/v1/instances/b4e3777d8d16df5595cbe9336011ce876fe74989185ca3bb9d4b5aa70a1dff33.ttf": {
+   "bytes": 223392,
+   "generator": "fonts",
+   "sha256": "b4e3777d8d16df5595cbe9336011ce876fe74989185ca3bb9d4b5aa70a1dff33"
+  },
+  "fixtures/fonts/v1/instances/cedc0f5b93494df39fa441c51a6386ff477976481977040128304ee551a059d9.ttf": {
+   "bytes": 257236,
+   "generator": "fonts",
+   "sha256": "cedc0f5b93494df39fa441c51a6386ff477976481977040128304ee551a059d9"
+  },
+  "fixtures/fonts/v1/instances/de1a714523badc9e0403ffd18fb2d71c9f3da3b93f067bf4035ef9dcda003ccd.ttf": {
+   "bytes": 223116,
+   "generator": "fonts",
+   "sha256": "de1a714523badc9e0403ffd18fb2d71c9f3da3b93f067bf4035ef9dcda003ccd"
+  },
+  "fixtures/fonts/v1/instances/e1a56f0c3ed3f9499c06dbdbd10f42a0e695ef5b3bb6e17ef51830ba1a446ce6.ttf": {
+   "bytes": 422192,
+   "generator": "fonts",
+   "sha256": "e1a56f0c3ed3f9499c06dbdbd10f42a0e695ef5b3bb6e17ef51830ba1a446ce6"
+  },
+  "fixtures/fonts/v1/instances/fdfabfe2c999dd4a6b48a42538c1f397ae15df9c15acfdc01eb071dbaf0bffb3.ttf": {
+   "bytes": 223308,
+   "generator": "fonts",
+   "sha256": "fdfabfe2c999dd4a6b48a42538c1f397ae15df9c15acfdc01eb071dbaf0bffb3"
+  },
+  "fixtures/fonts/v1/latin-archivonarrow-OFL.txt": {
+   "bytes": 4495,
+   "generator": "fonts",
+   "sha256": "b2087ef3fb91248e346600d19021249152a9688efea72905aa1996bb16a4c8de"
+  },
+  "fixtures/fonts/v1/latin-sourceserif4-OFL.txt": {
+   "bytes": 4400,
+   "generator": "fonts",
+   "sha256": "5f94c3fd3a23131a417ab5a0c8452de57e70c3cfb9f604d88241f7065ebf9fd9"
+  },
+  "fixtures/goldens/v1/compose/c2_grid.json": {
+   "bytes": 1863,
+   "generator": "compose",
+   "sha256": "a00097a643a2b5177936df6296128aaaf12f35fbae680f65119f0bd16d70604f"
+  },
+  "fixtures/goldens/v1/compose/compose.jsonl.gz": {
+   "bytes": 1727782,
+   "generator": "compose",
+   "sha256": "00d38aec6febbba9a761351e476c9aff615083109d5585f16845f89c7790de13"
+  },
+  "fixtures/goldens/v1/compose/info.json": {
+   "bytes": 751,
+   "generator": "compose",
+   "sha256": "bb0231b47534aa53d063c3020a31f4e8138900250eb529b8b9c3cf511ba1163c"
+  },
+  "fixtures/goldens/v1/compose/policies.json": {
+   "bytes": 127387,
+   "generator": "compose",
+   "sha256": "aec81b364c601115d6c26f8d2f86a0845fb3a42da00463508837e74f18cb2232"
+  },
+  "fixtures/goldens/v1/compose/prepare.jsonl.gz": {
+   "bytes": 419092,
+   "generator": "compose",
+   "sha256": "fb85aeac231266954120a5beecadf4133b44595eac23338b66ec299a44a9d962"
+  },
+  "fixtures/goldens/v1/fonts/info.json": {
+   "bytes": 1827,
+   "generator": "fonts",
+   "sha256": "600f06e031bc432b690b5f2ef4ef898854622db16b6042115c2175b799be00be"
+  },
+  "fixtures/goldens/v1/fonts/registry.jsonl.gz": {
+   "bytes": 17413,
+   "generator": "fonts",
+   "sha256": "28bb8f51b39db641121a1e084e46b1989b3ea51eb374980e2209d08741cea202"
+  },
+  "fixtures/goldens/v1/fonts/tables.json.gz": {
+   "bytes": 40745,
+   "generator": "fonts",
+   "sha256": "36c5a3a4f3ef5fe2b0d2e6ee06ff3445253b8f89515569aec3131dc8d0decccd"
+  },
+  "fixtures/goldens/v1/headline/compose.jsonl.gz": {
+   "bytes": 89463,
+   "generator": "headline",
+   "sha256": "8c8e6dc7c1ed5b782f98757f9c09d681758f93d2ce06adbe07bfc4250986321a"
+  },
+  "fixtures/goldens/v1/headline/info.json": {
+   "bytes": 584,
+   "generator": "headline",
+   "sha256": "6c7cd5c7f79ad39fff6f338c214b9e54f3c7b5ea4febb3533763a2ca66e87de4"
+  },
+  "fixtures/goldens/v1/headline/links.jsonl.gz": {
+   "bytes": 3603,
+   "generator": "headline",
+   "sha256": "b57c4e8c2b89978ca08dfc82c93d6a8665f424bc5fc102616823c850ba96f7f3"
+  },
+  "fixtures/goldens/v1/headline/policies.json": {
+   "bytes": 10508,
+   "generator": "headline",
+   "sha256": "a30531fa19e2418e3ac54278fe21820bb56500cd555c910447f7ab199f44baff"
+  },
+  "fixtures/goldens/v1/liang/breaks.jsonl.gz": {
+   "bytes": 76320,
+   "generator": "liang",
+   "sha256": "21210a05a0d00dc170ba8b7f4c6b80dc7eb05cadf10887002ad973a70c675d17"
+  },
+  "fixtures/goldens/v1/liang/info.json": {
+   "bytes": 506,
+   "generator": "liang",
+   "sha256": "a23c87ded52a50fbee2fb56a83df900d5b90e11640f21eb3c052594a0d874795"
+  },
+  "fixtures/goldens/v1/liang/patterns-en.json.gz": {
+   "bytes": 21946,
+   "generator": "liang",
+   "sha256": "55b8118628d95ae787fd4491df266f12a5ce5c5f9936053e1835f2d2026b5104"
+  },
+  "fixtures/goldens/v1/liang/patterns-mr.json.gz": {
+   "bytes": 421,
+   "generator": "liang",
+   "sha256": "bac4b09685478d1e272a2b1d616483d29fbf1fe48b7148675a03c4b5e8a9bd76"
+  },
+  "fixtures/goldens/v1/pdf/info.json": {
+   "bytes": 591,
+   "generator": "pdf",
+   "sha256": "8de99093ba6267e48b6103f74dbf9ad9b11a9dbb761a32bfe3cc3f19be336180"
+  },
+  "fixtures/goldens/v1/pdf/micro.jsonl.gz": {
+   "bytes": 22292,
+   "generator": "pdf",
+   "sha256": "95745429dd8ed70bebe1673d33d4d57d3cd1721fa34c36e529248c8e05f8878f"
+  },
+  "fixtures/goldens/v1/pdf/micro/composed.pdf": {
+   "bytes": 13077,
+   "generator": "pdf",
+   "sha256": "1abb040680577dcfab51481d0ebcd95e8873ce64b6e94a869b3a4b9ffcda4d42"
+  },
+  "fixtures/goldens/v1/pdf/micro/deva.pdf": {
+   "bytes": 10008,
+   "generator": "pdf",
+   "sha256": "2acf0c3ed837b558599e3411d9d97d318009853f0a9ca9976b1d7d08a0c534ce"
+  },
+  "fixtures/goldens/v1/pdf/micro/empty.pdf": {
+   "bytes": 1396,
+   "generator": "pdf",
+   "sha256": "e097864d1d27614da245ee589840f3aab10241527230f0d54587fee0e6b54927"
+  },
+  "fixtures/goldens/v1/pdf/micro/hscale.pdf": {
+   "bytes": 5445,
+   "generator": "pdf",
+   "sha256": "c1ea4042ee349640bfe8d0647b0b9fab7afb895a648f2393abd27a6f58c4b86d"
+  },
+  "fixtures/goldens/v1/pdf/micro/image.pdf": {
+   "bytes": 1703,
+   "generator": "pdf",
+   "sha256": "15842d17b567dd983af988a0cf422746e8d7e9f552e84f79cb6fbd2b1aa57c03"
+  },
+  "fixtures/goldens/v1/pdf/micro/latin.pdf": {
+   "bytes": 5415,
+   "generator": "pdf",
+   "sha256": "c67213189a125281d55c47a98a2aa567c285c52e665665ab1d484f8159aa576b"
+  },
+  "fixtures/goldens/v1/pdf/micro/no_actualtext.pdf": {
+   "bytes": 9878,
+   "generator": "pdf",
+   "sha256": "712d39740a81c194b410a9cad5390c8f449de147e112cf2bb214daa8a43cf80f"
+  },
+  "fixtures/goldens/v1/pdf/micro/rects.pdf": {
+   "bytes": 1499,
+   "generator": "pdf",
+   "sha256": "ad1b0b77679b058f36ccb21220ba2db710b8ddbb211a83af43dc5ede1c591391"
+  },
+  "fixtures/goldens/v1/pdf/micro/rules.pdf": {
+   "bytes": 1526,
+   "generator": "pdf",
+   "sha256": "f752e7ad9e96af455b5de9bee1574ef0882777518d3ec78bede9f4e26096d615"
+  },
+  "fixtures/goldens/v1/pdf/micro/title_deva.pdf": {
+   "bytes": 1449,
+   "generator": "pdf",
+   "sha256": "b9f36e42d50d35f018c879fa24ec83fc9755bb066a43b6f4b0a48732cf54b2bb"
+  },
+  "fixtures/goldens/v1/pdf/micro/title_escapes.pdf": {
+   "bytes": 1405,
+   "generator": "pdf",
+   "sha256": "fd4ef6039e1a0042615ab8f555e5f2537820937fe6a077cb08488ff4decab281"
+  },
+  "fixtures/goldens/v1/pdf/micro/two_pages.pdf": {
+   "bytes": 9770,
+   "generator": "pdf",
+   "sha256": "ec6d97008f625dc7b52eb56373817c512290cb2be58bf62bd7b57c1601d34400"
+  },
+  "fixtures/goldens/v1/pdf/micro/white_text.pdf": {
+   "bytes": 5793,
+   "generator": "pdf",
+   "sha256": "592d27baecd474e4149591a11f0778b13ed09047b5ceb09d624ff331ab2787cd"
+  },
+  "fixtures/goldens/v1/pdf/micro/x1a_2001.pdf": {
+   "bytes": 10047,
+   "generator": "pdf",
+   "sha256": "3223dfa00e9456055fe8390741856d1661607aa389901289020c86acd99aa7e8"
+  },
+  "fixtures/goldens/v1/pdf/vectors.jsonl.gz": {
+   "bytes": 34570,
+   "generator": "pdf",
+   "sha256": "0f36c1f574376c6a1494c5522f32ac4681b29ce28b287113ea88bd809a7965b7"
+  },
+  "fixtures/goldens/v1/press/info.json": {
+   "bytes": 1416,
+   "generator": "press",
+   "sha256": "f0567e1cc9c8af79802681d5289cbfeb7ab7d4e2b018ebfa4182183d1715339d"
+  },
+  "fixtures/goldens/v1/press/pageinator_press_test_synthetic.manifest.json": {
+   "bytes": 561160,
+   "generator": "press",
+   "sha256": "e5b275290229d93c5bf2d474e6c86b72270821b58c1af19362e1792b2c42724d"
+  },
+  "fixtures/goldens/v1/press/pageinator_press_test_synthetic.pdf": {
+   "bytes": 150251,
+   "generator": "press",
+   "sha256": "57be46b44e15d40ba4b877bc92434c1da87d8b349030a382566b2f2017bb3b93"
+  },
+  "fixtures/goldens/v1/pyshim/info.json": {
+   "bytes": 526,
+   "generator": "pyshim",
+   "sha256": "9ac2d4d722339cf92e44d03b09fe02a78496c4bdc3819dc0803f97dcdc1f6f95"
+  },
+  "fixtures/goldens/v1/pyshim/vectors.jsonl.gz": {
+   "bytes": 3915268,
+   "generator": "pyshim",
+   "sha256": "a5489b8d4860888c7bdc9e7f928cc46ebd0bf083f8633f194f5c2bd7e374c0e8"
+  },
+  "fixtures/goldens/v1/rline/info.json": {
+   "bytes": 1032,
+   "generator": "rline",
+   "sha256": "92d4efe59b395626703b980d600d98616259cca052076549305522baae9e8eb7"
+  },
+  "fixtures/goldens/v1/rline/lines.jsonl.gz": {
+   "bytes": 186275,
+   "generator": "rline",
+   "sha256": "4dd2038f687df5d1193107779bf236e447828c80726d00720be3820062112efc"
+  },
+  "fixtures/goldens/v1/unicode/info.json": {
+   "bytes": 468,
+   "generator": "unicode",
+   "sha256": "c976b536ca91edc08809c0ad2f6602394fc3ababe0f24d997c805d80533b044f"
+  },
+  "fixtures/goldens/v1/unicode/unicode14-hb14.3.0.json.gz": {
+   "bytes": 42733,
+   "generator": "unicode",
+   "sha256": "661ae191e91ad4eb93cbc27a1964a1c16b7bc920af3aa04d35e048d627367d00"
+  }
+ },
+ "generators": [
+  "unicode",
+  "pyshim",
+  "fonts",
+  "liang",
+  "compose",
+  "headline",
+  "rline",
+  "pdf",
+  "press"
+ ],
+ "goldens": "v1",
+ "referenced_in_place": {
+  "experiments/phase0/results/compose2/signatures.json": {
+   "c2_entries": 32076,
+   "entries": 35640,
+   "sha256": "7eab9653263fa7d22e98960192d4b0ab5e80afbc395681cd1e1c482b74b8e63f"
+  },
+  "fixtures/typeset/v1": {
+   "files": {
+    "fixtures/typeset/v1/behavior/GENERATION_ENV.json": "275ecc107c585d6c095fea0b27a2ac12d5fb29743212bd15309652660307bc5b",
+    "fixtures/typeset/v1/behavior/body.jsonl": "19f6f9846993a051bf6aba999b1d003703d7e9e65d7cd5738db7f0785f81f9bd",
+    "fixtures/typeset/v1/behavior/difficult.jsonl": "f3f3a6a24bd7c2351441a82b7823a787851545bd21f664e50360f5f52a7d6fe9",
+    "fixtures/typeset/v1/behavior/headline.jsonl": "0b37bf7df0fce075c56b4a687fc00b413d8c89ba432e763ee927901673be265c",
+    "fixtures/typeset/v1/behavior/mixed.jsonl": "49d80ded2f213e9aa5367d6368398ed97126a352151d15c3e1fb2ae32407bad3",
+    "fixtures/typeset/v1/conditions.json": "312d15a2e02ae2049a3132dfd0b74978c9685db73633eeed8ef0bc2b3820e807",
+    "fixtures/typeset/v1/corpus/texts.json": "71b18a5e49718174ce33614adafa064371bb74f48f1e6a38c028d0379c134d82",
+    "fixtures/typeset/v1/real/README.md": "58951cb312d956260a192c23d84b1daea499d782b0f3c94d72560cfcf3769371"
+   }
+  }
+ },
+ "schema": "pageinator.golden.manifest/1"
+}

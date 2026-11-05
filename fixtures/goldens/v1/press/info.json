@@ -1,0 +1,33 @@
+{
+ "build_id": "7354475e64",
+ "counts": {
+  "actualtext_spans": 4067,
+  "bytes": 150251,
+  "glyphs": 14633,
+  "lines": 646
+ },
+ "environment": {
+  "fonttools": "4.63.0",
+  "harfbuzz": "14.3.0",
+  "machine": "arm64",
+  "oracle_manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05",
+  "platform": "macOS-27.0.1",
+  "python": "3.11.14",
+  "uharfbuzz": "0.56.0"
+ },
+ "files": {
+  "fixtures/goldens/v1/press/pageinator_press_test_synthetic.manifest.json": "e5b275290229d93c5bf2d474e6c86b72270821b58c1af19362e1792b2c42724d",
+  "fixtures/goldens/v1/press/pageinator_press_test_synthetic.pdf": "57be46b44e15d40ba4b877bc92434c1da87d8b349030a382566b2f2017bb3b93"
+ },
+ "reference": {
+  "body_policy_key": "2d2631806ae1",
+  "build_id": "39b217c097",
+  "differences": "build id only: Title; 2 slug lines (20 glyph ids and their x positions); page stream Length; xref offsets; /ID. 644/646 manifest lines and 6/7 streams identical",
+  "file": "experiments/phase0/results/pdfx1/pageinator_press_test_synthetic.pdf (git-ignored; EXP-PDF-1)",
+  "reproduced_from": "c9786fd^ (composer3.Policy before pattern_min/compound_breaks), same SOURCE_DATE_EPOCH",
+  "sha256": "7593d3f4981ce02a5ce90ee274e4ab31600745ba6a05832b0d61dba0ace7f1bd"
+ },
+ "schema": "pageinator.golden.press/1",
+ "source": "experiments/phase0/pdfx1/make_press_test.py --synthetic (frozen, unchanged)",
+ "source_date_epoch": 1791991449
+}
