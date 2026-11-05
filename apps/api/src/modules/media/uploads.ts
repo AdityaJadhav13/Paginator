@@ -1,7 +1,8 @@
 // Photo uploads (docs/product/10-l2-newsroom-plan.md §5.2, §6.2): the browser uploads straight to the object store
 // with a presigned POST, then asks the API to complete it.
 //   - Presign: JPEG, PNG or WebP, at most 40 MiB (a Word file, purpose docx: 10 MiB; a dataset bundle, purpose
-//     engine_dataset: a ZIP of at most 4 GiB, settings.edit, not charged to the daily quota); 60 uploads an hour per person and 2 GB a day per organisation,
+//     engine_dataset: a ZIP of at most 4 GiB; a past edition, purpose onboard_pdf: a PDF of at most 200 MiB, its file
+//     name kept; both settings.edit, not charged to the daily quota); 60 uploads an hour per person and 2 GB a day per organisation,
 //     both counted under the organisation's quota row lock, so requests at once cannot pass the limits together. The
 //     quota is charged the declared size, and the POST policy (valid 15 minutes) takes exactly that many bytes, for
 //     exactly the upload's key (uploads/orgs/<org>/pubs/<pub>/<upload>, the database's), its Content-Type and its
@@ -23,6 +24,7 @@ import {
   CompletedUpload,
   MAX_DATASET_BYTES,
   MAX_DOCX_BYTES,
+  MAX_ONBOARD_PDF_BYTES,
   MAX_PICTURE_BYTES,
   PresignedUpload,
   UploadRequest,
@@ -143,6 +145,15 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
             },
           ]);
         }
+      } else if (input.purpose === "onboard_pdf") {
+        // a past edition's PDF, to learn the paper's design from (POST …/onboarding): settings.edit, at most 200 MiB
+        if (reach("settings.edit", access.orgRole, access.publications.get(pub) ?? { roles: [], grants: [] }) === null)
+          throw refused("a past edition is read for the paper's design: settings.edit");
+        if (input.bytes > MAX_ONBOARD_PDF_BYTES) {
+          throw new ApiError("file_too_large", [
+            { field: "body.bytes", message: "A past edition's PDF is at most 200 MB." },
+          ]);
+        }
       } else if (input.bytes > MAX_PICTURE_BYTES) throw new ApiError("file_too_large");
       const answer = await idempotent(
         database,
@@ -151,8 +162,9 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
         async (tx) => {
           // the quota row's lock first: the hour's count then sees every upload committed before it (a refusal rolls
           // the quota back with the rest)
-          // a dataset bundle (settings.edit only, a few a year) is larger than a day's quota, and is not charged to it
-          const charged = input.purpose === "engine_dataset" ? 0 : input.bytes;
+          // a dataset bundle or a past edition's PDF (settings.edit only, a few sets a year) may be larger than a day's
+          // quota together, and is not charged to it
+          const charged = input.purpose === "engine_dataset" || input.purpose === "onboard_pdf" ? 0 : input.bytes;
           if ((await addToQuota(tx, access.tenant.orgId, charged)) > ORG_BYTES_PER_DAY) {
             throw new ApiError("slow_down");
           }
@@ -162,6 +174,7 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
             type: input.contentType,
             bytes: input.bytes,
             expiresSeconds: POST_SECONDS,
+            filename: input.filename,
           });
           // the size charged to the quota, never the file's name
           await recordAudit(tx, access.tenant, {
@@ -209,8 +222,9 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
       if (!upload || upload.user_id !== userId) throw new ApiError("not_found");
       uploaderOf(access, pub, upload.purpose);
       // a Word file is completed by its import (POST …/imports/docx), never as a picture
-      // and a dataset bundle by its engine profile (POST …/engine-profiles)
-      if (upload.purpose === "docx" || upload.purpose === "engine_dataset") throw new ApiError("not_a_picture");
+      // and a dataset bundle by its engine profile (POST …/engine-profiles), a past edition by its onboarding
+      if (upload.purpose === "docx" || upload.purpose === "engine_dataset" || upload.purpose === "onboard_pdf")
+        throw new ApiError("not_a_picture");
       if (upload.status === "completed" && upload.asset_id) {
         const assetId = upload.asset_id;
         const asset = await database.withTenant(access.tenant, (tx) => findAsset(tx, pub, assetId));

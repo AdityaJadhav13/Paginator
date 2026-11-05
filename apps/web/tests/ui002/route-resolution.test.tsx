@@ -20,7 +20,7 @@ describe("Deep link resolves the correct shell", () => {
     { path: "/", shell: "public", h1: "Newspaper production, built first for Marathi papers" },
     { path: "/features", shell: "public", h1: "What Pageinator does today, stage by stage" },
     { path: "/login", shell: "public", h1: "You are signed in" },
-    { path: "/onboarding", shell: "public", h1: "Onboarding" },
+    { path: "/onboarding", shell: "public", h1: "Welcome to Pageinator" },
     { path: "/org/org-demo-sahyadri/settings", shell: "workspace", h1: "Organization settings" },
     {
       path: "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/overview",

@@ -39,11 +39,13 @@ import { gatewayClient } from "./modules/editor/gateway.ts";
 import { editorRoutes } from "./modules/editor/routes.ts";
 import { adsRoutes } from "./modules/ads/routes.ts";
 import { layoutRoutes } from "./modules/layout/routes.ts";
+import { onboardingRoutes } from "./modules/onboarding/routes.ts";
 import { releaseRoutes } from "./modules/release/routes.ts";
 import { type PhotoFetch, newsRoutes } from "./modules/news/routes.ts";
 import { startNewsSchedule } from "./modules/news/schedule.ts";
 import { adSettingsRoutes, startAdCutoffSchedule } from "./modules/ads/cutoff.ts";
 import { contactRoutes } from "./modules/contact/routes.ts";
+import { type SignupOptions, signupRoutes } from "./modules/signup/routes.ts";
 import { closeWhenStopping } from "./shutdown.ts";
 import type { ObjectStore } from "./storage/object-store.ts";
 import { s3Store } from "./storage/s3.ts";
@@ -74,6 +76,8 @@ export type AppDeps = {
   contactLimits?: { perHour: number; perDay: number; perDayAll: number };
   /** The pause before a dropped contact message's answer (ms); tests make it 0. */
   contactDropPause?: () => number;
+  /** The paper sign-up's limits and drop pause (src/modules/signup/routes.ts); tests make them small. */
+  signup?: Pick<SignupOptions, "limits" | "dropPause">;
   /** Runs the engine inbox's consumer and the queue's sweep (src/modules/media/engine-inbox.ts) while the app is open:
    * main.ts does; tests that do not drive them leave it out. */
   engineInbox?: boolean;
@@ -209,6 +213,7 @@ export async function buildApp(deps: AppDeps) {
   });
   if (people) {
     await app.register(peopleRoutes, { ...people, config });
+    await app.register(signupRoutes, { ...people, origin: config.publicOrigin, ...deps.signup });
     await app.register(storyRoutes, { database: people.database, notify: people.notify, mail: people.mail });
     await app.register(commentRoutes, { database: people.database, notify: people.notify });
     await app.register(editionRoutes, { database: people.database });
@@ -236,6 +241,7 @@ export async function buildApp(deps: AppDeps) {
       await app.register(deskBundleRoutes, { database: people.database, store });
       await app.register(importRoutes, { database: people.database, store });
       await app.register(layoutRoutes, { database: people.database, store });
+      await app.register(onboardingRoutes, { database: people.database, store });
       await app.register(adsRoutes, { database: people.database });
       await app.register(releaseRoutes, {
         database: people.database,

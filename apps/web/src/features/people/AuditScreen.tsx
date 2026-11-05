@@ -71,6 +71,12 @@ export const AUDIT_ACTION_KEYS = [
   "auditLog.action.engine_profile.create",
   "auditLog.action.engine_profile.fail",
   "auditLog.action.engine_profile.ready",
+  "auditLog.action.onboarding.start",
+  "auditLog.action.onboarding.cancel",
+  "auditLog.action.onboarding.use",
+  "auditLog.action.onboarding.test_edition",
+  "auditLog.action.onboarding.ready",
+  "auditLog.action.onboarding.fail",
   "auditLog.action.layout.run_cancel",
   "auditLog.action.layout.run_create",
   "auditLog.action.layout.run_done",
@@ -158,6 +164,7 @@ const TARGET_KEYS: Readonly<Record<string, PlainKey>> = {
   route: "auditLog.target.route",
   import: "auditLog.target.import",
   section: "auditLog.target.section",
+  onboarding: "auditLog.target.onboarding",
 };
 
 /** An action's plain name; one of a newer API than this screen is shown by its code. An upload is named by its

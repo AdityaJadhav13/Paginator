@@ -84,6 +84,22 @@ class KeyGuard:
         """A run's frozen request (the API writes it; the worker never does)."""
         return self.key("runs", uuid(run_id, "run_id"), "request.json")
 
+    # L4: onboarding a paper (engine.onboard), under onboarding/<onboarding>/
+
+    def onboarding_inputs(self, onboarding_id: object) -> str:
+        """The frozen inputs file the API wrote (OnboardInputs; the worker never writes it)."""
+        return self.key("onboarding", uuid(onboarding_id, "onboarding_id"), "inputs.json")
+
+    def onboarding_pdf(self, onboarding_id: object, n: object) -> str:
+        """A past edition's PDF, `pdfs/NN.pdf` from the inputs file's n (1 … 40)."""
+        if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= 40:
+            raise KeyRefused("not a file of an onboarding")
+        return self.key("onboarding", uuid(onboarding_id, "onboarding_id"), "pdfs", f"{n:02d}.pdf")
+
+    def onboarding_dataset(self, onboarding_id: object) -> str:
+        """The dataset bundle the worker made."""
+        return self.key("onboarding", uuid(onboarding_id, "onboarding_id"), "dataset.zip")
+
     def run_file(self, run_id: object, name: str, page: int | None = None) -> str:
         """A run's output: `runs/<run>/edition.pdf`, `press-files.zip`, or a page's `runs/<run>/pages/NN/<name>` (the
         layout's files, or a save's from the page editor: `edit-<rev>.pdf`, `.png`, `.thumb.png`, `.pdfx-check.txt`)."""

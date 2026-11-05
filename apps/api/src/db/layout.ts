@@ -61,20 +61,24 @@ const PROFILE = sql`
   left join app.person cb on cb.org_id = p.org_id and cb.user_id = p.created_by
   left join app.engine_profile bp on bp.org_id = p.org_id and bp.publication_id = p.publication_id and bp.id = p.based_on`;
 
-/** A new profile (setting_up), numbered after the publication's last; the publication's row is locked first, so two
- * at once take the next numbers in turn. */
+/** A new profile (setting_up), numbered after the publication's last, made from an upload or an onboarding's bundle;
+ * the publication's row is locked first, so two at once take the next numbers in turn. */
 export async function createProfile(
   tx: Tx,
   who: Tenant,
   publicationId: string,
-  input: { uploadId: string; sha256: string; bytes: number },
+  input: ({ uploadId: string; onboardingId?: never } | { onboardingId: string; uploadId?: never }) & {
+    sha256: string;
+    bytes: number;
+  },
 ) {
   await sql`select 1 from app.publication where id = ${publicationId} for update`.execute(tx);
   const { rows } = await sql<{ id: string; dataset_key: string; version: number }>`
-    insert into app.engine_profile (org_id, publication_id, version, upload_id, dataset_sha256, dataset_bytes, created_by)
+    insert into app.engine_profile (org_id, publication_id, version, upload_id, onboarding_id, dataset_sha256,
+      dataset_bytes, created_by)
     values (${who.orgId}, ${publicationId},
       (select coalesce(max(version), 0) + 1 from app.engine_profile where publication_id = ${publicationId}),
-      ${input.uploadId}, ${input.sha256}, ${input.bytes}, ${who.userId})
+      ${input.uploadId ?? null}, ${input.onboardingId ?? null}, ${input.sha256}, ${input.bytes}, ${who.userId})
     returning id, dataset_key, version`.execute(tx);
   const made = rows[0];
   if (!made) throw new Error("the profile was not made");

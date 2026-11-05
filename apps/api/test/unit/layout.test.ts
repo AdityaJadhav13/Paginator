@@ -198,4 +198,13 @@ describe("the layout and profile live hints", () => {
     });
     expect(messageFor({ ...who(["viewer"]), orgId: id(8) }, layout)).toBeNull();
   });
+
+  it("and an onboarding's to those who may view the settings", () => {
+    const onboarding = { v: 1, type: "onboarding", org: id(1), pub: id(2), onboarding: id(5) } as const;
+    expect(messageFor(who(["viewer"]), onboarding)).toBeNull();
+    expect(messageFor(who(["chief_editor"]), onboarding)).toEqual({
+      event: "onboarding",
+      data: { publicationId: id(2), onboardingId: id(5) },
+    });
+  });
 });

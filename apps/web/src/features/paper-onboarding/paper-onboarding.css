@@ -1,0 +1,20 @@
+/* /onboarding (PaperOnboardingScreen): the paper's details as label and value, side by side on a desktop. */
+.pg-paper-onboarding {
+  max-inline-size: 48rem;
+  padding-block: var(--pg-space-6);
+}
+
+.pg-paper-onboarding__details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--pg-space-2) var(--pg-space-5);
+  margin: 0;
+}
+
+.pg-paper-onboarding__details dt {
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-paper-onboarding__details dd {
+  margin: 0;
+}

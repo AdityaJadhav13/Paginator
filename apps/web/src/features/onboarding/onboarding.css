@@ -1,0 +1,41 @@
+/* Onboard a new paper (L4). Tokens and logical properties only. */
+
+.pg-onboard--prominent {
+  border-color: var(--pg-app-accent);
+}
+
+.pg-onboard__drop {
+  padding: var(--pg-space-4);
+  border: var(--pg-border-width) dashed var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  background: var(--pg-app-canvas);
+}
+
+.pg-onboard__drop > p {
+  margin: 0 0 var(--pg-space-2);
+}
+
+.pg-onboard__files {
+  display: grid;
+  gap: var(--pg-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-onboard__files > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(10rem, 16rem) auto;
+  align-items: center;
+  gap: var(--pg-space-1) var(--pg-space-3);
+}
+
+.pg-onboard__name {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 40rem) {
+  .pg-onboard__files > li {
+    grid-template-columns: 1fr auto;
+  }
+}

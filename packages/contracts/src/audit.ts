@@ -105,6 +105,16 @@ export const AUDIT_ACTIONS = {
    * a print profile saved as a new version ({profile, version}). */
   "engine_profile.retemplate": { scope: "publication" },
   "brand.set": { scope: "publication" },
+  /** Onboarding a new paper (L4): past editions sent to be read ({onboarding, files, bytes}: counts, never a file's
+   * name), cancelled ({from}), used for a new engine profile ({profile, version}), a test edition of fictional stories
+   * made ({edition, date, stories, language}); read ({job, editions, pages}) or not ({job, code}), from the engine's
+   * inbox or the sweep (actor: the system). */
+  "onboarding.start": { scope: "publication" },
+  "onboarding.cancel": { scope: "publication" },
+  "onboarding.use": { scope: "publication" },
+  "onboarding.test_edition": { scope: "publication" },
+  "onboarding.ready": { scope: "publication" },
+  "onboarding.fail": { scope: "publication" },
   "print_profile.create": { scope: "publication" },
   /** A section made ({name}), or renamed, moved, archived or brought back ({fields}: which changed). */
   "section.create": { scope: "publication" },

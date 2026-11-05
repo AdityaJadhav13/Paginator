@@ -37,6 +37,7 @@ import { may } from "../people/navigation.ts";
 import { DeskWords } from "../layout/desk-text.tsx";
 import { useLayout } from "../layout/layout-context.tsx";
 import { POLL_MS } from "../layout/EditionLayoutScreen.tsx";
+import { OnboardingPanel } from "../onboarding/OnboardingPanel.tsx";
 import { TemplateOutline, TemplateOutlineLegend } from "./TemplateOutline.tsx";
 import "../layout/layout.css";
 import "./templates.css";
@@ -74,7 +75,13 @@ export function TemplatesScreen() {
       />
       <OfflineNotice />
       {open && may(org, "templates.view", pubId) && (
-        <TemplatesContent orgId={orgId} pubId={pubId} edit={may(org, "templates.edit", pubId)} />
+        <TemplatesContent
+          orgId={orgId}
+          pubId={pubId}
+          edit={may(org, "templates.edit", pubId)}
+          setup={may(org, "settings.edit", pubId)}
+          generate={may(org, "layout.generate", pubId)}
+        />
       )}
     </Stack>
   );
@@ -98,10 +105,15 @@ function TemplatesContent({
   orgId,
   pubId,
   edit,
+  setup,
+  generate,
 }: {
   readonly orgId: string;
   readonly pubId: string;
   readonly edit: boolean;
+  /** settings.edit: set the paper's design up from its past editions (L4) */
+  readonly setup: boolean;
+  readonly generate: boolean;
 }) {
   const layout = useLayout();
   const { t } = useI18n();
@@ -169,6 +181,16 @@ function TemplatesContent({
   const canChoose = edit && !view.settingUp && sending.step !== "sending";
   const feedback = (what: string) =>
     sending.step !== "idle" && sending.what === what ? <SendingNote sending={sending} /> : null;
+  const onboarding = setup && (
+    <OnboardingPanel
+      orgId={orgId}
+      pubId={pubId}
+      prominent={!view.inUse}
+      generate={generate}
+      templatesLink={false}
+      onUsed={() => void fetchView(true)}
+    />
+  );
 
   return (
     <Stack gap="5">
@@ -194,16 +216,19 @@ function TemplatesContent({
           {view.inUse && <> {t("templates.failedKept", { version: view.inUse.version })}</>}
         </InlineMessage>
       )}
+      {!view.inUse && onboarding}
       {!view.inUse ? (
-        <Panel>
-          <EmptyState
-            icon="settings"
-            heading={t("templates.none")}
-            action={<Link to={paths.pubEngineProfile(orgId, pubId)}>{t("templates.noneLink")}</Link>}
-          >
-            {t("templates.noneBody")}
-          </EmptyState>
-        </Panel>
+        !onboarding && (
+          <Panel>
+            <EmptyState
+              icon="settings"
+              heading={t("templates.none")}
+              action={<Link to={paths.pubEngineProfile(orgId, pubId)}>{t("templates.noneLink")}</Link>}
+            >
+              {t("templates.noneBody")}
+            </EmptyState>
+          </Panel>
+        )
       ) : (
         <>
           <p className="pg-layout__note">
@@ -252,6 +277,7 @@ function TemplatesContent({
           )}
         </>
       )}
+      {view.inUse && onboarding}
       {view.history.length > 0 && <History items={view.history} />}
     </Stack>
   );

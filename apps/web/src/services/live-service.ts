@@ -20,6 +20,8 @@ export type LiveEventDto =
     }
   /** An engine profile of the publication changed (setting up, ready or failed). */
   | { readonly type: "profile"; readonly publicationId: string; readonly profileId: string }
+  /** The publication's onboarding moved on (a step, ready, rejected, failed, cancelled or used). */
+  | { readonly type: "onboarding"; readonly publicationId: string; readonly onboardingId: string }
   | { readonly type: "resync" };
 
 export interface LiveService {

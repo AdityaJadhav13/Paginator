@@ -93,3 +93,23 @@ def one_line(text: str | None) -> str:
 
 def log(*parts) -> None:
     print(*parts, file=sys.stderr, flush=True)
+
+
+# letters of a paper's script (paper.json "script"): Devanagari, or Latin with its accented letters
+SCRIPT_RANGE = {"deva": ("ऀ", "ॿ"), "latn": ("A", "ɏ")}
+
+
+def paper(ds: Path) -> dict | None:
+    """The dataset's paper.json (tools/onboard writes it for a paper onboarded from its PDFs), checked; None when the
+    dataset has none (the pilot's): every rule then stays the pilot's, unchanged."""
+    f = ds / "paper.json"
+    if not f.is_file():
+        return None
+    pj = read_json(f)
+    sizes = pj.get("edition_sizes") if isinstance(pj, dict) else None
+    imprint = pj.get("imprint_text") if isinstance(pj, dict) else None
+    if (not isinstance(pj, dict) or pj.get("format") != "pageinator.paper/1" or pj.get("script") not in SCRIPT_RANGE
+            or not isinstance(sizes or [], list) or not all(type(n) is int and 3 <= n <= 64 for n in sizes or [])
+            or not isinstance(imprint or [], list) or not all(isinstance(t, str) for t in imprint or [])):
+        raise DamagedFile("the file paper.json of this dataset is not a paper description the engine reads")
+    return pj

@@ -1,7 +1,7 @@
 """The worker's job runner, whatever queue drives it (l22-plan W6; D-8 is open): one job in, one result out.
 
     job    {"format": "pageinator.worker-job/1", "id": "<the queue's job id>", "kind": "media.ingest" | "docx.import" |
-            "media.ad" | "engine.setup" | "engine.measure" | "engine.layout", "args": {…}}
+            "media.ad" | "engine.setup" | "engine.measure" | "engine.layout" | "engine.onboard", "args": {…}}
     result {"format": "pageinator.worker-result/1", "job": id, "kind": kind, "outcome": "done" | "retry" | "failed",
             "event": {…} (done), "error": {"code", "message"} (retry, failed)}
 
@@ -9,8 +9,8 @@
   (a photo the Desk refuses is a finished job, not a failure); for docx.import, `import.parsed` or `import.rejected`
   (pgn_worker/docx_import.py); media.ad: `ad.ready` or `ad.rejected` (media.py); engine.setup: `profile.ready` or
   `profile.rejected` (engine.py); engine.measure: `measure.status`; engine.layout: `run.finished`, whatever the run's
-  end (done, failed with the engine's words, cancelled: launcher.py). The last two write progress lines first
-  (pgn_worker/run.py).
+  end (done, failed with the engine's words, cancelled: launcher.py); engine.onboard: `onboard.ready` or
+  `onboard.rejected` (onboard.py). The last three write progress lines first (pgn_worker/run.py).
 - **retry**: nothing was decided and the job may be run again as it is: the colour profile cannot be read or the
   conversion's environment failed (`worker.profile`), the store failed or could not be reached (`worker.store`), or it
   ran out of memory (`worker.memory`).
@@ -19,7 +19,8 @@
   original (or the dataset, config, request or snapshot) is not the one it names (`worker.checksum`), or that
   version is not in the store (`worker.missing`); the worker's own settings are missing or not valid, or its colour
   profile is not the one it was given (`worker.config`: an operator must fix the worker, the same job would fail the
-  same way); or the worker has a fault (`worker.internal`, its exception's type only).
+  same way); engine.onboard's tool crashed (`worker.onboard`), showed no progress (`worker.stalled`) or was cancelled
+  (`worker.cancelled`); or the worker has a fault (`worker.internal`, its exception's type only).
 
 Every queue option drives it the same way: Procrastinate or a queue of our own call `run()` in-process; Graphile
 Worker (Node) runs `python -m pgn_worker.run` with the job on stdin and reads the result from stdout and the exit
@@ -32,7 +33,7 @@ import re
 import threading
 from typing import Any, Callable
 
-from . import docx_import, engine, launcher, media
+from . import docx_import, engine, launcher, media, onboard
 from .engine import ConfigError
 from .home import BadRequest
 from .keys import KeyGuard, KeyRefused
@@ -44,10 +45,13 @@ from .desk import util
 JOB_FORMAT = "pageinator.worker-job/1"
 RESULT_FORMAT = "pageinator.worker-result/1"
 JOB_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", re.ASCII)
-KINDS = {"media.ingest": media.ARGS, "docx.import": docx_import.ARGS, "media.ad": media.AD_ARGS, **engine.ARGS}
+KINDS = {"media.ingest": media.ARGS, "docx.import": docx_import.ARGS, "media.ad": media.AD_ARGS, **engine.ARGS,
+         "engine.onboard": onboard.ARGS}
 CHECKS = {"media.ingest": media.check_args, "docx.import": docx_import.check_args, "media.ad": media.check_ad_args,
-          **{kind: (lambda args, kind=kind: engine.check_args(kind, args)) for kind in engine.ARGS}}
-STREAMING = ("engine.layout", "engine.measure")         # kinds that write progress lines before their result
+          **{kind: (lambda args, kind=kind: engine.check_args(kind, args)) for kind in engine.ARGS},
+          "engine.onboard": onboard.check_args}
+# kinds that write progress lines before their result
+STREAMING = ("engine.layout", "engine.measure", "engine.onboard")
 RETRY, FAILED, DONE = "retry", "failed", "done"
 MAX_MESSAGE = 2000
 
@@ -117,6 +121,9 @@ def run(job: Any, storage_for: Callable[[KeyGuard], Storage], icc_sha256: str,
             event = media.ingest(store, args, icc_sha256)
         elif kind == "media.ad":
             event = media.ad(store, args, icc_sha256)
+        elif kind == "engine.onboard":
+            settings = onboard.Settings.from_env(dict(os.environ if environ is None else environ))
+            event = onboard.run(store, args, settings, icc_sha256, progress, cancel or threading.Event())
         else:
             settings = engine.Settings.from_env(dict(os.environ if environ is None else environ))
             if kind == "engine.setup":
@@ -129,6 +136,8 @@ def run(job: Any, storage_for: Callable[[KeyGuard], Storage], icc_sha256: str,
         return result(job, FAILED, code="worker.job", message=str(e))
     except KeyRefused as e:
         return result(job, FAILED, code="worker.key", message=str(e))
+    except onboard.Failed as e:
+        return result(job, FAILED, code=e.code, message=e.message)
     except media.Mismatch as e:
         return result(job, FAILED, code="worker.checksum", message=str(e))
     except BadRequest as e:                                  # a request or home the materialiser does not take

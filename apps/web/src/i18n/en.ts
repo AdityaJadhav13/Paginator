@@ -14,6 +14,8 @@ import { NEWSROOM_EN } from "./screens/newsroom.en.ts";
 import { ARCHIVE_EN } from "./screens/archive.en.ts";
 import { BRAND_EN } from "./screens/brand.en.ts";
 import { PRINT_PROFILES_EN } from "./screens/printProfiles.en.ts";
+import { ONBOARDING_EN } from "./screens/onboarding.en.ts";
+import { PAPER_SIGNUP_EN } from "./screens/paperSignup.en.ts";
 
 export const EN = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -97,7 +99,7 @@ export const EN = {
   "language.label": "Language",
   "shell.skipLink": "Skip to main content",
   "shell.notice":
-    "Pageinator is still being built. Accounts are by invitation; no payments or press services exist here.",
+    "Pageinator is in its first months. A newspaper can apply to join, and we let each one in by hand after a call; staff join by invitation. No payments or press services exist here.",
 
   // ── The public website's header and footer (03 §4.1) ─────────────────
   "public.nav.primary": "Primary",
@@ -1291,8 +1293,8 @@ export const EN = {
   "profile.upload.sending": "Uploading: {percent}%",
   "profile.upload.cancel": "Cancel upload",
   "profile.upload.cancelled": "The upload was cancelled.",
-  "profile.upload.notZip": "Choose a ZIP file.",
-  "profile.upload.tooLarge": "This file is larger than 4 GB.",
+  "profile.upload.notZip": "This is not a ZIP file. Choose the dataset bundle Pageinator gave you: a file ending in .zip.",
+  "profile.upload.tooLarge": "This file is larger than 4 GB, the most a dataset bundle can be.",
   "profile.upload.done": "Uploaded. The engine is setting it up.",
 
   // ── The Desk's own messages (tools/desk/engine/messages.json), by code; the Marathi is the Desk's draft (strings.js) ──
@@ -1812,6 +1814,8 @@ export const EN = {
   ...ARCHIVE_EN,
   ...BRAND_EN,
   ...PRINT_PROFILES_EN,
+  ...ONBOARDING_EN,
+  ...PAPER_SIGNUP_EN,
 } as const;
 
 export type CatalogueKey = keyof typeof EN;

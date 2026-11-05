@@ -88,3 +88,47 @@ $$;
 revoke execute on function app.cancel_engine_job(uuid, text) from public;
 grant execute on function app.cancel_engine_job(uuid, text) to pgn_app;
 `;
+
+// Onboarding a paper (L4), made by the API's onboarding migration after APP_ENQUEUE_LAYOUT, as it is:
+//   - engine.onboard: queue engine-cpu (after any layout: one heavy job at a time on the machine), job key
+//     onboard:<onboarding>, 1 attempt (never retried: the API shows it working), priority 5 (after a layout, before a
+//     measure);
+//   - app.cancel_engine_job made again to take onboard:<id> too (the onboarding must be the caller's), the rest as
+//     before.
+const UUID_KEY = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const owned = (table: string) =>
+  `exists (select 1 from app.${table} t
+                 where t.org_id = cancel_engine_job.org_id and t.id = split_part(job_key, ':', 2)::uuid)`;
+
+export const APP_ENQUEUE_ONBOARD = `
+${wrapper(
+  "enqueue_engine_onboard",
+  ["paper_onboarding", "onboarding_id"],
+  `queue.add_job('engine.onboard', payload::json, queue_name => 'engine-cpu', max_attempts => 1,
+    job_key => 'onboard:' || (payload->>'onboarding_id'), priority => 5)`,
+)}
+create or replace function app.cancel_engine_job(org_id uuid, job_key text)
+returns void language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+begin
+  if org_id is null or org_id is distinct from app.current_org() then
+    raise exception 'a job for another organisation' using errcode = 'insufficient_privilege';
+  end if;
+  if job_key is null or (job_key <> 'measure:*' and job_key !~ '^(run|measure|onboard):${UUID_KEY}$') then
+    raise exception 'not a run''s, a measure''s or an onboarding''s job key' using errcode = 'invalid_parameter_value';
+  end if;
+  -- the run, the edition or the onboarding the key names must be the caller's: a definer function skips the walls
+  if job_key <> 'measure:*' and not (case split_part(job_key, ':', 1)
+      when 'run' then ${owned("layout_run")}
+      when 'measure' then ${owned("edition")}
+      else ${owned("paper_onboarding")} end) then
+    raise exception 'a job for another organisation' using errcode = 'insufficient_privilege';
+  end if;
+  if job_key <> 'measure:*' then
+    perform queue.remove_job(job_key);
+  end if;
+  perform pg_notify('engine_cancel', job_key);
+end
+$$;
+revoke execute on function app.cancel_engine_job(uuid, text) from public;
+grant execute on function app.cancel_engine_job(uuid, text) to pgn_app;
+`;

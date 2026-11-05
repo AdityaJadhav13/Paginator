@@ -146,7 +146,7 @@ export function spentJobs(tx: SystemTx, staleMs: number): Promise<ExhaustedJob[]
 export async function jobAssets(tx: SystemTx): Promise<Set<string>> {
   const { rows } = await sql<{ id: string }>`
     select right(key, 36) as id from queue._private_jobs
-    where key ~ '^(asset|import|news-draft|profile|measure|run|ad):[0-9a-f-]{36}$'`.execute(tx);
+    where key ~ '^(asset|import|news-draft|profile|measure|run|ad|onboard):[0-9a-f-]{36}$'`.execute(tx);
   return new Set(rows.map((row) => row.id));
 }
 

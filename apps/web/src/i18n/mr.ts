@@ -12,6 +12,8 @@ import { NEWSROOM_MR } from "./screens/newsroom.mr.ts";
 import { ARCHIVE_MR } from "./screens/archive.mr.ts";
 import { BRAND_MR } from "./screens/brand.mr.ts";
 import { PRINT_PROFILES_MR } from "./screens/printProfiles.mr.ts";
+import { ONBOARDING_MR } from "./screens/onboarding.mr.ts";
+import { PAPER_SIGNUP_MR } from "./screens/paperSignup.mr.ts";
 
 export const MR: Readonly<Record<CatalogueKey, string>> = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -94,7 +96,7 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   "language.label": "भाषा",
   "shell.skipLink": "मुख्य मजकुराकडे जा",
   "shell.notice":
-    "Pageinator अजून तयार होत आहे. खाती फक्त निमंत्रणावरून उघडता येतात; इथे पैसे भरण्याची किंवा छापखान्याची कोणतीही सेवा नाही.",
+    "Pageinator चे हे सुरुवातीचे महिने आहेत. वृत्तपत्र सामील होण्यासाठी अर्ज करू शकते, आणि आम्ही प्रत्येकाशी बोलून त्याला स्वतः प्रवेश देतो; कर्मचारी निमंत्रणावरून सामील होतात. इथे पैसे भरण्याची किंवा छापखान्याची कोणतीही सेवा नाही.",
 
   // ── The public website's header and footer (03 §4.1) ─────────────────
   "public.nav.primary": "मुख्य",
@@ -1295,8 +1297,8 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   "profile.upload.sending": "अपलोड होत आहे: {percent}%",
   "profile.upload.cancel": "अपलोड रद्द करा",
   "profile.upload.cancelled": "अपलोड रद्द झाले.",
-  "profile.upload.notZip": "ZIP फाइल निवडा.",
-  "profile.upload.tooLarge": "ही फाइल 4 GB पेक्षा मोठी आहे.",
+  "profile.upload.notZip": "ही ZIP फाइल नाही. Pageinator ने दिलेला डेटासेट संच निवडा: .zip ने संपणारी फाइल.",
+  "profile.upload.tooLarge": "ही फाइल 4 GB पेक्षा मोठी आहे; डेटासेट संच जास्तीत जास्त इतकाच असू शकतो.",
   "profile.upload.done": "अपलोड झाले. इंजिन ते तयार करत आहे.",
 
   // ── The Desk's own messages (tools/desk/engine/messages.json), by code; the Marathi is the Desk's draft (strings.js) ──
@@ -1818,4 +1820,6 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   ...ARCHIVE_MR,
   ...BRAND_MR,
   ...PRINT_PROFILES_MR,
+  ...ONBOARDING_MR,
+  ...PAPER_SIGNUP_MR,
 };

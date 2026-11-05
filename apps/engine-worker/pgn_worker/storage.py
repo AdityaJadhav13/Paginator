@@ -26,6 +26,11 @@ class Storage(Protocol):
         4 GiB), refused when larger than max_bytes; → the SHA-256 of the bytes written."""
         ...
 
+    def upload(self, key: str, path: Path, sha256: str, content_type: str) -> str:
+        """Writes the key from the file path (streamed: an onboarding's bundle is hundreds of MB), whose SHA-256 the
+        caller worked out; → the new version's id."""
+        ...
+
 
 class FolderStorage:
     """Keys as files under root (0700 folders, 0600 files), each with one version: the SHA-256 of its bytes."""
@@ -73,3 +78,13 @@ class FolderStorage:
         util.write_bytes(path.with_name(path.name + ".meta.json"),
                          json.dumps({"content_type": content_type}).encode("utf-8"))
         return hashlib.sha256(data).hexdigest()
+
+    def upload(self, key: str, path: Path, sha256: str, content_type: str) -> str:
+        dest = self._path(key)
+        util.ensure_dir(dest.parent)
+        with open(path, "rb") as src, util.atomic_file(dest) as out:
+            while chunk := src.read(1024 * 1024):
+                out.write(chunk)
+        util.write_bytes(dest.with_name(dest.name + ".meta.json"),
+                         json.dumps({"content_type": content_type}).encode("utf-8"))
+        return sha256

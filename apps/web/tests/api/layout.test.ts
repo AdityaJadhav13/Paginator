@@ -110,6 +110,62 @@ describe("The layout service", () => {
   });
 });
 
+describe("Onboarding a new paper (L4)", () => {
+  const ONBOARDING = {
+    id: ID,
+    state: "queued",
+    progress: null,
+    files: [{ n: 1, name: "Fictional 2026-09-01.pdf", bytes: 1000, check: null }],
+    report: null,
+    problem: null,
+    profileId: null,
+    createdBy: null,
+    createdAt: AT,
+    updatedAt: AT,
+  };
+  it("takes the routes, bodies and Idempotency-Keys of onboard.ts, and reads each answer by its schema", async () => {
+    const { layout, calls } = service((call) => {
+      if (call.url.endsWith("/test-edition")) return json(201, { editionId: ID, stories: 12 });
+      if (call.url.endsWith("/use")) return json(400, { error: { code: "onboarding_not_ready", message: "No.", requestId: "r" } });
+      if (call.method === "GET") return json(200, { current: ONBOARDING, history: [] });
+      return json(202, ONBOARDING);
+    });
+    expect(await layout.getOnboarding({ orgId: ORG, pubId: PUB })).toEqual({
+      ok: true,
+      value: { current: ONBOARDING, history: [] },
+    });
+    expect(calls[0]).toMatchObject({ method: "GET", url: `${BASE}/onboarding` });
+    await layout.startOnboarding({ orgId: ORG, pubId: PUB, uploadIds: [ID, ID, ID], idempotencyKey: "start-key" });
+    expect(calls[1]).toMatchObject({
+      method: "POST",
+      url: `${BASE}/onboarding`,
+      body: { uploadIds: [ID, ID, ID], permission: true },
+    });
+    expect(calls[1]!.headers.get("Idempotency-Key")).toBe("start-key");
+    await layout.cancelOnboarding({ orgId: ORG, pubId: PUB, id: ID });
+    expect(calls[2]).toMatchObject({ method: "POST", url: `${BASE}/onboarding/${ID}/cancel` });
+    const used = await layout.adoptOnboarding({ orgId: ORG, pubId: PUB, id: ID, idempotencyKey: "use-key" });
+    expect(!used.ok && used.error.kind === "answer" && used.error.code).toBe("onboarding_not_ready");
+    expect(calls[3]).toMatchObject({ method: "POST", url: `${BASE}/onboarding/${ID}/use` });
+    expect(calls[3]!.headers.get("Idempotency-Key")).toBe("use-key");
+    expect(await layout.makeTestEdition({ orgId: ORG, pubId: PUB, idempotencyKey: "test-key" })).toEqual({
+      ok: true,
+      value: { editionId: ID, stories: 12 },
+    });
+    expect(calls[4]).toMatchObject({ method: "POST", url: `${BASE}/onboarding/test-edition` });
+    expect(calls[4]!.headers.get("Idempotency-Key")).toBe("test-key");
+  });
+
+  it("hears the onboarding live event by its ids", () => {
+    expect(liveEventOf("onboarding", { publicationId: PUB, onboardingId: ID })).toEqual({
+      type: "onboarding",
+      publicationId: PUB,
+      onboardingId: ID,
+    });
+    expect(liveEventOf("onboarding", { publicationId: PUB })).toBeNull();
+  });
+});
+
 describe("The layout's live events", () => {
   it("reads layout and profile by their ids, and nothing else", () => {
     expect(liveEventOf("layout", { publicationId: PUB, editionId: ID, runId: null })).toEqual({

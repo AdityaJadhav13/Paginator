@@ -281,6 +281,7 @@ export interface AppEngineProfile {
   icc_sha256: string | null;
   id: Generated<string>;
   message: Json | null;
+  onboarding_id: string | null;
   org_id: string;
   plans: Json | null;
   problem: string | null;
@@ -516,6 +517,34 @@ export interface AppPageSave {
   run_id: string;
   saved_at: Generated<Timestamp>;
   saved_by: string;
+}
+
+export interface AppPaperOnboarding {
+  checks: Json | null;
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  dataset_bytes: string | null;
+  dataset_key: GeneratedAlways<string>;
+  dataset_sha256: string | null;
+  dataset_version_id: string | null;
+  files: Json;
+  heartbeat_at: Timestamp | null;
+  id: Generated<string>;
+  inputs_key: GeneratedAlways<string>;
+  inputs_sha256: string | null;
+  inputs_version_id: string | null;
+  message: string | null;
+  org_id: string;
+  params: Json | null;
+  permission_confirmed_at: Generated<Timestamp>;
+  permission_confirmed_by: string;
+  problem: string | null;
+  profile_id: string | null;
+  progress: Json | null;
+  publication_id: string;
+  report: Json | null;
+  state: Generated<string>;
+  updated_at: Generated<Timestamp>;
 }
 
 export interface AppPdfCheck {
@@ -759,9 +788,11 @@ export interface AppUpload {
   declared_type: string;
   engine_profile_id: string | null;
   expires_at: Timestamp;
+  filename: string | null;
   id: Generated<string>;
   import_id: string | null;
   key: GeneratedAlways<string>;
+  onboarding_id: string | null;
   org_id: string;
   publication_id: string;
   purpose: string;
@@ -810,6 +841,7 @@ export interface DB {
   "app.page_edit": AppPageEdit;
   "app.page_lock": AppPageLock;
   "app.page_save": AppPageSave;
+  "app.paper_onboarding": AppPaperOnboarding;
   "app.pdf_check": AppPdfCheck;
   "app.person": AppPerson;
   "app.press_test": AppPressTest;

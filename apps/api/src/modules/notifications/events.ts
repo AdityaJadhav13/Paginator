@@ -43,6 +43,7 @@ export const AppEvent = z.discriminatedUnion("type", [
   z.strictObject({ v: z.literal(1), type: z.literal("import"), org: Id, pub: Id, import: Id, user: Id }),
   z.strictObject({ v: z.literal(1), type: z.literal("layout"), org: Id, pub: Id, edition: Id, run: Id.nullable() }),
   z.strictObject({ v: z.literal(1), type: z.literal("profile"), org: Id, pub: Id, profile: Id }),
+  z.strictObject({ v: z.literal(1), type: z.literal("onboarding"), org: Id, pub: Id, onboarding: Id }),
 ]);
 export type AppEvent = z.infer<typeof AppEvent>;
 
@@ -68,13 +69,15 @@ export function messageFor(listener: Listener, event: AppEvent): Message | null 
     if (event.user !== listener.userId) return null;
     return { event: "import", data: { publicationId: event.pub, importId: event.import } };
   }
-  if (event.type === "layout" || event.type === "profile") {
+  if (event.type === "layout" || event.type === "profile" || event.type === "onboarding") {
     const here = access.publications.get(event.pub) ?? { roles: [], grants: [] };
     if (event.type === "layout") {
       if (reach("pages.view", access.orgRole, here) === null) return null;
       return { event: "layout", data: { publicationId: event.pub, editionId: event.edition, runId: event.run } };
     }
     if (reach("settings.view", access.orgRole, here) === null) return null;
+    if (event.type === "onboarding")
+      return { event: "onboarding", data: { publicationId: event.pub, onboardingId: event.onboarding } };
     return { event: "profile", data: { publicationId: event.pub, profileId: event.profile } };
   }
   if (event.type === "edition") {

@@ -9,7 +9,8 @@
 //                      the page editor's edit gateway +790
 //   PGN_E2E_KEEP=1     keeps the logs folder (its path is printed)
 // Of a shell's other PGN_* settings only these reach the processes, so a real layout can run (without them the engine's
-// jobs refuse): PGN_ENGINE_PYTHON (the engine environment's Python), PGN_ENGINE_STALL_S, PGN_LAYOUT_TIMEOUT_S.
+// jobs refuse): PGN_ENGINE_PYTHON (the engine environment's Python), PGN_ENGINE_STALL_S, PGN_LAYOUT_TIMEOUT_S, and
+// PGN_ONBOARD_PYTHON (the onboarding tool's Python: the worker venv's).
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -119,7 +120,7 @@ export default async function stack(): Promise<() => Promise<void>> {
     );
 
   // the settings every process gets: no inherited PGN_* (a developer's shell) but the engine's, only these
-  const kept = new Set(["PGN_ENGINE_PYTHON", "PGN_ENGINE_STALL_S", "PGN_LAYOUT_TIMEOUT_S"]);
+  const kept = new Set(["PGN_ENGINE_PYTHON", "PGN_ENGINE_STALL_S", "PGN_LAYOUT_TIMEOUT_S", "PGN_ONBOARD_PYTHON"]);
   const base = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith("PGN_") || kept.has(name)),
   );

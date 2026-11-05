@@ -24,12 +24,14 @@
 //       profile.*, measure.status, run.*, ad.*, and a job.failed of engine.setup, engine.measure, engine.layout or
 //                     media.ad → hosted layout's (src/modules/layout/inbox.ts applyLayoutEvent); the inbox's asset_id
 //                     is the profile's, the edition's, the run's or the ad slot's artwork row's id.
+//       onboard.*, and a job.failed of engine.onboard → onboarding's (src/modules/onboarding/inbox.ts
+//                     applyOnboardEvent); the inbox's asset_id is the onboarding's id.
 //   - The sweep, at start-up and every 5 minutes, so every asset settles even when the queue cannot: jobs out of
 //     attempts that nobody settled (exhaustedJobs: unlocked, or locked longer than STALE_MS) are written to the inbox as
 //     job.failed worker.lost (dropped when the job had reported), then removed; and an asset (or a Word import) still
 //     waiting after DEADLINE_MS with no job and no waiting event gets the same (a news draft too; and a profile setting
 //     up, an ad's artwork preparing, a measure waiting and a queued layout run); a run whose worker stopped reporting
-//     for RUN_STALE_MS (10 minutes) too, which the inbox then fails in the Desk's words (m.run.restarted). It reads and removes jobs as the system reader
+//     for RUN_STALE_MS (10 minutes) too, which the inbox then fails in the Desk's words (m.run.restarted); an onboarding queued with no job left, or working with no report for RUN_STALE_MS (worker.stalled), too. It reads and removes jobs as the system reader
 //     'engine-sweep' (plain pgn_app sees no job), and writes under each job's organisation. Two API instances may
 //     sweep at once, and a sweep may stop between a write and a removal: the inbox's unique job id and the
 //     conditional delete make a repeat's writes no-ops. It counts and logs only the failures it wrote.
@@ -67,6 +69,8 @@ import { applyNewsEvent, isNewsEvent } from "../news/inbox.ts";
 import { applyImportEvent } from "./imports.ts";
 import { applyLayoutEvent, isLayoutEvent, layoutTarget } from "../layout/inbox.ts";
 import { stalledRuns, strandedLayout } from "../../db/layout.ts";
+import { strandedOnboardings } from "../../db/onboarding.ts";
+import { applyOnboardEvent, isOnboardEvent, onboardTarget } from "../onboarding/inbox.ts";
 
 /** The system's tenant has no person: the nil UUID (audit events by the system record no actor). */
 const NOBODY = "00000000-0000-0000-0000-000000000000";
@@ -82,6 +86,7 @@ const BATCH = 50;
  * deferEvent's backoff (5 s doubling to 10 minutes), about 2.2 hours of tries. */
 export const MAX_TRIES = 20;
 const LOST = { code: "worker.lost", message: "the job was lost: its worker stopped, or its report never arrived" };
+const STALLED = { code: "worker.stalled", message: "the job's worker stopped reporting its progress" };
 
 const tenantFor = (orgId: string, pubIds: string[], requestId: string): Tenant => ({
   orgId,
@@ -135,6 +140,12 @@ async function decide(
   const parsed = EngineEvent.safeParse(row.payload);
   if (!parsed.success || parsed.data.kind !== row.kind) return refuse("contract");
   const event = parsed.data;
+  if (isOnboardEvent(event)) {
+    if (event.org_id !== tenant.orgId || event.pub_id !== tenant.pubIds[0] || onboardTarget(event) !== row.asset_id)
+      return refuse("mismatch");
+    const out = await applyOnboardEvent(tx, tenant, event, row.job_id, log);
+    return typeof out === "string" ? out : refuse(out.refuse);
+  }
   if (isLayoutEvent(event)) {
     if (event.org_id !== tenant.orgId || event.pub_id !== tenant.pubIds[0] || layoutTarget(event) !== row.asset_id)
       return refuse("mismatch");
@@ -264,6 +275,7 @@ const TARGET_FIELD: Record<(typeof JOB_KINDS)[number], string> = {
   "engine.measure": "edition_id",
   "engine.layout": "run_id",
   "media.ad": "artwork_id",
+  "engine.onboard": "onboarding_id",
 };
 /** A layout run whose worker has not reported (run.progress, at least every 30 s) for this long is lost: the
  * reconciler fails it in the Desk's words (m.run.restarted). */
@@ -345,6 +357,19 @@ export async function sweep(
         });
         if (!wrote) continue;
         log.warn({ target: left.id, kind: left.kind }, "a layout job with no worker left was settled as lost");
+        settled += 1;
+      }
+      // onboarding: queued with no job left, or working with a worker that stopped reporting (worker.stalled)
+      for (const left of await strandedOnboardings(
+        tx,
+        limits.deadlineMs,
+        limits.runStaleMs ?? RUN_STALE_MS,
+        withJobs,
+      )) {
+        const lost = lostEvent(orgId, left.publication_id, left.id, "engine.onboard");
+        const payload = left.stalled ? { ...lost, ...STALLED } : lost;
+        if (!(await reportLost(tx, { orgId, assetId: left.id, payload }))) continue;
+        log.warn({ onboarding: left.id }, "an onboarding with no worker left was settled as lost");
         settled += 1;
       }
       for (const left of await strandedDrafts(tx, limits.deadlineMs, withJobs)) {

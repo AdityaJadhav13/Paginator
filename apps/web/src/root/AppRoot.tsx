@@ -19,6 +19,7 @@ import { SessionProvider } from "../features/auth/SessionProvider.tsx";
 import { SignedOutRedirect } from "../features/auth/SignedOutRedirect.tsx";
 import { SignInScreen } from "../features/auth/SignInScreen.tsx";
 import { SignUpScreen } from "../features/auth/SignUpScreen.tsx";
+import { PaperOnboardingScreen } from "../features/paper-onboarding/PaperOnboardingScreen.tsx";
 import { VerifyEmailScreen } from "../features/auth/VerifyEmailScreen.tsx";
 import { TwoStepScreen } from "../features/auth/TwoStepScreen.tsx";
 import { OrgHome } from "../features/people/OrgHome.tsx";
@@ -142,13 +143,16 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                 <Route path={PATTERNS.security} element={<SecurityPage />} />
                 <Route path={PATTERNS.contact} element={<ContactPage />} />
                 <Route path={PATTERNS.login} element={<SignInScreen />} />
-                <Route path={PATTERNS.signup} element={<SignUpScreen />} />
+                <Route path={PATTERNS.signup} element={<SignUpScreen service={activeEnvironment.paperSignup} />} />
                 <Route path={PATTERNS.forgotPassword} element={<ForgotPasswordScreen />} />
                 <Route path={PATTERNS.resetPassword} element={<ResetPasswordScreen />} />
                 <Route path={PATTERNS.verify} element={<VerifyEmailScreen />} />
                 <Route path={PATTERNS.invitation} element={<InvitationScreen />} />
                 <Route path={PATTERNS.twoStep} element={<TwoStepScreen />} />
-                {DEVELOPMENT && <Route path={PATTERNS.onboarding} element={measured(placeholder("onboarding"))} />}
+                <Route
+                  path={PATTERNS.onboarding}
+                  element={measured(<PaperOnboardingScreen service={activeEnvironment.paperSignup} />)}
+                />
                 <Route path="*" element={measured(<NotFoundPage />)} />
               </Route>
 

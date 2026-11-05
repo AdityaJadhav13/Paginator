@@ -36,10 +36,12 @@ export async function createUpload(
   who: Who,
   publicationId: string,
   upload: {
-    purpose: "story_photo" | "library" | "docx" | "engine_dataset";
+    purpose: "story_photo" | "library" | "docx" | "engine_dataset" | "onboard_pdf";
     type: string;
     bytes: number;
     expiresSeconds: number;
+    /** kept for a past edition's PDF only (its edition's date may be read from it) */
+    filename?: string;
   },
 ) {
   return tx
@@ -51,6 +53,7 @@ export async function createUpload(
       purpose: upload.purpose,
       declared_type: upload.type,
       declared_bytes: String(upload.bytes), // bigint: a dataset bundle may be up to 4 GiB
+      filename: upload.purpose === "onboard_pdf" ? (upload.filename ?? null) : null,
       expires_at: sql`now() + make_interval(secs => ${upload.expiresSeconds})`,
     })
     .returning(["id", "key", "expires_at"])
@@ -69,6 +72,8 @@ export async function findUpload(tx: Tx, publicationId: string, uploadId: string
       "asset_id",
       "import_id",
       "engine_profile_id",
+      "onboarding_id",
+      "filename",
       "declared_type",
       "declared_bytes",
     ])

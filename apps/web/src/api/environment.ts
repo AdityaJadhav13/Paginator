@@ -6,6 +6,7 @@ import type { ServiceEnvironment } from "../services/index.ts";
 import { createApiAccountService } from "./account-service.ts";
 import { createApiAuditService } from "./audit-service.ts";
 import { createApiContactService } from "./contact-service.ts";
+import { createApiPaperSignupService } from "./paper-signup-service.ts";
 import { createApiClient, type ApiClientOptions } from "./client.ts";
 import { createApiCommentService } from "./comment-service.ts";
 import { createApiLiveService, type LiveOptions } from "./live.ts";
@@ -67,6 +68,7 @@ export function createApiEnvironment(
     stories: createApiStoryService(client),
     editions: createApiEditionService(client),
     contact: createApiContactService(client),
+    paperSignup: createApiPaperSignupService(client),
     media: createApiMediaService(client, { ...(options.fetch ? { fetch: options.fetch } : {}), onSignedOut: signedOut }),
     news: createApiNewsService(client),
     layout: createApiLayoutService(client, options.fetch ? { fetch: options.fetch } : {}),

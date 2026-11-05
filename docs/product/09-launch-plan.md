@@ -141,6 +141,19 @@ Each phase ends with something the newsroom uses on real work.
 - **Running many papers:** multi-paper tenancy and billing (Razorpay).
 - **Website:** public claims updated as each capability becomes true.
 
+**As built (onboarding, 2026-11-05; steps O1–O7 of the onboarding plan; details in doc 10 "L4 onboarding"):** a new
+paper can apply on `/signup`, and is let in by hand (`review-paper` on the server); its Owner then uploads 3–40 past
+edition PDFs on the Templates or Engine profile screen. The engine checks each file (plain English and Marathi
+reasons), learns the paper's page size, column grid and template pages with a copy of the Phase-0 chain
+(`tools/onboard`, byte-identical to the frozen code on the pilot and on fictional papers), and the existing engine
+set-up and Templates screen follow; "Make a test layout" lays out fictional sample stories. All of it is deterministic.
+**Proven:** the pilot's layout is unchanged byte for byte (config, cache keys and page PDFs), and fictional English
+(6-column) and Marathi (5-column) papers went through the hosted flow on a real stack, from sign-up and approval to a
+laid-out test edition (the Marathi test edition's fourth page was left empty there; after the fix it was checked with
+the engine directly, not again on the stack). **Not proven:** any real paper other than the pilot (other programs, legacy
+fonts, several grids), house fonts, a press test per paper; G3 still decides when other papers may be offered it.
+Our review per paper: `docs/runbooks/onboard-a-new-paper.md`. Not built: the template editor, billing.
+
 ### All along: the TypeScript engine
 M0.5 → M8 as in 08 §15. Each proven piece moves into the browser for instant fit while typing. The Python service
 stays the reference.

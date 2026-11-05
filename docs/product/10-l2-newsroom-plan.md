@@ -294,6 +294,41 @@ This milestone deliberately puts the queue, the worker, the event inbox and S3 i
 | L2.4 | The gateway |
 | L2.5 | Archive bucket with Object Lock, deadline-night runbook, on-call cover, the light penetration test (O-m) |
 
+### L4 onboarding (owner's order 2026-11-05; built ahead of L4, released only after G3)
+
+**As built:** migrations `2026_12_07_0001_onboarding.ts` and `2026_12_07_0002_paper_signup.ts`; minor findings are in
+doc 11 (L4-001 onwards); our part per paper is `docs/runbooks/onboard-a-new-paper.md`.
+- **Sign-up for a new paper** (`apps/api/src/modules/signup`, `packages/contracts/src/signup.ts`): `POST
+  /api/v1/signup/paper` keeps an application (`identity.paper_application`: no organisation yet, so outside `app.` and
+  readable by the API's server connection only) and emails a link (only its SHA-256 kept, 24 h, once); protected like
+  the contact form (per-address and global limits, a trap field, a minimum fill time, the same answer whatever the
+  address). Once confirmed it waits; an operator runs `review-paper -- list | approve <id> | refuse <id> [reason]`
+  (`apps/api/scripts/review-paper.ts`): approve runs the existing bootstrap (organisation, Owner, first publication,
+  audited) and is safe to run again after a crash; who decided and when is kept. `/onboarding` is a real screen.
+- **The upload** (`apps/web/src/features/onboarding`, on Templates and Engine profile, `settings.edit`): 3–40 PDFs
+  (upload purpose `onboard_pdf`, at most 200 MiB each), each with its progress, and the paper's permission ticked;
+  `POST …/onboarding` copies them out of quarantine to `onboarding/<id>/pdfs/NN.pdf`, writes `inputs.json` (each PDF
+  pinned by version and SHA-256) and enqueues `engine.onboard` with it pinned; one active per publication (a partial
+  unique index), cancel (`app.cancel_engine_job`), a heartbeat and the sweep's stall (`worker.stalled`, 10 min).
+- **The job** (`apps/engine-worker/pgn_worker/onboard.py`, queue engine-cpu, priority 5, one attempt, 2 h): downloads
+  and checks every byte, runs `tools/onboard/onboard.py build` (the worker's own venv; head1 in the engine's) with a
+  bare environment, streams `onboard.progress`, packs a deterministic ZIP to `onboarding/<id>/dataset.zip` (the
+  worker's IAM may write only that there) and answers `onboard.ready` (each file's check, the report) or
+  `onboard.rejected` (a code the web says in English and Marathi).
+- **`tools/onboard`:** the Phase-0 chain copied out of the frozen tree (each change marked `# onboard:`: outputs into the
+  bundle, the split date from the data — the oldest ⌈2n/3⌉ editions calibrate —, Latin papers, no hand-written
+  manifest); the parity test proves the copy byte-identical to the frozen scripts on a fictional paper (CI) and on the
+  pilot (90 of 90 files, locally). Intake checks per file (scanned, fonts missing or Type 3, no Unicode, untested
+  program, page size mix, duplicate, no date) and automatic exclusion of unreadable frames (on the pilot 42 of the 43
+  hand-made exclusions, 3.3 % of frames; above 15 % a person must look).
+- **Per paper in the engine** (`tools/desk/engine/deskprofile.py`, `deskcommon.paper`): a dataset's own
+  `house_profile.json` and `paper.json` replace the pilot's grid, spacing, script and thresholds at run time (gen1 and
+  compose_page stay frozen, imported read-only); without them nothing changes — the pilot's config, cache keys and page
+  PDFs are byte-identical.
+- **Use this design** (`POST …/onboarding/:id/use`) copies the bundle to a new engine profile and runs the existing
+  `engine.setup` unchanged; **Make a test layout** (`POST …/onboarding/test-edition`) makes an edition of 14 fictional
+  stories (English or Marathi) for the existing layout button.
+
 ---
 
 ## 2. Architecture

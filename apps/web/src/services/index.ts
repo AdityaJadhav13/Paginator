@@ -48,6 +48,13 @@ export type {
 } from "./media-service.ts";
 export type { ContactConnection, ContactOutcome, ContactRequestDto, ContactService } from "./contact-service.ts";
 export type {
+  PaperConfirmOutcome,
+  PaperDetailsDto,
+  PaperSignupOutcome,
+  PaperSignupRequestDto,
+  PaperSignupService,
+} from "./paper-signup-service.ts";
+export type {
   DraftLengthDto,
   NewsDraftDto,
   NewsItemDto,
@@ -69,8 +76,11 @@ export type {
   LayoutPageDto,
   LayoutRunDto,
   LayoutService,
+  OnboardingDto,
+  OnboardingViewDto,
   SectionDto,
   SectionListDto,
+  TestEditionDto,
 } from "./layout-service.ts";
 export type {
   EditChangeDto,

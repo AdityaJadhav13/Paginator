@@ -7,6 +7,10 @@
 !tools/desk/deskserver
 !tools/desk/engine
 !tools/desk/test/test_docx.py
+!tools/onboard/chain
+!tools/onboard/onboard.py
+!tools/onboard/intake.py
+!tools/onboard/autocorrect.py
 !tools/oracle/v0
 !experiments/phase0/compose1
 !experiments/phase0/compose2

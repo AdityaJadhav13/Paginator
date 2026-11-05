@@ -9,9 +9,11 @@
 // missing, the worker is not healthy, or a job found the worker misconfigured (worker.config): an operator's fault.
 //   PGN_DB_HOST, PGN_DB_PORT (5432), PGN_DB_NAME, PGN_ENGINE_PASSWORD; PGSSLMODE as node-postgres reads it
 //   PGN_QUEUE_CONCURRENCY (2), PGN_RUNNER_TIMEOUT_S (180), PGN_WORKER_PYTHON (python), PGN_WORKER_DIR (the runner's cwd)
-//   PGN_LAYOUT_TIMEOUT_S (3600: engine.layout's limit; engine.setup has 1800 s, engine.measure 900 s), and for the
-//   runner PGN_ENGINE_PYTHON (the layout engine's Python) and PGN_ENGINE_STALL_S (how long an engine may show no
-//   progress; the runner's default when unset)
+//   PGN_LAYOUT_TIMEOUT_S (3600: engine.layout's limit; engine.setup has 1800 s, engine.measure 900 s, engine.onboard
+//   7200 s: 40 editions of up to 16 pages, about 640 pages at the pilot's measured 3–5 min per 68 pages, plus the
+//   downloads, the packing and the upload, with room to spare), and for the runner PGN_ENGINE_PYTHON (the layout
+//   engine's Python), PGN_ENGINE_STALL_S (how long an engine may show no progress; the runner's default when unset)
+//   and PGN_ONBOARD_PYTHON (the onboarding tool's Python)
 //   and the runner's own settings (PGN_S3_*, PGN_ICC_SHA256, PAGEINATOR_ICC, PGN_WORKER_HOMES: runnerEnv passes only those)
 //   the news finder's Claude: ANTHROPIC_API_KEY (none: the AI part is off, collection still works; never passed to
 //   the Python runner), PGN_AI_MODEL (claude-opus-5-5), PGN_AI_INR_PER_USD (88: the rupee price of a dollar, for the
@@ -66,6 +68,7 @@ export function settingsFrom(env: NodeJS.ProcessEnv): QueueSettings {
         "engine.layout": whole("PGN_LAYOUT_TIMEOUT_S", "3600", 86_400) * 1000,
         "engine.setup": 1_800_000,
         "engine.measure": 900_000,
+        "engine.onboard": 7_200_000,
       },
     },
   };

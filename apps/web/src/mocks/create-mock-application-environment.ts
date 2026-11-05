@@ -25,9 +25,11 @@ import type {
   UserQueryService,
   WorkspaceAccessService,
   WorkspaceQueryService,
+  PaperSignupService,
 } from "../services/index.ts";
 import type { MockScenarioController } from "./scenarios.ts";
 import { createMockContact, type MockContactController } from "./create-mock-contact.ts";
+import { createMockPaperSignup, type MockPaperSignupController } from "./create-mock-paper-signup.ts";
 import type { MockLiveController } from "./create-mock-live.ts";
 
 /** The whole app on test doubles: the placeholder workspace's fictional data and the session double. */
@@ -55,6 +57,8 @@ export interface MockApplicationEnvironment extends ServiceEnvironment {
   readonly scenarios: MockScenarioController;
   readonly sessionController: MockSessionController;
   readonly contactController: MockContactController;
+  readonly paperSignup: PaperSignupService;
+  readonly paperSignupController: MockPaperSignupController;
   readonly invalidatePendingSessionMutations: () => void;
   readonly getSessionMutationGeneration: () => number;
   readonly onSignedOut: (listener: () => void) => () => void;
@@ -67,6 +71,7 @@ export function createMockApplicationEnvironment(
   const { users, workspace, scenarios, intercept } = createMockServiceEnvironment(options);
   const sessionEnvironment = createMockSessionEnvironment({ intercept });
   const { contact, contactController } = createMockContact();
+  const { paperSignup, paperSignupController } = createMockPaperSignup();
   return {
     users,
     workspace,
@@ -74,10 +79,13 @@ export function createMockApplicationEnvironment(
     ...sessionEnvironment,
     contact,
     contactController,
+    paperSignup,
+    paperSignupController,
     reset() {
       scenarios.reset();
       sessionEnvironment.sessionController.reset();
       contactController.reset();
+      paperSignupController.reset();
     },
   };
 }

@@ -24,9 +24,10 @@ REPO = Path(__file__).resolve().parents[2]
 # the frozen code the engine imports (L2.3), the 22 stand-in fonts among it; never experiments/phase0/published1
 ENGINE_CODE = ("tools/oracle/v0/", *(f"experiments/phase0/{d}/" for d in (
     "compose1", "compose2", "compose3", "gen1", "head1", "page1", "pdfx1", "typeset_harness", "results/page1")))
-TAKEN = ("tools/desk/deskserver/", "tools/desk/engine/", "apps/engine-worker/pgn_worker/", "apps/engine-queue/src/",
-         "packages/contracts/src/", *ENGINE_CODE)
-TAKEN_FILES = ("apps/engine-worker/requirements.lock", "apps/engine-queue/package.json", "packages/contracts/package.json")
+TAKEN = ("tools/desk/deskserver/", "tools/desk/engine/", "tools/onboard/chain/", "apps/engine-worker/pgn_worker/",
+         "apps/engine-queue/src/", "packages/contracts/src/", *ENGINE_CODE)
+TAKEN_FILES = ("apps/engine-worker/requirements.lock", "apps/engine-queue/package.json", "packages/contracts/package.json",
+               "tools/onboard/onboard.py", "tools/onboard/intake.py", "tools/onboard/autocorrect.py")
 ROOT = "opt/pageinator/"
 VENV = ROOT + "venv/"
 ENGINE_VENV = ROOT + "engine-venv/"             # the engine's environment: the frozen oracle lock (L2.3)

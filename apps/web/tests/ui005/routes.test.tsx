@@ -38,10 +38,10 @@ describe("Route ownership is preserved", () => {
     });
   }
 
-  it("/onboarding still renders the UI006 placeholder (development only)", async () => {
+  it("/onboarding renders the new paper's Owner's first screen (tests/paper-signup)", async () => {
     const { container } = renderPublic("/onboarding");
-    await screen.findByRole("heading", { level: 1, name: "Onboarding" });
-    expect(container).toHaveTextContent("UI006");
+    await screen.findByRole("heading", { level: 1, name: "Welcome to Pageinator" });
+    expect(container).not.toHaveTextContent("UI006");
   });
 });
 

@@ -12,8 +12,11 @@ import {
   EngineProfileList,
   FileLink,
   LayoutRun,
+  Onboarding,
+  OnboardingView,
   SectionList,
   TemplatesView,
+  TestEditionMade,
 } from "@pageinator/contracts";
 import type { ApiProblem, LayoutService, ServiceResult } from "../services/index.ts";
 import type { ApiClient, ApiResult } from "./client.ts";
@@ -92,6 +95,30 @@ export function createApiLayoutService(
     },
     async changeSection({ orgId, pubId, id, change }) {
       return read(SectionList, await client.patch(`${pub(orgId, pubId)}/sections/${encodeURIComponent(id)}`, change));
+    },
+    async getOnboarding({ orgId, pubId }) {
+      return read(OnboardingView, await client.get(`${pub(orgId, pubId)}/onboarding`));
+    },
+    async startOnboarding({ orgId, pubId, uploadIds, idempotencyKey }) {
+      return read(
+        Onboarding,
+        await client.post(`${pub(orgId, pubId)}/onboarding`, { uploadIds, permission: true }, { idempotencyKey }),
+      );
+    },
+    async cancelOnboarding({ orgId, pubId, id }) {
+      return read(Onboarding, await client.post(`${pub(orgId, pubId)}/onboarding/${encodeURIComponent(id)}/cancel`, {}));
+    },
+    async adoptOnboarding({ orgId, pubId, id, idempotencyKey }) {
+      return read(
+        EngineProfile,
+        await client.post(`${pub(orgId, pubId)}/onboarding/${encodeURIComponent(id)}/use`, {}, { idempotencyKey }),
+      );
+    },
+    async makeTestEdition({ orgId, pubId, idempotencyKey }) {
+      return read(
+        TestEditionMade,
+        await client.post(`${pub(orgId, pubId)}/onboarding/test-edition`, {}, { idempotencyKey }),
+      );
     },
     async loadFile({ orgId, pubId, runId, name, signal }) {
       const link = await service.fileLink({ orgId, pubId, runId, name });

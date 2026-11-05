@@ -11,10 +11,14 @@
 // queue stopping during a layout is reported as job.failed worker.restarted: the run cannot go on in a later attempt,
 // so the API fails it with the Desk's RESTARTED words at once rather than after its sweep. (The launcher's answer then,
 // run.finished cancelled, would say a person cancelled it.) Setup, measure and media.ad give the attempt back as today.
+// engine.onboard (L4) is as engine.layout: one attempt, its progress lines (onboard.progress) reported as they come,
+// its lock kept fresh, a user's cancel (key onboard:<id>) stopping it with nothing reported (it answers no event for a
+// cancel), and the queue stopping during it reported as job.failed worker.restarted.
 import {
   DocxImportPayload,
   EngineLayoutPayload,
   EngineMeasurePayload,
+  EngineOnboardPayload,
   EngineSetupPayload,
   MediaAdPayload,
   EngineEvent,
@@ -78,17 +82,25 @@ const KINDS = {
     progress: ["run.progress", "run.page"],
   },
   "media.ad": { payload: MediaAdPayload, target: "artwork_id", events: ["ad.ready", "ad.rejected"] },
+  "engine.onboard": {
+    payload: EngineOnboardPayload,
+    target: "onboarding_id",
+    events: ["onboard.ready", "onboard.rejected"],
+    progress: ["onboard.progress"],
+  },
 } as const;
 /** The kinds whose lock is refreshed while they run (they may outlast the runner's default limit). */
-const LONG: ReadonlySet<string> = new Set(["engine.setup", "engine.measure", "engine.layout"]);
+const LONG: ReadonlySet<string> = new Set(["engine.setup", "engine.measure", "engine.layout", "engine.onboard"]);
+/** The kinds run once: a later attempt would start again what the API may have shown as going. */
+const ONCE: ReadonlySet<string> = new Set(["engine.layout", "engine.onboard"]);
 type Kind = keyof typeof KINDS;
 
 /** What a payload that is not ids-only must still name for its target to settle. */
 const Target = z.object({ org_id: OrgId, pub_id: Uuid7, target_id: Uuid7 });
 type Target = z.infer<typeof Target>;
 
-/** The target an event names (its asset, its import, the profile, the edition, the ad slot's row, the layout or news
- * run or the news draft). An ad's event names its asset too: its target is the slot's row. */
+/** The target an event names (its asset, its import, the profile, the edition, the ad slot's row, the onboarding, the
+ * layout or news run or the news draft). An ad's event names its asset too: its target is the slot's row. */
 export function targetOf(event: EngineEvent): string {
   if (event.kind === "job.failed") return event.target_id;
   if ("artwork_id" in event) return event.artwork_id;
@@ -96,6 +108,7 @@ export function targetOf(event: EngineEvent): string {
   if ("import_id" in event) return event.import_id;
   if ("profile_id" in event) return event.profile_id;
   if ("edition_id" in event) return event.edition_id;
+  if ("onboarding_id" in event) return event.onboarding_id;
   return "run_id" in event ? event.run_id : event.draft_id;
 }
 
@@ -166,8 +179,8 @@ export function engineTask(
       return settle(out.result.event);
     }
     if (out.code === "worker.config") misconfigured();
-    if (kind === "engine.layout") {
-      // never run twice: a later attempt would lay the edition out again from a run the API may have shown as going
+    if (ONCE.has(kind)) {
+      // never run twice: a later attempt would start again (a layout, an onboarding) what the API may show as going
       if (shutdown) return settle(failed(kind, target, "worker.restarted", "the queue stopped while the run ran"));
       return settle(failed(kind, target, out.code, out.message));
     }
@@ -297,6 +310,7 @@ export function taskList(
     "engine.measure": engine("engine.measure"),
     "engine.layout": engine("engine.layout"),
     "media.ad": engine("media.ad"),
+    "engine.onboard": engine("engine.onboard"),
     "news.collect": newsTask("news.collect", news, report),
     "news.draft": newsTask("news.draft", news, report),
   };

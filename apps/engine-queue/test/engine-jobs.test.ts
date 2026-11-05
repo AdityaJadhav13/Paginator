@@ -14,6 +14,9 @@ import {
   EDITION,
   finished,
   measured,
+  ONBOARDING,
+  onboardProgress,
+  onboardRejected,
   PAYLOADS,
   PROFILE,
   profileRejected,
@@ -29,12 +32,14 @@ const KEYS: Record<EngineKind, string> = {
   "engine.measure": `measure:${EDITION}`,
   "engine.layout": `run:${RUN}`,
   "media.ad": `ad:${ARTWORK}`,
+  "engine.onboard": `onboard:${ONBOARDING}`,
 };
 const TARGETS: Record<EngineKind, string> = {
   "engine.setup": PROFILE,
   "engine.measure": EDITION,
   "engine.layout": RUN,
   "media.ad": ARTWORK,
+  "engine.onboard": ONBOARDING,
 };
 
 type Fake = (
@@ -92,6 +97,8 @@ describe("the engine's events and their targets", () => {
     expect(targetOf(finished())).toBe(RUN);
     expect(targetOf(runProgress())).toBe(RUN);
     expect(targetOf(adRejected())).toBe(ARTWORK);
+    expect(targetOf(onboardRejected())).toBe(ONBOARDING);
+    expect(targetOf(onboardProgress())).toBe(ONBOARDING);
   });
 
   it("reports each kind's done event, and anything else as job.failed for its target", async () => {
@@ -100,6 +107,7 @@ describe("the engine's events and their targets", () => {
       ["engine.measure", measured()],
       ["engine.layout", finished("done")],
       ["media.ad", adRejected()],
+      ["engine.onboard", onboardRejected()],
     ];
     for (const [kind, event] of cases) {
       const ok = await task(kind, answer(event));
@@ -136,12 +144,13 @@ describe("the engine's events and their targets", () => {
     ]);
   });
 
-  it("runs the queue's six kinds", () => {
+  it("runs the queue's kinds", () => {
     expect(Object.keys(taskList(settings, async () => {})).sort()).toEqual(
       [
         "docx.import",
         "engine.layout",
         "engine.measure",
+        "engine.onboard",
         "engine.setup",
         "media.ad",
         "media.ingest",
@@ -191,6 +200,47 @@ describe("engine.layout runs once", () => {
   it("does not report a runner's answer after its time limit as what happened", async () => {
     const r = await task("engine.layout", answer(finished("cancelled"), { stoppedBy: "worker.timeout" }));
     expect(failedWith(r.reported)).toEqual(["worker.timeout"]);
+  });
+});
+
+describe("engine.onboard runs once, as a layout", () => {
+  it("settles a retry outcome, and the queue stopping, as job.failed though attempts remain", async () => {
+    const r = await task("engine.onboard", async () => ({ outcome: "retry", code: "worker.store", message: "x" }), {
+      max: 3,
+    });
+    expect([r.thrown, failedWith(r.reported)]).toEqual([null, ["worker.store"]]);
+    const shutdown = new AbortController();
+    const s = await task(
+      "engine.onboard",
+      async () => (shutdown.abort(), { outcome: "retry", code: "worker.cancelled", message: "x" }),
+      { shutdown },
+    );
+    expect(s.reported.map(([e]) => e.kind === "job.failed" && [e.code, e.job_kind, e.target_id])).toEqual([
+      ["worker.restarted", "engine.onboard", ONBOARDING],
+    ]);
+  });
+
+  it("reports its progress lines under <job>:<seq>, and nothing on a user's cancel (onboard:<id>)", async () => {
+    const p = await task("engine.onboard", async (_job, _s, _signal, onProgress) => {
+      onProgress?.(progressLine(onboardProgress(1), 1, "7"));
+      onProgress?.(progressLine(runProgress(), 2, "7")); // a layout's line in an onboarding
+      return { outcome: "done", result: doneResult(onboardRejected(), "7") };
+    });
+    expect(p.reported.map(([e, id]) => [e.kind, id])).toEqual([
+      ["onboard.progress", "7:1"],
+      ["onboard.rejected", "7"],
+    ]);
+    const cancels = new Cancels();
+    const c = await task(
+      "engine.onboard",
+      async (_job, _s, signal) => {
+        expect(cancels.cancel(`onboard:${ONBOARDING}`)).toBe(1);
+        expect(signal?.aborted).toBe(true);
+        return { outcome: "retry", code: "worker.cancelled", message: "x" };
+      },
+      { cancels },
+    );
+    expect([c.reported, c.thrown]).toEqual([[], null]);
   });
 });
 
@@ -312,7 +362,7 @@ describe("progress lines", () => {
 describe("long jobs keep their lock fresh", () => {
   it("refresh their job's and their named queue's lock every minute while they run, and stop after", async () => {
     vi.useFakeTimers();
-    for (const kind of ["engine.setup", "engine.measure", "engine.layout", "media.ad"] as const) {
+    for (const kind of ["engine.setup", "engine.measure", "engine.layout", "engine.onboard", "media.ad"] as const) {
       let end: (o: RunOutcome) => void = () => {};
       const running = task(kind, () => new Promise((r) => (end = r)));
       await vi.advanceTimersByTimeAsync(HEARTBEAT_MS * 2 + 10);

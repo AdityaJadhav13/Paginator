@@ -285,8 +285,10 @@ def _plan(pages: int, back: bool, got: dict) -> dict:
                       "spare_share": float(needs.get("spare_share", 0))}}
 
 
-def grid() -> dict:
-    g = json.loads(HOUSE_PROFILE.read_text(encoding="utf-8"))["grid"]
+def grid(ds: Path) -> dict:
+    """The dataset's own grid (its house_profile.json, a paper onboarded from its PDFs), else the repository's."""
+    own = ds / "house_profile.json"
+    g = json.loads((own if own.is_file() and not own.is_symlink() else HOUSE_PROFILE).read_text(encoding="utf-8"))["grid"]
     return {"columns": g["columns"], "column_width_mm": g["column_width_mm"], "gutter_mm": g["gutter_mm"]}
 
 
@@ -352,6 +354,6 @@ def setup(storage: Storage, args: dict, settings: Settings, icc_sha256: str = ""
                        "bytes": len(body)},
             "engine_version": str(cfg.get("engine") or ENGINE_VERSION)[:200],
             "templates": {str(k)[:40]: str(v)[:400] for k, v in (cfg.get("templates") or {}).items()},
-            "grid": grid(), "plans": plans,
+            "grid": grid(ds), "plans": plans,
             "candidates": cfg["candidates"] if isinstance(cfg.get("candidates"), dict) else None,
             "icc_sha256": icc_sha256 if SHA256.fullmatch(icc_sha256) else None}

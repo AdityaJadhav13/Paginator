@@ -14,6 +14,7 @@
     "db:codegen": "node --env-file-if-exists=../../.env.dev scripts/db-codegen.ts",
     "db:identity-schema": "node --env-file-if-exists=../../.env.dev scripts/identity-schema.ts",
     "bootstrap-org": "node --env-file-if-exists=../../.env.dev scripts/bootstrap-org.ts",
+    "review-paper": "node --env-file-if-exists=../../.env.dev scripts/review-paper.ts",
     "dev-buckets": "node --env-file-if-exists=../../.env.dev scripts/dev-buckets.ts",
     "import-desk": "node --env-file-if-exists=../../.env.dev scripts/import-desk.ts"
   },

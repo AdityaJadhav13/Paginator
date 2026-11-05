@@ -2,20 +2,21 @@
 
     python -B -m pgn_worker.run [--job FILE] < job.json        → one JSON result line on stdout
 
-engine.layout and engine.measure write progress lines first (L2.3), each flushed as it is written, the result line
-always last:
+engine.layout, engine.measure and engine.onboard write progress lines first (L2.3, L4), each flushed as it is
+written, the result line always last:
     {"format": "pageinator.worker-progress/1", "job": id, "seq": 1, 2, …, "event": run.progress | run.page |
-     measure.status}
-For those two kinds SIGTERM is a cancel: the engine's process group is stopped (SIGTERM, SIGKILL after 5 s) and the
-result answered (run.finished `cancelled`, measure.status `stopped`); a stdout that closes meanwhile (EPIPE: the queue
-died) stops the engine and exits 74 with no more lines.
+     measure.status | onboard.progress}
+For those kinds SIGTERM is a cancel: the engine's process group is stopped (SIGTERM, SIGKILL after 5 s) and the
+result answered (run.finished `cancelled`, measure.status `stopped`, engine.onboard failed `worker.cancelled`); a
+stdout that closes meanwhile (EPIPE: the queue died) stops the engine and exits 74 with no more lines.
 
 Settings from the environment: `PGN_S3_*` (the store, pgn_worker/storage_s3.py) and `PGN_ICC_SHA256` (the colour
 profile the worker was given; `PAGEINATOR_ICC` names its file); for the engine's kinds `PGN_ENGINE_PYTHON` (the engine
-environment's Python), `PGN_WORKER_HOMES` and `PGN_ENGINE_STALL_S` (pgn_worker/engine.py Settings). Exit codes (sysexits):
+environment's Python), `PGN_WORKER_HOMES` and `PGN_ENGINE_STALL_S` (pgn_worker/engine.py Settings); for engine.onboard
+also `PGN_ONBOARD_PYTHON` (the onboarding tool's Python, pgn_worker/onboard.py). Exit codes (sysexits):
   0   done: the result holds the event (`media.ready`, or `media.rejected` for a photo the Desk refuses)
   65  failed: the job is wrong (its shape, a key, the checksum, a missing version): do not run it again
-  70  failed: a fault in the worker (its type only)
+  70  failed: a fault in the worker (its type only); engine.onboard's tool crashed, stalled or was cancelled
   74  the result could not be written (stdout closed): no line; the queue runs the job again
   75  retry: the colour profile could not be read, the store failed, or the worker ran out of memory (worker.memory):
       run the job again later
@@ -46,7 +47,8 @@ from .storage_s3 import S3Settings, S3Storage, SettingsError
 MAX_JOB = 64 * 1024
 PROGRESS_FORMAT = "pageinator.worker-progress/1"
 EXIT = {"done": 0, "worker.job": 65, "worker.key": 65, "worker.checksum": 65, "worker.missing": 65,
-        "worker.internal": 70, "worker.profile": 75, "worker.store": 75, "worker.memory": 75, "worker.config": 78}
+        "worker.internal": 70, "worker.onboard": 70, "worker.stalled": 70, "worker.cancelled": 70,
+        "worker.profile": 75, "worker.store": 75, "worker.memory": 75, "worker.config": 78}
 
 
 def _read(stream) -> bytes:

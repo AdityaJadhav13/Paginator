@@ -34,10 +34,11 @@ import deskmsg as DM  # noqa: E402
 import deskprinted  # noqa: E402
 import deskgen as DG  # noqa: E402
 import deskplan as DP  # noqa: E402
+import deskprofile as DPR  # noqa: E402
 import desksamples as DS  # noqa: E402
 import deskworker as DW  # noqa: E402
 from deskcommon import (ARTICLE_ID, EDITION_ID, ENGINE_VERSION, PHOTO_ID, RUN_ID, SLOT_ID, check_id, desk_home,  # noqa: E402
-                        error_text, log, now_iso, read_json, write_json)
+                        error_text, log, now_iso, paper, read_json, write_json)
 
 G = DG.G
 ROLES = ("front", "inside_imprint", "inside", "back")
@@ -49,6 +50,7 @@ def config(home: Path) -> dict:
     cfg = read_json(home / "config.json", {})
     if not cfg.get("templates") or not cfg.get("dataset"):
         raise SystemExit("the Desk is not set up yet: run setup")
+    DPR.use_dataset(Path(cfg["dataset"]))                 # the paper's own grid, before any template or layout
     return cfg
 
 
@@ -68,13 +70,13 @@ def sample_date(sample: str) -> str:
     return DS._date_of(sample) or sample
 
 
-def page_role_counts(models_by_sample) -> dict:
+def page_role_counts(models_by_sample, script: str = "deva") -> dict:
     """Measured needs per page role: medians over the paper's printed pages (aggregates only)."""
     rows = {"front": [], "inside": [], "back": []}
     for pages in models_by_sample.values():
         last = max(p for p, _, _ in pages)
         for p, _, m in pages:
-            stories = [s for s in DS.stories_of(m) if DS.deva_share(s["body"]) >= 0.5]
+            stories = [s for s in DS.stories_of(m) if DS.deva_share(s["body"], script) >= 0.5]
             if not stories:
                 continue
             ads = sum((e["bbox_mm"][2] - e["bbox_mm"][0]) * (e["bbox_mm"][3] - e["bbox_mm"][1]) for e in m["elements"] if e["kind"] == "ad")
@@ -109,15 +111,28 @@ def outline(tpl) -> dict:
             "ad_slots": [[_mm(v) for v in s["bbox_mm"]] for s in tpl.ad_slots]}
 
 
+PILOT_PAGE_H_MM = 540.0         # the pilot's page height: its limits in mm are this share of another paper's page
+
+
 def find_candidates(ds: Path, by_sample: dict | None = None) -> dict:
     """{role: [(sort key, date, name, page, Template)]}: every page of the dataset able to serve each role (setup's
-    test, unchanged), in no order."""
+    test), in no order. A dataset with a paper.json (another paper): its script, its imprint's text, and the pilot's
+    limits in mm as the same share of its page height."""
     by_sample = DS.sample_pages(ds) if by_sample is None else by_sample
+    pj = paper(ds)
+    script = (pj or {}).get("script", "deva")
+    imprint_keys = [k for k in (DG.standing_key(t) for t in (pj or {}).get("imprint_text") or []) if k]
+
+    def mm(v: float, page_h: float) -> float:
+        return v if pj is None else v * page_h / PILOT_PAGE_H_MM
+
+    def is_imprint(text: str) -> bool:
+        return "मुद्रक" in text if pj is None else any(k in DG.standing_key(text) for k in imprint_keys)
     last_page = {s: max(p for p, _, _ in v) for s, v in by_sample.items()}
     cands = {r: [] for r in ROLES}
     for sample, pages in by_sample.items():
         for p, name, m in pages:
-            if DS.deva_share(" ".join(b["text"] for s in m["stories"] for b in s["flow"] if b["type"] == "para")) < 0.5:
+            if DS.deva_share(" ".join(b["text"] for s in m["stories"] for b in s["flow"] if b["type"] == "para"), script) < 0.5:
                 continue
             last = p == last_page[sample]
             for role in ROLES:
@@ -128,16 +143,17 @@ def find_candidates(ds: Path, by_sample: dict | None = None) -> dict:
                 except Exception as ex:  # noqa: BLE001
                     log("template", name, role, "rejected:", ex)
                     continue
-                imprint = any("मुद्रक" in (e.get("text") or "") and e["bbox_mm"][1] >= tpl.news_bottom - 1 for e in tpl.keep)
-                ok = tpl.intruders == 0 and tpl.kept_stories_dropped == 0 and len(tpl.regions) == 1
+                imprint = any(is_imprint(e.get("text") or "") and e["bbox_mm"][1] >= tpl.news_bottom - 1 for e in tpl.keep)
+                # one news area; another paper's back page may have its news around one ad block (gen1 lays out regions)
+                ok = tpl.intruders == 0 and tpl.kept_stories_dropped == 0 and (len(tpl.regions) == 1 or pj is not None and role == "back")
                 if role == "front":
-                    ok &= tpl.news_top > 60 and not tpl.ad_slots
+                    ok &= tpl.news_top > mm(60, tpl.page_h) and not tpl.ad_slots
                 elif role == "back":
                     ok &= bool(tpl.ad_slots) and tpl.news_bottom < 0.75 * tpl.page_h
                 elif role == "inside_imprint":
                     ok &= p == 2 and imprint and not tpl.ad_slots
                 else:
-                    ok &= not imprint and not tpl.ad_slots and tpl.news_top < 50 and tpl.news_bottom > 0.9 * tpl.page_h
+                    ok &= not imprint and not tpl.ad_slots and tpl.news_top < mm(50, tpl.page_h) and tpl.news_bottom > 0.9 * tpl.page_h
                 if ok:                                     # inside pages: a page 3 or later (page 2 carries the imprint)
                     cands[role].append(((role != "inside" or p >= 3, sample_date(sample), name), sample_date(sample), name, p, tpl))
     return cands
@@ -160,6 +176,7 @@ def cmd_setup(home: Path, args) -> dict:
     pages_dir = ds / "report" / "page1" / "pages"
     if not pages_dir.exists():
         raise SystemExit(f"no page models in {pages_dir}")
+    DPR.use_dataset(ds)
     by_sample = DS.sample_pages(ds)
     cands = find_candidates(ds, by_sample)
     templates = {}
@@ -170,7 +187,7 @@ def cmd_setup(home: Path, args) -> dict:
     cal = DG.Calibration(ds)
     cx = DG.CP.Context(ds, "paper")
     cfg = {"schema": "pageinator.desk.config/1", "engine": ENGINE_VERSION, "created": now_iso(), "dataset": str(ds),
-           "templates": templates, "needs_per_role": page_role_counts(by_sample),
+           "templates": templates, "needs_per_role": page_role_counts(by_sample, DS.script_of(ds)),
            "calibration": {"styles": {f"{a}/{b}": n for (a, b), n in sorted(cal.styles.items())}, "lead_side": cal.lead_side,
                            "space_em": cal.space_em, "r_cal": cx.r_cal},
            "template_summary": {r: DG.Template(ds, n, r).summary() for r, n in templates.items()},
@@ -207,9 +224,10 @@ def cmd_retemplate(home: Path, args) -> dict:
 
 
 # ------------------------------------------------------------------------------------------- plan
-def page_roles(pages: int, back_ads: bool) -> list[str]:
-    if pages not in (4, 8, 16):
-        raise ValueError("pages must be 4, 8 or 16")
+def page_roles(pages: int, back_ads: bool, sizes=()) -> list[str]:
+    """sizes: the paper's own edition sizes (paper.json), allowed besides 4, 8 and 16."""
+    if pages not in (4, 8, 16) and pages not in sizes:
+        raise ValueError("pages must be 4, 8 or 16" + "".join(f" or {n}" for n in sorted(set(sizes) - {4, 8, 16})))
     roles = ["front", "inside_imprint"] + ["inside"] * (pages - 3) + ["back" if back_ads else "inside"]
     return roles
 
@@ -228,8 +246,8 @@ def needs(cfg: dict, roles: list[str]) -> dict:
 
 def cmd_plan(home: Path, args) -> dict:
     cfg = config(home)
-    roles = page_roles(int(args.pages), bool(int(args.back_ads)))
     ds = Path(cfg["dataset"])
+    roles = page_roles(int(args.pages), bool(int(args.back_ads)), (paper(ds) or {}).get("edition_sizes") or ())
     tpls = {r: DG.Template(ds, cfg["templates"][r], r) for r in set(roles)}
     pages = [{"page": i + 1, "role": "back" if r == "back" else "front" if r == "front" else "inside",
               "template_role": r, "news_mm2": round(tpls[r].news_mm2(), 1),
@@ -641,7 +659,7 @@ def cmd_generate(home: Path, args) -> dict:
     ds = Path(cfg["dataset"])
     edition = req["edition"]
     pages_n = int(edition["pages"])
-    roles = page_roles(pages_n, bool(edition.get("back_page_ads", True)))
+    roles = page_roles(pages_n, bool(edition.get("back_page_ads", True)), (paper(ds) or {}).get("edition_sizes") or ())
     day = date.fromisoformat(edition["date"])
     status.data["pages"] = [{"page": i + 1, "role": "back" if r == "back" else "front" if r == "front" else "inside", "state": "waiting",
                              "articles": [], "pdf": None, "seconds": None, "message": "", "warnings": []} for i, r in enumerate(roles)]

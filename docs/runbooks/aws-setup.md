@@ -123,7 +123,7 @@ then each key belongs to an IAM user that may do only what the policy below says
   only under `orgs/` in the work bucket, write only an asset's renditions (`orgs/*/pubs/*/assets/*/r/*`), a Word import's result file
   (`orgs/*/pubs/*/imports/*/result-*.json`), an engine profile's `config.json` (`orgs/*/pubs/*/profiles/*/config.json`)
   and a layout run's outputs (`orgs/*/pubs/*/runs/*/pages/*`, `…/runs/*/edition.pdf`, `…/runs/*/press-files.zip`; never
-  its `request.json`, L2.3) and delete
+  its `request.json`, L2.3), an onboarding's bundle (`orgs/*/pubs/*/onboarding/*/dataset.zip`, L4) and delete
   nothing (never `uploads/`, never another bucket), so a key guard bug or a decoder exploit in the worker still cannot
   overwrite or delete a paper's originals, nor reach the quarantine or the archive. One access key, into SSM.
 - [ ] IAM user `pgn-pilot-backup` (no console), policy `infra/aws/iam-backup-policy.json`: write dumps and their

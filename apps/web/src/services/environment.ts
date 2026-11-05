@@ -1,6 +1,7 @@
 import type { AccountService } from "./account-service.ts";
 import type { AuditService } from "./audit-service.ts";
 import type { ContactService } from "./contact-service.ts";
+import type { PaperSignupService } from "./paper-signup-service.ts";
 import type { SecurityService } from "./security-service.ts";
 import type { SessionService } from "./session-service.ts";
 import type { CommentService } from "./comment-service.ts";
@@ -44,6 +45,8 @@ export interface ServiceEnvironment {
   readonly ads: AdsService;
   /** The public website's contact form. */
   readonly contact: ContactService;
+  /** A new paper's sign-up, and its Owner's first screen (/onboarding). */
+  readonly paperSignup: PaperSignupService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
   readonly live: LiveService;
