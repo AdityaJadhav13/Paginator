@@ -187,6 +187,10 @@ export type ReleaseRow = {
   manifest_sha256: string | null;
   retain_until: Date;
   verified_at: Date | null;
+  /** the print profile pinned when it was approved (null: none was saved then) */
+  print_profile_id: string | null;
+  print_profile_version: number | null;
+  press_name: string | null;
 };
 
 export type FileRow = {
@@ -218,8 +222,11 @@ export type DeliveryRow = {
 
 const RELEASE = sql`
   select r.id, r.edition_id, r.run_id, r.number, r.kind, r.approved_by, p.display_name as approved_name,
-    r.approved_at, r.note, r.manifest_key, r.manifest_version_id, r.manifest_sha256, r.retain_until, r.verified_at
-  from app.release r join app.person p on p.org_id = r.org_id and p.user_id = r.approved_by`;
+    r.approved_at, r.note, r.manifest_key, r.manifest_version_id, r.manifest_sha256, r.retain_until, r.verified_at,
+    r.print_profile_id, pp.version as print_profile_version, pp.press_name
+  from app.release r join app.person p on p.org_id = r.org_id and p.user_id = r.approved_by
+  left join app.print_profile pp
+    on pp.org_id = r.org_id and pp.publication_id = r.publication_id and pp.id = r.print_profile_id`;
 
 /** The edition's releases, newest first. */
 export async function editionReleases(tx: Tx, publicationId: string, editionId: string): Promise<ReleaseRow[]> {
@@ -258,7 +265,8 @@ export async function deliveries(tx: Tx, publicationId: string, releaseIds: read
   return rows;
 }
 
-/** A new release of the edition (the next number; the caller holds the edition's lock) → its id. */
+/** A new release of the edition (the next number; the caller holds the edition's lock) → its id. It records the
+ * print profile in use now (the publication's newest version). */
 export async function createRelease(
   tx: Tx,
   who: Tenant,
@@ -266,11 +274,13 @@ export async function createRelease(
   input: { editionId: string; runId: string; kind: "release" | "correction"; note: string | null; retainUntil: Date },
 ): Promise<{ id: string; number: number }> {
   const { rows } = await sql<{ id: string; number: number }>`
-    insert into app.release (org_id, publication_id, edition_id, run_id, number, kind, approved_by, note, retain_until)
+    insert into app.release (org_id, publication_id, edition_id, run_id, number, kind, approved_by, note, retain_until,
+      print_profile_id)
     values (${who.orgId}, ${publicationId}, ${input.editionId}, ${input.runId},
       (select coalesce(max(number), 0) + 1 from app.release
        where publication_id = ${publicationId} and edition_id = ${input.editionId}),
-      ${input.kind}, ${who.userId}, ${input.note}, ${input.retainUntil})
+      ${input.kind}, ${who.userId}, ${input.note}, ${input.retainUntil},
+      (select id from app.print_profile where publication_id = ${publicationId} order by version desc limit 1))
     returning id, number`.execute(tx);
   const row = rows[0];
   if (!row) throw new Error("the release was not made");

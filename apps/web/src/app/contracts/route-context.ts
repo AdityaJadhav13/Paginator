@@ -67,7 +67,9 @@ export function fallbackPath(invalid: InvalidContext): string {
 
 export interface WorkspaceRouteProviderProps {
   readonly workspace: WorkspaceQueryService;
-  readonly releases: readonly ReleaseFixtureLike[];
+  /** Demo fixtures only (UI002): without them a release id is not checked here; the archive release screen loads it
+   * from the API and says itself when it is not available. */
+  readonly releases?: readonly ReleaseFixtureLike[];
   readonly getSessionMutationGeneration?: () => number;
   readonly children: ReactNode;
 }
@@ -180,7 +182,7 @@ export function WorkspaceRouteProvider({
       }
 
       let release: ReleaseFixtureLike | undefined;
-      if (params.releaseId) {
+      if (params.releaseId && releases) {
         release = releases.find((candidate) => candidate.id === params.releaseId && candidate.publicationId === publicationId);
         if (!release) { if (isCurrent()) setState({ status: "invalid-context", invalid: { status: "invalid", level: "release", organization, publication } }); return; }
       }

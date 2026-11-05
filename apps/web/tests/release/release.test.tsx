@@ -69,6 +69,7 @@ const released = (number: number, kind: "release" | "correction", files: Release
   files,
   archive: { verifiedAt: AT, retainUntil: "2033-10-24T10:00:00.000+05:30", manifestSha256: "a".repeat(64) },
   deliveries: [],
+  printProfile: null,
 });
 
 /** A fictional edition whose every check passed: two approved pages, ready to release. */

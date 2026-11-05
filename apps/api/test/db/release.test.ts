@@ -366,6 +366,8 @@ describe("a release", () => {
     const body = made.json();
     firstId = body.id;
     expect(body).toMatchObject({ number: 1, kind: "release", runId, approvedBy: { id: chief.id }, deliveries: [] });
+    // no print profile was saved yet: the release pins none
+    expect(body.printProfile).toBeNull();
     expect(body.files.map((f: { name: string; replaces: string | null }) => [f.name, f.replaces])).toEqual(
       [1, 2, 3, 4].map((p) => [`${DATE}_P0${p}.pdf`, null]),
     );
@@ -489,9 +491,23 @@ describe("a late correction", () => {
     });
     expect(tab.pages[2]).toMatchObject({ released: { name: `${DATE}_P03.pdf`, changed: true } });
     expect((await release(editor, await candidateFiles())).statusCode).toBe(403);
+    // the press details saved now: the correction pins the version in use
+    const saved = await change("POST", `${pubPath()}/print-profiles`, prepress.cookie, {
+      pressName: "Fictional Press",
+    });
+    expect(saved.statusCode).toBe(201);
     const made = await release(chief, await candidateFiles());
     expect(made.statusCode).toBe(201);
     expect(made.json()).toMatchObject({ number: 2, kind: "correction", files: [{ name: `${DATE}_P03_v2.pdf` }] });
+    expect(made.json().printProfile).toEqual({ id: saved.json().id, version: 1, pressName: "Fictional Press" });
+    // the archive shows both releases of the edition, to everyone (archive.view), with the pinned profile
+    const archived = await call("GET", `${pubPath()}/archive/releases/${made.json().id}`, reporter.cookie);
+    expect(archived.statusCode).toBe(200);
+    expect(archived.json().release.printProfile).toMatchObject({ version: 1 });
+    expect(archived.json().edition).toMatchObject({ id: editionId, date: DATE });
+    expect(archived.json().edition.releases.map((r: { number: number }) => r.number)).toEqual([2, 1]);
+    const list = await call("GET", `${pubPath()}/archive?kind=correction`, reporter.cookie);
+    expect(list.json().items.map((i: { number: number; files: number }) => [i.number, i.files])).toEqual([[2, 1]]);
     const after = await releaseTab();
     expect(after.releases.map((r: { number: number }) => r.number)).toEqual([2, 1]);
     // the first release and its receipt are kept

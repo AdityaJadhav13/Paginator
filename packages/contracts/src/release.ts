@@ -203,6 +203,8 @@ export const Release = z.strictObject({
   /** the archive copy: written under Object Lock (governance) until retainUntil, read back and matched by SHA-256 */
   archive: z.strictObject({ verifiedAt: Moment, retainUntil: Moment, manifestSha256: Sha256 }),
   deliveries: z.array(Delivery),
+  /** the print profile in use when it was approved (print-profiles.ts; null: none was saved then) */
+  printProfile: z.strictObject({ id: Id, version: z.number().int().min(1), pressName: z.string() }).nullable(),
 });
 export type Release = z.infer<typeof Release>;
 

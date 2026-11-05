@@ -21,6 +21,7 @@ import type {
   SectionDto,
   ServiceResult,
 } from "../services/index.ts";
+import type { TemplateCandidateDto, TemplateOutlineDto } from "../services/layout-service.ts";
 import { reach, type Permission } from "../services/permissions.ts";
 import type { MockStanding, MockStoryDeps } from "./create-mock-stories.ts";
 
@@ -32,7 +33,9 @@ export type MockLayoutOperation =
   | "layout.run"
   | "layout.cancel"
   | "layout.files"
-  | "layout.sections";
+  | "layout.sections"
+  | "layout.templates"
+  | "layout.templateChoose";
 
 /** What the double needs of the stories double: the edition, its stories, a picture and an upload. */
 export interface MockLayoutDeps {
@@ -138,7 +141,58 @@ interface ProfileRow {
   readonly orgId: string;
   readonly pubId: string;
   value: EngineProfileDto;
+  /** the template candidates its setup recorded, per role (null: none recorded) */
+  candidates?: Record<string, TemplateCandidateDto[]> | null;
 }
+
+const TEMPLATE_ROLES = ["front", "inside_imprint", "inside", "back"] as const;
+const PROFILE_SETTING_UP = answer(
+  409,
+  "profile_setting_up",
+  "An engine profile is being set up now. Wait until it is ready or has failed, then choose again.",
+);
+const NO_PROFILE = answer(
+  409,
+  "no_profile",
+  "This paper has no engine profile ready yet. Upload its dataset bundle in Settings first.",
+);
+/** A fictional broadsheet outline (330 × 520 mm): a masthead band on the front, a folio line inside, ads on the back. */
+function outline(role: string, variant: number): TemplateOutlineDto {
+  const top = role === "front" ? 95 + variant * 10 : 28;
+  const bottom = role === "back" ? 330 : 505;
+  return {
+    pageWMm: 330,
+    pageHMm: 520,
+    news: [[12, top, 318, bottom]],
+    kept: [
+      role === "front"
+        ? { kind: "masthead", box: [12, 10, 318, 70 + variant * 10] }
+        : { kind: "furniture", box: [12, 10, 318, 20] },
+      { kind: "rule", box: [12, top - 4, 318, top - 3.5] },
+      ...(role === "inside_imprint" ? [{ kind: "furniture", box: [12, 508, 318, 514] as [number, number, number, number] }] : []),
+    ],
+    adSlots:
+      role === "back"
+        ? [
+            [12, 340, 318, 510],
+            [12, 335, 170, 338],
+          ].slice(0, 1 + (variant % 2)) as [number, number, number, number][]
+        : [],
+  };
+}
+const candidatesFixture = (): Record<string, TemplateCandidateDto[]> =>
+  Object.fromEntries(
+    TEMPLATE_ROLES.map((r) => [
+      r,
+      [0, 1, 2].map((v) => ({
+        name: `${r.replace("_", "-")}-2026-10-${String(20 - v * 7).padStart(2, "0")}`,
+        date: `2026-10-${String(20 - v * 7).padStart(2, "0")}`,
+        page: r === "front" ? 1 : r === "inside_imprint" ? 2 : r === "inside" ? 3 : 8,
+        outline: outline(r, v),
+      })),
+    ]),
+  );
+const TEMPLATES = Object.fromEntries(TEMPLATE_ROLES.map((r) => [r, `${r.replace("_", "-")}-2026-10-20`]));
 interface RunRow {
   readonly orgId: string;
   readonly pubId: string;
@@ -172,9 +226,11 @@ function profileFixtures(): ProfileRow[] {
   const base = {
     datasetBytes: 734_003_200,
     engineVersion: "desk-engine 0.9.4 (fictional)",
-    templates: { front: "front-lead-6", inside: "inside-mixed", back: "back-ads" },
+    templates: TEMPLATES,
     grid: { columns: 8, columnMm: 38.5, gutterMm: 4.2 },
     error: null,
+    basedOn: null,
+    templateChoice: null,
     createdBy: EDITOR,
   };
   return [
@@ -191,6 +247,7 @@ function profileFixtures(): ProfileRow[] {
         createdAt: "2026-10-20T06:00:00.000Z",
         updatedAt: "2026-10-20T06:12:00.000Z",
       },
+      candidates: candidatesFixture(),
     },
     {
       orgId: SAHYADRI,
@@ -495,12 +552,77 @@ export function createMockLayout(deps: MockLayoutDeps): {
         templates: null,
         grid: null,
         error: null,
+        basedOn: null,
+        templateChoice: null,
         createdBy: { id: checked.person.userId, name: checked.person.name },
         createdAt: at,
         updatedAt: at,
       };
       profiles = [{ orgId, pubId, value }, ...profiles];
       keys = new Map(keys).set(idempotencyKey, { body, value: clone(value) });
+      return success(clone(value));
+    },
+    async getTemplates({ orgId, pubId }) {
+      const checked = await check("layout.templates", orgId, pubId, can("templates.view"));
+      if ("problem" in checked) return checked.problem;
+      const mine = profiles.filter((row) => row.orgId === orgId && row.pubId === pubId);
+      const used = mine.find((row) => row.value.state === "ready");
+      const busy = mine.find((row) => row.value.state === "setting_up");
+      const value = used?.value;
+      return success(
+        clone({
+          inUse: value ? { id: value.id, version: value.version } : null,
+          roles: value
+            ? TEMPLATE_ROLES.map((r) => ({
+                role: r,
+                chosen: value.templates?.[r] ?? null,
+                candidates: used?.candidates?.[r] ?? [],
+              }))
+            : [],
+          candidatesKnown: !!used?.candidates,
+          grid: value?.grid ?? null,
+          settingUp: busy ? { id: busy.value.id, version: busy.value.version } : null,
+          history: mine.map((row) => row.value),
+        }),
+      );
+    },
+    async chooseTemplate({ orgId, pubId, choice, idempotencyKey }) {
+      const checked = await check("layout.templateChoose", orgId, pubId, can("templates.edit"));
+      if ("problem" in checked) return checked.problem;
+      const body = JSON.stringify(choice);
+      const kept = keys.get(idempotencyKey);
+      if (kept) return kept.body === body ? success(clone(kept.value as EngineProfileDto)) : failure(KEY_REUSED);
+      const mine = profiles.filter((row) => row.orgId === orgId && row.pubId === pubId);
+      if (mine.some((row) => row.value.state === "setting_up")) return failure(PROFILE_SETTING_UP);
+      const base = mine.find((row) => row.value.state === "ready");
+      if (!base) return failure(NO_PROFILE);
+      const { role: r, page } = choice;
+      if (r !== undefined && !(base.candidates?.[r] ?? []).some((c) => c.name === page))
+        return failure({
+          ...answer(400, "invalid_request", "Some fields are not right."),
+          details: [{ field: "body.page", message: "This page of the dataset cannot serve as that template." }],
+        });
+      counter += 1;
+      const at = now();
+      const value: EngineProfileDto = {
+        ...base.value,
+        id: `profile-new-${String(counter).padStart(3, "0")}`,
+        version: Math.max(...mine.map((row) => row.value.version)) + 1,
+        state: "setting_up",
+        configSha256: null,
+        engineVersion: null,
+        templates: null,
+        grid: null,
+        error: null,
+        basedOn: { id: base.value.id, version: base.value.version },
+        templateChoice: r !== undefined && page !== undefined ? { [r]: page } : {},
+        createdBy: { id: checked.person.userId, name: checked.person.name },
+        createdAt: at,
+        updatedAt: at,
+      };
+      profiles = [{ orgId, pubId, value, candidates: base.candidates ?? candidatesFixture() }, ...profiles];
+      keys = new Map(keys).set(idempotencyKey, { body, value: clone(value) });
+      deps.emit(orgId, { type: "profile", publicationId: pubId, profileId: value.id });
       return success(clone(value));
     },
     async getLayout({ orgId, pubId, editionId }) {
@@ -734,6 +856,7 @@ export function createMockLayout(deps: MockLayoutDeps): {
     setUp(profileId, error) {
       const row = profiles.find((candidate) => candidate.value.id === profileId);
       if (!row || row.value.state !== "setting_up") return;
+      const base = profiles.find((candidate) => candidate.value.id === row.value.basedOn?.id)?.value;
       row.value = error
         ? { ...row.value, state: "failed", error: clone(error), updatedAt: now() }
         : {
@@ -741,10 +864,11 @@ export function createMockLayout(deps: MockLayoutDeps): {
             state: "ready",
             configSha256: SHA("f"),
             engineVersion: "desk-engine 0.9.4 (fictional)",
-            templates: { front: "front-lead-6", inside: "inside-mixed", back: "back-ads" },
+            templates: { ...(base?.templates ?? TEMPLATES), ...row.value.templateChoice },
             grid: { columns: 8, columnMm: 38.5, gutterMm: 4.2 },
             updatedAt: now(),
           };
+      if (!error && row.candidates === undefined) row.candidates = candidatesFixture();
       deps.emit(row.orgId, { type: "profile", publicationId: row.pubId, profileId });
     },
     latestRun(editionId) {

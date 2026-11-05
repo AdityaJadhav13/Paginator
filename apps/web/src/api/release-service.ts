@@ -4,7 +4,18 @@
  * a wrong screen. A refusal (409 approval_stale, release_refused, already_confirmed; 502 archive_failed) comes back as
  * the problem; the screen fetches the release again to show what it is now.
  */
-import { ArchiveCheck, EditionRelease, FileLink, PressTest, Release, ReleasePage } from "@pageinator/contracts";
+import {
+  ArchiveCheck,
+  ArchiveList,
+  ArchiveRelease,
+  EditionRelease,
+  FileLink,
+  PressTest,
+  PrintProfile,
+  PrintProfiles,
+  Release,
+  ReleasePage,
+} from "@pageinator/contracts";
 import type { ApiProblem, ReleaseService, ServiceResult } from "../services/index.ts";
 import type { ApiClient, ApiResult } from "./client.ts";
 
@@ -64,6 +75,28 @@ export function createApiReleaseService(client: ApiClient): ReleaseService {
         PressTest,
         await client.put(`${pub(orgId, pubId)}/press-test`, { pageSha256, acceptedOn, ...(note ? { note } : {}) }),
       );
+    },
+    async archive({ orgId, pubId, year, month, kind, q }) {
+      const query = new URLSearchParams();
+      if (year !== undefined) query.set("year", String(year));
+      if (month !== undefined) query.set("month", String(month));
+      if (kind) query.set("kind", kind);
+      if (q) query.set("q", q);
+      const tail = query.size ? `?${query.toString()}` : "";
+      return read(ArchiveList, await client.get(`${pub(orgId, pubId)}/archive${tail}`));
+    },
+    async archiveRelease({ orgId, pubId, releaseId }) {
+      return read(
+        ArchiveRelease,
+        await client.get(`${pub(orgId, pubId)}/archive/releases/${encodeURIComponent(releaseId)}`),
+      );
+    },
+    async printProfiles({ orgId, pubId }) {
+      return read(PrintProfiles, await client.get(`${pub(orgId, pubId)}/print-profiles`));
+    },
+    async addPrintProfile({ orgId, pubId, pressName, contact, note, idempotencyKey }) {
+      const body = { pressName, ...(contact ? { contact } : {}), ...(note ? { note } : {}) };
+      return read(PrintProfile, await client.post(`${pub(orgId, pubId)}/print-profiles`, body, { idempotencyKey }));
     },
   };
 }

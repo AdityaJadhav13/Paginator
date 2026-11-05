@@ -5,16 +5,18 @@
 //     colour map, 07 §12, not a new edition), with an Idempotency-Key; a date that has one already answers 409
 //     edition_exists with that edition as `current`. Audited (edition.create) in the change's transaction; the database
 //     tells other tabs (live event `edition`, migration 2026_11_28_0001). The bookings of its date are placed in it by
-//     their rules in the same transaction (src/modules/ads/place.ts);
+//     their rules in the same transaction (src/modules/ads/place.ts), and an issue number at or past the publication's
+//     next_issue moves it on (src/db/brand.ts issueUsed);
 //   - PATCH /:e changes its folio, volume, issue and price (edition.edit, the whole cell only): the fields changed are
 //     audited (edition.edit) and the edition's folio_changed_at moves (the release's folio check: page 1 prints it only
 //     once saved again after Update text, or laid out again). Unchanged fields change nothing.
 // A story is put in an edition, or taken out, by the story's own PATCH (editionId; the desk's, story.edition_change).
-import { Edition, EditionInput, EditionList, EditionPatch, EditionQuery } from "@pageinator/contracts";
+import { Edition, EditionInput, EditionList, EditionPatch, EditionQuery, issueNumber } from "@pageinator/contracts";
 import { DeskTextError, cleanText } from "@pageinator/desk-text";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { recordAudit } from "../../db/audit.ts";
+import { issueUsed } from "../../db/brand.ts";
 import { type EditionRow, createEdition, listEditions, setFolio } from "../../db/editions.ts";
 import { layoutEdition } from "../../db/layout.ts";
 import type { Database } from "../../db/pools.ts";
@@ -121,6 +123,9 @@ export const editionRoutes: FastifyPluginAsyncZod<{ database: Database }> = asyn
             publicationId: pub,
             data: { date: edition.date, pages: edition.pages },
           });
+          // the publication's next issue number moves past this one (packages/contracts/src/brand.ts)
+          const issue = issueNumber(edition.issue);
+          if (issue !== null) await issueUsed(tx, pub, issue);
           // the ads booked for its date go into their slots at once (src/modules/ads/place.ts)
           await placeBooked(tx, access.tenant, pub, id);
           return { status: 201, body: await one(tx, pub, id), stored: { id } };

@@ -1,7 +1,8 @@
 /**
  * Editions, /org/:orgId/pub/:pubId/editions (plan §1 L2.1 "minimal editions", §10 PR 21 and PR 24): the publication's
  * editions, newest first, each with its pages, its stories counted (all, Ready, spiked) and a link to its stories.
- * "Create edition" (date, 4/8/16 pages, back-page ads, volume, issue, price) for a full edition.create, with one
+ * "Create edition" (date, 4/8/16 pages, back-page ads, volume, issue, price; the last three filled in from the
+ * publication's edition defaults, the Brand screen) for a full edition.create, with one
  * Idempotency-Key per edition asked for, the same on a retry after no answer. "Send to the Desk" for a full
  * desk.export: the edition's Ready stories as a story bundle, saved as a file; spiked stories are never sent.
  *
@@ -427,6 +428,23 @@ function CreateEdition({
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<ApiProblem | null>(null);
   const [dateError, setDateError] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
+  // the publication's edition defaults (the Brand screen) fill in what the person has not typed yet
+  useEffect(() => {
+    let current = true;
+    void editions.brand({ orgId, pubId }).then((result) => {
+      if (!current || !result.ok) return;
+      const { volume: v, price: p, nextIssue } = result.value.defaults;
+      const fill = (value: string) => (typed: string) => (typed === "" ? value : typed);
+      setVolume(fill(v));
+      setIssue(fill(nextIssue === null ? "" : String(nextIssue)));
+      setPrice(fill(p));
+      setPrefilled(v !== "" || p !== "" || nextIssue !== null);
+    });
+    return () => {
+      current = false;
+    };
+  }, [editions, orgId, pubId]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -497,6 +515,7 @@ function CreateEdition({
           checked={backPageAds}
           onChange={(event) => setBackPageAds(event.target.checked)}
         />
+        {prefilled && <p>{t("brand.prefilled")}</p>}
         <Field label={t("editions.create.volume")}>
           <TextInput value={volume} maxLength={200} onChange={(event) => setVolume(event.target.value)} />
         </Field>

@@ -27,6 +27,7 @@ import { deskBundleRoutes } from "./modules/stories/desk-bundle.ts";
 import { editionRoutes } from "./modules/stories/editions.ts";
 import { peopleRoutes } from "./modules/people/plugin.ts";
 import { sectionRoutes } from "./modules/sections/routes.ts";
+import { brandRoutes } from "./modules/brand/routes.ts";
 import { storyRoutes } from "./modules/stories/routes.ts";
 import { photoRoutes } from "./modules/media/photos.ts";
 import { startEngineInbox } from "./modules/media/engine-inbox.ts";
@@ -213,6 +214,7 @@ export async function buildApp(deps: AppDeps) {
     await app.register(editionRoutes, { database: people.database });
     await app.register(adSettingsRoutes, { database: people.database });
     await app.register(sectionRoutes, { database: people.database });
+    await app.register(brandRoutes, { database: people.database });
     await app.register(auditRoutes, { database: people.database });
     // the page editor: through the edit gateway (without its settings, its routes answer 503 editor_unavailable)
     await app.register(editorRoutes, {

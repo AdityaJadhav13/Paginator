@@ -94,6 +94,7 @@ export async function findStories(tx: Tx, publicationId: string, ids: readonly s
 export type ListFilter = {
   publicationId: string;
   mine?: string; // the scope "own": reported by, or given to, this person
+  /** an edition's id, or "none": in no edition */
   edition?: string;
   status?: StoryStatus;
   assignee?: string;
@@ -104,13 +105,16 @@ export type ListFilter = {
   limit: number;
 };
 
+const noneOr = (edition: string | undefined) => (edition === undefined || edition === "none" ? null : edition);
+
 export async function listStories(tx: Tx, f: ListFilter): Promise<StoryRow[]> {
   const like = f.q ? `%${f.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
   const { rows } = await sql<StoryRow>`${STORY}
     where s.publication_id = ${f.publicationId} and s.deleted_at is null
       and (${f.mine ?? null}::uuid is null or s.reporter_id = ${f.mine ?? null}::uuid
         or s.assignee_id = ${f.mine ?? null}::uuid)
-      and (${f.edition ?? null}::uuid is null or s.edition_id = ${f.edition ?? null}::uuid)
+      and (${f.edition === "none"}::boolean is false or s.edition_id is null)
+      and (${noneOr(f.edition)}::uuid is null or s.edition_id = ${noneOr(f.edition)}::uuid)
       and (${f.status ?? null}::text is null or s.status = ${f.status ?? null}::text)
       and (${f.assignee ?? null}::uuid is null or s.assignee_id = ${f.assignee ?? null}::uuid)
       and (${f.reporter ?? null}::uuid is null or s.reporter_id = ${f.reporter ?? null}::uuid)

@@ -843,13 +843,15 @@ function Releases({
   );
 }
 
-function ReleaseItem({
+/** A release: its files (and their download), the archive copy, receipts and the print profile it pinned. Also the
+ * archive's release view (features/archive). */
+export function ReleaseItem({
   where,
   item,
   access,
   onChanged,
 }: {
-  readonly where: Where;
+  readonly where: Pick<Where, "orgId" | "pubId">;
   readonly item: ReleaseItemDto;
   readonly access: LayoutAccess;
   readonly onChanged: () => void;
@@ -905,6 +907,11 @@ function ReleaseItem({
           })}
         </p>
         {item.note && <p>{item.note}</p>}
+        <p className="pg-layout__note">
+          {item.printProfile
+            ? t("printProfiles.pinned", { version: item.printProfile.version, press: item.printProfile.pressName })
+            : t("printProfiles.pinnedNone")}
+        </p>
         <p className="pg-layout__note">
           {t("editionRelease.item.archive", {
             until: formatDate(item.archive.retainUntil, language),

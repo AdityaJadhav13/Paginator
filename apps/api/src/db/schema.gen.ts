@@ -226,6 +226,16 @@ export interface AppEdition {
   volume: Generated<string>;
 }
 
+export interface AppEditionDefaults {
+  next_issue: number | null;
+  org_id: string;
+  price: Generated<string>;
+  publication_id: string;
+  updated_at: Generated<Timestamp>;
+  updated_by: string | null;
+  volume: Generated<string>;
+}
+
 export interface AppEditionMeasure {
   edition_id: string;
   failed: Generated<number>;
@@ -255,6 +265,8 @@ export interface AppEngineEvent {
 }
 
 export interface AppEngineProfile {
+  based_on: string | null;
+  candidates: Json | null;
   config_key: GeneratedAlways<string>;
   config_sha256: string | null;
   config_version_id: string | null;
@@ -266,6 +278,7 @@ export interface AppEngineProfile {
   dataset_version_id: string | null;
   engine_version: string | null;
   grid: Json | null;
+  icc_sha256: string | null;
   id: Generated<string>;
   message: Json | null;
   org_id: string;
@@ -273,9 +286,10 @@ export interface AppEngineProfile {
   problem: string | null;
   publication_id: string;
   state: Generated<string>;
+  template_choice: Json | null;
   templates: Json | null;
   updated_at: Generated<Timestamp>;
-  upload_id: string;
+  upload_id: string | null;
   version: number;
 }
 
@@ -536,6 +550,18 @@ export interface AppPressTest {
   recorded_by: string;
 }
 
+export interface AppPrintProfile {
+  contact: string | null;
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  id: Generated<string>;
+  note: string | null;
+  org_id: string;
+  press_name: string;
+  publication_id: string;
+  version: number;
+}
+
 export interface AppPublication {
   created_at: Generated<Timestamp>;
   digit_style: string;
@@ -569,6 +595,7 @@ export interface AppRelease {
   note: string | null;
   number: number;
   org_id: string;
+  print_profile_id: string | null;
   publication_id: string;
   retain_until: Timestamp;
   run_id: string;
@@ -763,6 +790,7 @@ export interface DB {
   "app.desk_bundle": AppDeskBundle;
   "app.desk_bundle_revision": AppDeskBundleRevision;
   "app.edition": AppEdition;
+  "app.edition_defaults": AppEditionDefaults;
   "app.edition_measure": AppEditionMeasure;
   "app.engine_event": AppEngineEvent;
   "app.engine_profile": AppEngineProfile;
@@ -785,6 +813,7 @@ export interface DB {
   "app.pdf_check": AppPdfCheck;
   "app.person": AppPerson;
   "app.press_test": AppPressTest;
+  "app.print_profile": AppPrintProfile;
   "app.publication": AppPublication;
   "app.publication_grant": AppPublicationGrant;
   "app.release": AppRelease;

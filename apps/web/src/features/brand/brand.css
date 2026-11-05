@@ -1,0 +1,45 @@
+/* Brand & masthead: the masthead preview beside the name and defaults (under it on a phone). Tokens and logical
+ * properties only. */
+
+.pg-brand {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--pg-app-gutter);
+  align-items: start;
+}
+
+@media (max-width: 767px) {
+  .pg-brand {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pg-brand__meta {
+  color: var(--pg-app-text-secondary);
+}
+
+/* the top of page 1: the masthead and the folio under it */
+.pg-brand__crop {
+  max-block-size: 18rem;
+  overflow: hidden;
+  background: var(--pg-app-canvas);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+}
+
+.pg-brand__crop img {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.pg-brand__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--pg-space-2) var(--pg-space-4);
+  margin: 0;
+}
+
+.pg-brand__facts dd {
+  margin: 0;
+}

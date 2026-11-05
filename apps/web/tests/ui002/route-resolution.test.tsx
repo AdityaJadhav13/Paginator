@@ -30,7 +30,8 @@ describe("Deep link resolves the correct shell", () => {
     {
       path: "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/archive/release-demo-001",
       shell: "workspace",
-      h1: "Release",
+      // the archive release screen loads the release from the API; the test double has none of that id
+      h1: "Not available",
     },
     {
       path: "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/editions/edition-demo-001/generate",
@@ -214,7 +215,7 @@ describe("Invalid context", () => {
 
   it("a non-existent :releaseId under a valid publication renders InvalidContextPage", async () => {
     renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/archive/nonexistent-release");
-    expect(await screen.findByText("This archive release is not available in this publication.")).toBeInTheDocument();
+    expect(await screen.findByText("This release is not in this publication's archive.")).toBeInTheDocument();
   });
 
   it("the editor route also resolves invalid context (not just workspace routes)", async () => {
@@ -294,13 +295,15 @@ describe("No record leakage between the two invalid-publication causes", () => {
     await screen.findByRole("heading", { level: 1, name: "Not available" });
     expect(crossPublication.container.querySelector("main")?.innerHTML).toBe(nonexistentMarkup);
     expect(
-      screen.getByRole("link", { name: "Return to a valid workspace page" })
+      screen.getByRole("link", { name: "Back to the archive" })
     ).toHaveAttribute(
       "href",
-      "/org/org-demo-sahyadri/pub/pub-demo-urdu-evening/overview"
+      "/org/org-demo-sahyadri/pub/pub-demo-urdu-evening/archive"
     );
-    expect(crossPublication.container.innerHTML).not.toContain("release-demo-001");
-    expect(crossPublication.container.innerHTML).not.toContain("pub-demo-pune-daily");
+    // the archive release screen sits in the publication's own shell (its switcher lists the person's publications)
+    const main = crossPublication.container.querySelector("main")?.innerHTML ?? "";
+    expect(main).not.toContain("release-demo-001");
+    expect(main).not.toContain("pub-demo-pune-daily");
   });
 
   it("a deeper invalid child preserves the resolved publication locale", async () => {
@@ -357,9 +360,9 @@ describe("Reserved edition-planning nav seam (§9.4, BLV2-02)", () => {
 
 describe("Placeholders never imply the feature behind them works", () => {
   it("names the owning future unit and contains no fabricated data", async () => {
-    // Media (L2.2) and Ads (L2.6) are built; Templates is still a placeholder
-    renderAt("/org/org-demo-sahyadri/pub/pub-demo-pune-daily/templates");
-    expect(await screen.findByText(/not yet implemented/i)).toHaveTextContent("UI013");
+    // the publication's sidebar screens are built; the organisation's settings are still a placeholder
+    renderAt("/org/org-demo-sahyadri/settings");
+    expect(await screen.findByText(/not yet implemented/i)).toHaveTextContent("UI");
     // Scoped to <main>, less the breadcrumb trail at its top: that is a
     // legitimate <ol> (role="list"), not fabricated story data.
     const main = document.querySelector("main")!;

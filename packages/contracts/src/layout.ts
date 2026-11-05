@@ -33,6 +33,10 @@ export const DeskRunKey = z.string().regex(/^r-[0-9]{8}-[0-9]{6}$/);
 export const DeskSlot = z.string().regex(/^[A-Za-z0-9_-]{1,40}$/);
 export const PAGE_ROLES = ["front", "inside", "back"] as const;
 export const PageRole = z.enum(PAGE_ROLES);
+/** The engine's template roles (tools/desk/engine/desk_engine.py ROLES): page 2 is an inside page with the imprint. */
+export const TEMPLATE_ROLES = ["front", "inside_imprint", "inside", "back"] as const;
+export const TemplateRole = z.enum(TEMPLATE_ROLES);
+export type TemplateRole = z.infer<typeof TemplateRole>;
 
 /** A millimetre size as job text (job arguments are text): a positive decimal, at most two places. */
 const MmText = z.string().regex(/^(?:[1-9][0-9]{0,3}|0)(?:\.[0-9]{1,2})?$/);
@@ -63,13 +67,33 @@ export type StoredFile = z.infer<typeof StoredFile>;
  * SHA-256 at orgs/<org>/pubs/<pub>/profiles/<profile>/dataset.zip (the key is made from the ids). The ZIP holds the
  * dataset folder (report/page1/pages …) and, optionally, the Desk's own config.json at its root (then its choice of
  * templates is kept, as the Desk made it; otherwise the engine's `setup` chooses). */
-export const EngineSetupPayload = z.strictObject({
-  org_id: OrgId,
-  pub_id: Uuid7,
-  profile_id: Uuid7,
-  version_id: VersionId,
-  sha256: Sha256,
-});
+export const EngineSetupPayload = z
+  .strictObject({
+    org_id: OrgId,
+    pub_id: Uuid7,
+    profile_id: Uuid7,
+    version_id: VersionId,
+    sha256: Sha256,
+    /** A profile made from another one (Templates, templates.ts): that profile's config, pinned; the dataset above is
+     * the same bundle copied to this profile's own key. All three or none. */
+    base_profile_id: Uuid7.optional(),
+    base_config_version_id: VersionId.optional(),
+    base_config_sha256: Sha256.optional(),
+    /** With a base: this page of the dataset as this role's template (the engine's `retemplate` refuses a page that is
+     * not one of the role's candidates); none: the candidates found again (`candidates`). Both or neither. */
+    template_role: z.enum(TEMPLATE_ROLES).optional(),
+    template_page: z.string().min(1).max(400).optional(),
+  })
+  .refine(
+    (p) => {
+      const base = [p.base_profile_id, p.base_config_version_id, p.base_config_sha256].filter((v) => v !== undefined);
+      const chosen = [p.template_role, p.template_page].filter((v) => v !== undefined);
+      return (
+        (base.length === 0 || base.length === 3) && (chosen.length === 0 || (chosen.length === 2 && base.length === 3))
+      );
+    },
+    { message: "base_ fields all or none; template_role and template_page both or neither, and only with a base" },
+  );
 export type EngineSetupPayload = z.infer<typeof EngineSetupPayload>;
 
 /** What a layout or measure needs of the profile: the dataset (by version and SHA-256, unpacked once per worker home
@@ -176,6 +200,37 @@ const Plan = z.strictObject({
   }),
 });
 
+const Mm = z.number().min(-10_000).max(10_000);
+const MmBox = z.tuple([Mm, Mm, Mm, Mm]);
+
+/** A template page as the engine reads it (desk_engine.py `outline`), in mm rounded to 0.1: the page, its news area,
+ * what it keeps every day (masthead, folio, rules, panels: at most 80) and its ad slots. Not the printed page. */
+export const TemplateOutline = z.strictObject({
+  page_w_mm: z.number().positive().max(10_000),
+  page_h_mm: z.number().positive().max(10_000),
+  news: z.array(MmBox).max(20),
+  kept: z.array(z.strictObject({ kind: z.string().min(1).max(40), box: MmBox })).max(80),
+  ad_slots: z.array(MmBox).max(40),
+});
+export type TemplateOutline = z.infer<typeof TemplateOutline>;
+
+/** The pages of the dataset able to serve each role (the engine's setup test), newest design first, at most 12 a role
+ * and always the chosen one (the config's `candidates`; stored on app.engine_profile.candidates as it is). */
+export const TemplateCandidates = z.record(
+  z.string().regex(/^[a-z_]{1,40}$/),
+  z
+    .array(
+      z.strictObject({
+        name: z.string().min(1).max(400),
+        date: z.union([z.literal(""), z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)]),
+        page: z.number().int().min(1).max(9999),
+        outline: TemplateOutline,
+      }),
+    )
+    .max(40),
+);
+export type TemplateCandidates = z.infer<typeof TemplateCandidates>;
+
 const ProfileBase = { org_id: OrgId, pub_id: Uuid7, profile_id: Uuid7, sha256: Sha256 };
 
 /** The profile is set up: the config the engine wrote (dataset path taken out), the six plans (4, 8 and 16 pages,
@@ -192,6 +247,10 @@ export const ProfileReady = z.strictObject({
     gutter_mm: z.number().min(0).max(100),
   }),
   plans: z.array(Plan).length(6),
+  /** null: the config names none (it cannot have: the worker finds them when it does not) */
+  candidates: TemplateCandidates.nullable(),
+  /** the colour profile the worker had (PGN_ICC_SHA256) */
+  icc_sha256: Sha256.nullable(),
 });
 
 /** The dataset bundle cannot be used: not a ZIP the Desk's limits take (profile.not_zip, profile.too_large,
@@ -344,6 +403,10 @@ export const EngineProfile = z.strictObject({
   grid: z.strictObject({ columns: z.number().int(), columnMm: z.number(), gutterMm: z.number() }).nullable(),
   /** why it failed: the Desk's or the engine's words (profile.… or worker.… code) */
   error: z.strictObject({ code: z.string(), message: DeskText }).nullable(),
+  /** made from another profile (Templates) rather than an upload: that profile, and the roles chosen ({} = the
+   * dataset checked again) */
+  basedOn: z.strictObject({ id: Id, version: z.number().int().min(1) }).nullable(),
+  templateChoice: z.record(z.string(), z.string()).nullable(),
   createdBy: z.strictObject({ id: Id, name: z.string() }).nullable(),
   createdAt: Moment,
   updatedAt: Moment,

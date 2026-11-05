@@ -1,5 +1,8 @@
-import type { Edition, EditionInput, EditionPatch } from "@pageinator/contracts";
+import type { Brand, BrandInput, Edition, EditionInput, EditionPatch } from "@pageinator/contracts";
 import type { ApiProblem } from "./problem.ts";
+
+/** The issue number a text is (Latin or Devanagari digits), as the API counts the next one (the test double uses it). */
+export { issueNumber } from "@pageinator/contracts";
 import type { ServiceResult } from "./result.ts";
 
 /** A publication's edition as the API sends it (@pageinator/contracts), with its stories counted. */
@@ -7,6 +10,11 @@ export type PubEditionDto = Edition;
 export type EditionInputDto = EditionInput;
 /** PATCH …/editions/:e (edition.edit): the folio's volume, issue number and price; a field left out is kept. */
 export type EditionPatchDto = EditionPatch;
+
+/** Brand & masthead (packages/contracts/src/brand.ts): the publication's name, the edition defaults "Create edition"
+ * fills in, and the newest laid-out front page (its masthead). */
+export type BrandDto = Brand;
+export type BrandInputDto = BrandInput;
 
 /** "Send to the Desk": the story bundle's ZIP, its file name and how many stories went in. */
 export interface DeskBundleDto {
@@ -34,4 +42,8 @@ export interface EditionService {
     input: Where & { readonly editionId: string; readonly patch: EditionPatchDto },
   ): Promise<ServiceResult<PubEditionDto, ApiProblem>>;
   deskBundle(input: Where & { readonly editionId: string }): Promise<ServiceResult<DeskBundleDto, ApiProblem>>;
+  /** GET …/brand (anyone on the publication). */
+  brand(input: Where): Promise<ServiceResult<BrandDto, ApiProblem>>;
+  /** PUT …/brand (brand.edit): a field left out stays. */
+  setBrand(input: Where & { readonly input: BrandInputDto }): Promise<ServiceResult<BrandDto, ApiProblem>>;
 }

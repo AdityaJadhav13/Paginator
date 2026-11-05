@@ -38,7 +38,7 @@ describe("Navigation from permissions", () => {
     }
   });
 
-  it("lists the placeholder screens in a development build, still by permission", () => {
+  it("lists the placeholder screens in a development build, still by permission; the five sidebar screens are built", () => {
     expect(labels(navigation(org("admin", []), undefined, true))).toEqual([
       "nav.home /org/o",
       "glossary.team /org/o/team",
@@ -56,18 +56,23 @@ describe("Navigation from permissions", () => {
       "glossary.overview /org/o/pub/p/overview",
       "glossary.stories /org/o/pub/p/stories",
       "nav.media /org/o/pub/p/media",
+      "nav.newsroom /org/o/pub/p/newsroom",
+      "glossary.archive /org/o/pub/p/archive",
     ]);
     // Editions (L2.1) for whoever has edition.view, a ◐ one too; the ads desk (L2.6) for ads.view
     expect(labels(navigation(org("member", ["advertising"]), "p", false))).toEqual([
       "glossary.overview /org/o/pub/p/overview",
       "nav.editions /org/o/pub/p/editions",
       "nav.ads /org/o/pub/p/ads",
+      "glossary.archive /org/o/pub/p/archive",
     ]);
     expect(labels(navigation(org("member", ["photo_editor"]), "p", false))).toEqual([
       "glossary.overview /org/o/pub/p/overview",
       "nav.editions /org/o/pub/p/editions",
       "glossary.stories /org/o/pub/p/stories",
       "nav.media /org/o/pub/p/media",
+      "nav.newsroom /org/o/pub/p/newsroom",
+      "glossary.archive /org/o/pub/p/archive",
     ]);
     expect(labels(navigation(org("member", ["sub_editor"]), "p", false))).toContain("nav.editions /org/o/pub/p/editions");
     // making an edition and sending it to the Desk need a full cell: Advertising's and Prepress's ◐ are refused

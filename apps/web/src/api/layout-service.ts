@@ -13,6 +13,7 @@ import {
   FileLink,
   LayoutRun,
   SectionList,
+  TemplatesView,
 } from "@pageinator/contracts";
 import type { ApiProblem, LayoutService, ServiceResult } from "../services/index.ts";
 import type { ApiClient, ApiResult } from "./client.ts";
@@ -76,6 +77,12 @@ export function createApiLayoutService(
     },
     async fileLink({ orgId, pubId, runId, name }) {
       return read(FileLink, await client.get(`${run(orgId, pubId, runId)}/files/${encodeURIComponent(name)}`));
+    },
+    async getTemplates({ orgId, pubId }) {
+      return read(TemplatesView, await client.get(`${pub(orgId, pubId)}/templates`));
+    },
+    async chooseTemplate({ orgId, pubId, choice, idempotencyKey }) {
+      return read(EngineProfile, await client.post(`${pub(orgId, pubId)}/templates`, choice, { idempotencyKey }));
     },
     async listSections({ orgId, pubId }) {
       return read(SectionList, await client.get(`${pub(orgId, pubId)}/sections`));

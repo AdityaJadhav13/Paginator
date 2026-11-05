@@ -1583,6 +1583,60 @@ class FontInstanceCacheTest(unittest.TestCase):
         self.assertIs(deskfonts.F.FontRegistry._instance_bytes, wrapped)
 
 
+class TemplateCandidatesTest(unittest.TestCase):
+    """The template candidates a profile records (the Templates screen) and the engine's re-check of a choice."""
+
+    @staticmethod
+    def tpl(name, page_h=500.0, ads=()):
+        return types.SimpleNamespace(page_w=330.04, page_h=page_h, regions=[(0, DG.G.NCOL, 60.0, 450.0)],
+                                     keep=[{"kind": "furniture", "bbox_mm": [12.0, 10.0, 300.0, 50.04]},
+                                           {"kind": "ad", "bbox_mm": [0, 0, 1, 1]}],
+                                     ad_slots=[{"bbox_mm": list(b)} for b in ads], name=name,
+                                     summary=lambda: {"role": "back", "name": name})
+
+    def test_an_outline_is_the_page_its_news_area_kept_parts_and_ad_slots_in_tenths_of_a_mm(self):
+        o = DE.outline(self.tpl("x", ads=[(20.0, 400.0, 120.0, 480.06)]))
+        self.assertEqual((o["page_w_mm"], o["page_h_mm"]), (330.0, 500.0))
+        self.assertEqual(o["news"], [[round(v, 1) for v in DG.G.region_box((0, DG.G.NCOL, 60.0, 450.0))]])
+        self.assertEqual(o["kept"], [{"kind": "furniture", "box": [12.0, 10.0, 300.0, 50.0]}])   # the ad is a slot
+        self.assertEqual(o["ad_slots"], [[20.0, 400.0, 120.0, 480.1]])
+
+    def test_candidates_are_newest_first_capped_and_keep_the_chosen_one(self):
+        rows = [((True, f"2026-01-{d:02d}", f"p{d}"), f"2026-01-{d:02d}", f"p{d}", 4, self.tpl(f"p{d}"))
+                for d in range(1, DE.MAX_CANDIDATES + 4)]
+        rows.append(((True, "sample-x", "undated"), "sample-x", "undated", 4, self.tpl("undated")))
+        got = DE.candidates_record({"back": rows}, {"back": "p1"})
+        names = [c["name"] for c in got["back"]]
+        self.assertEqual(names[:2], ["undated", f"p{DE.MAX_CANDIDATES + 3}"])   # "sample-x" sorts after a date
+        self.assertEqual(len(names), DE.MAX_CANDIDATES + 1)
+        self.assertEqual(names[-1], "p1")                                        # the chosen one, past the cap
+        self.assertEqual(got["back"][0]["date"], "")
+        self.assertEqual(set(got), set(DE.ROLES))
+        self.assertEqual(got["front"], [])
+
+    def test_retemplate_takes_only_a_candidate_of_that_role(self):
+        with tempfile.TemporaryDirectory() as d:
+            home = Path(d)
+            cfg = {"dataset": d, "templates": {"front": "a", "back": "b"}, "template_summary": {"front": {}},
+                   "candidates": {"back": [{"name": "b"}, {"name": "c"}], "front": [{"name": "a"}]}}
+            DE.write_json(home / "config.json", cfg)
+            ns = types.SimpleNamespace
+            for role, page in (("back", "a"), ("inside", "c"), ("masthead", "c")):
+                with self.subTest(role=role, page=page), self.assertRaises(SystemExit):
+                    DE.cmd_retemplate(home, ns(role=role, page=page))
+            real = DG.Template
+            DG.Template = lambda ds, name, role: self.tpl(name)
+            try:
+                out = DE.cmd_retemplate(home, ns(role="back", page="c"))
+            finally:
+                DG.Template = real
+            self.assertEqual(out["templates"], {"front": "a", "back": "c"})
+            saved = DE.read_json(home / "config.json")
+            self.assertEqual(saved["templates"]["back"], "c")
+            self.assertEqual(saved["template_summary"], {"front": {}, "back": {"role": "back", "name": "c"}})
+            self.assertEqual(saved["candidates"], cfg["candidates"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

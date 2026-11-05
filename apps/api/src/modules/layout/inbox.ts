@@ -4,8 +4,8 @@
 // under the event's organisation and publication, so another's is not found (refused: not_found), except an ad slot's
 // artwork, which a person may have cleared since (ignored).
 //   - profile.ready → the profile ready (its config, which must be the profile's own config.json; its templates, grid
-//     and six plans), and so in use; profile.rejected and a failed engine.setup → failed, with the code and the Desk's
-//     words. Only a profile still setting up, and only for its dataset's bytes, takes them.
+//     and six plans, the template candidates and the worker's colour profile), and so in use; profile.rejected and
+//     a failed engine.setup → failed, with the code and the Desk's words. Only a profile still setting up, and only for its dataset's bytes, takes them.
 //   - measure.status → the edition's measuring progress, for the snapshot it names (its SHA-256); a failed
 //     engine.measure → failed.
 //   - run.progress → a heartbeat, the run's state and its pages' states; run.page → a page made (its files, each under
@@ -131,6 +131,8 @@ export async function applyLayoutEvent(
         templates: event.templates,
         grid: event.grid,
         plans: event.plans,
+        candidates: event.candidates,
+        iccSha256: event.icc_sha256,
       });
       await audit("engine_profile.ready", { engineVersion: event.engine_version });
     } else {

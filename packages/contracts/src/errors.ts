@@ -27,6 +27,7 @@ export const ERROR_CODES = [
   "run_finished",
   "layout_refused",
   "no_profile",
+  "profile_setting_up",
   "not_editable",
   "stale",
   "page_locked",

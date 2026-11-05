@@ -998,6 +998,8 @@ export function createMockSessionEnvironment(
     members: memberIds,
     notify: (orgId, userId, notice) => notificationDouble.add(orgId, userId, notice),
     emit: (orgId, event) => emitLive(orgId, event),
+    publicationName: (pubId) => pubNames.get(pubId),
+    renamePublication: (pubId, name) => void pubNames.set(pubId, name),
   };
   const storyDouble = createMockStories(storyDeps);
   const newsDouble = createMockNews({

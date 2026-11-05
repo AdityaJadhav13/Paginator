@@ -161,6 +161,8 @@ function listItem(story: Story): StoryListItem {
     assignee: story.assignee,
     dueAt: story.dueAt,
     updatedAt: story.updatedAt,
+    photo: story.photo,
+    can: story.can,
   };
 }
 

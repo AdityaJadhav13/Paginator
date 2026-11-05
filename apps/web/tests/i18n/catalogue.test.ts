@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ERROR_CODES } from "@pageinator/contracts";
+import { ERROR_CODES, PERMISSION_NAMES } from "@pageinator/contracts";
 import {
   CATALOGUE_KEYS,
   CATALOGUES,
@@ -46,7 +46,7 @@ const PLAN_ERROR_CODES = [
 ];
 
 // The test double (src/mocks) renders no text: its operation names ("team.invite") only look like keys.
-const sourceFiles = import.meta.glob(["/src/**/*.{ts,tsx}", "!/src/i18n/en.ts", "!/src/i18n/mr.ts", "!/src/mocks/**"], {
+const sourceFiles = import.meta.glob(["/src/**/*.{ts,tsx}", "!/src/i18n/en.ts", "!/src/i18n/mr.ts", "!/src/i18n/screens/**", "!/src/mocks/**"], {
   eager: true,
   query: "?raw",
   import: "default",
@@ -59,7 +59,9 @@ function keyLiterals(): Map<string, string> {
   const literal = new RegExp(`["'\`]((?:${prefixes})\\.[A-Za-z0-9_.]+)["'\`]`, "g");
   for (const [path, source] of Object.entries(sourceFiles)) {
     for (const match of source.matchAll(literal)) {
-      if (!/\.(css|ts|tsx|js|json)$/.test(match[1]!)) found.set(match[1]!, path); // not a file name
+      // not a file name, nor a permission's name ("brand.edit", "archive.view" share a screen's key prefix)
+      if (!/\.(css|ts|tsx|js|json)$/.test(match[1]!) && !PERMISSION_NAMES.includes(match[1] as never))
+        found.set(match[1]!, path);
     }
   }
   return found;

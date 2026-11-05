@@ -13,7 +13,6 @@ import {
   ArchiveCheck,
   ConfirmInput,
   DeliveryInput,
-  type Delivery,
   EditionRelease,
   FileLink,
   PageApprovalInput,
@@ -33,7 +32,6 @@ import { editRun, pageTurn, runTurn } from "../../db/editor.ts";
 import { editionArtwork, layoutEdition, profileInUse, storiesByDeskKey } from "../../db/layout.ts";
 import type { Database } from "../../db/pools.ts";
 import {
-  type DeliveryRow,
   type ReleaseRow,
   addDelivery,
   addReleaseFile,
@@ -64,7 +62,10 @@ import { type Access, accessOf, auditRefusals, refused } from "../access/access.
 import { planFor, slotsOf } from "../layout/request.ts";
 import { DOWNLOAD_SECONDS } from "../media/photos.ts";
 import { idempotent } from "../requests/idempotency.ts";
+import { archiveRoutes } from "./archive.ts";
 import { type ReleaseState, candidate, needsPressTest, preflight, releasePage, sameFiles } from "./preflight.ts";
+import { printProfileRoutes } from "./print-profiles.ts";
+import { releaseNow, releaseView, releaseViews } from "./views.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE = /^([1-9]|1[0-6])$/;
@@ -144,77 +145,10 @@ export async function stateOf(tx: Tx, pub: string, editionId: string, lock = fal
   };
 }
 
-function deliveryView(row: DeliveryRow): Delivery {
-  return {
-    id: row.id,
-    method: "download",
-    sentBy: { id: row.sent_by, name: row.sent_name },
-    sentAt: row.sent_at.toISOString(),
-    note: row.note,
-    files: row.files,
-    confirmation:
-      row.press_person !== null && row.confirmed_at !== null && row.confirmed_by !== null
-        ? {
-            pressPerson: row.press_person,
-            at: row.confirmed_at.toISOString(),
-            note: row.confirm_note,
-            recordedBy: { id: row.confirmed_by, name: row.confirmed_name ?? "" },
-          }
-        : null,
-  };
-}
-
-/** A release's manifest columns: always written in its own transaction (a release without them is a bug). */
-function written<T>(value: T | null, id: string): T {
-  if (value === null) throw new Error(`release ${id} has no manifest`);
-  return value;
-}
-
-async function releaseViews(tx: Tx, pub: string, rows: readonly ReleaseRow[]): Promise<Release[]> {
-  const ids = rows.map((r) => r.id);
-  const files = await releaseFiles(tx, pub, ids);
-  const sent = await deliveries(tx, pub, ids);
-  return rows.map((r) => ({
-    id: r.id,
-    editionId: r.edition_id,
-    runId: r.run_id,
-    number: r.number,
-    kind: r.kind,
-    approvedBy: { id: r.approved_by, name: r.approved_name },
-    approvedAt: r.approved_at.toISOString(),
-    note: r.note,
-    files: files
-      .filter((f) => f.release_id === r.id)
-      .map((f) => ({
-        page: f.page_no,
-        name: f.name,
-        rev: f.rev,
-        sha256: f.sha256,
-        bytes: f.bytes,
-        replaces: f.replaces,
-      })),
-    archive: {
-      verifiedAt: written(r.verified_at, r.id).toISOString(),
-      retainUntil: r.retain_until.toISOString(),
-      manifestSha256: written(r.manifest_sha256, r.id),
-    },
-    deliveries: sent.filter((d) => d.release_id === r.id).map(deliveryView),
-  }));
-}
-
-async function releaseView(tx: Tx, pub: string, id: string): Promise<Release | null> {
-  const row = await findRelease(tx, pub, id);
-  return row ? ((await releaseViews(tx, pub, [row]))[0] ?? null) : null;
-}
-
-async function releaseNow(tx: Tx, pub: string, id: string): Promise<Release> {
-  const view = await releaseView(tx, pub, id);
-  if (!view) throw new Error("the release is not found");
-  return view;
-}
-
 export const releaseRoutes: FastifyPluginAsyncZod<ReleaseOptions> = async (app, { database, store, retainDays }) => {
   auditRefusals(app, database);
+  await app.register(archiveRoutes, { database });
+  await app.register(printProfileRoutes, { database });
 
   /** Writes bytes to the archive under Object Lock and reads that version back: its SHA-256 must be theirs. Any
    * failure (or a store slower than STORE_MS) is 502 `failed` (archive_failed: nothing released; receipt_failed: the

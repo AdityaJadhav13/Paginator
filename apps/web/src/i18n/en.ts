@@ -9,6 +9,12 @@
  * `error.*` keys are the API's error codes (docs/product/10-l2-newsroom-plan.md §5.1): the web shows this text for a
  * code, and falls back to the API's own English message for a code it does not know.
  */
+import { TEMPLATES_EN } from "./screens/templates.en.ts";
+import { NEWSROOM_EN } from "./screens/newsroom.en.ts";
+import { ARCHIVE_EN } from "./screens/archive.en.ts";
+import { BRAND_EN } from "./screens/brand.en.ts";
+import { PRINT_PROFILES_EN } from "./screens/printProfiles.en.ts";
+
 export const EN = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
   "glossary.overview": "Overview",
@@ -1628,6 +1634,9 @@ export const EN = {
   "auditLog.action.plan.page": "Planned a page's section or note",
   "auditLog.action.plan.copy": "Copied an edition's plan",
   "auditLog.action.ad_settings.set": "Changed the ads cut-off",
+  "auditLog.action.engine_profile.retemplate": "Chose another template page",
+  "auditLog.action.brand.set": "Changed the publication's name or edition defaults",
+  "auditLog.action.print_profile.create": "Saved the print profile",
   "auditLog.action.section.create": "Added a section",
   "auditLog.action.section.edit": "Changed a section",
   "auditLog.action.ad_cutoff.alert": "Warned of ads without usable artwork at the cut-off",
@@ -1798,6 +1807,11 @@ export const EN = {
   "adsDesk.advertiser.archiveMessage": "It is no longer offered for new bookings. Its bookings stay as they are, and you can bring it back.",
   "adsDesk.advertiser.archiveConfirm": "Archive",
   "adsDesk.advertiser.keep": "Keep it",
+  ...TEMPLATES_EN,
+  ...NEWSROOM_EN,
+  ...ARCHIVE_EN,
+  ...BRAND_EN,
+  ...PRINT_PROFILES_EN,
 } as const;
 
 export type CatalogueKey = keyof typeof EN;

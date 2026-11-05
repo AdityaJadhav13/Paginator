@@ -24,6 +24,11 @@ def write_atomic(path, obj):
     tmp.write_text(json.dumps(DM.annotate(obj)))
     os.replace(tmp, path)
 
+def fake_candidates():
+    o = {"page_w_mm": 330.0, "page_h_mm": 520.0, "news": [[12.0, 70.0, 318.0, 500.0]],
+         "kept": [{"kind": "furniture", "box": [12.0, 10.0, 318.0, 60.0]}], "ad_slots": []}
+    return {r: [{"name": f"fictional-{r}-{d}", "date": f"2026-01-0{d}", "page": 1, "outline": o} for d in (2, 1)]
+            for r in ("front", "inside_imprint", "inside", "back")}
 cmd = sys.argv[1]
 home = Path(first("--home"))
 with open(home / "fake-engine-calls.txt", "a") as f:
@@ -36,13 +41,28 @@ if cmd == "setup":
         reply({"error": "no page of the dataset can serve as the back template"}, 1)
     cfg = {"schema": "pageinator.desk.config/1", "engine": "desk-engine/0.1.0", "created": "x", "dataset": str(ds),
            "templates": {"front": "fictional-p1", "inside_imprint": "fictional-p2", "inside": "fictional-p3",
-                         "back": "fictional-p4"},
+                         "back": "fictional-p4"}, "candidates": fake_candidates(),
            "needs_per_role": {"front": {"stories": 5, "briefs": 1, "photos": 2, "words": 1500, "pages_measured": 3}}}
     write_atomic(home / "config.json", cfg)
     reply({"config": {k: v for k, v in cfg.items() if k != "dataset"}})
 cfg = json.loads((home / "config.json").read_text()) if (home / "config.json").exists() else {}
 if not cfg.get("templates") or not cfg.get("dataset") or not Path(cfg["dataset"]).is_dir():
     reply({"error": "the Desk is not set up yet: run setup"}, 1)
+if cmd == "candidates":
+    cfg["candidates"] = fake_candidates()
+    write_atomic(home / "config.json", cfg)
+    reply({"candidates": cfg["candidates"]})
+if cmd == "retemplate":
+    role, page = first("--role") or "", first("--page") or ""
+    for a in sys.argv[2:]:
+        role = a[7:] if a.startswith("--role=") else role
+        page = a[7:] if a.startswith("--page=") else page
+    cands = cfg.get("candidates") or fake_candidates()
+    if page not in [c["name"] for c in cands.get(role, [])]:
+        reply({"error": f"the page {page} cannot serve as the {role.replace('_', ' ')} template"}, 1)
+    cfg["candidates"], cfg["templates"] = cands, {**cfg["templates"], role: page}
+    write_atomic(home / "config.json", cfg)
+    reply({"templates": cfg["templates"]})
 if cmd == "plan":
     pages, back = int(first("--pages")), first("--back-ads") == "1"
     out = []

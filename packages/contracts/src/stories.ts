@@ -85,13 +85,18 @@ export const StoryListItem = Story.pick({
   assignee: true,
   dueAt: true,
   updatedAt: true,
+  /** the Newsroom board's flags (no photo, no caption, a refused picture) */
+  photo: true,
+  /** the Newsroom board's moves: the same rules as the story's own */
+  can: true,
 });
 export type StoryListItem = z.infer<typeof StoryListItem>;
 
 export const StoryList = z.strictObject({ items: z.array(StoryListItem), nextCursor: z.string().nullable() });
 
 export const StoryQuery = z.strictObject({
-  edition: Id.optional(),
+  /** an edition's id, or "none": the stories in no edition (the Newsroom board) */
+  edition: z.union([Id, z.literal("none")]).optional(),
   status: StoryStatus.optional(),
   assignee: z.literal("me").optional(),
   reporter: Id.optional(),

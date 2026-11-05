@@ -61,6 +61,10 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     status: 409,
     message: "This paper has no engine profile ready yet. Upload its dataset bundle in Settings first.",
   },
+  profile_setting_up: {
+    status: 409,
+    message: "An engine profile is being set up now. Wait until it is ready or has failed, then choose again.",
+  },
   // the page editor (L2.4); the first is the Desk's own words (deskserver/api.py _edit_page)
   not_editable: { status: 409, message: "Pages can be changed once their layout has finished." },
   stale: {

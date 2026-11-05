@@ -1351,7 +1351,8 @@ function SaveState({
   );
 }
 
-function SendBackDialog({
+/** The send-back comment (a move to Draft needs one); the Newsroom board uses it too. */
+export function SendBackDialog({
   open,
   onClose,
   onSend,

@@ -16,6 +16,7 @@ export type DocxImportDto = DocxImport;
 
 /** The list's filters (GET …/stories): every one optional; `cursor` is the API's, from the previous page. */
 export interface StoryFilterDto {
+  /** an edition's id, or "none": the stories in no edition */
   readonly edition?: string;
   readonly status?: StoryStatus;
   readonly assignee?: "me";

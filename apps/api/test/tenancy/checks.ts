@@ -79,6 +79,9 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   // the ads cut-off (migration 2026_12_05_0002): the settings are rewritten; an alert is only added
   ad_settings: ["INSERT", "SELECT", "UPDATE"],
   ad_cutoff_alert: ["INSERT", "SELECT"],
+  // the sidebar screens (migration 2026_12_06_0001): the edition defaults are rewritten; a print profile only added
+  edition_defaults: ["INSERT", "SELECT", "UPDATE"],
+  print_profile: ["INSERT", "SELECT"],
   // the ads desk (migration 2026_12_05_0001): advertisers are archived and bookings cancelled, never removed; a
   // placement is taken out; a plan page is rewritten
   advertiser: ["INSERT", "SELECT", "UPDATE"],

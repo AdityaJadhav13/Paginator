@@ -38,7 +38,9 @@
  * it fails with the Desk's code; then the importer alone hears `import` live. GET …/imports/:id is the importer's only.
  * Fictional data only; deterministic (no clock, no randomness).
  */
+import { issueNumber } from "../services/edition-service.ts";
 import type {
+  BrandDto,
   CommentDto,
   CommentService,
   DeskBundleDto,
@@ -86,7 +88,9 @@ export type MockStoryOperation =
   | "editions.list"
   | "editions.create"
   | "editions.update"
-  | "editions.deskBundle";
+  | "editions.deskBundle"
+  | "editions.brand"
+  | "editions.setBrand";
 
 /** The person's standing on a publication, as the API's access check finds it. */
 export interface MockStanding {
@@ -109,6 +113,9 @@ export interface MockStoryDeps {
   notify?(orgId: string, userId: string, notice: MockStoryNotice): void;
   /** A change the API would send as a live update (the session double decides who hears it). */
   emit?(orgId: string, event: LiveEventDto): void;
+  /** The publication's name in the session double, and its rename (Brand & masthead). */
+  publicationName?(pubId: string): string | undefined;
+  renamePublication?(pubId: string, name: string): void;
 }
 
 /** What a story's change tells someone of (create-mock-notifications.ts MockNotice). */
@@ -519,6 +526,10 @@ export function createMockStories(deps: MockStoryDeps): {
   let rows = fixtures();
   let editionRows = editionFixtures();
   let editionCounter = 0;
+  /** Each publication's edition defaults (Brand & masthead); none set: empty, no counting. */
+  let defaults = new Map<string, BrandDto["defaults"]>();
+  const defaultsOf = (pubId: string): BrandDto["defaults"] =>
+    defaults.get(pubId) ?? { volume: "", price: "", nextIssue: null };
   let comments = commentFixtures();
   let commentCounter = 0;
   let counter = 0;
@@ -716,6 +727,8 @@ export function createMockStories(deps: MockStoryDeps): {
     assignee: story.assignee,
     dueAt: story.dueAt,
     updatedAt: story.updatedAt,
+    photo: story.photo,
+    can: story.can,
   });
 
   /** The API's access check: signed in, a member, two-step if required, the route's permission. */
@@ -736,7 +749,9 @@ export function createMockStories(deps: MockStoryDeps): {
       | "edition.create"
       | "edition.edit"
       | "desk.export"
-      | "settings.edit",
+      | "settings.edit"
+      | "publication.view"
+      | "brand.edit",
     /** also allowed by any of these (the ad picker: a ready picture to whoever may set an ad slot) */
     orAny: readonly ("ads.manage" | "layout.generate")[] = [],
   ): Promise<ServiceResult<T, ApiProblem> | { person: { userId: string; name: string }; s: MockStanding }> {
@@ -810,7 +825,9 @@ export function createMockStories(deps: MockStoryDeps): {
       const matching = rows
         .filter((story) => story.orgId === orgId && story.publicationId === pubId && sees(s, story, person.userId))
         .filter((story) => !filter.status || story.status === filter.status)
-        .filter((story) => !filter.edition || story.edition?.id === filter.edition)
+        .filter((story) =>
+          !filter.edition || (filter.edition === "none" ? story.edition === null : story.edition?.id === filter.edition),
+        )
         .filter((story) => filter.assignee !== "me" || story.assignee?.id === person.userId)
         .filter((story) => !filter.reporter || story.reporter.id === filter.reporter)
         .filter((story) => !q || `${story.headline}\n${story.body}`.toLowerCase().includes(q))
@@ -1433,6 +1450,11 @@ export function createMockStories(deps: MockStoryDeps): {
         status: "planning",
       };
       editionRows = [...editionRows, made];
+      // the next issue number moves past this one (the API's src/db/brand.ts issueUsed)
+      const issue = issueNumber(made.issue);
+      const set = defaultsOf(pubId);
+      if (issue !== null && set.nextIssue !== null && set.nextIssue <= issue && issue < 999_999)
+        defaults = new Map(defaults).set(pubId, { ...set, nextIssue: issue + 1 });
       keep(idempotencyKey, "edition", input, made.id);
       deps.emit?.(orgId, { type: "edition", publicationId: pubId, editionId: made.id });
       return success(editionView(made));
@@ -1467,7 +1489,44 @@ export function createMockStories(deps: MockStoryDeps): {
       const file = new Blob(["PK\u0003\u0004", ready.map((story) => story.id).join("\n")], { type: "application/zip" });
       return success({ file, filename: `pageinator-stories-${edition.date}.zip`, stories: ready.length });
     },
+
+    async brand({ orgId, pubId }) {
+      const checked = await check<BrandDto>("editions.brand", orgId, pubId, "publication.view");
+      if (refused(checked)) return checked;
+      return success(brandOf(pubId));
+    },
+
+    async setBrand({ orgId, pubId, input }) {
+      const checked = await check<BrandDto>("editions.setBrand", orgId, pubId, "brand.edit");
+      if (refused(checked)) return checked;
+      const name = input.name?.trim();
+      if (name !== undefined && (name === "" || name.includes("\n")))
+        return failure(answer(400, "invalid_request", "The name must be one line, not empty."));
+      if (name !== undefined) deps.renamePublication?.(pubId, name);
+      const given = Object.fromEntries(
+        Object.entries(input.defaults ?? {}).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]),
+      );
+      defaults = new Map(defaults).set(pubId, { ...defaultsOf(pubId), ...given });
+      return success(brandOf(pubId));
+    },
   };
+
+  function brandOf(pubId: string): BrandDto {
+    return {
+      name: deps.publicationName?.(pubId) ?? pubId,
+      defaults: defaultsOf(pubId),
+      // shortcut: the layout double's fixed done run (create-mock-layout.ts boardFixture), not its newest run
+      masthead:
+        pubId === "pub-demo-pune-daily"
+          ? {
+              runId: "run-demo-001",
+              editionId: "edition-demo-2026-10-24",
+              editionDate: "2026-10-24",
+              finishedAt: "2026-10-24T08:17:16.000+05:30",
+            }
+          : null,
+    };
+  }
 
   const media: MediaService = {
     async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey, purpose = "story_photo" }) {
@@ -1918,6 +1977,7 @@ export function createMockStories(deps: MockStoryDeps): {
       rows = fixtures();
       editionRows = editionFixtures();
       editionCounter = 0;
+      defaults = new Map();
       counter = 0;
       clock = 0;
       before = new Map([["story-demo-005", "editing"]]);

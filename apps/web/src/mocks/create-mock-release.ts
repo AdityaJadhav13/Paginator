@@ -4,8 +4,10 @@
  * test, stories not placed), page approval and unlocking (409 approval_stale on another revision or bytes, not_approved),
  * a release bound to the candidate's SHA-256 (409 approval_stale, release_refused), its files by link, "Mark as sent",
  * the press's confirmation (409 already_confirmed), the archive check and the press test. Every page PDF's SHA-256 is
- * fictional and never changes here, so a correction is not modelled (tests stub one). Permissions are not modelled: the
- * screen hides what the API would refuse. Fictional data only.
+ * fictional and never changes here, so a correction is not modelled (tests stub one). The archive lists the releases made
+ * here (the search over stories is not modelled: a search finds nothing); print profiles are kept in memory, and a
+ * release pins the newest. Permissions are not modelled: the screen hides what the API would refuse. Fictional data
+ * only.
  */
 import type {
   ApiProblem,
@@ -18,6 +20,7 @@ import type {
   ReleaseService,
   ServiceResult,
 } from "../services/index.ts";
+import type { PrintProfileDto } from "../services/release-service.ts";
 
 export interface MockReleaseDeps {
   readonly layout: LayoutService;
@@ -41,6 +44,7 @@ export function createMockRelease(deps: MockReleaseDeps): {
   let approvals = new Map<string, PageApprovalDto>();
   let releases: ReleaseItemDto[] = [];
   let pressTest: PressTestDto | null = null;
+  let profiles: PrintProfileDto[] = [];
   let counter = 0;
   /** the newest view of each run's pages, for an approval */
   let runs = new Map<string, { editionId: string; pages: ReleasePageDto[] }>();
@@ -182,6 +186,9 @@ export function createMockRelease(deps: MockReleaseDeps): {
         files: candidate.files,
         archive: { verifiedAt: NOW, retainUntil: "2033-10-24T10:00:00.000+05:30", manifestSha256: "a".repeat(64) },
         deliveries: [],
+        printProfile: profiles[0]
+          ? { id: profiles[0].id, version: profiles[0].version, pressName: profiles[0].pressName }
+          : null,
       };
       releases = [made, ...releases];
       return { ok: true, value: structuredClone(made) };
@@ -232,6 +239,79 @@ export function createMockRelease(deps: MockReleaseDeps): {
       pressTest = { pageSha256, acceptedOn, note: note ?? null, recordedBy: person, recordedAt: NOW };
       return { ok: true, value: { ...pressTest } };
     },
+    async archive({ year, month, kind, q }) {
+      const items = releases
+        .map((r) => ({ r, date: /\d{4}-\d{2}-\d{2}/.exec(r.editionId)?.[0] ?? "2026-10-24" }))
+        .filter(
+          ({ r, date }) =>
+            (year === undefined || Number(date.slice(0, 4)) === year) &&
+            (month === undefined || Number(date.slice(5, 7)) === month) &&
+            (!kind || r.kind === kind) &&
+            !q,
+        )
+        .map(({ r, date }) => ({
+          releaseId: r.id,
+          editionId: r.editionId,
+          editionDate: date,
+          number: r.number,
+          kind: r.kind,
+          approvedAt: r.approvedAt,
+          retainUntil: r.archive.retainUntil,
+          files: r.files.length,
+          runId: r.runId,
+          frontThumb: true,
+          matches: [],
+        }));
+      return { ok: true, value: { items, truncated: false } };
+    },
+    async archiveRelease({ releaseId }) {
+      const found = releaseOf(releaseId);
+      if (!found) return fail(404, "not_found");
+      const mine = releases.filter((r) => r.editionId === found.editionId);
+      return {
+        ok: true,
+        value: {
+          release: structuredClone(found),
+          edition: {
+            id: found.editionId,
+            date: /\d{4}-\d{2}-\d{2}/.exec(found.editionId)?.[0] ?? "2026-10-24",
+            releases: mine.map((r) => ({ id: r.id, number: r.number, kind: r.kind, approvedAt: r.approvedAt })),
+          },
+        },
+      };
+    },
+    async printProfiles() {
+      return {
+        ok: true,
+        value: {
+          items: structuredClone(profiles),
+          facts: {
+            engineProfileVersion: 1,
+            trim: { wMm: 330, hMm: 520 },
+            pdfStandard: "PDF/X-1a",
+            checkerSha256: "c".repeat(64),
+            iccSha256: "d".repeat(64),
+            adMinPpi: 200,
+            photoSharpPpi: 150,
+            delivery: "download",
+          },
+        },
+      };
+    },
+    async addPrintProfile({ pressName, contact, note }) {
+      counter += 1;
+      const made: PrintProfileDto = {
+        id: id(300 + counter),
+        version: profiles.length + 1,
+        pressName,
+        contact: contact || null,
+        note: note || null,
+        createdBy: me(),
+        createdAt: NOW,
+      };
+      profiles = [made, ...profiles];
+      return { ok: true, value: structuredClone(made) };
+    },
   };
   return {
     release,
@@ -240,6 +320,7 @@ export function createMockRelease(deps: MockReleaseDeps): {
       approvals = new Map();
       releases = [];
       pressTest = null;
+      profiles = [];
       counter = 0;
       runs = new Map();
     },

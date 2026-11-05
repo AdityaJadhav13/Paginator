@@ -4,7 +4,7 @@
  * `current`, when it is one. "Send to the Desk" takes the story bundle's ZIP as a Blob, with its file name from
  * Content-Disposition and its story count from X-Pageinator-Stories.
  */
-import { Edition, EditionList } from "@pageinator/contracts";
+import { Brand, Edition, EditionList } from "@pageinator/contracts";
 import type { ApiProblem, EditionService, ServiceResult } from "../services/index.ts";
 import type { ApiClient, ApiResult } from "./client.ts";
 
@@ -26,8 +26,8 @@ function withCurrent(problem: ApiProblem): ApiProblem {
   return edition.success ? { ...rest, current: edition.data } : rest;
 }
 
-const base = (orgId: string, pubId: string) =>
-  `/api/v1/orgs/${encodeURIComponent(orgId)}/pubs/${encodeURIComponent(pubId)}/editions`;
+const pub = (orgId: string, pubId: string) => `/api/v1/orgs/${encodeURIComponent(orgId)}/pubs/${encodeURIComponent(pubId)}`;
+const base = (orgId: string, pubId: string) => `${pub(orgId, pubId)}/editions`;
 
 /** filename="…" from Content-Disposition, kept only when it is a plain file name. */
 function filenameOf(headers: Headers): string | undefined {
@@ -58,6 +58,12 @@ export function createApiEditionService(client: ApiClient): EditionService {
       const filename = filenameOf(answer.value.headers);
       if (!/^\d{1,6}$/.test(stories) || !filename) return { ok: false, error: UNEXPECTED };
       return { ok: true, value: { file: answer.value.blob, filename, stories: Number(stories) } };
+    },
+    async brand({ orgId, pubId }) {
+      return read(Brand, await client.get(`${pub(orgId, pubId)}/brand`));
+    },
+    async setBrand({ orgId, pubId, input }) {
+      return read(Brand, await client.put(`${pub(orgId, pubId)}/brand`, input));
     },
   };
 }

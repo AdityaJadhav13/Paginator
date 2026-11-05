@@ -1,6 +1,10 @@
 import type {
   ApprovedPage,
   ArchiveCheck,
+  ArchiveList,
+  ArchiveRelease,
+  PrintProfile,
+  PrintProfiles,
   EditionRelease,
   PageApproval,
   PressTest,
@@ -20,6 +24,11 @@ export type PageApprovalDto = PageApproval;
 export type ApprovedPageDto = ApprovedPage;
 export type PressTestDto = PressTest;
 export type ArchiveCheckDto = ArchiveCheck;
+export type ArchiveListDto = ArchiveList;
+export type ArchiveEntryDto = ArchiveList["items"][number];
+export type ArchiveReleaseDto = ArchiveRelease;
+export type PrintProfileDto = PrintProfile;
+export type PrintProfilesDto = PrintProfiles;
 export type PreflightItemDto = EditionRelease["preflight"]["items"][number];
 
 interface Where {
@@ -62,4 +71,25 @@ export interface ReleaseService {
   setPressTest(
     input: Where & { readonly pageSha256: string; readonly acceptedOn: string; readonly note?: string },
   ): Result<PressTestDto>;
+  /** The archive (archive.view): the releases by edition date, filtered and searched; one release with its edition's
+   * other releases (404 not_found: none in this publication). */
+  archive(
+    input: Where & {
+      readonly year?: number;
+      readonly month?: number;
+      readonly kind?: "release" | "correction";
+      readonly q?: string;
+    },
+  ): Result<ArchiveListDto>;
+  archiveRelease(input: Where & { readonly releaseId: string }): Result<ArchiveReleaseDto>;
+  /** Print profiles (print_profiles.view) and a new version (print_profiles.edit; an Idempotency-Key). */
+  printProfiles(input: Where): Result<PrintProfilesDto>;
+  addPrintProfile(
+    input: Where & {
+      readonly pressName: string;
+      readonly contact?: string;
+      readonly note?: string;
+      readonly idempotencyKey: string;
+    },
+  ): Result<PrintProfileDto>;
 }

@@ -446,6 +446,13 @@ export const FIXTURES: Fixture[] = [
     per: "publication",
     row: (org, pub) => ({ ...inPub(org, pub), edition_date: "2026-10-21", bookings: "{}", told: 0 }),
   },
+  // the sidebar screens (migration 2026_12_06_0001): the edition defaults and a print profile
+  { table: "edition_defaults", per: "publication", row: (org, pub) => ({ ...inPub(org, pub), updated_by: org.user }) },
+  {
+    table: "print_profile",
+    per: "publication",
+    row: (org, pub) => ({ ...inPub(org, pub), version: 1, press_name: "Example Press", created_by: org.user }),
+  },
   // the ads desk (migration 2026_12_05_0001): an advertiser, its booking (with the asset as artwork) placed in the
   // edition's slot, and a plan page naming the section
   {

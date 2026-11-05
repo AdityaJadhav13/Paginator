@@ -10,12 +10,12 @@
         "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
         "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
         "profile_id": "01890a5d-ac96-774b-bcce-b302099a8061",
-        "sha256": "9bd99aebbad6f61ea337f8ba383826ff899f4c1be9ac8fa86c6a7afac60daeda",
+        "sha256": "08b89d990254fcd537d6a7499c39f4d74760c9e62f7934be6435b45b20e4a9e2",
         "config": {
           "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/profiles/01890a5d-ac96-774b-bcce-b302099a8061/config.json",
-          "version_id": "7a3d1ac11972b757712727ef1b37c48f84aafa8105f3b3cc41c0d3b21bee51bb",
-          "sha256": "7a3d1ac11972b757712727ef1b37c48f84aafa8105f3b3cc41c0d3b21bee51bb",
-          "bytes": 359
+          "version_id": "fc67a2f33f1187a313f7d5ff6462ef8b956cb9116977ef70ebe394eff146d7d8",
+          "sha256": "fc67a2f33f1187a313f7d5ff6462ef8b956cb9116977ef70ebe394eff146d7d8",
+          "bytes": 3818
         },
         "engine_version": "desk-engine/0.1.0",
         "templates": {
@@ -566,7 +566,250 @@
               "spare_share": 0.2
             }
           }
-        ]
+        ],
+        "candidates": {
+          "front": [
+            {
+              "name": "fictional-front-2",
+              "date": "2026-01-02",
+              "page": 1,
+              "outline": {
+                "page_w_mm": 330.0,
+                "page_h_mm": 520.0,
+                "news": [
+                  [
+                    12.0,
+                    70.0,
+                    318.0,
+                    500.0
+                  ]
+                ],
+                "kept": [
+                  {
+                    "kind": "furniture",
+                    "box": [
+                      12.0,
+                      10.0,
+                      318.0,
+                      60.0
+                    ]
+                  }
+                ],
+                "ad_slots": []
+              }
+            },
+            {
+              "name": "fictional-front-1",
+              "date": "2026-01-01",
+              "page": 1,
+              "outline": {
+                "page_w_mm": 330.0,
+                "page_h_mm": 520.0,
+                "news": [
+                  [
+                    12.0,
+                    70.0,
+                    318.0,
+                    500.0
+                  ]
+                ],
+                "kept": [
+                  {
+                    "kind": "furniture",
+                    "box": [
+                      12.0,
+                      10.0,
+                      318.0,
+                      60.0
+                    ]
+                  }
+                ],
+                "ad_slots": []
+              }
+            }
+          ],
+          "inside_imprint": [
+            {
+              "name": "fictional-inside_imprint-2",
+              "date": "2026-01-02",
+              "page": 1,
+              "outline": {
+                "page_w_mm": 330.0,
+                "page_h_mm": 520.0,
+                "news": [
+                  [
+                    12.0,
+                    70.0,
+                    318.0,
+                    500.0
+                  ]
+                ],
+                "kept": [
+                  {
+                    "kind": "furniture",
+                    "box": [
+                      12.0,
+                      10.0,
+                      318.0,
+                      60.0
+                    ]
+                  }
+                ],
+                "ad_slots": []
+              }
+            },
+            {
+              "name": "fictional-inside_imprint-1",
+              "date": "2026-01-01",
+              "page": 1,
+              "outline": {
+                "page_w_mm": 330.0,
+                "page_h_mm": 520.0,
+                "news": [
+                  [
+                    12.0,
+                    70.0,
+                    318.0,
+                    500.0
+                  ]
+                ],
+                "kept": [
+                  {
+                    "kind": "furniture",
+                    "box": [
+                      12.0,
+                      10.0,
+                      318.0,
+                      60.0
+                    ]
+                  }
+                ],
+                "ad_slots": []
+              }
+            }
+          ],
+          "inside": [
+            {
+              "name": "fictional-inside-2",
+              "date": "2026-01-02",
+              "page": 1,
+              "outline": {
+                "page_w_mm": 330.0,
+                "page_h_mm": 520.0,
+                "news": [
+                  [
+                    12.0,
+                    70.0,
+                    318.0,
+                    500.0
+                  ]
+                ],
+                "kept": [
+                  {
+                    "kind": "furniture",
+                    "box": [
+                      12.0,
+                      10.0,
+                      318.0,
+                      60.0
+                    ]
+                  }
+                ],
+                "ad_slots": []
+              }
+            },
+            {
+              "name": "fictional-inside-1",
+              "date": "2026-01-01",
+              "page": 1,
+              "outline": {
+                "page_w_mm": 330.0,
+                "page_h_mm": 520.0,
+                "news": [
+                  [
+                    12.0,
+                    70.0,
+                    318.0,
+                    500.0
+                  ]
+                ],
+                "kept": [
+                  {
+                    "kind": "furniture",
+                    "box": [
+                      12.0,
+                      10.0,
+                      318.0,
+                      60.0
+                    ]
+                  }
+                ],
+                "ad_slots": []
+              }
+            }
+          ],
+          "back": [
+            {
+              "name": "fictional-back-2",
+              "date": "2026-01-02",
+              "page": 1,
+              "outline": {
+                "page_w_mm": 330.0,
+                "page_h_mm": 520.0,
+                "news": [
+                  [
+                    12.0,
+                    70.0,
+                    318.0,
+                    500.0
+                  ]
+                ],
+                "kept": [
+                  {
+                    "kind": "furniture",
+                    "box": [
+                      12.0,
+                      10.0,
+                      318.0,
+                      60.0
+                    ]
+                  }
+                ],
+                "ad_slots": []
+              }
+            },
+            {
+              "name": "fictional-back-1",
+              "date": "2026-01-01",
+              "page": 1,
+              "outline": {
+                "page_w_mm": 330.0,
+                "page_h_mm": 520.0,
+                "news": [
+                  [
+                    12.0,
+                    70.0,
+                    318.0,
+                    500.0
+                  ]
+                ],
+                "kept": [
+                  {
+                    "kind": "furniture",
+                    "box": [
+                      12.0,
+                      10.0,
+                      318.0,
+                      60.0
+                    ]
+                  }
+                ],
+                "ad_slots": []
+              }
+            }
+          ]
+        },
+        "icc_sha256": "2a82d0dc760bc443cf1c5207a5073bb2a553ae72247ff90913dc88d677c939eb"
       }
     },
     {
@@ -579,7 +822,7 @@
         "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
         "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
         "profile_id": "01890a5d-ac96-774b-bcce-b302099a8061",
-        "sha256": "12e8191386b94b44baa75c5b7cacaff70d832e31bdfc6e865b324bb4ba6f8ce4",
+        "sha256": "cf32ccd3fe4ce4739ef923b63fe8d2c138efb2e163b45ffa9e1c200861c6ce2c",
         "code": "profile.unsafe_path",
         "message": {
           "text": "This dataset bundle holds a path outside its folder (../x): the file was refused.",
@@ -652,8 +895,8 @@
               "warnings": 1,
               "report": {
                 "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/01/pdfx-check.txt",
-                "version_id": "389fb71d8c67526a441f5d015c5b5fba6cf0704cb9bcfad4e6fe5f5d5f4c4b2d",
-                "sha256": "389fb71d8c67526a441f5d015c5b5fba6cf0704cb9bcfad4e6fe5f5d5f4c4b2d",
+                "version_id": "eaec54a9106b6c33b25b5c165eaf4087aafac1216e8d006c5a310fdeba47d01d",
+                "sha256": "eaec54a9106b6c33b25b5c165eaf4087aafac1216e8d006c5a310fdeba47d01d",
                 "bytes": 3587
               }
             }
@@ -700,8 +943,8 @@
               "warnings": 1,
               "report": {
                 "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/pages/02/pdfx-check.txt",
-                "version_id": "035a8bf2eef20753b57e8defb7222b8c59936c6db0b6aa75a89c5ebc7af18506",
-                "sha256": "035a8bf2eef20753b57e8defb7222b8c59936c6db0b6aa75a89c5ebc7af18506",
+                "version_id": "ba62fa30f50352e43d7efe2f4e248c2ccdf2a9cb9a506ffacbee1a200e7c1a3c",
+                "sha256": "ba62fa30f50352e43d7efe2f4e248c2ccdf2a9cb9a506ffacbee1a200e7c1a3c",
                 "bytes": 3587
               }
             }
@@ -736,7 +979,7 @@
           "plan_s": 0.2,
           "layout_s": 0.3
         },
-        "elapsed_s": 0.5
+        "elapsed_s": 0.4
       }
     },
     {

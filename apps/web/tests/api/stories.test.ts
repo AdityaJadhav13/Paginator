@@ -44,7 +44,7 @@ const STORY = {
   can: { edit: true, transitions: ["filed"], comment: true, assign: false },
 };
 const ITEM = Object.fromEntries(
-  ["id", "status", "revision", "headline", "byline", "words", "isBrief", "language", "sectionId", "priority", "pagePin", "edition", "reporter", "assignee", "dueAt", "updatedAt"].map(
+  ["id", "status", "revision", "headline", "byline", "words", "isBrief", "language", "sectionId", "priority", "pagePin", "edition", "reporter", "assignee", "dueAt", "updatedAt", "photo", "can"].map(
     (key) => [key, STORY[key as keyof typeof STORY]],
   ),
 );

@@ -38,6 +38,7 @@ const RELEASE = {
   files: [FILE],
   archive: { verifiedAt: AT, retainUntil: AT, manifestSha256: SHA },
   deliveries: [],
+  printProfile: null,
 };
 const VIEW = {
   editionId: ID,

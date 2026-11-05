@@ -2,7 +2,7 @@
 
   PYTHONDONTWRITEBYTECODE=1 tools/oracle/v0/.venv/bin/python tools/desk/engine/desk_engine.py <command> --home DIR …
 
-Commands: setup, plan, samples, import-sample, generate. Each prints one JSON object on stdout.
+Commands: setup, candidates, retemplate, plan, samples, import-sample, generate. Each prints one JSON object on stdout.
 An internal tool for the owner's own paper; the page layout is gen1's (EXP-GEN-1), imported read-only. No AI.
 """
 from __future__ import annotations
@@ -91,12 +91,28 @@ def page_role_counts(models_by_sample) -> dict:
     return out
 
 
-def cmd_setup(home: Path, args) -> dict:
-    ds = find_dataset(args.dataset)
-    pages_dir = ds / "report" / "page1" / "pages"
-    if not pages_dir.exists():
-        raise SystemExit(f"no page models in {pages_dir}")
-    by_sample = DS.sample_pages(ds)
+MAX_CANDIDATES = 12             # per role, newest design first (and the chosen one): the profile's payload stays small
+MAX_KEPT = 80                   # kept elements drawn per outline (rules and panels first in the model's order)
+
+
+def _mm(v) -> float:
+    return round(float(v), 1)
+
+
+def outline(tpl) -> dict:
+    """A template page as the engine reads it, in mm: the page, its news area, what it keeps every day (masthead,
+    folio, rules, panels: at most MAX_KEPT) and its ad slots. An outline, not the printed page."""
+    return {"page_w_mm": _mm(tpl.page_w), "page_h_mm": _mm(tpl.page_h),
+            "news": [[_mm(v) for v in G.region_box(r)] for r in tpl.regions],
+            "kept": [{"kind": str(e["kind"]), "box": [_mm(v) for v in e["bbox_mm"]]}
+                     for e in tpl.keep if e["kind"] != "ad"][:MAX_KEPT],
+            "ad_slots": [[_mm(v) for v in s["bbox_mm"]] for s in tpl.ad_slots]}
+
+
+def find_candidates(ds: Path, by_sample: dict | None = None) -> dict:
+    """{role: [(sort key, date, name, page, Template)]}: every page of the dataset able to serve each role (setup's
+    test, unchanged), in no order."""
+    by_sample = DS.sample_pages(ds) if by_sample is None else by_sample
     last_page = {s: max(p for p, _, _ in v) for s, v in by_sample.items()}
     cands = {r: [] for r in ROLES}
     for sample, pages in by_sample.items():
@@ -123,22 +139,71 @@ def cmd_setup(home: Path, args) -> dict:
                 else:
                     ok &= not imprint and not tpl.ad_slots and tpl.news_top < 50 and tpl.news_bottom > 0.9 * tpl.page_h
                 if ok:                                     # inside pages: a page 3 or later (page 2 carries the imprint)
-                    cands[role].append((role != "inside" or p >= 3, sample_date(sample), name))
+                    cands[role].append(((role != "inside" or p >= 3, sample_date(sample), name), sample_date(sample), name, p, tpl))
+    return cands
+
+
+def candidates_record(cands: dict, templates: dict) -> dict:
+    """The config's `candidates` (packages/contracts templates.ts): per role, newest design first, at most
+    MAX_CANDIDATES and always the chosen one."""
+    out = {}
+    for role in ROLES:
+        rows = sorted(cands.get(role) or [], key=lambda c: c[0], reverse=True)
+        keep = rows[:MAX_CANDIDATES] + [c for c in rows[MAX_CANDIDATES:] if c[2] == templates.get(role)]
+        out[role] = [{"name": name, "date": d if re.fullmatch(r"\d{4}-\d{2}-\d{2}", d) else "", "page": int(p),
+                      "outline": outline(tpl)} for _, d, name, p, tpl in keep]
+    return out
+
+
+def cmd_setup(home: Path, args) -> dict:
+    ds = find_dataset(args.dataset)
+    pages_dir = ds / "report" / "page1" / "pages"
+    if not pages_dir.exists():
+        raise SystemExit(f"no page models in {pages_dir}")
+    by_sample = DS.sample_pages(ds)
+    cands = find_candidates(ds, by_sample)
     templates = {}
     for role in ROLES:
         if not cands[role]:
             raise SystemExit(f"no page of the dataset can serve as the {role.replace('_', ' ')} template")
-        templates[role] = max(cands[role])[-1]              # the paper's most recent design
+        templates[role] = max(cands[role], key=lambda c: c[0])[2]       # the paper's most recent design
     cal = DG.Calibration(ds)
     cx = DG.CP.Context(ds, "paper")
     cfg = {"schema": "pageinator.desk.config/1", "engine": ENGINE_VERSION, "created": now_iso(), "dataset": str(ds),
            "templates": templates, "needs_per_role": page_role_counts(by_sample),
            "calibration": {"styles": {f"{a}/{b}": n for (a, b), n in sorted(cal.styles.items())}, "lead_side": cal.lead_side,
                            "space_em": cal.space_em, "r_cal": cx.r_cal},
-           "template_summary": {r: DG.Template(ds, n, r).summary() for r, n in templates.items()}}
+           "template_summary": {r: DG.Template(ds, n, r).summary() for r, n in templates.items()},
+           "candidates": candidates_record(cands, templates)}
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
     write_json(home / "config.json", cfg)
     return {"config": {k: v for k, v in cfg.items() if k != "dataset"}}
+
+
+def cmd_candidates(home: Path, args) -> dict:
+    """The set-up home's config with its `candidates` found again from its dataset (its templates unchanged)."""
+    cfg = config(home)
+    cfg["candidates"] = candidates_record(find_candidates(Path(cfg["dataset"])), cfg["templates"])
+    write_json(home / "config.json", cfg)
+    return {"candidates": cfg["candidates"]}
+
+
+def cmd_retemplate(home: Path, args) -> dict:
+    """--role R --page NAME: that page of the dataset as the role's template, only when it is one of the role's
+    candidates (found again when the config names none). Rewrites templates[role] and its template_summary."""
+    cfg = config(home)
+    role, name = args.role, args.page
+    if role not in ROLES:
+        raise SystemExit(f"{role} is not a page role ({', '.join(ROLES)})")
+    if not isinstance(cfg.get("candidates"), dict):
+        cfg["candidates"] = candidates_record(find_candidates(Path(cfg["dataset"])), cfg["templates"])
+    if name not in {c.get("name") for c in cfg["candidates"].get(role) or []}:
+        raise SystemExit(f"the page {name} cannot serve as the {role.replace('_', ' ')} template")
+    tpl = DG.Template(Path(cfg["dataset"]), name, role)
+    cfg["templates"] = {**cfg["templates"], role: name}
+    cfg["template_summary"] = {**(cfg.get("template_summary") or {}), role: tpl.summary()}
+    write_json(home / "config.json", cfg)
+    return {"templates": cfg["templates"]}
 
 
 # ------------------------------------------------------------------------------------------- plan
@@ -886,7 +951,8 @@ def cmd_edit_service(home: Path, args) -> dict:
 # ------------------------------------------------------------------------------------------- main
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="desk_engine")
-    ap.add_argument("command", choices=("setup", "plan", "samples", "import-sample", "measure", "generate", "edit-service"))
+    ap.add_argument("command", choices=("setup", "candidates", "retemplate", "plan", "samples", "import-sample", "measure",
+                                        "generate", "edit-service"))
     ap.add_argument("--home")
     ap.add_argument("--dataset")
     ap.add_argument("--pages", default="4")
@@ -894,13 +960,16 @@ def main(argv=None) -> int:
     ap.add_argument("--edition")
     ap.add_argument("--run")
     ap.add_argument("--sample", action="append")
+    ap.add_argument("--role")
+    ap.add_argument("--page")
     args = ap.parse_args(argv)
     os.umask(0o077)                                       # everything the engine writes is private
     try:
         home = desk_home(args.home)
         if args.command != "setup":
             deskfonts.install(instances_dir(home))       # this process (planning, samples) reads font instances too
-        fn = {"setup": cmd_setup, "plan": cmd_plan, "samples": cmd_samples, "import-sample": cmd_import, "measure": cmd_measure,
+        fn = {"setup": cmd_setup, "candidates": cmd_candidates, "retemplate": cmd_retemplate, "plan": cmd_plan,
+              "samples": cmd_samples, "import-sample": cmd_import, "measure": cmd_measure,
               "generate": cmd_generate, "edit-service": cmd_edit_service}[args.command]
         out = fn(home, args)
         print(json.dumps(out, ensure_ascii=False))

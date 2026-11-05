@@ -45,6 +45,8 @@ export function profileView(row: ProfileRow): EngineProfile {
       ? { columns: row.grid.columns, columnMm: row.grid.column_width_mm, gutterMm: row.grid.gutter_mm }
       : null,
     error: row.problem ? { code: row.problem, message: row.message ?? plain(row.problem) } : null,
+    basedOn: row.based_on && row.based_on_version ? { id: row.based_on, version: row.based_on_version } : null,
+    templateChoice: row.template_choice,
     createdBy: row.created_by_name !== null ? { id: row.created_by, name: row.created_by_name } : null,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),

@@ -310,3 +310,8 @@ export {
   UnplacedReason,
 } from "./ads.ts";
 export { Section, SectionInput, SectionList, SectionPatch } from "./sections.ts";
+// The five sidebar screens (Templates, Newsroom, Archive, Brand & masthead, Print profiles)
+export * from "./templates.ts";
+export * from "./archive.ts";
+export * from "./brand.ts";
+export * from "./print-profiles.ts";

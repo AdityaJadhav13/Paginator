@@ -52,8 +52,13 @@ import { Container } from "../ui/index.ts";
 import { HomePage, FeaturesPage, PricingPage, SecurityPage, ContactPage } from "../features/public/index.ts";
 import { ContactProvider } from "../features/contact/contact-context.tsx";
 import { EditorRouteContent } from "../demo/ui002/EditorRouteContent.tsx";
-import { RELEASE_FIXTURES } from "../demo/ui002/release-fixtures.ts";
 import "../app/shell.css";
+import { TemplatesScreen } from "../features/templates/TemplatesScreen.tsx";
+import { NewsroomScreen } from "../features/newsroom/NewsroomScreen.tsx";
+import { ArchiveScreen } from "../features/archive/ArchiveScreen.tsx";
+import { ArchiveReleaseScreen } from "../features/archive/ArchiveReleaseScreen.tsx";
+import { BrandScreen } from "../features/brand/BrandScreen.tsx";
+import { PrintProfilesScreen } from "../features/print-profiles/PrintProfilesScreen.tsx";
 
 type LabeledRouteKey = keyof typeof ROUTE_LABELS & keyof typeof OWNING_UNIT;
 /** A screen still to be built: English, and in a development build only (plan §2.6). */
@@ -81,7 +86,6 @@ function WorkspaceBoundary({ editor = false }: { readonly editor?: boolean }) {
   return (
     <WorkspaceRouteProvider
       workspace={environment.workspace}
-      releases={RELEASE_FIXTURES}
       getSessionMutationGeneration={environment.getSessionMutationGeneration}
     >
       {editor && DEVELOPMENT ? <EditorShell /> : <WorkspaceShell />}
@@ -166,17 +170,17 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                 <Route path={PATTERNS.pubEngineProfile} element={<EngineProfileScreen />} />
                 <Route path={PATTERNS.pubAds} element={<AdsScreen />} />
                 <Route path={PATTERNS.pubOverview} element={<PublicationOverview />} />
+                <Route path={PATTERNS.pubTemplates} element={<TemplatesScreen />} />
+                <Route path={PATTERNS.pubNewsroom} element={<NewsroomScreen />} />
+                <Route path={PATTERNS.pubArchive} element={<ArchiveScreen />} />
+                <Route path={PATTERNS.pubArchiveRelease} element={<ArchiveReleaseScreen />} />
+                <Route path={PATTERNS.pubBrand} element={<BrandScreen />} />
+                <Route path={PATTERNS.pubPrintProfiles} element={<PrintProfilesScreen />} />
                 {DEVELOPMENT && (
                   <>
                     <Route path={PATTERNS.orgSettings} element={placeholder("orgSettings")} />
                     <Route path={PATTERNS.orgBilling} element={placeholder("orgBilling")} />
                     <Route path={PATTERNS.orgStorage} element={placeholder("orgStorage")} />
-                    <Route path={PATTERNS.pubTemplates} element={placeholder("pubTemplates")} />
-                    <Route path={PATTERNS.pubNewsroom} element={placeholder("pubNewsroom")} />
-                    <Route path={PATTERNS.pubArchive} element={placeholder("pubArchive")} />
-                    <Route path={PATTERNS.pubArchiveRelease} element={placeholder("pubArchiveRelease")} />
-                    <Route path={PATTERNS.pubBrand} element={placeholder("pubBrand")} />
-                    <Route path={PATTERNS.pubPrintProfiles} element={placeholder("pubPrintProfiles")} />
                     <Route path={PATTERNS.pubTeam} element={placeholder("pubTeam")} />
                     <Route path={PATTERNS.editionLayout} element={<EditionWorkspaceLayout />}>
                       <Route index element={<Navigate to={PATTERNS.editionContent} replace />} />

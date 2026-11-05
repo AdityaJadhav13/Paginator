@@ -7,6 +7,11 @@
  * review"); review.ts lists which entries are still waiting. Digits stay Latin in the interface (02 §3.3).
  */
 import type { CatalogueKey } from "./en.ts";
+import { TEMPLATES_MR } from "./screens/templates.mr.ts";
+import { NEWSROOM_MR } from "./screens/newsroom.mr.ts";
+import { ARCHIVE_MR } from "./screens/archive.mr.ts";
+import { BRAND_MR } from "./screens/brand.mr.ts";
+import { PRINT_PROFILES_MR } from "./screens/printProfiles.mr.ts";
 
 export const MR: Readonly<Record<CatalogueKey, string>> = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -1635,6 +1640,9 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   "auditLog.action.plan.page": "पानाचा विभाग किंवा सूचना ठरवली",
   "auditLog.action.plan.copy": "अंकाचा आराखडा नक्कल केला",
   "auditLog.action.ad_settings.set": "जाहिरातींची अंतिम वेळ बदलली",
+  "auditLog.action.engine_profile.retemplate": "दुसरे साचा-पान निवडले",
+  "auditLog.action.brand.set": "प्रकाशनाचे नाव किंवा अंकाचे मूळ तपशील बदलले",
+  "auditLog.action.print_profile.create": "छपाई प्रोफाइल जतन केली",
   "auditLog.action.section.create": "विभाग जोडला",
   "auditLog.action.section.edit": "विभाग बदलला",
   "auditLog.action.ad_cutoff.alert": "अंतिम वेळी वापरण्याजोगे चित्र नसलेल्या जाहिरातींची सूचना दिली",
@@ -1805,4 +1813,9 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   "adsDesk.advertiser.archiveMessage": "नव्या बुकिंगसाठी ते दिसणार नाही. त्याची बुकिंग आहेत तशीच राहतात, आणि ते परत आणता येते.",
   "adsDesk.advertiser.archiveConfirm": "संग्रहात ठेवा",
   "adsDesk.advertiser.keep": "राहू द्या",
+  ...TEMPLATES_MR,
+  ...NEWSROOM_MR,
+  ...ARCHIVE_MR,
+  ...BRAND_MR,
+  ...PRINT_PROFILES_MR,
 };

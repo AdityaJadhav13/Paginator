@@ -68,7 +68,8 @@ def check(job: Any) -> dict:
     if not isinstance(job["kind"], str) or job["kind"] not in KINDS:
         raise JobRefused("a kind this runner does not take")
     args = job["args"]
-    if not isinstance(args, dict) or set(args) != set(KINDS[job["kind"]]):
+    if not isinstance(args, dict) or not set(KINDS[job["kind"]]) <= set(args) <= {*KINDS[job["kind"]],
+                                                                                  *engine.OPTIONAL.get(job["kind"], ())}:
         raise JobRefused(f"{job['kind']} takes exactly {', '.join(KINDS[job['kind']])}")
     if not all(isinstance(v, str) and 0 < len(v) <= 1024 and _utf8(v) for v in args.values()):
         raise JobRefused(f"{job['kind']}'s arguments are text")
@@ -119,7 +120,7 @@ def run(job: Any, storage_for: Callable[[KeyGuard], Storage], icc_sha256: str,
         else:
             settings = engine.Settings.from_env(dict(os.environ if environ is None else environ))
             if kind == "engine.setup":
-                event = engine.setup(store, args, settings)
+                event = engine.setup(store, args, settings, icc_sha256)
             else:
                 task = launcher.layout if kind == "engine.layout" else launcher.measure
                 event = task(store, args, settings, progress, cancel or threading.Event())

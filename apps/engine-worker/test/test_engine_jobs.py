@@ -38,6 +38,7 @@ EDITION = "01890a5d-ac96-774b-bcce-b302099a8062"
 RUN_ID = "01890a5d-ac96-774b-bcce-b302099a8063"
 ARTWORK = "01890a5d-ac96-774b-bcce-b302099a8064"
 ASSET = "01890a5d-ac96-774b-bcce-b302099a8065"
+NEW_PROFILE = "01890a5d-ac96-774b-bcce-b302099a8066"
 EID, RKEY = "2026-11-04", "r-20261104-101500"
 FAKE = (WORKER / "test" / "fake_desk_engine.py").read_text(encoding="utf-8")
 FIXTURE = WORKER.parents[1] / "packages" / "contracts" / "test" / "fixtures" / "engine-results.json"
@@ -227,6 +228,57 @@ class SetupTests(Case):
         out = self.run_job("engine.setup", args)
         self.assertEqual((out["outcome"], out["error"]["code"]), ("failed", "worker.checksum"))
         self.assertEqual(list((self.home / "datasets").iterdir()), [])       # the download is not kept
+
+    def base_args(self, **extra) -> dict:
+        """A new profile from PROFILE_ID's (set up first): its dataset copied, the base config pinned."""
+        facts = self.profile_facts()
+        args = self.setup_args()
+        return {**args, "profile_id": NEW_PROFILE, **self.put(self.guard.profile_dataset(NEW_PROFILE),
+                                                              dataset_zip()),
+                "base_profile_id": PROFILE_ID, "base_config_version_id": facts["config_version_id"],
+                "base_config_sha256": facts["config_sha256"], **extra}
+
+    def test_a_template_chosen_makes_a_new_profile_from_the_one_in_use(self):
+        out = self.run_job("engine.setup", self.base_args(template_role="back", template_page="fictional-back-1"))
+        ev = out["event"]
+        self.assertEqual((ev["kind"], ev["profile_id"]), ("profile.ready", NEW_PROFILE))
+        self.assertEqual(ev["templates"], {"front": "fictional-p1", "inside_imprint": "fictional-p2",
+                                           "inside": "fictional-p3", "back": "fictional-back-1"})
+        self.assertEqual([c["name"] for c in ev["candidates"]["back"]], ["fictional-back-2", "fictional-back-1"])
+        self.assertEqual(ev["icc_sha256"], ICC)
+        self.assertEqual(ev["config"]["key"], f"orgs/{ORG}/pubs/{PUB}/profiles/{NEW_PROFILE}/config.json")
+        self.assertEqual(json.loads(self.stored(ev["config"]["key"]))["templates"]["back"], "fictional-back-1")
+        self.assertIn("retemplate -", self.calls())
+        self.assertEqual(len([c for c in self.calls() if c.startswith("setup")]), 1)     # the base's only
+
+    def test_a_page_that_is_not_a_candidate_is_refused_in_the_engines_words(self):
+        ev = self.run_job("engine.setup", self.base_args(template_role="back", template_page="fictional-front-1"))[
+            "event"]
+        self.assertEqual((ev["kind"], ev["code"]), ("profile.rejected", "profile.setup"))
+        self.assertEqual(ev["message"]["text"], "the page fictional-front-1 cannot serve as the back template")
+
+    def test_no_choice_finds_the_candidates_again(self):
+        ev = self.run_job("engine.setup", self.base_args())["event"]
+        self.assertEqual((ev["kind"], ev["templates"]["back"]), ("profile.ready", "fictional-p4"))
+        self.assertIn("candidates -", self.calls())
+
+    def test_the_base_config_is_checked_and_its_arguments_go_together(self):
+        out = self.run_job("engine.setup", self.base_args(base_config_sha256="0" * 64))
+        self.assertEqual((out["outcome"], out["error"]["code"]), ("failed", "worker.checksum"))
+        args = self.base_args(template_role="back", template_page="x")
+        for drop in ("base_config_sha256", "template_page"):
+            with self.subTest(drop=drop):
+                out = self.run_job("engine.setup", {k: v for k, v in args.items() if k != drop})
+                self.assertEqual((out["outcome"], out["error"]["code"]), ("failed", "worker.job"))
+        out = self.run_job("engine.setup", {**args, "template_role": "Back!"})
+        self.assertEqual(out["error"]["code"], "worker.job")
+
+    def test_a_desk_config_without_candidates_gets_them(self):
+        own = {"schema": "pageinator.desk.config/1", "engine": "desk-engine/0.1.0",
+               "templates": {"front": "a", "inside_imprint": "b", "inside": "c", "back": "d"}}
+        ev = self.run_job("engine.setup", self.setup_args(dataset_zip({"config.json": json.dumps(own).encode()})))[
+            "event"]
+        self.assertEqual(sorted(ev["candidates"]), ["back", "front", "inside", "inside_imprint"])
 
     def test_the_engines_settings(self):
         args = self.setup_args()

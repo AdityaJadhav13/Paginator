@@ -314,6 +314,8 @@ describe("an engine profile", () => {
       templates: { front: "page1" },
       grid: GRID,
       plans: PLANS,
+      candidates: null,
+      icc_sha256: null,
     });
     const forged = await report(
       event(ready, `orgs/${a.orgId}/pubs/${a.pubId}/profiles/${randomUUID()}/config.json`),

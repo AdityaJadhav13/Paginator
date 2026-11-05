@@ -20,6 +20,7 @@
 //     (a second later when the edition has that one).
 //   - GET runs/:r (pages.view) → LayoutRun. POST runs/:r/cancel (layout.generate) → LayoutRun, cancelled at once (its
 //     job removed, or a running one stopped: app.cancel_engine_job); 409 run_finished once it ended.
+//   - GET/POST templates: the Templates screen (templates.ts).
 //   - GET runs/:r/files/:name → FileLink, a link to that exact version for 5 minutes: previews and the check's report
 //     (pages.view), a page PDF and edition.pdf (proof.view), press-files.zip (export.press); only a done run's, but a
 //     page's previews while its run goes on.
@@ -79,6 +80,7 @@ import { type Access, accessOf, actorOf, auditRefusals, refused } from "../acces
 import { DOWNLOAD_SECONDS } from "../media/photos.ts";
 import { idempotent } from "../requests/idempotency.ts";
 import { LAID_OUT, blockerOf, frozenRequest, planFor, readiness, slotsOf } from "./request.ts";
+import { templateRoutes } from "./templates.ts";
 import { CANCELLED, CANCELLED_BEFORE, profileView, runViews } from "./views.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -121,6 +123,7 @@ const notDataset = (message: string) => new ApiError("invalid_request", [{ field
 
 export const layoutRoutes: FastifyPluginAsyncZod<LayoutOptions> = async (app, { database, store }) => {
   auditRefusals(app, database);
+  await templateRoutes(app, { database, store }); // the Templates screen (templates.ts)
 
   // ------------------------------------------------------------------------------------------ engine profiles
 

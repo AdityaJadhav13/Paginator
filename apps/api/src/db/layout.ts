@@ -9,6 +9,7 @@ import {
   MediaAdPayload,
   type ProfileReady,
   type RunState,
+  type TemplateCandidates,
 } from "@pageinator/contracts";
 import { sql } from "kysely";
 import type { z } from "zod";
@@ -40,18 +41,25 @@ export type ProfileRow = {
   plans: Plan[] | null;
   problem: string | null;
   message: DeskTextValue | null;
+  /** made from another profile (Templates): that profile, its version, and the roles chosen */
+  based_on: string | null;
+  based_on_version: number | null;
+  template_choice: Record<string, string> | null;
   created_by: string;
   created_by_name: string | null;
   created_at: Date;
   updated_at: Date;
 };
 
+// candidates (up to ~1 MiB) are read only by profileCandidates
 const PROFILE = sql`
   select p.id, p.version, p.state, p.dataset_key, p.dataset_version_id, p.dataset_sha256, p.dataset_bytes, p.config_key,
     p.config_version_id, p.config_sha256, p.engine_version, p.templates, p.grid, p.plans, p.problem, p.message,
+    p.based_on, bp.version as based_on_version, p.template_choice,
     p.created_by, cb.display_name as created_by_name, p.created_at, p.updated_at
   from app.engine_profile p
-  left join app.person cb on cb.org_id = p.org_id and cb.user_id = p.created_by`;
+  left join app.person cb on cb.org_id = p.org_id and cb.user_id = p.created_by
+  left join app.engine_profile bp on bp.org_id = p.org_id and bp.publication_id = p.publication_id and bp.id = p.based_on`;
 
 /** A new profile (setting_up), numbered after the publication's last; the publication's row is locked first, so two
  * at once take the next numbers in turn. */
@@ -71,6 +79,50 @@ export async function createProfile(
   const made = rows[0];
   if (!made) throw new Error("the profile was not made");
   return made;
+}
+
+/** A new profile (setting_up) made from another (Templates): the same dataset bundle (its bytes copied by the caller
+ * to the new profile's key), the base and the roles chosen ({} = the dataset checked again). */
+export async function createProfileFrom(
+  tx: Tx,
+  who: Tenant,
+  publicationId: string,
+  base: ProfileRow,
+  choice: Record<string, string>,
+) {
+  await sql`select 1 from app.publication where id = ${publicationId} for update`.execute(tx);
+  const { rows } = await sql<{ id: string; dataset_key: string; version: number }>`
+    insert into app.engine_profile (org_id, publication_id, version, based_on, template_choice, dataset_sha256,
+      dataset_bytes, created_by)
+    values (${who.orgId}, ${publicationId},
+      (select coalesce(max(version), 0) + 1 from app.engine_profile where publication_id = ${publicationId}),
+      ${base.id}, ${JSON.stringify(choice)}::jsonb, ${base.dataset_sha256}, ${base.dataset_bytes}, ${who.userId})
+    returning id, dataset_key, version`.execute(tx);
+  const made = rows[0];
+  if (!made) throw new Error("the profile was not made");
+  return made;
+}
+
+/** The publication's profile being set up now, if any (newest first). `lock`: the publication's row is locked first
+ * (as createProfile does), so a check and a new profile that follows it take turns with another. */
+export async function profileSettingUp(tx: Tx, publicationId: string, lock = false): Promise<ProfileRow | undefined> {
+  if (lock) await sql`select 1 from app.publication where id = ${publicationId} for update`.execute(tx);
+  const { rows } = await sql<ProfileRow>`${PROFILE}
+    where p.publication_id = ${publicationId} and p.state = 'setting_up' order by p.version desc limit 1`.execute(tx);
+  return rows[0];
+}
+
+/** The template candidates the profile's setup recorded (null: none recorded). */
+export async function profileCandidates(
+  tx: Tx,
+  publicationId: string,
+  profileId: string,
+): Promise<TemplateCandidates | null> {
+  const { rows } = await sql<{ candidates: TemplateCandidates | null }>`
+    select candidates from app.engine_profile where publication_id = ${publicationId} and id = ${profileId}`.execute(
+    tx,
+  );
+  return rows[0]?.candidates ?? null;
 }
 
 export async function setProfileDataset(tx: Tx, publicationId: string, profileId: string, versionId: string) {
@@ -115,6 +167,8 @@ export async function settleProfile(
         templates: Record<string, string>;
         grid: Grid;
         plans: Plan[];
+        candidates: TemplateCandidates | null;
+        iccSha256: string | null;
       }
     | { state: "failed"; problem: string; message: DeskTextValue },
 ): Promise<void> {
@@ -122,7 +176,9 @@ export async function settleProfile(
     await sql`update app.engine_profile set state = 'ready', config_version_id = ${outcome.config.version_id},
         config_sha256 = ${outcome.config.sha256}, engine_version = ${outcome.engineVersion},
         templates = ${JSON.stringify(outcome.templates)}::jsonb, grid = ${JSON.stringify(outcome.grid)}::jsonb,
-        plans = ${JSON.stringify(outcome.plans)}::jsonb, updated_at = now()
+        plans = ${JSON.stringify(outcome.plans)}::jsonb,
+        candidates = ${outcome.candidates === null ? null : JSON.stringify(outcome.candidates)}::jsonb,
+        icc_sha256 = ${outcome.iccSha256}, updated_at = now()
       where publication_id = ${publicationId} and id = ${profileId}`.execute(tx);
   } else {
     await sql`update app.engine_profile set state = 'failed', problem = ${outcome.problem},

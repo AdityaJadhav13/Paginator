@@ -45,6 +45,10 @@ ARGS = {
     "engine.measure": ("org_id", "pub_id", "edition_id", "edition_key", "version_id", "sha256", *PROFILE_FACTS),
     "engine.layout": ("org_id", "pub_id", "run_id", "edition_key", "run_key", "version_id", "sha256", *PROFILE_FACTS),
 }
+# engine.setup from another profile (the Templates screen): its config pinned, and one role's template chosen, or none
+# ("check the dataset again"). All three base_ args or none; the template's two only with them.
+OPTIONAL = {"engine.setup": ("base_profile_id", "base_config_version_id", "base_config_sha256", "template_role",
+                             "template_page")}
 SHA256 = re.compile(r"[0-9a-f]{64}", re.ASCII)
 GIB = 1024 ** 3
 MAX_DATASET_BYTES = 4 * GIB              # the contract's MAX_DATASET_BYTES: one presigned upload
@@ -120,10 +124,21 @@ def home_of(settings: Settings, guard: KeyGuard) -> Path:
 
 
 def check_args(kind: str, args: dict) -> dict:
-    names = ARGS[kind]
-    if not isinstance(args, dict) or set(args) != set(names):
-        raise ValueError(f"{kind} takes exactly {', '.join(names)}")
-    for key in names:
+    names, optional = ARGS[kind], OPTIONAL.get(kind, ())
+    if not isinstance(args, dict) or not set(names) <= set(args) <= {*names, *optional}:
+        raise ValueError(f"{kind} takes exactly {', '.join(names)}" + (f" (and {', '.join(optional)})" if optional else ""))
+    given = set(args) & set(optional)
+    if given and (not {"base_profile_id", "base_config_version_id", "base_config_sha256"} <= given
+                  or len(given & {"template_role", "template_page"}) == 1):
+        raise ValueError(f"{kind}: base_ arguments all or none, template_role and template_page both or neither")
+    if "base_profile_id" in args:
+        uuid(args["base_profile_id"], "base_profile_id")
+    if "template_role" in args and not re.fullmatch(r"[a-z_]{1,40}", args["template_role"]):
+        raise ValueError(f"{kind}: template_role is not a page role")
+    page = args.get("template_page")
+    if page is not None and (not isinstance(page, str) or not 0 < len(page) <= 400 or page.startswith("-")):
+        raise ValueError(f"{kind}: template_page is not a page model's name")
+    for key in args:
         if key.endswith("sha256") and not SHA256.fullmatch(args[key]):
             raise ValueError(f"{kind}: {key} is not 64 lowercase hex characters")
         if key.endswith("version_id") and not 0 < len(args[key]) <= 1024:
@@ -275,8 +290,25 @@ def grid() -> dict:
     return {"columns": g["columns"], "column_width_mm": g["column_width_mm"], "gutter_mm": g["gutter_mm"]}
 
 
-def setup(storage: Storage, args: dict, settings: Settings) -> dict:
-    """→ `profile.ready` (the config stored, the six plans, the grid) or `profile.rejected` with the reason."""
+def base_config(storage: Storage, guard: KeyGuard, args: dict) -> dict:
+    """The base profile's config (engine.setup from another profile), its SHA-256 checked."""
+    data = storage.get(guard.profile_config(args["base_profile_id"]), args["base_config_version_id"])
+    if hashlib.sha256(data).hexdigest() != args["base_config_sha256"]:
+        raise Mismatch("the stored config is not the one this job names")
+    try:
+        cfg = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        cfg = None
+    if not isinstance(cfg, dict) or not isinstance(cfg.get("templates"), dict):
+        raise home.BadRequest("the base profile's config cannot be read")
+    return cfg
+
+
+def setup(storage: Storage, args: dict, settings: Settings, icc_sha256: str = "") -> dict:
+    """→ `profile.ready` (the config stored, the six plans, the grid, the template candidates, the colour profile the
+    worker has) or `profile.rejected` with the reason. With a base profile: its config, then the chosen template
+    through the engine's `retemplate` (which refuses a page that is not one of the role's candidates), or the
+    candidates found again (`candidates`) when none is chosen."""
     args = check_args("engine.setup", args)
     guard = KeyGuard(args["org_id"], args["pub_id"])
     profile = uuid(args["profile_id"], "profile_id")
@@ -286,7 +318,14 @@ def setup(storage: Storage, args: dict, settings: Settings) -> dict:
     try:
         ds = dataset(storage, guard, home_dir, profile, args["version_id"], args["sha256"])
         own = ds / "config.json"
-        if own.is_file() and not own.is_symlink():        # the Desk's own choice of templates, kept
+        if "base_profile_id" in args:
+            util.write_json(home_dir / "config.json", {**base_config(storage, guard, args), "dataset": str(ds)})
+            if "template_role" in args:
+                client.run("retemplate", f"--role={args['template_role']}", f"--page={args['template_page']}",
+                           timeout=engine_client.SETUP_TIMEOUT_S)
+            else:
+                client.run("candidates", timeout=engine_client.SETUP_TIMEOUT_S)
+        elif own.is_file() and not own.is_symlink():      # the Desk's own choice of templates, kept
             try:
                 cfg = json.loads(own.read_text(encoding="utf-8"))
             except (UnicodeDecodeError, ValueError):
@@ -294,6 +333,8 @@ def setup(storage: Storage, args: dict, settings: Settings) -> dict:
             if not isinstance(cfg, dict) or not isinstance(cfg.get("templates"), dict):
                 raise Refused("profile.setup", "The config.json in this dataset bundle cannot be read.")
             util.write_json(home_dir / "config.json", {**cfg, "dataset": str(ds)})
+            if not isinstance(cfg.get("candidates"), dict):
+                client.run("candidates", timeout=engine_client.SETUP_TIMEOUT_S)
         else:
             client.setup(str(ds))
         plans = [_plan(n, back, client.plan(n, back)) for n, back in PLANS]
@@ -311,4 +352,6 @@ def setup(storage: Storage, args: dict, settings: Settings) -> dict:
                        "bytes": len(body)},
             "engine_version": str(cfg.get("engine") or ENGINE_VERSION)[:200],
             "templates": {str(k)[:40]: str(v)[:400] for k, v in (cfg.get("templates") or {}).items()},
-            "grid": grid(), "plans": plans}
+            "grid": grid(), "plans": plans,
+            "candidates": cfg["candidates"] if isinstance(cfg.get("candidates"), dict) else None,
+            "icc_sha256": icc_sha256 if SHA256.fullmatch(icc_sha256) else None}

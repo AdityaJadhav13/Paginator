@@ -102,6 +102,8 @@ export type {
 } from "./notification-service.ts";
 export type { LiveEventDto, LiveService } from "./live-service.ts";
 export type {
+  BrandDto,
+  BrandInputDto,
   DeskBundleDto,
   EditionInputDto,
   EditionPatchDto,

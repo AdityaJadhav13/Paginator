@@ -100,6 +100,12 @@ export const AUDIT_ACTIONS = {
   "plan.copy": { scope: "publication" },
   "ad_settings.set": { scope: "publication" },
   "ad_cutoff.alert": { scope: "publication" },
+  /** The five sidebar screens: a new engine profile made from the one in use with another page as a role's template
+   * ({profile, basedOn, version, role, page}); the publication's name or the edition defaults changed ({fields});
+   * a print profile saved as a new version ({profile, version}). */
+  "engine_profile.retemplate": { scope: "publication" },
+  "brand.set": { scope: "publication" },
+  "print_profile.create": { scope: "publication" },
   /** A section made ({name}), or renamed, moved, archived or brought back ({fields}: which changed). */
   "section.create": { scope: "publication" },
   "section.edit": { scope: "publication" },

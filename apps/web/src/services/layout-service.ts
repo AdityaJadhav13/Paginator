@@ -8,6 +8,8 @@ import type {
   LayoutRun,
   SectionList,
   SectionPatch,
+  TemplateChoiceInput,
+  TemplatesView,
 } from "@pageinator/contracts";
 import type { ApiProblem } from "./problem.ts";
 import type { ServiceResult } from "./result.ts";
@@ -23,6 +25,9 @@ export type FileLinkDto = FileLink;
 export type DeskTextDto = DeskText;
 export type SectionListDto = SectionList;
 export type SectionDto = SectionList["items"][number];
+export type TemplatesViewDto = TemplatesView;
+export type TemplateCandidateDto = TemplatesView["roles"][number]["candidates"][number];
+export type TemplateOutlineDto = TemplateCandidateDto["outline"];
 
 interface Where {
   readonly orgId: string;
@@ -61,6 +66,14 @@ export interface LayoutService {
   loadFile(
     input: Where & { readonly runId: string; readonly name: string; readonly signal?: AbortSignal },
   ): Promise<ServiceResult<Blob, ApiProblem>>;
+  /** The Templates screen (templates.ts): the profile in use's template per role, its candidates and the versions
+   * (templates.view). */
+  getTemplates(input: Where): Promise<ServiceResult<TemplatesViewDto, ApiProblem>>;
+  /** {role, page}: that page as that role's template; {}: the dataset checked again (templates.edit). A new profile
+   * version, 202 setting up; 409 profile_setting_up or no_profile, 400 when the page is not a candidate. */
+  chooseTemplate(
+    input: Where & { readonly choice: TemplateChoiceInput; readonly idempotencyKey: string },
+  ): Promise<ServiceResult<EngineProfileDto, ApiProblem>>;
   /** The publication's sections (publication.view); made, renamed, moved, archived or brought back (settings.edit;
    * 409 section_exists). Each change answers the whole list. */
   listSections(input: Where): Promise<ServiceResult<SectionListDto, ApiProblem>>;
