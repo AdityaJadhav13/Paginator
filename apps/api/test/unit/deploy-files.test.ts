@@ -154,7 +154,8 @@ describe("the pilot compose and its settings", () => {
 
 // infra/deploy/deploy.sh with fake docker, curl, aws, id and flock on PATH: what it starts, in which order, and what
 // it records. Each fake logs its arguments, with the image tag in force, to one file.
-describe("deploy.sh", () => {
+// Each test runs the real deploy.sh with stub commands: seconds of shell work that overran 5 s on a busy machine.
+describe("deploy.sh", { timeout: 30_000 }, () => {
   const script = fileURLToPath(new URL("../../../../infra/deploy/deploy.sh", import.meta.url));
   let dir = "";
   beforeEach(() => {
