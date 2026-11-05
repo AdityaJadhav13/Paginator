@@ -99,7 +99,8 @@ export const NotificationsRead = z.union([
  * A comment line comes every 25 s to keep the connection open. */
 /** layout: an edition's layout changed (a run's state or page, an ad slot, its measuring): {publicationId, editionId,
  * runId | null}, to people with pages.view; profile: an engine profile changed: {publicationId, profileId}, to people
- * with settings.view (L2.3). */
+ * with settings.view (L2.3); onboarding: a paper's onboarding changed (its state or progress): {publicationId,
+ * onboardingId}, to people with settings.view (L4). */
 export const LIVE_EVENTS = [
   "story",
   "comment",
@@ -108,5 +109,6 @@ export const LIVE_EVENTS = [
   "import",
   "layout",
   "profile",
+  "onboarding",
   "resync",
 ] as const;

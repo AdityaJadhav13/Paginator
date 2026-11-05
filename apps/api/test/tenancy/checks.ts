@@ -82,6 +82,8 @@ export const APP_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   // the sidebar screens (migration 2026_12_06_0001): the edition defaults are rewritten; a print profile only added
   edition_defaults: ["INSERT", "SELECT", "UPDATE"],
   print_profile: ["INSERT", "SELECT"],
+  // onboarding a new paper (migration 2026_12_07_0001): an onboarding only changes state, never removed
+  paper_onboarding: ["INSERT", "SELECT", "UPDATE"],
   // the ads desk (migration 2026_12_05_0001): advertisers are archived and bookings cancelled, never removed; a
   // placement is taken out; a plan page is rewritten
   advertiser: ["INSERT", "SELECT", "UPDATE"],
@@ -133,6 +135,7 @@ export const DEFINERS = [
   "app.enqueue_engine_measure",
   "app.enqueue_engine_layout",
   "app.enqueue_media_ad",
+  "app.enqueue_engine_onboard",
   "app.cancel_engine_job",
 ];
 
@@ -161,6 +164,8 @@ export const IDENTITY_RIGHTS: Readonly<Record<string, readonly string[]>> = {
   totp_used: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   auth_event: ["INSERT", "SELECT"],
   sign_in_failure: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  // a new paper's application (migration 2026_12_07_0002): it changes state, never removed
+  paper_application: ["INSERT", "SELECT", "UPDATE"],
 };
 
 /** The schemas each login role may use; none may create anything anywhere. */

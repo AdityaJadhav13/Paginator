@@ -31,6 +31,8 @@ import deskfonts  # noqa: E402
 import deskgen as DG  # noqa: E402
 import deskplan as DP  # noqa: E402
 import deskprinted as DP_  # noqa: E402
+import deskprofile as DPR  # noqa: E402
+import desksamples as DS  # noqa: E402
 
 DAY = date(2026, 10, 21)          # a Wednesday
 
@@ -46,6 +48,19 @@ class FolioTest(unittest.TestCase):
         t = "पाने ४ अंक क्र. १२३ वर्ष ५ किंमत ३ रुपये"
         self.assertEqual(DF.rewrite(t, DAY, 1, 8, volume="6", issue="240", price="5"), "पाने ८ अंक क्र. २४० वर्ष ६ किंमत ५ रुपये")
         self.assertEqual(DF.rewrite(t, DAY, 1, 8), "पाने ८ अंक क्र. १२३ वर्ष ५ किंमत ३ रुपये")   # not given: kept
+
+    def test_an_english_running_head_only_for_a_latin_paper(self):
+        t = "Monday, 9 March 2026 · Vol. 12 No. 46 · 4 pages Rs 6"
+        self.assertEqual(DF.rewrite(t, DAY, 1, 8), t)                    # the pilot's: English words are left alone
+        self.assertFalse(DF.has_month(t))
+        DF.ENGLISH = True
+        try:
+            self.assertEqual(DF.rewrite(t, DAY, 1, 8, volume="13", issue="240", price="7"),
+                             "Wednesday, 21 October 2026 · Vol. 13 No. 240 · 8 pages Rs 7")
+            self.assertEqual(DF.rewrite("March 9, 2026 | Page 2", DAY, 3, 8), "October 21, 2026 | Page 3")
+            self.assertTrue(DF.has_month(t))
+        finally:
+            DF.ENGLISH = False
 
     def test_page_number(self):
         self.assertEqual(DF.rewrite("पान ३", DAY, 5, 8), "पान ५")
@@ -1635,6 +1650,170 @@ class TemplateCandidatesTest(unittest.TestCase):
             self.assertEqual(saved["templates"]["back"], "c")
             self.assertEqual(saved["template_summary"], {"front": {}, "back": {"role": "back", "name": "c"}})
             self.assertEqual(saved["candidates"], cfg["candidates"])
+
+
+# ------------------------------------------------------------------------------------------- another paper (paper.json)
+EN_PAPER = {"format": "pageinator.paper/1", "script": "latn", "imprint_text": ["Printed and published by Fictional Press Ltd"],
+            "split_date": "2026-01-01", "page_w_mm": 280.0, "page_h_mm": 400.0, "edition_sizes": [4, 6, 8]}
+
+
+def fictional_profile(columns=6, col=40.0, gut=4.0, origin=10.0) -> dict:
+    return {"grid": {"columns": columns, "column_width_mm": col, "gutter_mm": gut, "origin_mm": origin},
+            "spacing": {"rule_to_headline": {"n": 9, "mm": {"median": 8.0}}, "photo_to_body": {"n": 2, "mm": {"median": 1.0}}},
+            "headline_size": {"by_span": {}},
+            "composer_defaults": {"spacing": {"crosshead_space_above": {"body_leadings": 0.5}}, "roles": {"body": {"first_line_indent_mm": 3.0}}}}
+
+
+class PaperProfileTest(unittest.TestCase):
+    """A dataset with its own house_profile.json and paper.json (an onboarded paper); without them, the pilot's."""
+
+    def tearDown(self):
+        DPR.use_dataset(Path(tempfile.gettempdir()) / "no-such-dataset")   # the repository's profile again
+
+    def test_without_its_own_files_the_repository_profile_stays_as_gen1_imported_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            DPR.use_dataset(Path(d))
+        for k, v in DPR.REPO_GLOBALS.items():
+            self.assertIs(getattr(DG.G, k), v, k)
+        self.assertEqual({k: DG.G._sp(k, dflt) for k, dflt in DPR.SP_DEFAULTS}, DG.G.SP)   # the copied defaults are gen1's
+        self.assertIsNone(DE.paper(Path(d)))
+
+    def test_its_own_grid_spacing_and_script(self):
+        with tempfile.TemporaryDirectory() as d:
+            ds = Path(d)
+            DE.write_json(ds / "house_profile.json", fictional_profile())
+            DE.write_json(ds / "paper.json", EN_PAPER)
+            DPR.use_dataset(ds)
+            G = DG.G
+            self.assertEqual((G.NCOL, G.COL_W, G.GUT, G.ORIGIN, G.PITCH), (6, 40.0, 4.0, 10.0, 44.0))
+            self.assertEqual(G.span_mm(6), 6 * 40.0 + 5 * 4.0)
+            self.assertEqual(G.SP["rule_to_headline"], 8.0)
+            self.assertEqual(G.SP["photo_to_body"], 5.5)                  # too few observations: gen1's default
+            self.assertTrue(G.deva("The council met on Monday"))         # gen1's script test is the paper's
+            self.assertFalse(G.deva("शहरात नवा पूल"))
+            self.assertEqual(G.BODY_INK_TEST, DPR.LATN_INK_TEST)
+            DPR.use_dataset(ds / "missing")                               # another dataset: the repository's again
+            self.assertIs(G.PROFILE, DPR.REPO_GLOBALS["PROFILE"])
+            self.assertTrue(G.deva("शहरात नवा पूल"))
+
+    def test_a_house_profile_the_engine_cannot_read_is_a_damaged_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            ds = Path(d)
+            for bad in ({"grid": {"columns": 6}}, {**fictional_profile(), "grid": {**fictional_profile()["grid"], "columns": 0}},
+                        {"grid": fictional_profile()["grid"]}):
+                with self.subTest(bad=bad):
+                    DE.write_json(ds / "house_profile.json", bad)
+                    with self.assertRaises(DPR.DamagedFile):
+                        DPR.use_dataset(ds)
+
+    def test_the_context_reads_its_profile_and_keys_the_cache_on_it(self):
+        def real(self, ds, size_mode):
+            self.ds, self.xh_above, self.xh_below, self.indent_mm = ds, 1.0, 1.0, 5.0
+            self.inputs = {"house_profile.json": "repo"}
+        init = DPR._context_init(real)
+        with tempfile.TemporaryDirectory() as d:
+            ds = Path(d)
+            cx = types.SimpleNamespace()
+            init(cx, ds)
+            self.assertEqual(cx.inputs, {"house_profile.json": "repo"})  # the pilot's: its cache keys unchanged
+            DE.write_json(ds / "house_profile.json", fictional_profile())
+            DE.write_json(ds / "paper.json", EN_PAPER)
+            init(cx, ds)
+            self.assertEqual((cx.xh_above, cx.xh_below, cx.indent_mm), (0.5, 1.0, 3.0))
+            self.assertEqual(cx.inputs["house_profile.json"], DG.CP._sha(ds / "house_profile.json"))
+            self.assertEqual(set(cx.inputs), {"house_profile.json", "desk_profile", "paper.json"})
+
+    def test_another_papers_masthead_lettering_stays_though_read_as_a_kicker(self):
+        title = {"id": "t1", "kind": "kicker", "size_pt": 64.0, "bbox_mm": [40.0, 30.0, 270.0, 55.0]}
+        teaser = {"id": "t2", "kind": "kicker", "size_pt": 12.0, "bbox_mm": [40.0, 58.0, 120.0, 62.0]}
+
+        def real(self, ds, name, role):
+            self.news_top, self.news_bottom, self.ad_block, self.regions = 70.0, 385.0, {"an": "ad block"}, []
+            self.keep, self.dropped = [], ["t1", "t2"]
+        init = DPR._template_init(real)
+        with tempfile.TemporaryDirectory() as d:
+            ds = Path(d)
+            DE.write_json(ds / "report" / "page1" / "pages" / "x__p1.json",
+                          {"stories": [], "elements": [title, teaser], "page_h_mm": 400.0})
+            tpl = types.SimpleNamespace()
+            init(tpl, ds, "x__p1", "front")
+            self.assertEqual((tpl.keep, tpl.dropped), ([], ["t1", "t2"]))   # no paper.json (the pilot): as before
+            DE.write_json(ds / "paper.json", EN_PAPER)
+            init(tpl, ds, "x__p1", "front")
+            self.assertEqual(([e["id"] for e in tpl.keep], tpl.dropped), (["t1"], ["t2"]))
+
+    def test_another_papers_news_stops_above_a_narrow_imprint_or_a_band_of_ads(self):
+        def real(self, ds, name, role):
+            self.news_top, self.news_bottom, self.ad_block, self.regions = 30.0, 385.0, None, ["pilot's"]
+            self.dropped = []
+            self.keep = [{"kind": "rule", "bbox_mm": [11.0, 380.9, 269.0, 381.1]},           # a foot rule
+                         {"kind": "furniture", "bbox_mm": [85.0, 383.4, 195.0, 385.7]},      # a narrow imprint line
+                         {"kind": "rule", "bbox_mm": [60.0, 40.0, 60.2, 384.0]}]            # a column rule: not below
+        init = DPR._template_init(real)
+        story = {"id": "s1", "headline": "h1", "bbox_mm": [11.0, 30.0, 269.0, 378.8]}
+        with tempfile.TemporaryDirectory() as d:
+            ds = Path(d)
+            DE.write_json(ds / "report" / "page1" / "pages" / "x__p2.json", {"stories": [story], "elements": [], "page_h_mm": 400.0})
+            DE.write_json(ds / "house_profile.json", fictional_profile(columns=5, col=48.5, gut=3.9, origin=11.0))
+            DPR.use_dataset(ds)
+            tpl = types.SimpleNamespace()
+            init(tpl, ds, "x__p2", "inside_imprint")
+            self.assertEqual((tpl.news_bottom, tpl.regions), (385.0, ["pilot's"]))      # no paper.json: as before
+            DE.write_json(ds / "paper.json", EN_PAPER)
+            init(tpl, ds, "x__p2", "inside_imprint")
+            self.assertEqual(tpl.news_bottom, 378.8)              # 3 mm above the rule, never above the lowest story
+            self.assertEqual(tpl.regions, [(0, 5, 30.0, 378.8)])
+
+    def test_paper_json_is_checked(self):
+        with tempfile.TemporaryDirectory() as d:
+            ds = Path(d)
+            for bad in ({**EN_PAPER, "script": "arab"}, {**EN_PAPER, "edition_sizes": [2]}, {**EN_PAPER, "format": "x"},
+                        {**EN_PAPER, "imprint_text": "Printed"}, []):
+                DE.write_json(ds / "paper.json", bad)
+                with self.subTest(bad=bad), self.assertRaises(ValueError):
+                    DE.paper(ds)
+            DE.write_json(ds / "paper.json", EN_PAPER)
+            self.assertEqual(DE.paper(ds)["script"], "latn")
+
+    def test_script_share_and_edition_sizes(self):
+        self.assertEqual(DS.deva_share("शहर abc"), 0.5)
+        self.assertEqual(DS.deva_share("Café, the city", "latn"), 1.0)
+        self.assertEqual(DS.deva_share("शहर", "latn"), 0.0)
+        with self.assertRaisesRegex(ValueError, "^pages must be 4, 8 or 16$"):
+            DE.page_roles(6, True)
+        self.assertEqual(DE.page_roles(6, True, (4, 6, 8)), ["front", "inside_imprint", "inside", "inside", "inside", "back"])
+        with self.assertRaisesRegex(ValueError, "^pages must be 4, 8 or 16 or 6$"):
+            DE.page_roles(5, True, (4, 6, 8))
+
+    def test_candidates_use_the_papers_script_imprint_and_page_share(self):
+        def page(n, text):
+            return (n, f"en-20260105__p{n}", {"page": n, "sample": "en-20260105",
+                                               "stories": [{"flow": [{"type": "para", "text": text}]}]})
+
+        def tpl(ds, name, role):
+            p = int(name.rsplit("p", 1)[1])
+            foot = [{"kind": "furniture", "text": "Printed and published by Fictional Press Ltd, 12 January 2026",
+                     "bbox_mm": [10.0, 392.0, 200.0, 396.0]}] if p == 2 else []
+            return types.SimpleNamespace(intruders=0, kept_stories_dropped=0, regions=[(0, 6, 0, 1)], page_h=400.0,
+                                         news_top=50.0 if p == 1 else 30.0, news_bottom=390.0 if p != 4 else 250.0,
+                                         ad_slots=[{"bbox_mm": [0, 260, 100, 390]}] if p == 4 else [], keep=foot)
+        english = "The council met on Monday to discuss the new bridge"
+        by_sample = {"en-20260105": [page(n, english) for n in (1, 2, 3, 4)]}
+        real = DG.Template
+        DG.Template = tpl
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                ds = Path(d)
+                self.assertEqual({r: len(c) for r, c in DE.find_candidates(ds, by_sample).items()},   # the pilot's rules
+                                 {"front": 0, "inside_imprint": 0, "inside": 0, "back": 0})
+                DE.write_json(ds / "paper.json", EN_PAPER)
+                got = DE.find_candidates(ds, by_sample)
+                # front: news from 50 mm of a 400 mm page (the pilot's 60 of 540 is 44 mm here); imprint by its text
+                self.assertEqual({r: [c[3] for c in v] for r, v in got.items()},
+                                 {"front": [1], "inside_imprint": [2], "inside": [3], "back": [4]})
+                self.assertEqual(DE.page_role_counts({}, "latn"), {})
+        finally:
+            DG.Template = real
 
 
 if __name__ == "__main__":

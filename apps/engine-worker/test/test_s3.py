@@ -208,6 +208,22 @@ class ReadWriteTests(unittest.TestCase):
             with self.subTest(answer=answer), self.assertRaisesRegex(StorageError, "no version"):
                 self.store(FakeClient(answer)).put(KEY, b"x", "text/plain")
 
+    def test_an_upload_streams_the_file_with_its_checksum(self):
+        """engine.onboard's bundle (hundreds of MB): the file itself is the body, never read into memory here."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "dataset.zip"
+            path.write_bytes(b"fictional bundle")
+            sha = hashlib.sha256(b"fictional bundle").hexdigest()
+            client = FakeClient({"VersionId": "v9"})
+            self.assertEqual(self.store(client).upload(KEY, path, sha, "application/zip"), "v9")
+            sent = client.calls[0][1]
+            self.assertEqual(sent["ChecksumSHA256"], base64.b64encode(bytes.fromhex(sha)).decode())
+            self.assertTrue(sent["Body"].closed and sent["Body"].name == str(path))
+            with self.assertRaisesRegex(StorageError, "no version"):
+                self.store(FakeClient({})).upload(KEY, path, sha, "application/zip")
+            with self.assertRaises(keys.KeyRefused):
+                self.store(client).upload("orgs/other/x", path, sha, "application/zip")
+
 
 @unittest.skipUnless(RUN, "the store tests run with PGN_WORKER_S3_RUN=1 (and then fail, never skip)")
 class StoreTests(Case):

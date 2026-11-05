@@ -16,6 +16,7 @@ export const EDITION = "01890a5d-ac96-774b-bcce-b302099a805b";
 export const PROFILE = "01890a5d-ac96-774b-bcce-b302099a805c";
 export const ARTWORK = "01890a5d-ac96-774b-bcce-b302099a805d";
 export const ASSET = "01890a5d-ac96-774b-bcce-b302099a805e";
+export const ONBOARDING = "01890a5d-ac96-774b-bcce-b302099a805f";
 export const SHA = "a".repeat(64);
 const facts = {
   profile_id: PROFILE,
@@ -56,6 +57,7 @@ export const PAYLOADS = {
     w_mm: "120",
     h_mm: "80.5",
   },
+  "engine.onboard": { org_id: ORG, pub_id: PUB, onboarding_id: ONBOARDING, version_id: "v1", sha256: SHA },
 } as const;
 export type EngineKind = keyof typeof PAYLOADS;
 
@@ -124,6 +126,18 @@ export const adRejected = () =>
     message: words,
     status: 422,
   });
+const onboardBase = { org_id: ORG, pub_id: PUB, onboarding_id: ONBOARDING, sha256: SHA };
+export const onboardProgress = (done = 1) =>
+  EngineEvent.parse({ kind: "onboard.progress", ...onboardBase, step: "reading", done, total: 12 });
+export const onboardRejected = () =>
+  EngineEvent.parse({
+    kind: "onboard.rejected",
+    ...onboardBase,
+    code: "onboard.too_few_editions",
+    params: null,
+    files: [{ n: 1, status: "refused", date: null, pages: 4, notes: [{ code: "onboard.no_date", count: null }] }],
+    message: "Fewer than 3 editions could be used.",
+  });
 
 export const engineJob = (kind: EngineKind, id = "1") =>
   WorkerJob.parse({ format: WORKER_JOB_FORMAT, id, kind, args: PAYLOADS[kind] });
@@ -134,6 +148,8 @@ const KIND_OF: Partial<Record<EngineEvent["kind"], EngineKind>> = {
   "run.finished": "engine.layout",
   "ad.ready": "media.ad",
   "ad.rejected": "media.ad",
+  "onboard.ready": "engine.onboard",
+  "onboard.rejected": "engine.onboard",
 };
 export const doneResult = (event: EngineEvent, job = "1") =>
   WorkerResult.parse({

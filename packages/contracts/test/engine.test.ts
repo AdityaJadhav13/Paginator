@@ -181,6 +181,24 @@ describe("the engine's contracts", () => {
     );
   });
 
+  it("read engine.onboard's own results and progress line (apps/engine-worker test_onboard.py ContractTests)", () => {
+    const onboard = JSON.parse(readFileSync(new URL("./fixtures/onboard-results.json", import.meta.url), "utf8")) as {
+      results: unknown[];
+      progress: unknown[];
+    };
+    const results = onboard.results.map((r) => WorkerResult.parse(r));
+    expect(results.map((r) => (r.outcome === "done" ? r.event.kind : r.error.code))).toEqual([
+      "onboard.ready",
+      "onboard.rejected",
+      "worker.onboard",
+    ]);
+    expect(onboard.progress.map((p) => WorkerProgress.parse(p).event.kind)).toEqual(["onboard.progress"]);
+    // the ready event's bundle is pinned: no key, no bundle
+    const ready = structuredClone(onboard.results[0]) as { event: Record<string, unknown> };
+    delete ready.event["dataset"];
+    expect(WorkerResult.safeParse(ready).success).toBe(false);
+  });
+
   it("give the engine's jobs only their own arguments", () => {
     const ids = { org_id: ORG, pub_id: ORG };
     const facts = {

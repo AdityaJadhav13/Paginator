@@ -22,7 +22,7 @@ const NEWS = "docs/product/13-news-finder.md";
 
 export const EVIDENCE = {
   edition: { path: LAUNCH, quote: "It already lays out a whole 4-, 8- or 16-page paper" },
-  editionCode: { path: "tools/desk/engine/desk_engine.py", quote: 'raise ValueError("pages must be 4, 8 or 16")' },
+  editionCode: { path: "tools/desk/engine/desk_engine.py", quote: "if pages not in (4, 8, 16) and pages not in sizes:" },
   houseStyle: { path: DESK, quote: "it chooses the paper's page designs and measures" },
   medians: { path: DESK, quote: "medians measured on the paper's own printed pages." },
   standInFonts: { path: DESK, quote: "The type uses the free stand-in fonts the experiments use; the paper's own fonts come later." },

@@ -321,6 +321,12 @@ describe("Lay out", () => {
     expect(screen.getByText("Fix what stops a layout first: see Readiness.")).toBeInTheDocument();
   });
 
+  it("tells a Reporter the engine profile is not theirs to see, instead of an empty page", async () => {
+    const { container } = renderAuth(PROFILE, { preset: "sahyadri-reporter" });
+    expect(await screen.findByText("You don't have access to the engine profile")).toBeInTheDocument();
+    expect(await seriousViolations(container)).toEqual([]);
+  });
+
   it("shows a Reporter the last run, with nothing to start or cancel", async () => {
     renderAuth(LAYOUT(B, "run"), { preset: "sahyadri-reporter" });
     expect(await screen.findByRole("region", { name: "Last layout" })).toBeInTheDocument();
@@ -520,6 +526,12 @@ describe("The Today card", () => {
   });
 });
 
+/** The operator's dataset upload, folded under its plain summary: opened. */
+async function advanced(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByText("Advanced: upload an engine dataset bundle (for Pageinator staff)"));
+  return within(screen.getByRole("region", { name: "Upload a dataset bundle" }));
+}
+
 describe("The engine profile", () => {
   it("shows the profile in use and the earlier versions", async () => {
     const { container } = renderAuth(PROFILE, { preset: "sahyadri-editor" });
@@ -541,7 +553,7 @@ describe("The engine profile", () => {
   it("uploads a dataset bundle with its progress, hears it setting up, and shows the new profile in use", async () => {
     const { environment, container } = renderAuth(PROFILE, { preset: "sahyadri-chief-editor" });
     const user = userEvent.setup();
-    const upload = within(await screen.findByRole("region", { name: "Upload a dataset bundle" }));
+    const upload = await advanced(user);
     await user.upload(
       upload.getByLabelText(/Dataset bundle/),
       new File(["PK fictional"], "dataset.zip", { type: "application/zip" }),
@@ -561,10 +573,10 @@ describe("The engine profile", () => {
     expect(await screen.findByRole("region", { name: "In use: version 3" })).toBeInTheDocument();
   });
 
-  it("says why a dataset could not be set up, in the engine's words", async () => {
+  it("says why a dataset could not be set up in plain words, and no longer that it is setting up", async () => {
     const { environment } = renderAuth(PROFILE, { preset: "sahyadri-chief-editor" });
     const user = userEvent.setup();
-    const upload = within(await screen.findByRole("region", { name: "Upload a dataset bundle" }));
+    const upload = await advanced(user);
     await user.upload(
       upload.getByLabelText(/Dataset bundle/),
       new File(["PK"], "dataset.zip", { type: "application/zip" }),
@@ -578,17 +590,45 @@ describe("The engine profile", () => {
       }),
     );
     expect(await screen.findByText("This dataset could not be set up.")).toBeInTheDocument();
-    expect(screen.getByText("The bundle has no page models.")).toBeInTheDocument();
+    expect(
+      screen.getByText("This dataset bundle has no measured pages in it, so the engine has nothing to set up from."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("The bundle has no page models.")).not.toBeInTheDocument();
+    expect(upload.queryByText("Uploaded. The engine is setting it up.")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "In use: version 2" })).toBeInTheDocument();
   });
 
   it("sends nothing for a file that is not a ZIP", async () => {
     renderAuth(PROFILE, { preset: "sahyadri-chief-editor" });
     const user = userEvent.setup({ applyAccept: false });
-    const upload = within(await screen.findByRole("region", { name: "Upload a dataset bundle" }));
+    const upload = await advanced(user);
     await user.upload(upload.getByLabelText(/Dataset bundle/), new File(["x"], "notes.txt", { type: "text/plain" }));
     await user.click(upload.getByRole("button", { name: "Upload and set up" }));
-    expect(await upload.findByText("Choose a ZIP file.")).toBeInTheDocument();
+    expect(
+      await upload.findByText(
+        "This is not a ZIP file. Choose the dataset bundle Pageinator gave you: a file ending in .zip.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the dataset upload folded away for staff, and says a worker failure in general Marathi words", async () => {
+    const { environment } = renderAuth(PROFILE, { preset: "sahyadri-chief-editor", language: "mr" });
+    const user = userEvent.setup();
+    const summary = await screen.findByText("प्रगत: इंजिन डेटासेट संच अपलोड करा (Pageinator कर्मचाऱ्यांसाठी)");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    await user.click(summary);
+    const upload = within(screen.getByRole("region", { name: "डेटासेट संच अपलोड करा" }));
+    await user.upload(upload.getByLabelText(/डेटासेट संच/), new File(["PK"], "dataset.zip", { type: "application/zip" }));
+    await user.click(upload.getByRole("button", { name: "अपलोड करून तयार करा" }));
+    await upload.findByText("अपलोड झाले. इंजिन ते तयार करत आहे.");
+    act(() =>
+      environment.sessionController.layout.setUp("profile-new-001", {
+        code: "worker.timeout",
+        message: { text: "fictional timeout", code: null, params: null },
+      }),
+    );
+    expect(await screen.findByText(/तयार होताना इंजिन अनपेक्षितपणे थांबले/)).toBeInTheDocument();
+    expect(upload.queryByText("अपलोड झाले. इंजिन ते तयार करत आहे.")).not.toBeInTheDocument();
   });
 
   it("is in the publication's navigation for settings.view, in Marathi too", async () => {

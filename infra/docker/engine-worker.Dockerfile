@@ -52,6 +52,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PGN_WORKER_HOMES=/var/lib/pageinator/homes \
     PAGEINATOR_ICC=/run/pageinator/newsprint.icc \
     PGN_ENGINE_PYTHON=/opt/pageinator/engine-venv/bin/python \
+    PGN_ONBOARD_PYTHON=/opt/pageinator/venv/bin/python \
     PGN_ENGINE_STALL_S=600
 
 # the io environment: the worker's lock, wheels only, every hash checked, checked whole; then the venv's own pip and
@@ -83,6 +84,10 @@ COPY packages/contracts/src /opt/pageinator/packages/contracts/src
 COPY tools/desk/deskserver /opt/pageinator/tools/desk/deskserver
 COPY tools/desk/engine /opt/pageinator/tools/desk/engine
 COPY apps/engine-worker/pgn_worker /opt/pageinator/apps/engine-worker/pgn_worker
+# onboarding (engine.onboard): the copy of the Phase-0 PDF reading chain, run in the worker's own venv (its tests and
+# fixture generator stay out)
+COPY tools/onboard/chain /opt/pageinator/tools/onboard/chain
+COPY tools/onboard/onboard.py tools/onboard/intake.py tools/onboard/autocorrect.py /opt/pageinator/tools/onboard/
 # the frozen code the engine imports (its OFL stand-in fonts and their licences among it), at the repository's paths
 COPY tools/oracle/v0 /opt/pageinator/tools/oracle/v0
 COPY experiments/phase0/compose1 /opt/pageinator/experiments/phase0/compose1

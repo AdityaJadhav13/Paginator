@@ -41,4 +41,4 @@ export {
 } from "./news/fetch.ts";
 export { installQueueSchema, type Query } from "./schema.ts";
 export { licenceLabel } from "./news/licence.ts";
-export { APP_ENQUEUE_LAYOUT } from "./layout-enqueue.ts";
+export { APP_ENQUEUE_LAYOUT, APP_ENQUEUE_ONBOARD } from "./layout-enqueue.ts";

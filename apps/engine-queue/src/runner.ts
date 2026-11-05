@@ -3,8 +3,8 @@
 // refuses, a line that disagrees with its exit code, an unknown code, a death by a signal such as the kernel's
 // out-of-memory killer, the time limit, a cancel) decides nothing: the job is run again. The runner runs in a process
 // group of its own, and the whole group is killed at the time limit, on a cancel, and once the runner has exited, so
-// nothing it started outlives it. The engine's kinds (L2.3) differ in three ways: a time limit of their own
-// (`limitsMs`); engine.layout and engine.measure write progress lines (WorkerProgress) before their result, each
+// nothing it started outlives it. The engine's kinds (L2.3, L4) differ in three ways: a time limit of their own
+// (`limitsMs`); engine.layout, engine.measure and engine.onboard write progress lines (WorkerProgress) before their result, each
 // passed to `onProgress` as it comes (one the contract refuses is dropped, never the job's failure); and a stop is
 // graceful: SIGTERM to the group, SIGKILL 10 s later, and the result the runner still answers is read
 // (`stoppedBy` then says why it was stopped: the task decides whether that answer counts).
@@ -30,8 +30,8 @@ export type RunnerSettings = {
 
 /** The kinds that write progress lines before their result, and the kinds stopped gracefully (the Python launcher
  * stops the engine's own process group on SIGTERM and answers what it did). */
-const STREAMING: ReadonlySet<string> = new Set(["engine.layout", "engine.measure"]);
-const GRACEFUL: ReadonlySet<string> = new Set(["engine.setup", "engine.measure", "engine.layout"]);
+const STREAMING: ReadonlySet<string> = new Set(["engine.layout", "engine.measure", "engine.onboard"]);
+const GRACEFUL: ReadonlySet<string> = new Set(["engine.setup", "engine.measure", "engine.layout", "engine.onboard"]);
 /** How long a graceful stop waits after SIGTERM before SIGKILL. */
 export const STOP_GRACE_MS = 10_000;
 
@@ -49,9 +49,10 @@ const MAX_STREAMED = 256 * MAX_STDOUT;
 const DRAIN_MS = 2_000; // after the runner exits, how long its output may take to arrive
 /** The runner's settings, copied from the queue's environment: nothing else reaches Python (no database URL).
  * AWS_CA_BUNDLE: a store behind a private CA (pilot-local's Caddy), which boto3 then trusts. PGN_ENGINE_PYTHON and
- * PGN_ENGINE_STALL_S: the layout engine's Python and how long an engine may show no progress (L2.3). */
+ * PGN_ENGINE_STALL_S: the layout engine's Python and how long an engine may show no progress (L2.3). PGN_ONBOARD_PYTHON:
+ * the onboarding tool's Python (engine.onboard, L4). */
 const PASSED =
-  /^(PATH|HOME|LANG|LC_[A-Z]+|TMPDIR|PYTHONPATH|PYTHONDONTWRITEBYTECODE|PAGEINATOR_ICC|PGN_ICC_SHA256|PGN_S3_[A-Z_]+|PGN_WORKER_HOMES|AWS_CA_BUNDLE|PGN_ENGINE_PYTHON|PGN_ENGINE_STALL_S)$/;
+  /^(PATH|HOME|LANG|LC_[A-Z]+|TMPDIR|PYTHONPATH|PYTHONDONTWRITEBYTECODE|PAGEINATOR_ICC|PGN_ICC_SHA256|PGN_S3_[A-Z_]+|PGN_WORKER_HOMES|AWS_CA_BUNDLE|PGN_ENGINE_PYTHON|PGN_ENGINE_STALL_S|PGN_ONBOARD_PYTHON)$/;
 
 export function runnerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(Object.entries(env).filter(([name]) => PASSED.test(name)));

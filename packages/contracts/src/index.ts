@@ -317,3 +317,6 @@ export * from "./brand.ts";
 export * from "./print-profiles.ts";
 // Organization and publication settings (doc 07 §13)
 export * from "./settings.ts";
+
+export * from "./onboard.ts";
+export * from "./signup.ts";

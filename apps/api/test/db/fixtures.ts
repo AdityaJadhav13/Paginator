@@ -453,6 +453,21 @@ export const FIXTURES: Fixture[] = [
     per: "publication",
     row: (org, pub) => ({ ...inPub(org, pub), version: 1, press_name: "Example Press", created_by: org.user }),
   },
+  // onboarding a new paper (migration 2026_12_07_0001): three fictional past editions, read and cancelled
+  {
+    table: "paper_onboarding",
+    per: "publication",
+    row: (org, pub) => ({
+      ...inPub(org, pub),
+      id: childId(pub, 21),
+      state: "cancelled",
+      files: JSON.stringify(
+        [1, 2, 3].map((n) => ({ n, name: `Example ${n}.pdf`, bytes: 1024, version_id: "v1", sha256: "7".repeat(64) })),
+      ),
+      permission_confirmed_by: org.user,
+      created_by: org.user,
+    }),
+  },
   // the ads desk (migration 2026_12_05_0001): an advertiser, its booking (with the asset as artwork) placed in the
   // edition's slot, and a plan page naming the section
   {

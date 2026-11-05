@@ -3,7 +3,16 @@
 import { describe, expect, it } from "vitest";
 import type { WorkerProgress } from "@pageinator/contracts";
 import { runJob, runnerEnv, STOP_GRACE_MS, type RunnerSettings } from "../src/runner.ts";
-import { doneResult, engineJob, finished, measured, progressLine, runProgress } from "./engine-fixtures.ts";
+import {
+  doneResult,
+  engineJob,
+  finished,
+  measured,
+  onboardProgress,
+  onboardRejected,
+  progressLine,
+  runProgress,
+} from "./engine-fixtures.ts";
 
 /** A stand-in runner (Node) that reads the job and then does what `script` says. */
 function stub(script: string, timeoutMs = 10_000, limitsMs: RunnerSettings["limitsMs"] = {}): RunnerSettings {
@@ -55,6 +64,13 @@ describe("the runner for the engine's kinds", () => {
       outcome: "done",
     });
     expect(m).toHaveLength(1);
+    // and an onboarding's
+    const o: WorkerProgress[] = [];
+    const onboard = lines(progressLine(onboardProgress(), 1), doneResult(onboardRejected()));
+    expect(await runJob(engineJob("engine.onboard"), stub(write(onboard)), undefined, (p) => o.push(p))).toMatchObject({
+      outcome: "done",
+    });
+    expect(o.map((p) => p.event.kind)).toEqual(["onboard.progress"]);
   });
 
   it("still reads exactly one result line", async () => {

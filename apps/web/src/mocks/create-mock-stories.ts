@@ -393,6 +393,7 @@ interface MockUpload {
   readonly userId: string;
   readonly contentType: string;
   readonly bytes: number;
+  readonly filename: string;
   file?: Blob;
   status: "presigned" | "completed" | "rejected";
   assetId?: string;
@@ -413,6 +414,8 @@ const FIXTURE_PICTURE = new Blob(
 const MAX_BYTES = 41_943_040;
 /** the contracts' MAX_DATASET_BYTES (4 GiB) */
 const MAX_DATASET_BYTES = 4 * 1024 ** 3;
+/** the contracts' MAX_ONBOARD_PDF_BYTES (200 MiB) */
+const MAX_ONBOARD_PDF_BYTES = 200 * 1024 ** 2;
 const MEDIA_PAGE = 60;
 const UPLOADS_PER_HOUR = 60;
 const ORG_BYTES_PER_DAY = 2 * 1024 ** 3;
@@ -521,7 +524,9 @@ export function createMockStories(deps: MockStoryDeps): {
     orgId: string,
     pubId: string,
     uploadId: string,
-  ): { readonly contentType: string; readonly bytes: number } | undefined;
+  ):
+    | { readonly contentType: string; readonly bytes: number; readonly filename: string; readonly userId: string }
+    | undefined;
 } {
   let rows = fixtures();
   let editionRows = editionFixtures();
@@ -1367,7 +1372,7 @@ export function createMockStories(deps: MockStoryDeps): {
   function hears(userId: string, orgId: string, event: LiveEventDto): boolean {
     if (event.type === "resync" || event.type === "notification") return true;
     if (event.type === "import") return imports.get(event.importId)?.userId === userId;
-    if (event.type === "layout" || event.type === "profile") {
+    if (event.type === "layout" || event.type === "profile" || event.type === "onboarding") {
       const standing = deps.standing(userId, orgId, event.publicationId);
       const permission = event.type === "layout" ? "pages.view" : "settings.view";
       return standing !== undefined && reach(permission, standing.orgRole, standing.access) !== null;
@@ -1532,11 +1537,12 @@ export function createMockStories(deps: MockStoryDeps): {
     async presign({ orgId, pubId, filename, contentType, bytes, idempotencyKey, purpose = "story_photo" }) {
       const docx = purpose === "docx";
       const dataset = purpose === "engine_dataset";
+      const pdf = purpose === "onboard_pdf";
       const checked = await check<never>(
         "media.presign",
         orgId,
         pubId,
-        docx ? "story.create" : dataset ? "settings.edit" : "media.upload",
+        docx ? "story.create" : dataset || pdf ? "settings.edit" : "media.upload",
         // the ads desk uploads its artwork to the library (L2.6)
         purpose === "library" ? ["ads.manage"] : [],
       );
@@ -1556,7 +1562,11 @@ export function createMockStories(deps: MockStoryDeps): {
         return failure(invalid("body.contentType", "A dataset bundle is uploaded as engine_dataset, as a ZIP file."));
       if (dataset && bytes > MAX_DATASET_BYTES)
         return failure(answer(413, "file_too_large", "A dataset bundle is at most 4 GiB."));
-      if (!docx && !dataset && !(TYPES as readonly string[]).includes(contentType))
+      if (pdf !== (contentType === "application/pdf"))
+        return failure(invalid("body.contentType", "A past edition is uploaded as onboard_pdf, as a PDF file."));
+      if (pdf && bytes > MAX_ONBOARD_PDF_BYTES)
+        return failure(answer(413, "file_too_large", "A past edition's PDF is at most 200 MiB."));
+      if (!docx && !dataset && !pdf && !(TYPES as readonly string[]).includes(contentType))
         return failure(invalid("body.contentType", "must be JPEG, PNG or WebP"));
       if (docx && bytes > MAX_DOCX_BYTES) {
         return failure({
@@ -1564,18 +1574,20 @@ export function createMockStories(deps: MockStoryDeps): {
           details: [{ field: "body.bytes", message: "This Word file is larger than 10 MB." }],
         });
       }
-      if (!dataset && bytes > MAX_BYTES)
+      if (!dataset && !pdf && bytes > MAX_BYTES)
         return failure(answer(413, "file_too_large", "This picture is larger than 40 MB."));
       const used = orgBytes.get(orgId) ?? 0;
       const count = uploadCount.get(person.userId) ?? 0;
       // a dataset bundle (up to 4 GiB) is not a newsroom's daily pictures: the daily byte cap is the pictures'
-      if ((!dataset && used + bytes > ORG_BYTES_PER_DAY) || count >= UPLOADS_PER_HOUR) {
+      // nor are past editions (L4): the paper's few dozen PDFs, once
+      const daily = !dataset && !pdf;
+      if ((daily && used + bytes > ORG_BYTES_PER_DAY) || count >= UPLOADS_PER_HOUR) {
         return failure(answer(429, "slow_down", "Too many tries. Wait a minute and try again."));
       }
-      if (!dataset) orgBytes.set(orgId, used + bytes);
+      if (daily) orgBytes.set(orgId, used + bytes);
       uploadCount.set(person.userId, count + 1);
       const id = `upload-${String(uploads.size + 1).padStart(3, "0")}`;
-      uploads.set(id, { id, orgId, pubId, userId: person.userId, contentType, bytes, status: "presigned" });
+      uploads.set(id, { id, orgId, pubId, userId: person.userId, contentType, bytes, filename, status: "presigned" });
       const presigned = {
         uploadId: id,
         url: "mock-store://pgn-dev-work",
@@ -2005,7 +2017,7 @@ export function createMockStories(deps: MockStoryDeps): {
     uploadOf(orgId, pubId, uploadId) {
       const upload = uploads.get(uploadId);
       return upload && upload.orgId === orgId && upload.pubId === pubId
-        ? { contentType: upload.contentType, bytes: upload.bytes }
+        ? { contentType: upload.contentType, bytes: upload.bytes, filename: upload.filename, userId: upload.userId }
         : undefined;
     },
   };

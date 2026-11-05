@@ -508,3 +508,12 @@ describe("Every record is shown, and only records are shown", () => {
     for (const id of stateLabelIds()) expect(CONTENT_RECORDS.some((record) => record.id === id), id).toBe(true);
   });
 });
+
+describe("the public footer notice (doc 11 L2-567, L4-004)", () => {
+  it("says a paper can apply, and no longer that the product is still being built or invitation-only", () => {
+    const en = CATALOGUES.en["shell.notice"];
+    expect(en).toContain("A newspaper can apply to join");
+    expect(en).not.toMatch(/still being built|Accounts are by invitation/i);
+    expect(CATALOGUES.mr["shell.notice"]).toContain("अर्ज करू शकते");
+  });
+});

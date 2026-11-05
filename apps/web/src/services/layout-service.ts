@@ -6,10 +6,13 @@ import type {
   EngineProfileList,
   FileLink,
   LayoutRun,
+  Onboarding,
+  OnboardingView,
   SectionList,
   SectionPatch,
   TemplateChoiceInput,
   TemplatesView,
+  TestEditionMade,
 } from "@pageinator/contracts";
 import type { ApiProblem } from "./problem.ts";
 import type { ServiceResult } from "./result.ts";
@@ -28,6 +31,9 @@ export type SectionDto = SectionList["items"][number];
 export type TemplatesViewDto = TemplatesView;
 export type TemplateCandidateDto = TemplatesView["roles"][number]["candidates"][number];
 export type TemplateOutlineDto = TemplateCandidateDto["outline"];
+export type OnboardingDto = Onboarding;
+export type OnboardingViewDto = OnboardingView;
+export type TestEditionDto = TestEditionMade;
 
 interface Where {
   readonly orgId: string;
@@ -81,4 +87,21 @@ export interface LayoutService {
   changeSection(
     input: Where & { readonly id: string; readonly change: SectionPatch },
   ): Promise<ServiceResult<SectionListDto, ApiProblem>>;
+  /** Onboard a new paper (onboard.ts, L4): the newest onboarding and the earlier ones (settings.view). */
+  getOnboarding(input: Where): Promise<ServiceResult<OnboardingViewDto, ApiProblem>>;
+  /** Past editions uploaded (purpose onboard_pdf), in order, with the paper's permission: 202 queued (settings.edit;
+   * 409 onboarding_active, 400 invalid_request). */
+  startOnboarding(
+    input: Where & { readonly uploadIds: readonly string[]; readonly idempotencyKey: string },
+  ): Promise<ServiceResult<OnboardingDto, ApiProblem>>;
+  /** Stops it (settings.edit; 409 onboarding_finished). */
+  cancelOnboarding(input: Where & { readonly id: string }): Promise<ServiceResult<OnboardingDto, ApiProblem>>;
+  /** Its design made a new engine profile, setting up (settings.edit; 409 onboarding_not_ready, profile_setting_up). */
+  adoptOnboarding(
+    input: Where & { readonly id: string; readonly idempotencyKey: string },
+  ): Promise<ServiceResult<EngineProfileDto, ApiProblem>>;
+  /** An edition of fictional sample stories, Ready, for a test layout (layout.generate; 409 no_profile). */
+  makeTestEdition(
+    input: Where & { readonly idempotencyKey: string },
+  ): Promise<ServiceResult<TestEditionDto, ApiProblem>>;
 }

@@ -29,11 +29,11 @@ describe("UI004 auth and public routes", () => {
     expect(screen.queryByText("Sahyadri Media Cooperative")).not.toBeInTheDocument();
   });
 
-  it("offers sign-up only by invitation: /signup explains, and has no account form", async () => {
+  it("/signup signs up a new paper, and explains invitations: no password is asked there", async () => {
     renderUi004("/signup", "signed-out");
     expect(await screen.findByRole("heading", { level: 1, name: "Create an account" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Sign up a new paper" })).toBeInTheDocument();
     expect(screen.getByText(/accounts are made by invitation/)).toBeInTheDocument();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
   });
 

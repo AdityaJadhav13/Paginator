@@ -199,3 +199,10 @@
   font-size: var(--pg-font-size-200);
   font-weight: var(--pg-font-weight-semibold);
 }
+
+/* the operator's dataset upload, folded away under a plain summary */
+.pg-layout__advanced > summary {
+  cursor: pointer;
+  color: var(--pg-app-text-secondary);
+  margin-block-end: var(--pg-space-3);
+}

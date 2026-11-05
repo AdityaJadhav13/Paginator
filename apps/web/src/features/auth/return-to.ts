@@ -34,7 +34,7 @@ export function safeReturnTo(value: string | null, fallback: string): string {
   if (value.includes("?") || value.includes("#")) return fallback;
   const parts = value.split("/").filter(Boolean);
   if (parts[0] === "invite" && parts.length === 2 && isInvitationId(parts[1] ?? "")) return value;
-  if (value === paths.accountSecurity()) return value;
+  if (value === paths.accountSecurity() || value === paths.onboarding()) return value;
   if (parts[0] !== "org" || !parts[1]) return fallback;
   if (parts.length === 2) return value;
   if (parts.length === 3 && ORG_LEAF.test(parts[2] ?? "")) return value;

@@ -102,6 +102,10 @@ export function liveEventOf(type: string, data: unknown): LiveEventDto | null {
       return isId(data["publicationId"]) && isId(data["profileId"])
         ? { type, publicationId: data["publicationId"], profileId: data["profileId"] }
         : null;
+    case "onboarding":
+      return isId(data["publicationId"]) && isId(data["onboardingId"])
+        ? { type, publicationId: data["publicationId"], onboardingId: data["onboardingId"] }
+        : null;
     case "resync":
       return { type };
     default:

@@ -42,6 +42,12 @@
       "Effect": "Allow",
       "Action": ["s3:PutObject"],
       "Resource": "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/runs/*/press-files.zip"
+    },
+    {
+      "Sid": "WorkBucketOnboardingDatasetWriteOnly",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject"],
+      "Resource": "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/onboarding/*/dataset.zip"
     }
   ]
 }

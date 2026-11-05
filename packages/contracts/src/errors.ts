@@ -28,6 +28,9 @@ export const ERROR_CODES = [
   "layout_refused",
   "no_profile",
   "profile_setting_up",
+  "onboarding_active",
+  "onboarding_finished",
+  "onboarding_not_ready",
   "not_editable",
   "stale",
   "page_locked",
@@ -50,6 +53,7 @@ export const ERROR_CODES = [
   "contact_unavailable",
   "contact_send_failed",
   "contact_limit",
+  "signup_limit",
   "server_error",
 ] as const;
 
@@ -71,7 +75,8 @@ export const ErrorEnvelope = z.strictObject({
      * stale: the page in the editor (EditorPage) as it is now; with page_locked: the page's lock (PageLock); with
      * edit_refused: the engine's refusal in the Desk's words (DeskText); with approval_stale: the page (ReleasePage)
      * or the release candidate (ReleaseCandidate or null) as it is now; with page_approved: the page's approval
-     * and its page number (ApprovedPage). */
+     * and its page number (ApprovedPage); with onboarding_active and onboarding_finished: the onboarding (Onboarding) as
+     * it is now. */
     current: z.unknown().optional(),
     requestId: z.string().min(1),
   }),

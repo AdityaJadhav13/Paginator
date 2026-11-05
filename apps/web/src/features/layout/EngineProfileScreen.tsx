@@ -29,7 +29,7 @@ import {
 import { ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { randomUuid } from "../../api/client.ts";
 import { formatDateTime } from "../../i18n/dates.ts";
-import { useI18n, type Translate } from "../../i18n/index.ts";
+import { useI18n, type PlainKey, type Translate } from "../../i18n/index.ts";
 import type { ApiProblem, EngineProfileDto, EngineProfileListDto } from "../../services/index.ts";
 import { OfflineNotice } from "../auth/connection.tsx";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
@@ -42,6 +42,7 @@ import { DeskWords } from "./desk-text.tsx";
 import { useLayout } from "./layout-context.tsx";
 import { POLL_MS } from "./EditionLayoutScreen.tsx";
 import { SectionsPanel } from "./SectionsPanel.tsx";
+import { OnboardingPanel } from "../onboarding/OnboardingPanel.tsx";
 import "./layout.css";
 
 type Load =
@@ -67,8 +68,13 @@ export function EngineProfileScreen() {
         {...(publication ? { subtitle: publication.name } : {})}
       />
       <OfflineNotice />
-      {access.settings && <ProfileContent orgId={orgId} pubId={pubId} edit={access.settingsEdit} />}
+      {access.settings && <ProfileContent orgId={orgId} pubId={pubId} edit={access.settingsEdit} generate={access.generate} />}
       {access.settings && <SectionsPanel orgId={orgId} pubId={pubId} edit={access.settingsEdit} />}
+      {org && !access.settings && (
+        <InlineMessage variant="info" heading={t("onboarding.profileNoAccess.heading")} iconLabel={t("message.info")}>
+          {t("onboarding.profileNoAccess.body")}
+        </InlineMessage>
+      )}
     </Stack>
   );
 }
@@ -97,10 +103,12 @@ function ProfileContent({
   orgId,
   pubId,
   edit,
+  generate,
 }: {
   readonly orgId: string;
   readonly pubId: string;
   readonly edit: boolean;
+  readonly generate: boolean;
 }) {
   const layout = useLayout();
   const { t, language } = useI18n();
@@ -151,10 +159,22 @@ function ProfileContent({
   const newest =
     items[0] && items[0].id !== inUse && (!current || items[0].version > current.version) ? items[0] : null;
   const earlier = items.filter((item) => item !== current && item !== newest);
+  // set up from past editions (L4): the main step without a ready profile, a quieter one with
+  const onboarding = edit && (
+    <OnboardingPanel
+      orgId={orgId}
+      pubId={pubId}
+      prominent={!current}
+      generate={generate}
+      templatesLink
+      onUsed={() => void fetchList(true)}
+    />
+  );
 
   return (
     <Stack gap="5">
       <p>{t("profile.lede")}</p>
+      {!current && onboarding}
       {newest?.state === "setting_up" && (
         <div aria-live="polite">
           <InlineMessage
@@ -168,7 +188,7 @@ function ProfileContent({
       )}
       {newest?.state === "failed" && (
         <InlineMessage variant="error" heading={t("profile.failed")} iconLabel={t("message.error")}>
-          {newest.error && <DeskWords text={newest.error.message} />}
+          {newest.error && <SetupError error={newest.error} />}
         </InlineMessage>
       )}
       {current ? (
@@ -182,7 +202,19 @@ function ProfileContent({
           </EmptyState>
         </Panel>
       )}
-      {edit && <UploadDataset orgId={orgId} pubId={pubId} onMade={() => void fetchList(true)} />}
+      {current && onboarding}
+      {edit && (
+        // the operator's path: a new paper sets its design up from past editions above
+        <details className="pg-layout__advanced">
+          <summary>{t("profile.advanced")}</summary>
+          <UploadDataset
+            orgId={orgId}
+            pubId={pubId}
+            failed={newest?.state === "failed"}
+            onMade={() => void fetchList(true)}
+          />
+        </details>
+      )}
       {earlier.length > 0 && (
         <Panel title={t("profile.earlier")} flush>
           <Table caption={t("profile.earlier")}>
@@ -213,6 +245,23 @@ function ProfileContent({
       )}
     </Stack>
   );
+}
+
+/** The engine's refusal codes (pgn_worker/engine.py), in plain words; any other in the engine's own words. */
+const SETUP_ERROR: Readonly<Record<string, PlainKey>> = {
+  not_zip: "profile.error.not_zip",
+  too_large: "profile.error.too_large",
+  unsafe_path: "profile.error.unsafe_path",
+  no_pages: "profile.error.no_pages",
+  setup: "profile.error.setup",
+};
+
+function SetupError({ error }: { readonly error: NonNullable<EngineProfileDto["error"]> }) {
+  const { t } = useI18n();
+  const key = SETUP_ERROR[error.code.replace(/^profile\./, "")];
+  if (key) return <>{t(key)}</>;
+  if (error.code.startsWith("worker.")) return <>{t("profile.error.worker")}</>;
+  return <DeskWords text={error.message} />;
 }
 
 function ProfileFacts({ profile }: { readonly profile: EngineProfileDto }) {
@@ -289,10 +338,13 @@ const isZip = (file: File) =>
 function UploadDataset({
   orgId,
   pubId,
+  failed,
   onMade,
 }: {
   readonly orgId: string;
   readonly pubId: string;
+  /** the newest profile failed to set up: "Uploaded, setting it up" is no longer true */
+  readonly failed: boolean;
   readonly onMade: () => void;
 }) {
   const media = useMedia();
@@ -387,7 +439,7 @@ function UploadDataset({
               />
             )}
             {sending.step === "making" && <ProgressIndicator label={t("profile.settingUp")} />}
-            {sending.step === "done" && <p>{t("profile.upload.done")}</p>}
+            {sending.step === "done" && !failed && <p>{t("profile.upload.done")}</p>}
             {sending.step === "cancelled" && <p>{t("profile.upload.cancelled")}</p>}
           </div>
           {sending.step === "refused" && (

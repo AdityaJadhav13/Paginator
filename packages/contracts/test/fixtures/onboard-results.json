@@ -1,0 +1,133 @@
+{
+  "results": [
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "engine.onboard",
+      "outcome": "done",
+      "event": {
+        "kind": "onboard.ready",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "onboarding_id": "01890a5d-ac96-774b-bcce-b302099a8070",
+        "sha256": "85c9cc12578ba02146901eb9e21b84b4852fd025ea8602e595b21379e163c1dd",
+        "files": [
+          {
+            "n": 1,
+            "status": "ok",
+            "date": "2026-01-01",
+            "pages": 4,
+            "notes": []
+          },
+          {
+            "n": 2,
+            "status": "ok",
+            "date": "2026-01-02",
+            "pages": 4,
+            "notes": []
+          },
+          {
+            "n": 3,
+            "status": "ok",
+            "date": "2026-01-03",
+            "pages": 4,
+            "notes": []
+          }
+        ],
+        "report": {
+          "editions": 3,
+          "pages": 12,
+          "calibration_editions": 2,
+          "page_w_mm": 330.0,
+          "page_h_mm": 520.0,
+          "grid": {
+            "columns": 6,
+            "column_width_mm": 48.5,
+            "gutter_mm": 4.0
+          },
+          "grids_seen": 1,
+          "script": "latn",
+          "excluded_share": 0.0,
+          "roles": {
+            "front": 3,
+            "inside_imprint": 3,
+            "inside": 6,
+            "back": 3
+          }
+        },
+        "dataset": {
+          "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/onboarding/01890a5d-ac96-774b-bcce-b302099a8070/dataset.zip",
+          "version_id": "1cbf4458df6bdfe6141ccb92dd3835867d17389c4086fdc5f8c9999d5be9eb6b",
+          "sha256": "1cbf4458df6bdfe6141ccb92dd3835867d17389c4086fdc5f8c9999d5be9eb6b",
+          "bytes": 501
+        }
+      }
+    },
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "engine.onboard",
+      "outcome": "done",
+      "event": {
+        "kind": "onboard.rejected",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "onboarding_id": "01890a5d-ac96-774b-bcce-b302099a8070",
+        "sha256": "51d0293d25bc0481f3c68806fe89f0b609d2e0e6b8f68f51dd3d6a9ce157d87d",
+        "code": "onboard.no_grid",
+        "params": null,
+        "files": [
+          {
+            "n": 1,
+            "status": "ok",
+            "date": "2026-01-01",
+            "pages": 4,
+            "notes": []
+          },
+          {
+            "n": 2,
+            "status": "ok",
+            "date": "2026-01-02",
+            "pages": 4,
+            "notes": []
+          },
+          {
+            "n": 3,
+            "status": "ok",
+            "date": "2026-01-03",
+            "pages": 4,
+            "notes": []
+          }
+        ],
+        "message": "No column grid was found on these pages."
+      }
+    },
+    {
+      "format": "pageinator.worker-result/1",
+      "job": "job-7",
+      "kind": "engine.onboard",
+      "outcome": "failed",
+      "error": {
+        "code": "worker.onboard",
+        "message": "the onboarding tool stopped (exit 3)"
+      }
+    }
+  ],
+  "progress": [
+    {
+      "format": "pageinator.worker-progress/1",
+      "job": "job-7",
+      "seq": 1,
+      "event": {
+        "kind": "onboard.progress",
+        "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+        "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+        "onboarding_id": "01890a5d-ac96-774b-bcce-b302099a8070",
+        "sha256": "85c9cc12578ba02146901eb9e21b84b4852fd025ea8602e595b21379e163c1dd",
+        "step": "checking",
+        "done": 0,
+        "total": 3
+      }
+    }
+  ]
+}

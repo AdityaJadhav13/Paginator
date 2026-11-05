@@ -65,6 +65,16 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     status: 409,
     message: "An engine profile is being set up now. Wait until it is ready or has failed, then choose again.",
   },
+  // onboarding a new paper (L4)
+  onboarding_active: {
+    status: 409,
+    message: "Your past editions are being read now. Wait until that has finished, or cancel it first.",
+  },
+  onboarding_finished: { status: 409, message: "Reading these past editions has already finished." },
+  onboarding_not_ready: {
+    status: 409,
+    message: "Your paper's design is not ready to use: reading the past editions has not finished, or did not work.",
+  },
   // the page editor (L2.4); the first is the Desk's own words (deskserver/api.py _edit_page)
   not_editable: { status: 409, message: "Pages can be changed once their layout has finished." },
   stale: {
@@ -109,6 +119,7 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
   contact_unavailable: { status: 503, message: "Messages cannot be sent from this website yet." },
   contact_send_failed: { status: 503, message: "The message could not be sent just now. Try again later." },
   contact_limit: { status: 429, message: "Too many messages. Try again later." },
+  signup_limit: { status: 429, message: "Too many sign-ups from here. Try again later." },
   server_error: { status: 500, message: "Something went wrong on our side. Try again." },
 };
 const UNREADABLE = "This request could not be read.";

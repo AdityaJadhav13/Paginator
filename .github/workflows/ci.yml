@@ -152,6 +152,8 @@ jobs:
         run: PGN_ENGINE_PYTHON=tools/oracle/v0/.venv/bin/python experiments/phase0/pdfx1/.venv/bin/python -B -m unittest apps/engine-worker/test/test_screenprint.py
       - name: browser module tests (page editor view, words, paste)
         run: node --test tools/desk/test/*.mjs
+      - name: onboarding (fictional papers; the copy of the Phase-0 chain equals the frozen one, byte for byte)
+        run: PGN_ENGINE_PYTHON=tools/oracle/v0/.venv/bin/python experiments/phase0/pdfx1/.venv/bin/python -B -m unittest discover -s tools/onboard/test -t tools/onboard/test
 
   worker:
     name: engine worker and Python licences

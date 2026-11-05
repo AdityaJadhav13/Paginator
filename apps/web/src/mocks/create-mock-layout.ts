@@ -18,6 +18,7 @@ import type {
   LayoutRunDto,
   LayoutService,
   LiveEventDto,
+  OnboardingDto,
   SectionDto,
   ServiceResult,
 } from "../services/index.ts";
@@ -35,7 +36,8 @@ export type MockLayoutOperation =
   | "layout.files"
   | "layout.sections"
   | "layout.templates"
-  | "layout.templateChoose";
+  | "layout.templateChoose"
+  | "layout.onboarding";
 
 /** What the double needs of the stories double: the edition, its stories, a picture and an upload. */
 export interface MockLayoutDeps {
@@ -67,7 +69,9 @@ export interface MockLayoutDeps {
     orgId: string,
     pubId: string,
     uploadId: string,
-  ): { readonly contentType: string; readonly bytes: number } | undefined;
+  ):
+    | { readonly contentType: string; readonly bytes: number; readonly filename: string; readonly userId: string }
+    | undefined;
 }
 
 export interface MockLayoutController {
@@ -96,6 +100,19 @@ export interface MockLayoutController {
   setUp(profileId: string, error?: { readonly code: string; readonly message: DeskTextDto }): void;
   /** The newest run of an edition (its id), active or not. */
   latestRun(editionId: string): string | undefined;
+  /** The onboarding job's heartbeat: its step and how far (L4). */
+  onboardProgress(id: string, progress: NonNullable<OnboardingDto["progress"]>): void;
+  /** The onboarding job ended: ready (a fictional report and each file's check), rejected with the set's reason, or
+   * failed (a worker.… code). `files` replaces the checks. */
+  onboardFinish(
+    id: string,
+    outcome?: {
+      readonly state?: "ready" | "rejected" | "failed";
+      readonly code?: string;
+      readonly params?: Record<string, string | number> | null;
+      readonly files?: readonly NonNullable<OnboardingDto["files"][number]["check"]>[];
+    },
+  ): void;
 }
 
 type Answer = Extract<ApiProblem, { kind: "answer" }>;
@@ -146,6 +163,27 @@ interface ProfileRow {
 }
 
 const TEMPLATE_ROLES = ["front", "inside_imprint", "inside", "back"] as const;
+interface OnboardingRow {
+  readonly orgId: string;
+  readonly pubId: string;
+  value: OnboardingDto;
+}
+const ONBOARDING_ACTIVE = answer(409, "onboarding_active", "This paper's design is being learned now. Wait or cancel.");
+const ONBOARDING_FINISHED = answer(409, "onboarding_finished", "This has already ended.");
+const ONBOARDING_NOT_READY = answer(409, "onboarding_not_ready", "The design is not ready to use.");
+/** What the engine read from a fictional paper's past editions (aggregates only). */
+const ONBOARD_REPORT: NonNullable<OnboardingDto["report"]> = {
+  editions: 14,
+  pages: 112,
+  calibration_editions: 9,
+  page_w_mm: 330,
+  page_h_mm: 520,
+  grid: { columns: 8, column_width_mm: 38.5, gutter_mm: 4.2 },
+  grids_seen: 2,
+  script: "deva",
+  excluded_share: 0.03,
+  roles: { front: 14, inside_imprint: 14, inside: 70, back: 14 },
+};
 const PROFILE_SETTING_UP = answer(
   409,
   "profile_setting_up",
@@ -272,6 +310,7 @@ export function createMockLayout(deps: MockLayoutDeps): {
   reset(): void;
 } {
   let profiles = profileFixtures();
+  let onboardings: OnboardingRow[] = [];
   let runs = new Map<string, RunRow>();
   let slots = new Map<string, Map<string, SlotRow>>();
   let keys = new Map<string, { body: string; value: unknown }>();
@@ -560,6 +599,107 @@ export function createMockLayout(deps: MockLayoutDeps): {
       };
       profiles = [{ orgId, pubId, value }, ...profiles];
       keys = new Map(keys).set(idempotencyKey, { body, value: clone(value) });
+      return success(clone(value));
+    },
+    async getOnboarding({ orgId, pubId }) {
+      const checked = await check("layout.onboarding", orgId, pubId, can("settings.view"));
+      if ("problem" in checked) return checked.problem;
+      const [current, ...history] = onboardings
+        .filter((row) => row.orgId === orgId && row.pubId === pubId)
+        .map((row) => clone(row.value));
+      return success({ current: current ?? null, history: history.slice(0, 10) });
+    },
+    async startOnboarding({ orgId, pubId, uploadIds, idempotencyKey }) {
+      const checked = await check("layout.onboarding", orgId, pubId, can("settings.edit"));
+      if ("problem" in checked) return checked.problem;
+      const body = JSON.stringify({ uploadIds, permission: true });
+      const kept = keys.get(idempotencyKey);
+      if (kept) return kept.body === body ? success(clone(kept.value as OnboardingDto)) : failure(KEY_REUSED);
+      const mine = onboardings.filter((row) => row.orgId === orgId && row.pubId === pubId);
+      if (mine.some((row) => row.value.state === "queued" || row.value.state === "working"))
+        return failure(ONBOARDING_ACTIVE);
+      const files = uploadIds.map((uploadId) => deps.upload(orgId, pubId, uploadId));
+      if (
+        files.length < 3 ||
+        files.length > 40 ||
+        files.some((file) => !file || file.contentType !== "application/pdf" || file.userId !== checked.person.userId)
+      )
+        return failure(answer(400, "invalid_request", "Some fields are not right."));
+      counter += 1;
+      const at = now();
+      const value: OnboardingDto = {
+        id: `onboarding-new-${String(counter).padStart(3, "0")}`,
+        state: "queued",
+        progress: null,
+        files: files.map((file, i) => ({ n: i + 1, name: file!.filename, bytes: file!.bytes, check: null })),
+        report: null,
+        problem: null,
+        profileId: null,
+        createdBy: { id: checked.person.userId, name: checked.person.name },
+        createdAt: at,
+        updatedAt: at,
+      };
+      onboardings = [{ orgId, pubId, value }, ...onboardings];
+      keys = new Map(keys).set(idempotencyKey, { body, value: clone(value) });
+      deps.emit(orgId, { type: "onboarding", publicationId: pubId, onboardingId: value.id });
+      return success(clone(value));
+    },
+    async cancelOnboarding({ orgId, pubId, id }) {
+      const checked = await check("layout.onboarding", orgId, pubId, can("settings.edit"));
+      if ("problem" in checked) return checked.problem;
+      const row = onboardings.find((one) => one.value.id === id && one.orgId === orgId && one.pubId === pubId);
+      if (!row) return failure(NOT_FOUND);
+      if (row.value.state !== "queued" && row.value.state !== "working") return failure(ONBOARDING_FINISHED);
+      row.value = { ...row.value, state: "cancelled", progress: null, updatedAt: now() };
+      deps.emit(orgId, { type: "onboarding", publicationId: pubId, onboardingId: id });
+      return success(clone(row.value));
+    },
+    async adoptOnboarding({ orgId, pubId, id, idempotencyKey }) {
+      const checked = await check("layout.onboarding", orgId, pubId, can("settings.edit"));
+      if ("problem" in checked) return checked.problem;
+      const body = JSON.stringify({ id });
+      const kept = keys.get(idempotencyKey);
+      if (kept) return kept.body === body ? success(clone(kept.value as EngineProfileDto)) : failure(KEY_REUSED);
+      const row = onboardings.find((one) => one.value.id === id && one.orgId === orgId && one.pubId === pubId);
+      if (!row) return failure(NOT_FOUND);
+      if (row.value.state !== "ready") return failure(ONBOARDING_NOT_READY);
+      const mine = profiles.filter((one) => one.orgId === orgId && one.pubId === pubId);
+      if (mine.some((one) => one.value.state === "setting_up")) return failure(PROFILE_SETTING_UP);
+      counter += 1;
+      const at = now();
+      const value: EngineProfileDto = {
+        id: `profile-new-${String(counter).padStart(3, "0")}`,
+        version: Math.max(0, ...mine.map((one) => one.value.version)) + 1,
+        state: "setting_up",
+        datasetSha256: SHA("9"),
+        datasetBytes: 52_428_800,
+        configSha256: null,
+        engineVersion: null,
+        templates: null,
+        grid: null,
+        error: null,
+        basedOn: null,
+        templateChoice: null,
+        createdBy: { id: checked.person.userId, name: checked.person.name },
+        createdAt: at,
+        updatedAt: at,
+      };
+      profiles = [{ orgId, pubId, value }, ...profiles];
+      row.value = { ...row.value, state: "used", profileId: value.id, updatedAt: at };
+      keys = new Map(keys).set(idempotencyKey, { body, value: clone(value) });
+      deps.emit(orgId, { type: "onboarding", publicationId: pubId, onboardingId: id });
+      deps.emit(orgId, { type: "profile", publicationId: pubId, profileId: value.id });
+      return success(clone(value));
+    },
+    async makeTestEdition({ orgId, pubId, idempotencyKey }) {
+      const checked = await check("layout.onboarding", orgId, pubId, can("layout.generate"));
+      if ("problem" in checked) return checked.problem;
+      const kept = keys.get(idempotencyKey);
+      if (kept) return success(clone(kept.value as { editionId: string; stories: number }));
+      if (!inUse(orgId, pubId)) return failure(NO_PROFILE);
+      // shortcut: the double answers its demo edition instead of making one of sample stories; enough for the screens
+      const value = { editionId: EDITION_B, stories: deps.stories(orgId, pubId, EDITION_B).length };
+      keys = new Map(keys).set(idempotencyKey, { body: "", value });
       return success(clone(value));
     },
     async getTemplates({ orgId, pubId }) {
@@ -871,6 +1011,37 @@ export function createMockLayout(deps: MockLayoutDeps): {
       if (!error && row.candidates === undefined) row.candidates = candidatesFixture();
       deps.emit(row.orgId, { type: "profile", publicationId: row.pubId, profileId });
     },
+    onboardProgress(id, progress) {
+      const row = onboardings.find((one) => one.value.id === id);
+      if (!row || (row.value.state !== "queued" && row.value.state !== "working")) return;
+      row.value = { ...row.value, state: "working", progress: { ...progress }, updatedAt: now() };
+      deps.emit(row.orgId, { type: "onboarding", publicationId: row.pubId, onboardingId: id });
+    },
+    onboardFinish(id, outcome = {}) {
+      const row = onboardings.find((one) => one.value.id === id);
+      if (!row || (row.value.state !== "queued" && row.value.state !== "working")) return;
+      const state = outcome.state ?? "ready";
+      const checks =
+        outcome.files ??
+        row.value.files.map((file) => ({
+          n: file.n,
+          status: file.n === 2 ? ("warning" as const) : ("ok" as const),
+          date: `2026-09-${String(file.n).padStart(2, "0")}`,
+          pages: 8,
+          notes: file.n === 2 ? [{ code: "onboard.untested_program" as const, count: null }] : [],
+        }));
+      const code = outcome.code ?? (state === "failed" ? "worker.crashed" : "onboard.too_few_editions");
+      row.value = {
+        ...row.value,
+        state,
+        progress: null,
+        files: row.value.files.map((file) => ({ ...file, check: checks.find((c) => c.n === file.n) ?? null })),
+        report: state === "ready" ? clone(ONBOARD_REPORT) : null,
+        problem: state === "ready" ? null : { code, params: outcome.params ?? null, message: `Fictional: ${code}` },
+        updatedAt: now(),
+      };
+      deps.emit(row.orgId, { type: "onboarding", publicationId: row.pubId, onboardingId: id });
+    },
     latestRun(editionId) {
       return ofEdition(editionId).sort((x, y) => y.createdAt.localeCompare(x.createdAt))[0]?.id;
     },
@@ -881,6 +1052,7 @@ export function createMockLayout(deps: MockLayoutDeps): {
     controller,
     reset() {
       profiles = profileFixtures();
+      onboardings = [];
       runs = new Map([["run-demo-001", boardFixture()]]);
       slots = new Map();
       keys = new Map();

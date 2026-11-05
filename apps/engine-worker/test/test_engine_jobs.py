@@ -289,6 +289,14 @@ class SetupTests(Case):
                 self.assertEqual((out["outcome"], out["error"]["code"]), ("failed", "worker.config"))
         self.assertEqual(run.EXIT["worker.config"], 78)
 
+    def test_a_dataset_with_its_own_house_profile_gives_its_grid(self):
+        ds = self.tmp / "own"
+        ds.mkdir()
+        self.assertEqual(engine.grid(ds)["columns"], 8)                       # the repository's (the pilot's)
+        (ds / "house_profile.json").write_text(json.dumps(
+            {"grid": {"columns": 6, "column_width_mm": 46.0, "gutter_mm": 4.0, "origin_mm": 12.0}}), encoding="utf-8")
+        self.assertEqual(engine.grid(ds), {"columns": 6, "column_width_mm": 46.0, "gutter_mm": 4.0})
+
 
 # ------------------------------------------------------------------------------------------- engine.layout
 

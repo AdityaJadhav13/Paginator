@@ -114,6 +114,8 @@ describe("the pilot's deployment files", () => {
       ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/runs/*/pages/*"],
       ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/runs/*/edition.pdf"],
       ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/runs/*/press-files.zip"],
+      // L4: the bundle an onboarding made; never its PDFs or inputs.json
+      ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/onboarding/*/dataset.zip"],
     ]);
   });
 });

@@ -295,6 +295,25 @@ class S3Storage:
             raise StorageError(f"the store gave no version for {key}: is the bucket versioned?")
         return version
 
+    def upload(self, key: str, path: Path, sha256: str, content_type: str) -> str:
+        """One PUT streamed from the file (S3 takes up to 5 GB in one; a bundle is at most 4 GiB), its SHA-256 sent so
+        the store refuses bytes that arrive damaged."""
+        key = self.guard.check(key)
+        checksum = base64.b64encode(bytes.fromhex(sha256)).decode("ascii")
+        try:
+            body = open(path, "rb")
+        except OSError as e:
+            raise StorageError(f"{key} could not be read from the worker's disk ({type(e).__name__})") from None
+        with body:
+            answer, error = self._call("write", key, lambda: self._client.put_object(
+                Bucket=self.bucket, Key=key, Body=body, ContentType=content_type, ChecksumSHA256=checksum))
+        if error is not None:
+            raise error
+        version = answer.get("VersionId")
+        if not version or version == "null":
+            raise StorageError(f"the store gave no version for {key}: is the bucket versioned?")
+        return version
+
     def delete(self, key: str, version_id: str) -> None:
         key, version_id = self.guard.check(key), self._version(version_id)
         _, error = self._call("delete", key, lambda: self._client.delete_object(

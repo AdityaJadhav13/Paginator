@@ -19,10 +19,11 @@ export const UploadRequest = z
   .strictObject({
     /** story_photo: for a story's photo; library: straight into the media library (L2.2); docx: a Word file to import
      * as stories (POST …/imports/docx); engine_dataset: an engine profile's dataset bundle, a ZIP of at most 4 GiB
-     * (POST …/engine-profiles, L2.3) */
-    purpose: z.enum(["story_photo", "library", "docx", "engine_dataset"]),
+     * (POST …/engine-profiles, L2.3); onboard_pdf: a past edition's PDF, at most 200 MiB, to learn the paper's design
+     * from (POST …/onboarding, L4) */
+    purpose: z.enum(["story_photo", "library", "docx", "engine_dataset", "onboard_pdf"]),
     filename: z.string().min(1).max(255),
-    contentType: z.enum([...PICTURE_TYPES, DOCX_TYPE, "application/zip"]),
+    contentType: z.enum([...PICTURE_TYPES, DOCX_TYPE, "application/zip", "application/pdf"]),
     bytes: z.number().int().min(1),
   })
   .refine((u) => (u.purpose === "docx") === (u.contentType === DOCX_TYPE), {
@@ -32,6 +33,10 @@ export const UploadRequest = z
   .refine((u) => (u.purpose === "engine_dataset") === (u.contentType === "application/zip"), {
     path: ["contentType"],
     message: "A dataset bundle is uploaded as engine_dataset, as a ZIP file.",
+  })
+  .refine((u) => (u.purpose === "onboard_pdf") === (u.contentType === "application/pdf"), {
+    path: ["contentType"],
+    message: "A past edition is uploaded as onboard_pdf, as a PDF file.",
   });
 export type UploadRequest = z.infer<typeof UploadRequest>;
 

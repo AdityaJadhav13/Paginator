@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 
 from deskarticles import BRIEF_WORDS, body_words
-from deskcommon import now_iso, one_line, write_json
+from deskcommon import SCRIPT_RANGE, now_iso, one_line, paper, write_json
 
 
 def _text(el) -> str:
@@ -54,18 +54,24 @@ def stories_of(m: dict) -> list[dict]:
     return out
 
 
-def deva_share(text: str) -> float:
+def deva_share(text: str, script: str = "deva") -> float:
+    """The share of the text's letters in the paper's script (Devanagari unless its paper.json says otherwise)."""
+    lo, hi = SCRIPT_RANGE[script]
     letters = [ch for ch in text if ch.isalpha()]
-    return sum("ऀ" <= ch <= "ॿ" for ch in letters) / len(letters) if letters else 0.0
+    return sum(lo <= ch <= hi for ch in letters) / len(letters) if letters else 0.0
+
+
+def script_of(ds: Path) -> str:
+    return (paper(ds) or {}).get("script", "deva")
 
 
 def list_samples(ds: Path) -> list[dict]:
-    rows = []
+    rows, script = [], script_of(ds)
     for sample, pages in sample_pages(ds).items():
         n = photos = words = 0
         for _p, _name, m in pages:
             for s in stories_of(m):
-                if deva_share(s["body"]) < 0.5:
+                if deva_share(s["body"], script) < 0.5:
                     continue
                 n += 1
                 photos += bool(s["images"])
@@ -80,9 +86,9 @@ def _date_of(sample: str) -> str:
 
 
 def import_samples(ds: Path, edition_dir: Path, names: list[str]) -> dict:
-    """Appends the samples' Marathi stories to the edition's articles, photos included (the extracted newsprint
+    """Appends the samples' stories in the paper's script (Marathi for the pilot) to the edition's articles, photos included (the extracted newsprint
     rasters, as gen1 uses them). Priority from the printed page: page 1's lead → Lead, its next two → Top, the rest Normal."""
-    allp = sample_pages(ds)
+    allp, script = sample_pages(ds), script_of(ds)
     arts_path = edition_dir / "articles.json"
     data = json.loads(arts_path.read_text(encoding="utf-8")) if arts_path.exists() else {"schema": "pageinator.desk.articles/1", "articles": []}
     photos_dir = edition_dir / "photos"
@@ -98,7 +104,7 @@ def import_samples(ds: Path, edition_dir: Path, names: list[str]) -> dict:
             src_dir = ds / "report" / "page1" / "photos" / page_name
             src_idx = json.loads((src_dir / "index.json").read_text())["elements"] if (src_dir / "index.json").exists() else {}
             for rank, s in enumerate(stories_of(m)):
-                if deva_share(s["body"]) < 0.5:
+                if deva_share(s["body"], script) < 0.5:
                     continue
                 if headline_key(s["headline"]) in seen:      # the same story printed again on another day
                     skipped += 1

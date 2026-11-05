@@ -58,7 +58,10 @@ def install(cache_dir: Path) -> None:
 
 
 def worker_init(instances: str, ds: str, cal) -> None:
-    """A layout worker's start: the font-instance cache, then deskworker's own start."""
+    """A layout worker's start: the font-instance cache, the dataset's own house profile (a spawned worker imports gen1
+    with the repository's), then deskworker's own start."""
     install(Path(instances))
+    import deskprofile
+    deskprofile.use_dataset(Path(ds))
     import deskworker
     deskworker.init(ds, cal)

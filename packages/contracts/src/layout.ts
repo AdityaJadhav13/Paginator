@@ -11,6 +11,7 @@
 import { z } from "zod";
 
 import { OrgId, Uuid7 } from "./ids.ts";
+import { OnboardProgress } from "./onboard.ts";
 
 const Sha256 = z.string().regex(/^[0-9a-f]{64}$/);
 const VersionId = z.string().min(1).max(1024);
@@ -373,14 +374,14 @@ export const AdRejected = z.strictObject({
   status: z.number().int().min(400).max(499),
 });
 
-/** The progress lines engine.layout and engine.measure write on stdout before their result (pgn_worker/run.py): one
+/** The progress lines engine.layout, engine.measure and engine.onboard write on stdout before their result (pgn_worker/run.py): one
  * JSON object a line, `seq` counting from 1. The queue reports each to the inbox under the job id `<job>:<seq>`. */
 export const WORKER_PROGRESS_FORMAT = "pageinator.worker-progress/1";
 export const WorkerProgress = z.strictObject({
   format: z.literal(WORKER_PROGRESS_FORMAT),
   job: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
   seq: z.number().int().min(1).max(100_000),
-  event: z.discriminatedUnion("kind", [RunProgress, RunPage, MeasureStatus]),
+  event: z.discriminatedUnion("kind", [RunProgress, RunPage, MeasureStatus, OnboardProgress]),
 });
 export type WorkerProgress = z.infer<typeof WorkerProgress>;
 
