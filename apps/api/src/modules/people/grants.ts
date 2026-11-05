@@ -37,14 +37,15 @@ export async function applyInvitation(
   who: { requestId: string; client?: Client },
   rejoin: boolean,
   /** More to write in the same transaction (the accept's notice and event, a repair's event), given the publications
-   * the invitation reaches: all of it is saved, or none. */
-  also?: (tx: Tx, tenant: Tenant, publications: string[]) => Promise<void>,
+   * the invitation reaches and whether this call wrote anything (a directory row or a grant): all of it is saved, or
+   * none. */
+  also?: (tx: Tx, tenant: Tenant, publications: string[], changed: boolean) => Promise<void>,
 ): Promise<string[]> {
   const tenant = tenantOf(invitation.orgId, person.id, who.requestId, who.client);
   return database.withTenant(tenant, async (tx) => {
     const name = displayName(person.name, person.email);
     const row = { org_id: invitation.orgId, user_id: person.id, display_name: name, email: person.email };
-    await tx
+    const written = await tx
       .insertInto("app.person")
       .values(row)
       .onConflict((conflict) =>
@@ -54,6 +55,7 @@ export async function applyInvitation(
               .doUpdateSet({ status: "active", removed_at: null, display_name: name, email: person.email })
           : conflict.columns(["org_id", "user_id"]).doNothing(),
       )
+      .returning("user_id")
       .execute();
     const pending = await tx
       .selectFrom("app.invitation_grant")
@@ -78,13 +80,17 @@ export async function applyInvitation(
         )
         .execute();
     }
+    // what this call really wrote: an accept and a repair running together (a GET /me during the accept) both see the
+    // grants pending, but only the first marks them applied; the other's insert and update wait for it and touch nothing
+    let marked = 0n;
     if (pending.length > 0) {
-      await tx
+      const [result] = await tx
         .updateTable("app.invitation_grant")
         .set({ applied_at: new Date() })
         .where("invitation_id", "=", invitation.id)
         .where("applied_at", "is", null)
         .execute();
+      marked = result?.numUpdatedRows ?? 0n;
     }
     const all = await tx
       .selectFrom("app.invitation_grant")
@@ -92,7 +98,7 @@ export async function applyInvitation(
       .where("invitation_id", "=", invitation.id)
       .execute();
     const publications = all.map((grant) => grant.publication_id);
-    if (also) await also(tx, tenant, publications);
+    if (also) await also(tx, tenant, publications, written.length > 0 || marked > 0n);
     return publications;
   });
 }
@@ -128,8 +134,22 @@ export async function repairInvitations(
       tx.selectFrom("app.person").select("status").where("user_id", "=", person.id).executeTakeFirst(),
     );
     if (pending.length === 0 && directory) continue;
-    await applyInvitation(database, invitation, person, { requestId, ...(client ? { client } : {}) }, false, (tx, t) =>
-      recordAudit(tx, t, { action: "invitation.grants_repaired", targetType: "invitation", targetId: invitation.id }),
+    await applyInvitation(
+      database,
+      invitation,
+      person,
+      { requestId, ...(client ? { client } : {}) },
+      false,
+      async (tx, t, _publications, changed) => {
+        // logged only when the repair really wrote something, not when an accept running beside it had done it all
+        if (changed) {
+          await recordAudit(tx, t, {
+            action: "invitation.grants_repaired",
+            targetType: "invitation",
+            targetId: invitation.id,
+          });
+        }
+      },
     );
   }
 }

@@ -15,6 +15,7 @@ import type { NotificationService } from "./notification-service.ts";
 import type { StoryService } from "./story-service.ts";
 import type { EditionService } from "./edition-service.ts";
 import type { TeamService } from "./team-service.ts";
+import type { SettingsService } from "./settings-service.ts";
 import type { WorkspaceAccessService } from "./workspace-access.ts";
 import type { WorkspaceQueryService } from "./workspace-query-service.ts";
 
@@ -44,6 +45,8 @@ export interface ServiceEnvironment {
   readonly ads: AdsService;
   /** The public website's contact form. */
   readonly contact: ContactService;
+  /** Organization and publication settings (doc 07 §13). */
+  readonly settings: SettingsService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
   readonly live: LiveService;

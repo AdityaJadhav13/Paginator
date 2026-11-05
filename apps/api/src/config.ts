@@ -174,8 +174,10 @@ const Env = z
     // Request limits (src/http/rate-limit.ts): per client address for signed-out requests; per person for signed-in
     // /api/v1 requests (autosave every 1.5 s is 40 a minute, plus the lists and live-update fetches); and a ceiling
     // per address on requests that carry a session cookie (a newsroom of twenty behind one address fits under it).
-    PGN_RATE_LIMIT_PER_MINUTE: wholeNumber(1, 100_000).default(60),
-    PGN_RATE_LIMIT_PER_PERSON_PER_MINUTE: wholeNumber(1, 100_000).default(300),
+    // signed out, 300: a newsroom of ~50 behind one address signing in at once makes a few requests each
+    PGN_RATE_LIMIT_PER_MINUTE: wholeNumber(1, 100_000).default(300),
+    // per person, 1,200: a page load asks ~6 things, so 100 reloads in a minute stay within it (audit fix 2026-11-05)
+    PGN_RATE_LIMIT_PER_PERSON_PER_MINUTE: wholeNumber(1, 100_000).default(1200),
     PGN_RATE_LIMIT_SIGNED_IN_PER_ADDRESS_PER_MINUTE: wholeNumber(1, 100_000).default(6000),
     // The database (plan §3.1): one login role per connection pool, each with its own password (.env.dev in
     // development).

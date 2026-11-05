@@ -21,6 +21,7 @@ import { createApiReleaseService } from "./release-service.ts";
 import { createApiAdsService } from "./ads-service.ts";
 import { createApiNewsService } from "./news-service.ts";
 import { createApiTeamService } from "./team-service.ts";
+import { createApiSettingsService } from "./settings-service.ts";
 import { createApiWorkspace } from "./workspace.ts";
 
 export function createApiEnvironment(
@@ -73,6 +74,7 @@ export function createApiEnvironment(
     editor: createApiEditorService(client),
     release: createApiReleaseService(client),
     ads: createApiAdsService(client),
+    settings: createApiSettingsService(client),
     comments: createApiCommentService(client),
     notifications: createApiNotificationService(client),
     live,

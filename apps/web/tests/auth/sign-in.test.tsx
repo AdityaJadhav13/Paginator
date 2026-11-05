@@ -143,7 +143,11 @@ describe("Sign in", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
     expect(await screen.findByRole("heading", { level: 1, name: "You are signed in" })).toBeInTheDocument();
     expect(screen.getByText(`Signed in as ${accounts.unconfirmed.name} (${accounts.unconfirmed.email}).`)).toBeInTheDocument();
-    expect(screen.getByText("There is nothing to open yet: the newsroom screens are still being built.")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "You are not a member of any newsroom yet. Open the invitation email your newspaper sent you and use its link, or ask its owner or an admin to invite you again.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open workspace" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Sign out" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Sign in" })).toBeInTheDocument();
@@ -237,6 +241,27 @@ describe("Sign in: loading, error and offline states", () => {
     await fill(user, accounts.editor.email, accounts.editor.password);
     await user.click(screen.getByRole("button", { name: "Sign in" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Too many triesWait a few minutes and try again.");
+  });
+
+  it("says how long to wait when the answer gives a Retry-After", async () => {
+    const environment = createMockApplicationEnvironment();
+    const user = userEvent.setup();
+    const tooMany = (retryAfterSeconds: number) =>
+      environment.sessionController.setProblem(
+        { kind: "answer", status: 429, code: "slow_down", message: "", retryAfterSeconds },
+        ["session.signIn"],
+      );
+    tooMany(900);
+    const view = renderAuth("/login", { preset: "signed-out", environment });
+    await fill(user, accounts.editor.email, accounts.editor.password);
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too many triesWait 15 minutes and try again.");
+    view.unmount();
+    tooMany(45);
+    renderAuth("/login", { preset: "signed-out", environment });
+    await fill(user, accounts.editor.email, accounts.editor.password);
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too many triesWait 45 seconds and try again.");
   });
 
   it("says when this browser did not keep the sign-in", async () => {

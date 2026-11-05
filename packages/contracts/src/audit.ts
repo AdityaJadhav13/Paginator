@@ -143,6 +143,12 @@ export const AUDIT_ACTIONS = {
   "member.update": { scope: "org" },
   /** The organisation made by scripts/bootstrap-org.ts (it names the first publication, yet is the organisation's). */
   "org.bootstrap": { scope: "org" },
+  /** Organization settings (doc 07 §13): the organisation renamed ({fields: ["name"]}); a publication added
+   * ({publication}: its id; named as its publication, yet the organisation's act). */
+  "org.rename": { scope: "org" },
+  "org.publication_add": { scope: "org" },
+  /** A publication's settings changed ({fields}: which of name, languages, primaryLanguage, timezone). */
+  "publication.settings_edit": { scope: "publication" },
   /** A story's photo: given ({asset}), replaced ({asset, previous}), taken off ({asset}), and its caption or credit
    * changed ({asset}: that it changed, never what it says). */
   "photo.attach": { scope: "publication" },

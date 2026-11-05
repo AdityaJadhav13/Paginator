@@ -66,6 +66,7 @@ export const PATTERNS = {
   pubArchiveRelease: "pub/:pubId/archive/:releaseId",
   pubBrand: "pub/:pubId/brand",
   pubPrintProfiles: "pub/:pubId/print-profiles",
+  pubSettings: "pub/:pubId/publication-settings",
   pubTeam: "pub/:pubId/team",
   /** The engine profile (L2.3): the publication's settings for the layout engine. */
   pubEngineProfile: "pub/:pubId/engine-profile",
@@ -130,6 +131,7 @@ export const paths = {
   pubPrintProfiles: (orgId: string, pubId: string) =>
     `/org/${orgId}/pub/${pubId}/print-profiles`,
   pubTeam: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/team`,
+  pubSettings: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/publication-settings`,
   pubEngineProfile: (orgId: string, pubId: string) => `/org/${orgId}/pub/${pubId}/engine-profile`,
   pubEditionLayout: (orgId: string, pubId: string, editionId: string) =>
     `/org/${orgId}/pub/${pubId}/editions/${encodeURIComponent(editionId)}/layout`,

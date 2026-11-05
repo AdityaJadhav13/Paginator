@@ -8,7 +8,7 @@ import { type Config, loadConfig } from "../../src/config.ts";
 import { type Database, openDatabase } from "../../src/db/pools.ts";
 import { type Auth, createAuth } from "../../src/modules/identity/auth.ts";
 import type { PhotoFetch } from "../../src/modules/news/routes.ts";
-import { type Transport, openMailer } from "../../src/modules/notifications/mailer.ts";
+import { type Mailer, type Transport, openMailer } from "../../src/modules/notifications/mailer.ts";
 import type { ObjectStore } from "../../src/storage/object-store.ts";
 import { s3Store } from "../../src/storage/s3.ts";
 import type { TestDatabase } from "./helpers.ts";
@@ -26,6 +26,8 @@ export type IdentityApp = {
   database: Database;
   /** Better Auth for calls from the server itself (its emails are caught too) */
   server: Auth;
+  /** The mailer of `server` (scripts/bootstrap-org.ts sends with it too) */
+  mailer: Mailer;
   sent: Sent[];
   close(): Promise<void>;
 };
@@ -89,6 +91,7 @@ export async function identityApp(
     config,
     database,
     server,
+    mailer,
     sent,
     async close() {
       await app.close();

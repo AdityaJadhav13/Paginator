@@ -340,7 +340,7 @@ describe("whether the form is connected", () => {
   it("GET counts against the signed-out per-minute budget like every request", async () => {
     const { app } = await setup();
     let last = 0;
-    for (let i = 0; i < 61; i++)
+    for (let i = 0; i < 301; i++)
       last = (await app.inject({ method: "GET", url: PATH, remoteAddress: "198.51.100.40" })).statusCode;
     expect(last).toBe(429);
     await app.close();

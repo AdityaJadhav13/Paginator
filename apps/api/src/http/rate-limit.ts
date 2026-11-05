@@ -1,9 +1,9 @@
 // Request limits (docs/product/10-l2-newsroom-plan.md §4.6), counted in memory (one API instance in the pilot), each
 // in a minute:
-//   - signed out: one budget per client address, `perMinute` (60 by default), for every request that carries no
+//   - signed out: one budget per client address, `perMinute` (300 by default), for every request that carries no
 //     session cookie, on unknown paths too, before anything can refuse it, so neither probing for paths nor sending
 //     refused requests is free;
-//   - signed in: an /api/v1 request with a session cookie counts against its person, `perPerson` (300 by default), once
+//   - signed in: an /api/v1 request with a session cookie counts against its person, `perPerson` (1,200 by default), once
 //     the session is read: autosave every 1.5 s and the newsroom behind one shared address must not share one budget.
 //     Only a cookie the API signed counts so (its HMAC is checked here, as Better Auth checks it, with the sign-in
 //     secret): a made-up cookie is a signed-out request. A signed cookie that turns out to be no session (ended or
@@ -98,6 +98,14 @@ export function requestLimits(app: FastifyInstance, limits: Limits) {
   return {
     /** onRequest, first: every request counts, by address, or against the signed-in ceiling. */
     async first(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+      // the session check every page load makes (Better Auth's get-session, read-only) with a signed cookie: the
+      // per-address ceiling only, so a newsroom behind one address is never refused for opening pages
+      if (
+        request.url.split("?")[0] === "/api/auth/get-session" &&
+        signedSessionCookie(request.headers.cookie, limits.secret)
+      ) {
+        return count(signedInByAddress, request, reply);
+      }
       const signedIn =
         !request.is404 &&
         request.routeOptions.url?.startsWith("/api/v1/") === true &&

@@ -1,5 +1,6 @@
 /**
- * Moves focus to the new route's heading and announces its text via a
+ * Names the browser tab after the page's heading ("Team · Pageinator"), and
+ * moves focus to the new route's heading and announces its text via a
  * polite live region after every client-side navigation (UI002 §7.6,
  * AC-16). The initial page load is not announced, matching UI001
  * §5.1's initial-render rule.
@@ -12,6 +13,8 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { VisuallyHidden } from "../ui/index.ts";
 import { ROUTE_HEADING_ID } from "./routes.ts";
+
+const PRODUCT = "Pageinator";
 
 export function RouteAnnouncer() {
   const location = useLocation();
@@ -47,6 +50,19 @@ export function RouteAnnouncer() {
     // Depend on location.pathname specifically: a query-string-only
     // change is not a page navigation for focus/announcement purposes.
   }, [location.pathname]);
+
+  // the tab's title names the page: its heading, kept up to date as the heading's text arrives or changes
+  useEffect(() => {
+    const update = () => {
+      const heading = document.getElementById(ROUTE_HEADING_ID)?.textContent?.trim();
+      const title = heading && heading !== PRODUCT ? `${heading} · ${PRODUCT}` : PRODUCT;
+      if (document.title !== title) document.title = title;
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <VisuallyHidden role="status" aria-live="polite" aria-atomic="true">

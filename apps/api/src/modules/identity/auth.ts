@@ -16,7 +16,15 @@ import { authEvents } from "./events.ts";
 import { CLIENT_IP_HEADER } from "./headers.ts";
 import { hashPassword, verifyPassword } from "./password.ts";
 import { rateLimitStorage } from "./rate-limit.ts";
-import { signInGuard } from "./sign-in-guard.ts";
+import { emailKey, signInGuard, WINDOW_MS as SIGN_IN_WINDOW_MS } from "./sign-in-guard.ts";
+
+/** Sign-ins one client address may try in 5 minutes. */
+export const SIGN_INS_PER_ADDRESS = 100;
+/** The callback of the first Owner's account, made on the server (people/bootstrap.ts): its sign-up sends no
+ * confirmation email, as the welcome's link confirms the address (onPasswordReset). Over HTTP it means nothing. */
+export const WELCOMED = "/reset-password?welcome=1";
+/** Confirmation links one email address may be sent in an hour, from all addresses together. */
+export const VERIFICATION_EMAILS_PER_EMAIL = 3;
 
 /** The header that carries an invitation's id with a sign-up (plan §4.3). */
 export const INVITATION_HEADER = CONTRACT_INVITATION_HEADER.toLowerCase(); // as Fetch headers read it
@@ -239,6 +247,10 @@ export function authOptions({ config, database, mailer, log }: AuthDeps) {
       // a reset by emailed link has no session to say whose it is; Better Auth says it here
       onPasswordReset: async ({ user }: { user: { id: string } }, request?: Request) => {
         await events.record({ userId: user.id, kind: "password_reset", ...client(request?.headers) });
+        // the link came by email, so opening it proves the address: the first Owner's welcome is their only email
+        if (await database.identity.confirmEmail(user.id)) {
+          await events.record({ userId: user.id, kind: "email_verified", ...client(request?.headers) });
+        }
       },
       password: { hash: hashPassword, verify: verifyPassword },
       sendResetPassword: async ({ user, url }: { user: { name: string; email: string }; url: string }) => {
@@ -249,7 +261,12 @@ export function authOptions({ config, database, mailer, log }: AuthDeps) {
       sendOnSignUp: true,
       autoSignInAfterVerification: true,
       expiresIn: 3600,
-      sendVerificationEmail: async ({ user, url }: { user: { name: string; email: string }; url: string }) => {
+      sendVerificationEmail: async (
+        { user, url }: { user: { name: string; email: string }; url: string },
+        request?: Request,
+      ) => {
+        const welcomed = new URL(url).searchParams.get("callbackURL") === WELCOMED;
+        if (welcomed && request === undefined) return;
         send(mailer, log, { ...verificationEmail({ name: user.name, url, origin }), to: user.email });
       },
       // called only when an email really becomes verified: a forged link, or one opened again, records nothing
@@ -297,10 +314,16 @@ export function authOptions({ config, database, mailer, log }: AuthDeps) {
       storage: "database", // the table Better Auth's schema makes; customStorage writes it (rate-limit.ts)
       customStorage: rateLimitStorage(database.identity),
       customRules: {
-        "/sign-in/email": { window: 300, max: 5 },
-        "/sign-up/email": { window: 3600, max: 5 },
+        // per address: a newsroom of ~50 behind one NAT signs in at once; guessing is stopped per email (sign-in-guard.ts)
+        "/sign-in/email": { window: 300, max: SIGN_INS_PER_ADDRESS },
+        // a sign-up needs a pending invitation for exactly its email, so the per-address limit only has to leave room
+        // for a newsroom of ~50 behind one NAT signing up on its first day, typos and retries included
+        "/sign-up/email": { window: 3600, max: 100 },
         "/request-password-reset": { window: 3600, max: 3 },
-        "/send-verification-email": { window: 3600, max: 3 },
+        // a link goes only to an address that still needs one; the same newsroom asks again when a mail is slow
+        "/send-verification-email": { window: 3600, max: 100 },
+        // reading one's own session is no sign-in: every page load asks it, so it is never counted here
+        "/get-session": false,
       },
     },
     hooks: {
@@ -309,13 +332,25 @@ export function authOptions({ config, database, mailer, log }: AuthDeps) {
         if (ctx.path === "/change-password" && ctx.body && typeof ctx.body === "object") {
           ctx.body.revokeOtherSessions = true;
         }
+        // the per-address limit leaves room for a newsroom, so each email gets its own few links an hour; beyond them
+        // the same answer as a sent link, so the refusal says nothing about the address
+        if (ctx.path === "/send-verification-email" && typeof ctx.body?.email === "string") {
+          const key = `email:${emailKey(config.authSecret, `verify:${ctx.body.email}`)}|/send-verification-email`;
+          const { allowed } = await database.identity.consumeRateLimit(key, VERIFICATION_EMAILS_PER_EMAIL, 3600_000);
+          if (!allowed) return ctx.json({ status: true });
+        }
         // each sign-in attempt is reserved before its password is checked (sign-in-guard.ts)
         if (
           ctx.path === "/sign-in/email" &&
           typeof ctx.body?.email === "string" &&
           !(await guard.reserve(ctx.body.email))
         ) {
-          throw new APIError("TOO_MANY_REQUESTS", { message: "Too many tries. Wait a few minutes and try again." });
+          // the longest the lock can still run (sign-in-guard.ts), so the web says how long to wait
+          throw new APIError(
+            "TOO_MANY_REQUESTS",
+            { message: `Too many tries. Wait ${SIGN_IN_WINDOW_MS / 60_000} minutes and try again.` },
+            { "Retry-After": String(SIGN_IN_WINDOW_MS / 1000) },
+          );
         }
       }),
       after: createAuthMiddleware(async (ctx) => {

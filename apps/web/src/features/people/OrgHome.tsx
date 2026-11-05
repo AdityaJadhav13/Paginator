@@ -2,7 +2,7 @@
  * An organisation's home, /org/:orgId: where sign-in lands. A welcome header with the person's role here, a card for
  * each of its publications with their roles on it (from /me) and links to its Stories and Editions when they may see
  * them, and quick links to what is built for them: Team and the audit log, if they may see them, and their account's
- * security. The other newsroom screens come with later PRs (plan §10), so this page says they are still being built.
+ * security. A note says where the publication's other screens are: its menu.
  */
 import { Link, useParams } from "react-router";
 import { Icon, PageHeader, Stack, type IconName } from "../../ui/index.ts";

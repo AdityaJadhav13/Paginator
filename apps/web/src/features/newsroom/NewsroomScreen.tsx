@@ -349,7 +349,7 @@ function Board({
         />
       )}
       {items && (
-        <div className="pg-newsroom__board" role="group" aria-label={t("newsroom.board")}>
+        <div className="pg-newsroom__board" role="group" aria-label={t("newsroom.board")} tabIndex={0}>
           {columns.map((status) => {
             const cards = shown.filter((item) => item.status === status);
             const headingId = `newsroom-column-${status}`;

@@ -77,7 +77,7 @@ describe("The workflow", () => {
     });
   }
 
-  it("marks six stages working in the Desk, Content also built for the pilot, and Archive planned", () => {
+  it("marks six stages working in the Desk, Content also built for the pilot, and Archive built for the pilot", () => {
     expect(Object.fromEntries(WORKFLOW_STAGES.map((stage) => [stage.key, stage.states]))).toEqual({
       plan: ["desk"],
       content: ["desk", "pilot"],
@@ -85,7 +85,7 @@ describe("The workflow", () => {
       edit: ["desk"],
       check: ["desk"],
       print: ["desk"],
-      archive: ["planned"],
+      archive: ["pilot"],
     });
   });
 });

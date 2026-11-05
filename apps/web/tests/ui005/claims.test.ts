@@ -175,7 +175,7 @@ describe("Records", () => {
   });
 
   it("keep Marathi free of English words other than product and record names", () => {
-    const allowed = /^(Pageinator|Desk|Word|WhatsApp|AI|EXP-GEN-1|EXP-PDF-1|ADR-022|G2)$/;
+    const allowed = /^(Pageinator|Desk|Word|WhatsApp|AI|Claude|Anthropic|EXP-GEN-1|EXP-PDF-1|ADR-022|G2)$/;
     for (const record of CONTENT_RECORDS) {
       const latin = record.mr.match(/[A-Za-z][A-Za-z0-9-]*/g) ?? [];
       for (const word of latin) expect(word, `${record.id}: "${word}" in the Marathi`).toMatch(allowed);
@@ -353,8 +353,8 @@ describe("The workflow's states are the evidence's", () => {
     }
   });
 
-  it("archives nothing yet", () => {
-    expect(WORKFLOW_STAGES.find((stage) => stage.key === "archive")?.states).toEqual(["planned"]);
+  it("calls the archive built for the pilot, not working in the Desk", () => {
+    expect(WORKFLOW_STAGES.find((stage) => stage.key === "archive")?.states).toEqual(["pilot"]);
   });
 });
 

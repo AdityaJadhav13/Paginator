@@ -28,6 +28,8 @@ import type {
   EditorService,
   ReleaseService,
   AdsService,
+  PublicationDto,
+  SettingsService,
   NewsSettingsDto,
   CommentService,
   LiveEventDto,
@@ -49,6 +51,7 @@ import { createMockEditor } from "./create-mock-editor.ts";
 import { createMockRelease } from "./create-mock-release.ts";
 import { createMockAds } from "./create-mock-ads.ts";
 import { createMockAudit, type MockAuditOperation } from "./create-mock-audit.ts";
+import { createMockSettings, type MockSettingsOperation } from "./create-mock-settings.ts";
 import { createMockNotifications, type MockNotificationOperation, type MockOrgStanding } from "./create-mock-notifications.ts";
 import {
   createAccounts,
@@ -84,6 +87,7 @@ export type MockAuthOperation =
   | "account.resetPassword"
   | "account.sendVerificationEmail"
   | "account.getInvitation"
+  | "account.listMyInvitations"
   | "account.signUp"
   | "account.acceptInvitation"
   | "security.startTwoStep"
@@ -103,7 +107,8 @@ export type MockAuthOperation =
   | MockNewsOperation
   | MockLayoutOperation
   | MockNotificationOperation
-  | MockAuditOperation;
+  | MockAuditOperation
+  | MockSettingsOperation;
 
 /** An email the double "sent". */
 export interface MockMail {
@@ -189,6 +194,7 @@ export interface MockSessionEnvironment {
   readonly editor: EditorService;
   readonly release: ReleaseService;
   readonly ads: AdsService;
+  readonly settings: SettingsService;
   readonly comments: CommentService;
   readonly notifications: NotificationService;
   readonly live: LiveService;
@@ -587,6 +593,18 @@ export function createMockSessionEnvironment(
       if (problem) return failure(problem);
       const invitation = invitations.find((candidate) => candidate.id === invitationId);
       return invitation ? success(publicInvitation(invitation)) : failure(ANSWERS.notFound);
+    },
+
+    async listMyInvitations() {
+      const problem = await gate("account.listMyInvitations");
+      if (problem) return failure(problem);
+      const person = current();
+      if (!person) return signedOutAnswer();
+      return success(
+        invitations
+          .filter((candidate) => candidate.state === "pending" && candidate.email === person.email)
+          .map((candidate) => ({ ...publicInvitation(candidate), id: candidate.id })),
+      );
     },
 
     async signUp({ invitationId, name, email, password, returnPath }) {
@@ -1034,6 +1052,33 @@ export function createMockSessionEnvironment(
     editions: (orgId, pubId) => storyDouble.editionsOf(orgId, pubId),
     pictureOf: (orgId, pubId, assetId) => storyDouble.pictureOf(orgId, pubId, assetId),
   });
+  const settingsDouble = createMockSettings({
+    person: storyDeps.person,
+    orgStanding,
+    standing: storyDeps.standing,
+    gate: (operation) => gate(operation),
+    signedOut: () => signedOutAnswer(),
+    orgName: (orgId) => orgNames.get(orgId) ?? orgId,
+    renameOrg: (orgId, name) => void orgNames.set(orgId, name),
+    publications: (orgId) =>
+      names.publications.filter((pub) => pub.orgId === orgId).map((pub) => ({ id: pub.id, name: pubNames.get(pub.id) ?? pub.name })),
+    renamePublication: (pubId, name) => void pubNames.set(pubId, name),
+    addPublication(orgId, pubId, name) {
+      (names.publications as PublicationDto[]).push({ id: pubId, orgId, name, locale: "en-IN", direction: "ltr" });
+      pubNames.set(pubId, name);
+      // Owner and Admin reach every publication of the organisation
+      for (const [userId, orgs] of orgRoles) {
+        orgRoles.set(
+          userId,
+          orgs.map((org) =>
+            org.organizationId === orgId && org.orgRole !== "member"
+              ? { ...org, publications: [...org.publications, { publicationId: pubId, roles: [], grants: [] }] }
+              : org,
+          ),
+        );
+      }
+    },
+  });
   const editorDouble = createMockEditor((runId, page) => releaseDouble.approvalOf(runId, page));
 
   const sessionController: MockSessionController = {
@@ -1067,6 +1112,7 @@ export function createMockSessionEnvironment(
       editorDouble.reset();
       releaseDouble.reset();
       adsDouble.reset();
+      settingsDouble.reset();
       notificationDouble.reset();
       liveDouble.reset();
       acting = 0;
@@ -1151,6 +1197,7 @@ export function createMockSessionEnvironment(
     editor: editorDouble.editor,
     release: releaseDouble.release,
     ads: adsDouble.ads,
+    settings: settingsDouble.settings,
     comments: storyDouble.comments,
     notifications: notificationDouble.notifications,
     live: liveDouble.live,

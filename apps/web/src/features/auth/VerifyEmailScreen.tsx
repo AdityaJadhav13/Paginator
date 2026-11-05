@@ -2,11 +2,11 @@
  * Verify email (03 §5.1). Better Auth confirms an address with an emailed link, not a code: the plan enables no email
  * one-time codes (§4.1), so the spec's 6-digit field becomes "open the link we sent". The link signs the person in and
  * comes back here with `?confirmed=1` (and `&invitation=<id>` from an invitation's sign-up); a bad link comes back
- * with `?error=TOKEN_EXPIRED` or another code. A new link can be asked for 60 seconds after the last one; the answer
+ * with `?error=TOKEN_EXPIRED` or another code. Confirmed from an invitation, the person goes straight on to it. A new link can be asked for 60 seconds after the last one; the answer
  * is the same whether or not the address has an account.
  */
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { Button, Field, InlineMessage, ProgressIndicator, Stack, TextInput } from "../../ui/index.ts";
 import { paths } from "../../app/routes.ts";
 import { useI18n } from "../../i18n/index.ts";
@@ -101,6 +101,8 @@ export function VerifyEmailScreen() {
       );
     }
     const signedIn = state.status === "ready";
+    // confirmed from an invitation's sign-up: straight on to that invitation's Join, nothing to click on the way
+    if (signedIn && invitationId) return <Navigate to={paths.invitation(invitationId)} replace />;
     const workspace = state.status === "ready" ? state.workspace : null;
     const next = invitationId
       ? paths.invitation(invitationId)

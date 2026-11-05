@@ -59,6 +59,8 @@ import { ArchiveScreen } from "../features/archive/ArchiveScreen.tsx";
 import { ArchiveReleaseScreen } from "../features/archive/ArchiveReleaseScreen.tsx";
 import { BrandScreen } from "../features/brand/BrandScreen.tsx";
 import { PrintProfilesScreen } from "../features/print-profiles/PrintProfilesScreen.tsx";
+import { OrgSettingsScreen } from "../features/settings/OrgSettingsScreen.tsx";
+import { PublicationSettingsScreen } from "../features/settings/PublicationSettingsScreen.tsx";
 
 type LabeledRouteKey = keyof typeof ROUTE_LABELS & keyof typeof OWNING_UNIT;
 /** A screen still to be built: English, and in a development build only (plan §2.6). */
@@ -176,9 +178,10 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                 <Route path={PATTERNS.pubArchiveRelease} element={<ArchiveReleaseScreen />} />
                 <Route path={PATTERNS.pubBrand} element={<BrandScreen />} />
                 <Route path={PATTERNS.pubPrintProfiles} element={<PrintProfilesScreen />} />
+                <Route path={PATTERNS.orgSettings} element={<OrgSettingsScreen settings={activeEnvironment.settings} />} />
+                <Route path={PATTERNS.pubSettings} element={<PublicationSettingsScreen settings={activeEnvironment.settings} />} />
                 {DEVELOPMENT && (
                   <>
-                    <Route path={PATTERNS.orgSettings} element={placeholder("orgSettings")} />
                     <Route path={PATTERNS.orgBilling} element={placeholder("orgBilling")} />
                     <Route path={PATTERNS.orgStorage} element={placeholder("orgStorage")} />
                     <Route path={PATTERNS.pubTeam} element={placeholder("pubTeam")} />

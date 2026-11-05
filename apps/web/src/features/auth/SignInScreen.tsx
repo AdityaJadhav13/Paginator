@@ -3,15 +3,18 @@
  * same answer. The "Continue with Google/Microsoft" buttons stay hidden (plan §4.1: no social sign-in), and the
  * server, not this page, decides when too many tries lock an address.
  *
- * Signed in already, the same route shows who is signed in: until the API's `/me` (PR 9) gives a person their
- * newsroom, there is nothing more to open here.
+ * Signed in already, the same route shows who is signed in, and opens their newsroom; with none yet, it lists their
+ * pending invitations to join, or says how to get one.
  */
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Button, Checkbox, Field, InlineMessage, ProgressIndicator, Stack, TextInput } from "../../ui/index.ts";
 import { paths } from "../../app/routes.ts";
 import { useI18n } from "../../i18n/index.ts";
-import type { ApiProblem } from "../../services/index.ts";
+import type { ApiProblem, MyInvitationDto, ServiceResult } from "../../services/index.ts";
+import { randomUuid } from "../../api/client.ts";
+import { roleList } from "../people/roles.ts";
+import { useAccount } from "./account-context.tsx";
 import { AuthCard } from "./AuthCard.tsx";
 import { OfflineNotice } from "./connection.tsx";
 import { ProblemMessage } from "./ProblemMessage.tsx";
@@ -49,12 +52,83 @@ function SignedInLanding() {
           </Button>
         </div>
       ) : (
-        <p>{t("signedIn.nothingYet")}</p>
+        <MyInvitations />
       )}
       <div>
         <SignOutButton />
       </div>
     </AuthCard>
+  );
+}
+
+/** Signed in with no newsroom: the person's pending invitations, each with Join, so one never accepted (the tab closed
+ * after the email was confirmed) is still there on any later sign-in; or why there is nothing to open. */
+function MyInvitations() {
+  const account = useAccount();
+  const { refresh } = useSession();
+  const { t, language } = useI18n();
+  const [loaded, setLoaded] = useState<ServiceResult<readonly MyInvitationDto[], ApiProblem> | null>(null);
+  const [joining, setJoining] = useState<string | null>(null);
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
+  const keys = useRef(new Map<string, string>());
+  useEffect(() => {
+    let active = true;
+    void account.listMyInvitations().then((result) => {
+      if (active) setLoaded(result);
+    });
+    return () => {
+      active = false;
+    };
+  }, [account]);
+
+  if (loaded === null) return <ProgressIndicator role="status" label={t("signedIn.invitations.loading")} />;
+  const invitations = loaded.ok ? loaded.value : [];
+  const join = async (invitationId: string) => {
+    if (joining) return;
+    // one key per invitation, reused by every retry of its Join
+    const key = keys.current.get(invitationId) ?? randomUuid();
+    keys.current.set(invitationId, key);
+    setProblem(null);
+    setJoining(invitationId);
+    const result = await account.acceptInvitation({ invitationId, idempotencyKey: key });
+    setJoining(null);
+    if (result.ok) void refresh(); // the workspace arrives, and this landing offers to open it
+    else setProblem(result.error);
+  };
+  return (
+    <Stack gap="4">
+      {!loaded.ok && <ProblemMessage problem={loaded.error} live={false} />}
+      {problem && <ProblemMessage problem={problem} />}
+      {invitations.length === 0 ? (
+        <p>{t("signedIn.nothingYet")}</p>
+      ) : (
+        <section aria-labelledby="my-invitations">
+          <h2 id="my-invitations" className="pg-type-section-title">
+            {t("signedIn.invitations.heading")}
+          </h2>
+          <Stack gap="4">
+            {invitations.map((invitation) => (
+              <Stack gap="2" key={invitation.id}>
+                <p>
+                  {t("invite.summary", {
+                    inviter: invitation.inviterName,
+                    organization: invitation.organizationName,
+                    roles: roleList(invitation.roles, language, (key) => t(key)),
+                  })}
+                </p>
+                <div>
+                  <Button onClick={() => void join(invitation.id)}>
+                    {joining === invitation.id
+                      ? t("invite.joining")
+                      : t("invite.join", { organization: invitation.organizationName })}
+                  </Button>
+                </div>
+              </Stack>
+            ))}
+          </Stack>
+        </section>
+      )}
+    </Stack>
   );
 }
 

@@ -315,3 +315,5 @@ export * from "./templates.ts";
 export * from "./archive.ts";
 export * from "./brand.ts";
 export * from "./print-profiles.ts";
+// Organization and publication settings (doc 07 §13)
+export * from "./settings.ts";

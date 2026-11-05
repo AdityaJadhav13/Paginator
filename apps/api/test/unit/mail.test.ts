@@ -2,7 +2,7 @@
 // background, failures reported without the message, and the sign-in emails' text.
 import addressparser from "nodemailer/lib/addressparser";
 import { describe, expect, it } from "vitest";
-import { newSignInEmail, resetEmail, verificationEmail } from "../../src/modules/identity/emails.ts";
+import { newSignInEmail, resetEmail, verificationEmail, welcomeEmail } from "../../src/modules/identity/emails.ts";
 import { type Transport, PLAIN_ADDRESS, RecipientError, openMailer } from "../../src/modules/notifications/mailer.ts";
 
 const ORIGIN = "https://app.example.test";
@@ -111,6 +111,28 @@ describe("the sign-in emails", () => {
     expect(mail.html).toContain("&lt;b&gt;Eve&lt;/b&gt; evil Bcc");
     expect(mail.html).not.toContain("<b>");
     expect(mail.text).toContain("Hello <b>Eve</b> evil Bcc,");
+  });
+
+  it("welcome a new Owner in the paper's language first, with a 72-hour link and no 'if you did not ask'", () => {
+    const input = {
+      name: "Owner (fictional)",
+      organization: "Kalpaniknagar Media (fictional)",
+      url: `${ORIGIN}/api/auth/reset-password/t?callbackURL=%2Freset-password`,
+      origin: ORIGIN,
+    };
+    const mr = welcomeEmail({ ...input, lang: "mr" });
+    const en = welcomeEmail({ ...input, lang: "en" });
+    expect(mr.subject.startsWith("Pageinator: स्वागत")).toBe(true);
+    expect(en.subject.startsWith("Pageinator: Welcome, choose your password")).toBe(true);
+    const order = (html = "") => [html.indexOf('lang="mr"'), html.indexOf('lang="en"')];
+    expect(order(mr.html)[0]).toBeLessThan(order(mr.html)[1] ?? 0);
+    expect(order(en.html)[1]).toBeLessThan(order(en.html)[0] ?? 0);
+    for (const mail of [mr, en]) {
+      expect(mail.text).toContain("72 hours");
+      expect(mail.text).toContain("72 तासांत");
+      expect(mail.text).not.toMatch(/did not ask|reset your|मागितले नसेल/i);
+    }
+    expect(() => welcomeEmail({ ...input, url: "https://evil.example.test/r", lang: "en" })).toThrow();
   });
 
   it("refuse a link that does not lead to the public origin", () => {

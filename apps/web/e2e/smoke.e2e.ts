@@ -1,6 +1,6 @@
 // The L2.1 phone smoke (docs/product/10-l2-newsroom-plan.md §7.3; PR 26), on the stack of e2e/stack.ts, in two phones:
-// the Owner (390 × 844) and a Reporter (360 × 800). The Owner confirms the address and chooses a password from the
-// emails, turns on two-step sign-in, and signs in again with a code; invites the Reporter, who makes an account from
+// the Owner (390 × 844) and a Reporter (360 × 800). The Owner chooses a password from the welcome email (which
+// confirms the address), turns on two-step sign-in, and signs in again with a code; invites the Reporter, who makes an account from
 // the email; makes the edition on the Editions screen. The Reporter files a story with a photo (a real upload; the engine's queue converts it), and the Owner's
 // list shows it without a reload; the Owner picks it up, comments and sends it back, which the Reporter sees live; the
 // Reporter sends it again; the Owner puts it in the edition from the editor, marks it ready, and "Send to the Desk"
@@ -131,9 +131,7 @@ test("L2.1: two-step sign-in, a story with a photo, live updates, send back, rea
   const desk = await phone(browser, 390, 844);
   const reporter = await phone(browser, 360, 800);
 
-  // ── The Owner: confirm the address, choose a password, turn on two-step sign-in ──
-  await desk.goto(await emailLink(OWNER.email, /confirm|पत्ता|address/i));
-  await expect(desk.getByText("Your email address is confirmed")).toBeVisible();
+  // ── The Owner: choose a password from the welcome (which confirms the address too), turn on two-step sign-in ──
   await desk.goto(await emailLink(OWNER.email, /password|पासवर्ड/i));
   await desk.getByLabel("New password", { exact: true }).fill(PASSWORD);
   await desk.getByLabel("Type the new password again", { exact: true }).fill(PASSWORD);
@@ -185,9 +183,8 @@ test("L2.1: two-step sign-in, a story with a photo, live updates, send back, rea
   await reporter.getByLabel(/^Type the password again \(required\)/).fill(PASSWORD);
   await reporter.getByRole("button", { name: "Create account" }).click();
   await expect(reporter.getByText(/We sent a link to/)).toBeVisible();
+  // the confirmation link leads straight back to the invitation, whose Join is the Reporter's own click
   await reporter.goto(await emailLink(REPORTER.email, /confirm|पत्ता|address/i));
-  await expect(reporter.getByText("Your email address is confirmed")).toBeVisible();
-  await reporter.getByRole("link", { name: "Continue" }).or(reporter.getByRole("button", { name: "Continue" })).click();
   await reporter.getByRole("button", { name: "Join Example Press Smoke" }).click();
   await expect(reporter.getByText("You have joined Example Press Smoke")).toBeVisible();
 

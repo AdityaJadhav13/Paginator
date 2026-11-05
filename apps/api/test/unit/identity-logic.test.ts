@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { AuthEvent, IdentityStore } from "../../src/db/identity.ts";
 import type { AuthEvents } from "../../src/modules/identity/events.ts";
 import { ABSOLUTE_MS, type SessionApi, sessionResolver } from "../../src/modules/identity/session.ts";
+import { authOptions } from "../../src/modules/identity/auth.ts";
 import { storedKey } from "../../src/modules/identity/rate-limit.ts";
 import { LOCK_AFTER, WINDOW_MS, emailKey, signInGuard } from "../../src/modules/identity/sign-in-guard.ts";
 
@@ -90,6 +91,7 @@ function fakeStore() {
     returnAttempt: async (...args) => void calls.push(["returnAttempt", ...args]),
     countWrongPassword: async (...args) => (calls.push(["countWrongPassword", ...args]), false),
     clearAttempts: async (...args) => void calls.push(["clearAttempts", ...args]),
+    confirmEmail: unused,
     consumeRateLimit: async () => ({ allowed: true, retryAfter: null }),
     pruneRateLimits: async () => undefined,
     invitationIsFor: unused,
@@ -102,6 +104,7 @@ function fakeStore() {
     invitation: unused,
     pendingInvitations: unused,
     acceptedInvitations: unused,
+    pendingInvitationsFor: unused,
     addMember: unused,
     setMemberRole: unused,
     removeMember: unused,
@@ -146,5 +149,27 @@ describe("the rate-limit key", () => {
     ["no-trusted-ip|/get-session", "no-trusted-ip|/get-session"],
   ])("stores %s as %s", (key, stored) => {
     expect(storedKey(key)).toBe(stored);
+  });
+});
+
+describe("Better Auth's per-address limits (auth.ts)", () => {
+  const rules = () =>
+    authOptions({
+      config: { publicOrigin: "https://app.example.test", authSecret: "x".repeat(40), allowedOrigins: [] } as never,
+      database: { identity: fakeStore().store, auth: {} } as never,
+      mailer: { send: () => undefined } as never,
+      log: { warn: () => undefined, error: () => undefined },
+    }).rateLimit.customRules;
+
+  it("never count the session check, and leave room for a newsroom of ~50 behind one address", () => {
+    expect(rules()["/get-session"]).toBe(false);
+    expect(rules()["/sign-up/email"]).toEqual({ window: 3600, max: 100 });
+    expect(rules()["/send-verification-email"]).toEqual({ window: 3600, max: 100 });
+  });
+
+  it("let a newsroom of ~50 behind one address sign in, and keep password reset as strict as it was", () => {
+    // guessing a password is stopped per email (sign-in-guard.ts, 5 wrong in 15 minutes), not per address
+    expect(rules()["/sign-in/email"]).toEqual({ window: 300, max: 100 });
+    expect(rules()["/request-password-reset"]).toEqual({ window: 3600, max: 3 });
   });
 });

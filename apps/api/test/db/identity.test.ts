@@ -5,7 +5,7 @@
 import { getMigrations } from "better-auth/db/migration";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { authOptions } from "../../src/modules/identity/auth.ts";
+import { authOptions, SIGN_INS_PER_ADDRESS, VERIFICATION_EMAILS_PER_EMAIL } from "../../src/modules/identity/auth.ts";
 import { signedIn } from "../../src/modules/identity/plugin.ts";
 import { LOCK_AFTER, WINDOW_MS, emailKey } from "../../src/modules/identity/sign-in-guard.ts";
 import { openMailer } from "../../src/modules/notifications/mailer.ts";
@@ -114,6 +114,25 @@ describe("sign-up", () => {
     expect(rows).toEqual([{ n: 0 }]);
   });
 
+  it(`sends one email at most ${VERIFICATION_EMAILS_PER_EMAIL} confirmation links an hour, from any addresses, with the same answer`, async () => {
+    const email = someone();
+    await it_.server.api.signUpEmail({ body: { name: "Reporter (fictional)", email, password: PASSWORD } });
+    const links = () => it_.sent.filter((m) => m.to === email).length;
+    const before = links();
+    for (let i = 0; i < VERIFICATION_EMAILS_PER_EMAIL + 2; i += 1) {
+      const res = await it_.app.inject({
+        method: "POST",
+        url: "/api/auth/send-verification-email",
+        headers: FROM_APP,
+        payload: { email },
+        remoteAddress: `198.51.100.${60 + i}`,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ status: true });
+    }
+    expect(links() - before).toBe(VERIFICATION_EMAILS_PER_EMAIL);
+  });
+
   it("from the server sends a verification link to the public origin; no sign-in before it is opened", async () => {
     const email = someone();
     await it_.server.api.signUpEmail({ body: { name: "Reporter (fictional)", email, password: PASSWORD } });
@@ -167,14 +186,18 @@ describe("sign-in", () => {
       for (let i = 1; i <= 5; i += 1) {
         expect((await signIn(email, "not the password at all", {}, `${net}.${i}`)).statusCode).toBe(401);
       }
-      // the right password, from yet another address: still locked
-      expect((await signIn(email, PASSWORD, {}, `${net}.99`)).statusCode).toBe(429);
+      // the right password, from yet another address: still locked, and told how long the lock can still run
+      const locked = await signIn(email, PASSWORD, {}, `${net}.99`);
+      expect(locked.statusCode).toBe(429);
+      expect(locked.headers["retry-after"]).toBe("900");
     },
   );
 
-  it("limits one address to 5 sign-ins in 5 minutes; forged forwarding headers do not help", async () => {
+  it(`limits one address to ${SIGN_INS_PER_ADDRESS} sign-ins in 5 minutes (a newsroom behind one NAT); forged forwarding headers do not help`, async () => {
     const address = "192.0.2.50";
-    for (let i = 0; i < 5; i += 1) await signIn(someone(), PASSWORD, {}, address);
+    for (let i = 0; i < SIGN_INS_PER_ADDRESS; i += 1) {
+      expect((await signIn(someone(), PASSWORD, {}, address)).statusCode).not.toBe(429);
+    }
     const sixth = await it_.app.inject({
       method: "POST",
       url: "/api/auth/sign-in/email",

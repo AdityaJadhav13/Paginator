@@ -70,6 +70,8 @@ describe("Newsroom for the desk", () => {
     await user.selectOptions(screen.getByRole("combobox", { name: "Edition" }), "none");
     await waitFor(() => expect(cards(/^Draft/)).toEqual(["बाजार समितीची निवडणूक रविवारी"]));
     expect(cards(/^Filed/)).toEqual([]);
+    // the board scrolls sideways on a wide screen: a keyboard reaches it, by its name (axe scrollable-region-focusable)
+    expect(screen.getByRole("group", { name: "Stories by status" })).toHaveAttribute("tabindex", "0");
     expect(await seriousViolations(container)).toEqual([]);
   });
 

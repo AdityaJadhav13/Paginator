@@ -23,6 +23,8 @@ export interface StoryFields {
   readonly pagePin: number | null;
   /** The edition the story is in (the desk's), or none. */
   readonly editionId: string | null;
+  /** The story's section, or none. */
+  readonly sectionId: string | null;
   readonly deskNote: string;
   /** The photo's caption and credit (empty while the story has no photo). */
   readonly caption: string;
@@ -62,8 +64,8 @@ const disabled = new Set<string>();
 
 const FIELD_KEYS = ["headline", "kicker", "deck", "byline", "body", "priority", "pagePin", "deskNote"] as const;
 
-/** A draft's fields; caption and credit came with photos (L2-J), and the edition with editions (L2.1), so a draft
- * written before has them empty. */
+/** A draft's fields; caption and credit came with photos (L2-J), the edition with editions (L2.1) and the section with
+ * the section picker, so a draft written before has them empty. */
 function isFields(value: unknown): value is StoryFields {
   if (typeof value !== "object" || value === null) return false;
   const fields = value as Record<string, unknown>;
@@ -73,13 +75,15 @@ function isFields(value: unknown): value is StoryFields {
     ["caption", "credit"].every((key) => fields[key] === undefined || typeof fields[key] === "string") &&
     typeof fields["priority"] === "number" &&
     (fields["pagePin"] === null || typeof fields["pagePin"] === "number") &&
-    (fields["editionId"] === undefined || fields["editionId"] === null || typeof fields["editionId"] === "string")
+    (fields["editionId"] === undefined || fields["editionId"] === null || typeof fields["editionId"] === "string") &&
+    (fields["sectionId"] === undefined || fields["sectionId"] === null || typeof fields["sectionId"] === "string")
   );
 }
 
 const withPhotoFields = (fields: StoryFields): StoryFields => ({
   ...fields,
   editionId: fields.editionId ?? null,
+  sectionId: fields.sectionId ?? null,
   caption: fields.caption ?? "",
   credit: fields.credit ?? "",
 });

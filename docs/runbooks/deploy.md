@@ -132,7 +132,7 @@ c run --rm --no-deps api-local node scripts/bootstrap-org.ts --owner-name "<name
 Then the whole day can be rehearsed in a browser at `https://app.localhost:<PGN_HTTPS_PORT>` (Caddy's local CA:
 accept it, or trust its certificate:
 `docker run --rm -v pgn-pilot-local_local-ca:/ca pgn-plocal/pageinator-web:local-1 cat /ca/root.crt > root.crt`, which
-`NODE_EXTRA_CA_CERTS=root.crt` also gives `tools/ts/check-headers.ts`): the Owner confirms, chooses a password and
+`NODE_EXTRA_CA_CERTS=root.crt` also gives `tools/ts/check-headers.ts`): the Owner chooses a password from the welcome email (which confirms the address) and
 turns on two-step sign-in; invites the team (Team); a Reporter files a story with a photo (the engine converts it); Stories → "Import
 Word file"; the desk readies stories; Engine profile → upload the paper's dataset bundle (private: never from the
 repository); Editions → create; Ads → advertisers, bookings, artwork; the edition's Plan, Layout, Pages and the page

@@ -53,7 +53,7 @@ try {
     error: (_: object, m: string) => console.error(m),
   };
   try {
-    const made = await bootstrapOrg(createAuth({ config, database, mailer, log }), database, {
+    const made = await bootstrapOrg(createAuth({ config, database, mailer, log }), mailer, database, {
       owner: { name: values["owner-name"] ?? "", email: values["owner-email"] ?? "" },
       organization: { name: values["org-name"] ?? "", slug: values["org-slug"] ?? "" },
       publication: {

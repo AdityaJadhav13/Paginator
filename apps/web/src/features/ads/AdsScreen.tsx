@@ -26,6 +26,7 @@ import {
   TextArea,
   TextInput,
 } from "../../ui/index.ts";
+import { NoAccess } from "../../app/NoAccess.tsx";
 import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { formatDate, formatDateTime } from "../../i18n/dates.ts";
 import { useI18n } from "../../i18n/index.ts";
@@ -82,7 +83,11 @@ export function AdsScreen() {
         {...(publication ? { subtitle: publication.name } : {})}
       />
       <OfflineNotice />
-      {access.view && <Desk where={where} access={access} />}
+      {access.view ? (
+        <Desk where={where} access={access} />
+      ) : (
+        org && !(org.twoStep.required && !org.twoStep.satisfied) && <NoAccess />
+      )}
     </Stack>
   );
 }

@@ -18,6 +18,7 @@ const DESK = "tools/desk/README.md";
 const GEN1 = "docs/phase0/EXP_GEN_1_REPORT.md";
 const PDF1 = "docs/phase0/EXP_PDF_1_REPORT.md";
 const L2 = "docs/product/10-l2-newsroom-plan.md";
+const NEWS = "docs/product/13-news-finder.md";
 
 export const EVIDENCE = {
   edition: { path: LAUNCH, quote: "It already lays out a whole 4-, 8- or 16-page paper" },
@@ -76,6 +77,21 @@ export const EVIDENCE = {
     quote: "GET …/events → text/event-stream (src/modules/notifications/events.ts): story, comment, notification, resync;",
   },
   bundle: { path: DESK, quote: "imports the `.zip` the hosted newsroom's \"Send to the Desk\" makes" },
+  bundleSend: {
+    path: "apps/web/src/features/editions/EditionsScreen.tsx",
+    quote: "desk.export: the edition's Ready stories as a story bundle, saved as a file",
+  },
+  archiveBuilt: {
+    path: "apps/web/src/features/archive/ArchiveScreen.tsx",
+    quote: "a search by headline, reporter or section over the stories the released run placed",
+  },
+  commentsScreen: { path: "apps/web/src/features/stories/CommentsPanel.tsx", quote: "A story's comments, in the story editor" },
+  notificationsScreen: { path: "apps/web/src/features/live/Notifications.tsx", quote: "The notifications button and drawer" },
+  auditScreen: { path: "apps/web/src/features/people/AuditScreen.tsx", quote: "The audit log, /org/:orgId/audit" },
+  newsFinderDraft: { path: NEWS, quote: "An editor picks a topic, and Claude drafts a" },
+  newsFinderLabel: { path: NEWS, quote: "Every draft and photo choice says **\"Made with Claude — check before use\"** until a person edits the story." },
+  newsFinderApproval: { path: NEWS, quote: "Nothing prints without a person" },
+  newsFinderAiOnly: { path: NEWS, quote: "AI only drafts text, groups headlines and ranks photos." },
   pilotNotRun: { path: L2, quote: "**Release check:** real staff data goes in only after items 2–4 are true." },
   deskLanguages: { path: LAUNCH, quote: "The Marathi is a first draft: a native editor checks it (D-5" },
   india: { path: "docs/architecture/v2/ADR/ADR-008-platform-hosting-auth.md", quote: "**ACCEPTED:** hosting region in India (baseline B12)." },

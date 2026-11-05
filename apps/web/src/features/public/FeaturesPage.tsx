@@ -17,6 +17,7 @@ const NEWSROOM = [
   "newsroom-filing",
   "newsroom-server",
   "newsroom-desk",
+  "newsroom-sources",
   "newsroom-languages",
 ] as const;
 

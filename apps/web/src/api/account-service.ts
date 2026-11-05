@@ -73,6 +73,19 @@ export function createApiAccountService(client: ApiClient): AccountService {
       return invitation ? { ok: true, value: invitation } : { ok: false, error: UNEXPECTED };
     },
 
+    async listMyInvitations() {
+      const answer = await client.get("/api/v1/me/invitations");
+      if (!answer.ok) return { ok: false, error: answer.problem };
+      const items = isObject(answer.value) ? answer.value["items"] : undefined;
+      if (!Array.isArray(items)) return { ok: false, error: UNEXPECTED };
+      const mine = items.map((item) => {
+        const invitation = invitationFromAnswer(item);
+        const id = isObject(item) ? item["id"] : undefined;
+        return invitation && typeof id === "string" ? { ...invitation, id } : undefined;
+      });
+      return mine.every((item) => item !== undefined) ? { ok: true, value: mine } : { ok: false, error: UNEXPECTED };
+    },
+
     signUp: ({ invitationId, name, email, password, returnPath }) =>
       send(
         "/api/auth/sign-up/email",

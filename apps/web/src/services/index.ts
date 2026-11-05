@@ -13,7 +13,7 @@ export type {
   MemberPatchDto,
   TeamService,
 } from "./team-service.ts";
-export type { AccountService, InvitationDto, SignUpInput } from "./account-service.ts";
+export type { AccountService, InvitationDto, MyInvitationDto, SignUpInput } from "./account-service.ts";
 export type {
   DocxImportDto,
   PasteResultDto,
@@ -111,6 +111,7 @@ export type {
   PubEditionDto,
 } from "./edition-service.ts";
 export type { AuditEventDto, AuditFilterDto, AuditPageDto, AuditService } from "./audit-service.ts";
+export type { NewPublicationDto, OrgSettingsDto, PublicationSettingsDto, PublicationSettingsInputDto, SettingsService } from "./settings-service.ts";
 export type {
   AdSettingsDto,
   AdSizesDto,

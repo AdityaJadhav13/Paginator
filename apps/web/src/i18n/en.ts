@@ -13,7 +13,10 @@ import { TEMPLATES_EN } from "./screens/templates.en.ts";
 import { NEWSROOM_EN } from "./screens/newsroom.en.ts";
 import { ARCHIVE_EN } from "./screens/archive.en.ts";
 import { BRAND_EN } from "./screens/brand.en.ts";
+import { SETTINGS_EN } from "./screens/settings.en.ts";
 import { PRINT_PROFILES_EN } from "./screens/printProfiles.en.ts";
+import { AUTH_EN } from "./screens/auth.en.ts";
+import { SITE_EN } from "./screens/site.en.ts";
 
 export const EN = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -196,7 +199,8 @@ export const EN = {
 
   "signedIn.title": "You are signed in",
   "signedIn.as": "Signed in as {name} ({email}).",
-  "signedIn.nothingYet": "There is nothing to open yet: the newsroom screens are still being built.",
+  "signedIn.nothingYet":
+    "You are not a member of any newsroom yet. Open the invitation email your newspaper sent you and use its link, or ask its owner or an admin to invite you again.",
   "signedIn.openWorkspace": "Open workspace",
   "signOut.drafts.title": "Unsaved text on this device",
   "signOut.drafts.body": "Stories with unsaved text on this device: {count}. Signing out deletes that text.",
@@ -339,7 +343,7 @@ export const EN = {
   "orgHome.publications": "Your publications",
   "orgHome.publicationRoles": "{publication}: {roles}",
   "orgHome.noPublications": "You have no publication in this organization yet.",
-  "orgHome.next": "The stories desk is open. The other newsroom screens are still being built.",
+  "orgHome.next": "Open a publication for its stories, editions and other screens: the menu lists what your roles may use.",
   "orgHome.stories": "Stories of {publication}",
 
   // ── Two-step sign-in (/mfa) ──────────────────────────────────────────
@@ -1811,7 +1815,10 @@ export const EN = {
   ...NEWSROOM_EN,
   ...ARCHIVE_EN,
   ...BRAND_EN,
+  ...SETTINGS_EN,
   ...PRINT_PROFILES_EN,
+  ...AUTH_EN,
+  ...SITE_EN,
 } as const;
 
 export type CatalogueKey = keyof typeof EN;

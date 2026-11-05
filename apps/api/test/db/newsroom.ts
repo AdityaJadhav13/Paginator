@@ -93,7 +93,7 @@ export function newsroom(it_: () => IdentityApp, su: () => Client): Newsroom {
     await it_().server.api.signUpEmail({ body: { name: "Owner (fictional)", email: owner, password: PASSWORD } });
     await it_().app.inject({ url: lastLink(it_().sent, owner), remoteAddress: address() });
     const n = ++counter;
-    const made = await bootstrapOrg(it_().server, it_().database, {
+    const made = await bootstrapOrg(it_().server, it_().mailer, it_().database, {
       owner: { name: "Owner (fictional)", email: owner },
       organization: { name: `Kalpaniknagar Media ${n} (fictional)`, slug: `kalpaniknagar-${n}-${Date.now()}` },
       publication: {

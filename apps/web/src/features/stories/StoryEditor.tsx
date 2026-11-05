@@ -41,7 +41,8 @@ import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { randomUuid } from "../../api/client.ts";
 import { formatDate, formatDateTime } from "../../i18n/dates.ts";
 import { useI18n, type PlainKey, type Translate } from "../../i18n/index.ts";
-import type { ApiProblem, MemberDto, StoryDto, TransitionTargetDto } from "../../services/index.ts";
+import type { ApiProblem, MemberDto, SectionDto, StoryDto, TransitionTargetDto } from "../../services/index.ts";
+import { useLayout } from "../layout/layout-context.tsx";
 import { OfflineNotice, useOnline } from "../auth/connection.tsx";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useSession } from "../auth/SessionProvider.tsx";
@@ -63,7 +64,9 @@ const TEXT_KEYS = ["headline", "kicker", "deck", "byline", "body"] as const;
 const DESK_KEYS = ["priority", "pagePin", "editionId", "deskNote"] as const;
 /** The photo's own fields: sent with PATCH …/photo, not with the story's PATCH. */
 const PHOTO_KEYS = ["caption", "credit"] as const;
-const ALL_KEYS = [...TEXT_KEYS, ...DESK_KEYS, ...PHOTO_KEYS] as const;
+/** The story's own fields whoever edits it may send: its text and its section. */
+const OWN_KEYS = [...TEXT_KEYS, "sectionId"] as const;
+const ALL_KEYS = [...OWN_KEYS, ...DESK_KEYS, ...PHOTO_KEYS] as const;
 type FieldKey = keyof StoryFields;
 
 const PRIORITIES = [
@@ -82,6 +85,7 @@ const FIELD_LABELS: Readonly<Record<FieldKey, PlainKey>> = {
   priority: "editor.priority",
   pagePin: "editor.pagePin",
   editionId: "glossary.edition.issue",
+  sectionId: "editor.section",
   deskNote: "editor.deskNote",
   caption: "glossary.caption",
   credit: "glossary.photoCredit",
@@ -96,6 +100,7 @@ const EMPTY: StoryFields = {
   priority: 3,
   pagePin: null,
   editionId: null,
+  sectionId: null,
   deskNote: "",
   caption: "",
   credit: "",
@@ -111,6 +116,7 @@ function fieldsOf(story: StoryDto): StoryFields {
     priority: story.priority,
     pagePin: story.pagePin,
     editionId: story.edition?.id ?? null,
+    sectionId: story.sectionId,
     deskNote: story.deskNote,
     caption: story.photo?.caption ?? "",
     credit: story.photo?.credit ?? "",
@@ -119,7 +125,7 @@ function fieldsOf(story: StoryDto): StoryFields {
 
 /** The story's fields that differ (for its PATCH), among those the person may send; `all` adds the photo's. */
 function changes(from: StoryFields, to: StoryFields, desk: boolean | "all"): Partial<StoryFields> {
-  const keys: readonly FieldKey[] = desk === "all" ? ALL_KEYS : desk ? [...TEXT_KEYS, ...DESK_KEYS] : TEXT_KEYS;
+  const keys: readonly FieldKey[] = desk === "all" ? ALL_KEYS : desk ? [...OWN_KEYS, ...DESK_KEYS] : OWN_KEYS;
   return Object.fromEntries(keys.filter((key) => from[key] !== to[key]).map((key) => [key, to[key]])) as Partial<StoryFields>;
 }
 
@@ -288,6 +294,18 @@ function EditorContent({
   const { t, language } = useI18n();
   /** The publication's editions for the desk's Edition picker, with the story's own (it may not be listed yet). */
   const listedEditions = usePublicationEditions(orgId, pubId, desk);
+  const layout = useLayout();
+  /** The publication's sections for the Section picker (publication.view); none listed while they load, or if that fails. */
+  const [sections, setSections] = useState<readonly SectionDto[]>([]);
+  useEffect(() => {
+    let live = true;
+    void layout.listSections({ orgId, pubId }).then((result) => {
+      if (live && result.ok) setSections(result.value.items);
+    });
+    return () => {
+      live = false;
+    };
+  }, [layout, orgId, pubId]);
   const online = useOnline();
   const [loaded, setLoaded] = useState<Loaded>(storyId ? { status: "loading" } : { status: "ready" });
   const [story, setStory] = useState<StoryDto | null>(null);
@@ -1008,7 +1026,7 @@ function EditorContent({
         )}
 
         {conflict && (
-          <ConflictPanel conflict={conflict} mine={fields} lang={textLang} editionDates={editionDates} onKeepMine={keepMine} onTakeTheirs={takeTheirs} />
+          <ConflictPanel conflict={conflict} mine={fields} lang={textLang} editionDates={editionDates} sections={sections} onKeepMine={keepMine} onTakeTheirs={takeTheirs} />
         )}
 
         <div className="pg-editor__layout">
@@ -1059,6 +1077,22 @@ function EditorContent({
                   </Field>
                   <Field label={t("glossary.deck")}>
                     <TextInput lang={textLang} data-field="deck" value={fields.deck} readOnly={boxLocked("deck")} onChange={(event) => change("deck")(event.target.value)} onBlur={leaveBox} />
+                  </Field>
+                  <Field label={t("editor.section")}>
+                    <Select value={fields.sectionId ?? ""} disabled={locked} onChange={(event) => change("sectionId")(event.target.value || null)}>
+                      <option value="">{t("editor.noSection")}</option>
+                      {/* the sections in use; the story's own stays shown when it is archived (or not listed) */}
+                      {sections
+                        .filter((section) => !section.archived || section.id === fields.sectionId)
+                        .map((section) => (
+                          <option key={section.id} value={section.id}>
+                            {section.name}
+                          </option>
+                        ))}
+                      {fields.sectionId !== null && !sections.some((section) => section.id === fields.sectionId) && (
+                        <option value={fields.sectionId}>{t("editor.section.unlisted")}</option>
+                      )}
+                    </Select>
                   </Field>
                 </Stack>
               </Panel>
@@ -1199,13 +1233,20 @@ function EditorContent({
   );
 }
 
-function valueText(key: FieldKey, fields: StoryFields, t: Translate, editionName: (id: string) => string): string {
+function valueText(
+  key: FieldKey,
+  fields: StoryFields,
+  t: Translate,
+  editionName: (id: string) => string,
+  sectionName: (id: string) => string,
+): string {
   if (key === "priority") {
     const label = PRIORITIES.find(([level]) => level === fields.priority)?.[1];
     return label ? t(label) : String(fields.priority);
   }
   if (key === "pagePin") return fields.pagePin === null ? t("editor.pagePin.any") : t("editor.pagePin.page", { page: fields.pagePin });
   if (key === "editionId") return fields.editionId === null ? t("stories.noEdition") : editionName(fields.editionId);
+  if (key === "sectionId") return fields.sectionId === null ? t("editor.noSection") : sectionName(fields.sectionId);
   return fields[key];
 }
 
@@ -1215,6 +1256,7 @@ function ConflictPanel({
   mine,
   lang,
   editionDates,
+  sections,
   onKeepMine,
   onTakeTheirs,
 }: {
@@ -1223,6 +1265,8 @@ function ConflictPanel({
   readonly lang: string | undefined;
   /** The publication's editions (id → date), to name the edition each version is in. */
   readonly editionDates: ReadonlyMap<string, string>;
+  /** The publication's sections, to name the section each version is in. */
+  readonly sections: readonly SectionDto[];
   readonly onKeepMine: (putCaption: boolean) => void;
   readonly onTakeTheirs: () => void;
 }) {
@@ -1233,6 +1277,7 @@ function ConflictPanel({
     const date = editionDates.get(id) ?? (theirStory.edition?.id === id ? theirStory.edition.date : undefined);
     return date ? formatDate(date, language) : id;
   };
+  const sectionName = (id: string) => sections.find((section) => section.id === id)?.name ?? t("editor.section.unlisted");
   const theirs = fieldsOf(theirStory);
   const name = theirStory.updatedBy.name;
   const theirAsset = theirStory.photo?.assetId ?? null;
@@ -1295,11 +1340,11 @@ function ConflictPanel({
             <div className="pg-editor__versions">
               <div className="pg-editor__version">
                 <p className="pg-type-body-small">{t("editor.conflict.theirs")}</p>
-                <p lang={textual(key) ? lang : undefined}>{valueText(key, theirs, t, editionName)}</p>
+                <p lang={textual(key) ? lang : undefined}>{valueText(key, theirs, t, editionName, sectionName)}</p>
               </div>
               <div className="pg-editor__version">
                 <p className="pg-type-body-small">{t("editor.conflict.mine")}</p>
-                <p lang={textual(key) ? lang : undefined}>{valueText(key, mine, t, editionName)}</p>
+                <p lang={textual(key) ? lang : undefined}>{valueText(key, mine, t, editionName, sectionName)}</p>
               </div>
             </div>
           </div>

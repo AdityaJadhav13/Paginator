@@ -11,7 +11,10 @@ import { TEMPLATES_MR } from "./screens/templates.mr.ts";
 import { NEWSROOM_MR } from "./screens/newsroom.mr.ts";
 import { ARCHIVE_MR } from "./screens/archive.mr.ts";
 import { BRAND_MR } from "./screens/brand.mr.ts";
+import { SETTINGS_MR } from "./screens/settings.mr.ts";
 import { PRINT_PROFILES_MR } from "./screens/printProfiles.mr.ts";
+import { AUTH_MR } from "./screens/auth.mr.ts";
+import { SITE_MR } from "./screens/site.mr.ts";
 
 export const MR: Readonly<Record<CatalogueKey, string>> = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -192,7 +195,8 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
 
   "signedIn.title": "तुमचा प्रवेश झाला आहे",
   "signedIn.as": "तुम्ही {name} ({email}) म्हणून प्रवेश केला आहे.",
-  "signedIn.nothingYet": "अजून उघडण्यासारखे काही नाही: वृत्तकक्षाच्या स्क्रीन अजून तयार होत आहेत.",
+  "signedIn.nothingYet":
+    "तुम्ही अजून कोणत्याही वृत्तकक्षाचे सदस्य नाही. तुमच्या वृत्तपत्राने पाठवलेला निमंत्रणाचा ईमेल उघडा आणि त्यातील दुवा वापरा, किंवा मालकाला किंवा प्रशासकाला तुम्हाला पुन्हा निमंत्रित करण्यास सांगा.",
   "signedIn.openWorkspace": "कार्यक्षेत्र उघडा",
   "signOut.drafts.title": "या उपकरणावर जतन न झालेला मजकूर",
   "signOut.drafts.body": "या उपकरणावर जतन न झालेला मजकूर असलेल्या बातम्या: {count}. बाहेर पडल्यास तो मजकूर पुसला जाईल.",
@@ -337,7 +341,7 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   "orgHome.publications": "तुमची प्रकाशने",
   "orgHome.publicationRoles": "{publication} मधील भूमिका: {roles}",
   "orgHome.noPublications": "या संस्थेत अजून तुमच्याकडे कोणतेही प्रकाशन नाही.",
-  "orgHome.next": "बातम्यांचा डेस्क सुरू झाला आहे. वृत्तकक्षाच्या इतर स्क्रीन अजून तयार होत आहेत.",
+  "orgHome.next": "बातम्या, अंक आणि इतर स्क्रीनसाठी प्रकाशन उघडा: तुमच्या भूमिकांना जे वापरता येते ते मेनूमध्ये दिसते.",
   "orgHome.stories": "{publication} च्या बातम्या",
 
   // ── Two-step sign-in (/mfa) ──────────────────────────────────────────
@@ -1817,5 +1821,8 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   ...NEWSROOM_MR,
   ...ARCHIVE_MR,
   ...BRAND_MR,
+  ...SETTINGS_MR,
   ...PRINT_PROFILES_MR,
+  ...AUTH_MR,
+  ...SITE_MR,
 };

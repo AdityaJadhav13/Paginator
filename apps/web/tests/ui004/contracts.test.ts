@@ -73,6 +73,7 @@ type AccountMethods = Assert<Equal<keyof AccountService,
   | "resetPassword"
   | "sendVerificationEmail"
   | "getInvitation"
+  | "listMyInvitations"
   | "signUp"
   | "acceptInvitation"
 >>;

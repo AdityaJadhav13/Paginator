@@ -22,6 +22,7 @@ import {
   TextArea,
   TextInput,
 } from "../../ui/index.ts";
+import { NoAccess } from "../../app/NoAccess.tsx";
 import { ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { randomUuid } from "../../api/client.ts";
 import { formatDateTime } from "../../i18n/dates.ts";
@@ -64,7 +65,7 @@ export function PrintProfilesScreen() {
         {...(publication ? { subtitle: publication.name } : {})}
       />
       <OfflineNotice />
-      {view && <ProfilesContent orgId={orgId} pubId={pubId} edit={edit} />}
+      {view ? <ProfilesContent orgId={orgId} pubId={pubId} edit={edit} /> : open && <NoAccess />}
     </Stack>
   );
 }
@@ -249,7 +250,7 @@ function NewVersion({
     <Panel title={t("printProfiles.new")}>
       <form onSubmit={(event) => void save(event)}>
         <Stack gap="3">
-          <Field label={t("printProfiles.pressName")} required>
+          <Field label={t("printProfiles.pressName")} required requiredLabel={t("form.required")}>
             <TextInput
               value={pressName}
               maxLength={200}

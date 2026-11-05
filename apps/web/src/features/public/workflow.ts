@@ -48,7 +48,7 @@ export const WORKFLOW_STAGES: readonly WorkflowStage[] = [
   { number: 4, key: "edit", states: ["desk"] },
   { number: 5, key: "check", states: ["desk"] },
   { number: 6, key: "print", states: ["desk"] },
-  { number: 7, key: "archive", states: ["planned"] },
+  { number: 7, key: "archive", states: ["pilot"] },
 ];
 
 /** A stage's content-record ids. */

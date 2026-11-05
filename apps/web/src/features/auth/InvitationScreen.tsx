@@ -7,7 +7,7 @@
  * The invitation endpoints arrive with the API's PR 10; until then every link here is answered "cannot be used".
  */
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { Button, Checkbox, Field, InlineMessage, ProgressIndicator, Stack, TextInput } from "../../ui/index.ts";
 import { paths } from "../../app/routes.ts";
 import { useI18n } from "../../i18n/index.ts";
@@ -73,8 +73,10 @@ function SignUpForm({ invitationId }: { readonly invitationId: string }) {
   const account = useAccount();
   const { t } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  // the invitation email's link carries the invited address in its fragment (#email=…), which no server sees
+  const [email, setEmail] = useState(() => new URLSearchParams(location.hash.slice(1)).get("email") ?? "");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);

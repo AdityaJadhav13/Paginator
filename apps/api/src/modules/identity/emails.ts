@@ -97,6 +97,69 @@ export function resetEmail(input: { name: string; url: string; origin: string })
   ]);
 }
 
+/** How long a welcome link (a new Owner's first password) lasts: longer than a reset link, which is asked for. */
+export const WELCOME_LINK_HOURS = 72;
+
+/** A new account's first email, made for them by someone else (the first Owner, by scripts/bootstrap-org.ts): choose
+ * a password. Not a reset: nobody asked, so it never says "if you did not ask". In the paper's language first. */
+export function welcomeEmail(input: {
+  name: string;
+  organization: string;
+  url: string;
+  origin: string;
+  lang: "mr" | "en";
+}): Rendered {
+  const name = clean(input.name, 80);
+  const organization = clean(input.organization, 120);
+  const link = onOrigin(input.url, input.origin);
+  const parts: Record<"mr" | "en", Part[]> = {
+    mr: [
+      {
+        lang: "mr",
+        paragraphs: [
+          `नमस्कार ${name},`,
+          `Pageinator वर ${organization} साठी तुमचे खाते तयार झाले आहे. तुम्ही त्याचे मालक आहात.`,
+          "तुमचा पासवर्ड निवडण्यासाठी हा दुवा उघडा:",
+        ],
+        link,
+      },
+      {
+        lang: "mr",
+        paragraphs: [
+          `हा दुवा ${WELCOME_LINK_HOURS} तासांत कालबाह्य होईल आणि एकदाच वापरता येईल. पासवर्ड निवडल्यावर तुमचा ईमेल पत्ताही निश्चित होतो; मग तुमचा ईमेल पत्ता आणि नवा पासवर्ड वापरून साइन इन करा.`,
+        ],
+      },
+    ],
+    en: [
+      {
+        lang: "en",
+        paragraphs: [
+          `Hello ${name},`,
+          `Your Pageinator account for ${organization} is ready. You are its owner.`,
+          "Open this link to choose your password:",
+        ],
+        link,
+      },
+      {
+        lang: "en",
+        paragraphs: [
+          `The link expires in ${WELCOME_LINK_HOURS} hours and works once. Choosing the password also confirms your email address; then sign in with your email address and the new password.`,
+        ],
+      },
+    ],
+  };
+  const order: ("mr" | "en")[] = input.lang === "mr" ? ["mr", "en"] : ["en", "mr"];
+  const subject = {
+    mr: "Pageinator: स्वागत आहे, तुमचा पासवर्ड निवडा",
+    en: "Pageinator: Welcome, choose your password",
+  };
+  return render(
+    "reset-password",
+    order.map((lang) => subject[lang]).join(" · "),
+    order.flatMap((lang) => parts[lang]),
+  );
+}
+
 /** A moment as people in the pilot read it: Asia/Kolkata (UTC+05:30, no summer time), digits as written. */
 export function istTime(at: Date): string {
   const ist = new Date(at.getTime() + 330 * 60_000).toISOString();

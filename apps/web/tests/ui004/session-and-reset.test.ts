@@ -32,6 +32,7 @@ describe("The session double's contract", () => {
     expect(Object.keys(account).sort()).toEqual([
       "acceptInvitation",
       "getInvitation",
+      "listMyInvitations",
       "requestPasswordReset",
       "resetPassword",
       "sendVerificationEmail",

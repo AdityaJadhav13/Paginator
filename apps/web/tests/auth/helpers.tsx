@@ -32,9 +32,10 @@ export function renderAuth(path: string, options: RenderAuthOptions = {}) {
   const environment = options.environment ?? createMockApplicationEnvironment();
   if (options.preset) environment.sessionController.setPreset(options.preset);
   window.localStorage.setItem(LANGUAGE_STORAGE_KEY, options.language ?? "en");
-  const [pathname, search = ""] = path.split("?");
+  const [rest, hash = ""] = path.split("#");
+  const [pathname, search = ""] = rest!.split("?");
   const view = render(
-    <MemoryRouter useTransitions={false} initialEntries={[{ pathname: pathname!, search: search ? `?${search}` : "", state: options.state ?? null }]}>
+    <MemoryRouter useTransitions={false} initialEntries={[{ pathname: pathname!, search: search ? `?${search}` : "", hash: hash ? `#${hash}` : "", state: options.state ?? null }]}>
       <AppRoutes environment={environment} />
       <LocationProbe />
     </MemoryRouter>

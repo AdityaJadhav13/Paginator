@@ -73,12 +73,10 @@ describe("After signing up", () => {
 });
 
 describe("Coming back from the emailed link", () => {
-  it("confirms, signed in, and continues to the invitation", async () => {
+  it("confirms, signed in, and goes straight on to the invitation's Join (a closed tab cannot lose it)", async () => {
     const view = renderAuth(`/verify?confirmed=1&invitation=${INVITATION}`);
-    expect(await screen.findByText("Your email address is confirmed")).toBeInTheDocument();
-    expect(screen.getByText("You are signed in.")).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Your invitation" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
     expect(currentLocation(view.container).pathname).toBe(`/invite/${INVITATION}`);
   });
 

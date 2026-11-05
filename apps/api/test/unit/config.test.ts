@@ -114,18 +114,22 @@ describe("config", () => {
 });
 
 describe("config: security settings", () => {
-  it("defaults to the development web app's origin and 60 requests a minute", () => {
-    expect(load({})).toMatchObject({ allowedOrigins: ["http://127.0.0.1:5180"], rateLimitPerMinute: 60 });
+  it("defaults to the development web app's origin and 300 signed-out requests a minute", () => {
+    expect(load({})).toMatchObject({
+      allowedOrigins: ["http://127.0.0.1:5180"],
+      rateLimitPerMinute: 300,
+      rateLimitPerPersonPerMinute: 1200,
+    });
   });
 
   it("reads a list of origins and the limit", () => {
     const env = {
       PGN_ALLOWED_ORIGINS: "https://app.example.test, http://127.0.0.1:5180",
-      PGN_RATE_LIMIT_PER_MINUTE: "300",
+      PGN_RATE_LIMIT_PER_MINUTE: "120",
     };
     expect(load(env)).toMatchObject({
       allowedOrigins: ["https://app.example.test", "http://127.0.0.1:5180"],
-      rateLimitPerMinute: 300,
+      rateLimitPerMinute: 120,
     });
   });
 

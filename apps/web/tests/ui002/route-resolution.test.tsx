@@ -360,8 +360,8 @@ describe("Reserved edition-planning nav seam (§9.4, BLV2-02)", () => {
 
 describe("Placeholders never imply the feature behind them works", () => {
   it("names the owning future unit and contains no fabricated data", async () => {
-    // the publication's sidebar screens are built; the organisation's settings are still a placeholder
-    renderAt("/org/org-demo-sahyadri/settings");
+    // the publication's sidebar screens and the organisation's settings are built; storage is still a placeholder
+    renderAt("/org/org-demo-sahyadri/storage");
     expect(await screen.findByText(/not yet implemented/i)).toHaveTextContent("UI");
     // Scoped to <main>, less the breadcrumb trail at its top: that is a
     // legitimate <ol> (role="list"), not fabricated story data.

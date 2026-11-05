@@ -23,6 +23,7 @@ import {
   TableCell,
   TableHeader,
 } from "../../ui/index.ts";
+import { NoAccess } from "../../app/NoAccess.tsx";
 import { ROUTE_HEADING_ID, paths } from "../../app/routes.ts";
 import { randomUuid } from "../../api/client.ts";
 import { formatDate, formatDateTime } from "../../i18n/dates.ts";
@@ -73,9 +74,12 @@ export function TemplatesScreen() {
         {...(publication ? { subtitle: publication.name } : {})}
       />
       <OfflineNotice />
-      {open && may(org, "templates.view", pubId) && (
-        <TemplatesContent orgId={orgId} pubId={pubId} edit={may(org, "templates.edit", pubId)} />
-      )}
+      {open &&
+        (may(org, "templates.view", pubId) ? (
+          <TemplatesContent orgId={orgId} pubId={pubId} edit={may(org, "templates.edit", pubId)} />
+        ) : (
+          <NoAccess />
+        ))}
     </Stack>
   );
 }

@@ -1,7 +1,7 @@
 // The phone smoke's stack (Playwright's globalSetup; docs/DEVELOPMENT.md "The phone smoke"): Postgres, SeaweedFS and
 // Mailpit from compose.dev.yml under a compose project of its own on ports of its own (compose.e2e.yml), migrated, its
 // buckets made, and one fictional organisation bootstrapped; then the API, the engine's queue with
-// the real Python runner, and the web app (Vite), each a process of its own. It returns the teardown, which stops them
+// the real Python runner, and the web app (Vite; the demo's from the production build), each a process of its own. It returns the teardown, which stops them
 // and removes the project with its volumes. Nothing reads .env.dev: every secret is random, made here.
 //   PGN_E2E_WORKER_PY  the engine worker's Python (a venv from apps/engine-worker/requirements.lock); required
 //   PGN_E2E_ICC        a CMYK colour profile (default: macOS's Generic CMYK; never the private newsprint one)
@@ -67,7 +67,14 @@ async function portsFree(): Promise<void> {
 /** A test that fails writes this into the logs folder, so the teardown keeps the logs. */
 export const FAILED_MARK = "failed";
 
-export default async function stack(): Promise<() => Promise<void>> {
+/** Playwright's globalSetup: the web app from Vite's development server. */
+export default function stack(): Promise<() => Promise<void>> {
+  return startStack(false);
+}
+
+/** The stack; with production, the web app is the production build (`vite build`, then `vite preview` with the same
+ * /api proxy), as deployed: no development-only screens. */
+export async function startStack(production: boolean): Promise<() => Promise<void>> {
   const python = process.env["PGN_E2E_WORKER_PY"] ?? "";
   if (!existsSync(python)) throw new Error("Set PGN_E2E_WORKER_PY to the engine worker's Python (its venv).");
   const icc = process.env["PGN_E2E_ICC"] ?? "/System/Library/ColorSync/Profiles/Generic CMYK Profile.icc";
@@ -219,9 +226,20 @@ export default async function stack(): Promise<() => Promise<void>> {
       PGN_ICC_SHA256: createHash("sha256").update(profile).digest("hex"),
       PGN_WORKER_HOMES: homes,
     });
-    const web = start("web", process.execPath, ["node_modules/vite/bin/vite.js", "--port", String(PORTS.web)], join(REPO, "apps/web"), {
-      PGN_DEV_API: `http://127.0.0.1:${PORTS.api}`,
-    });
+    const vite = join(REPO, "apps/web/node_modules/vite/bin/vite.js");
+    const dist = join(folder, "dist"); // the build goes in the logs folder, not the checkout's dist/
+    if (production)
+      execFileSync(process.execPath, [vite, "build", "--outDir", dist, "--emptyOutDir"], {
+        cwd: join(REPO, "apps/web"),
+        stdio: "ignore",
+      });
+    const web = start(
+      "web",
+      process.execPath,
+      [vite, ...(production ? ["preview", "--outDir", dist] : []), "--port", String(PORTS.web)],
+      join(REPO, "apps/web"),
+      { PGN_DEV_API: `http://127.0.0.1:${PORTS.api}` },
+    );
     await until("the web app", async () => (await fetch(WEB)).ok, web);
     if (queue.exitCode !== null) throw new Error(`the engine queue stopped: see ${join(folder, "queue.log")}`);
     if (editGateway.exitCode !== null) throw new Error(`the edit gateway stopped: see ${join(folder, "gateway.log")}`);

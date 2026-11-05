@@ -7,6 +7,7 @@
  * Whoever lacks audit.view is told so, and nothing is asked of the API.
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { NoAccess as SharedNoAccess } from "../../app/NoAccess.tsx";
 import { useParams, useSearchParams } from "react-router";
 import { AUDIT_ACTION_NAMES, PUBLICATION_AUDIT_ACTIONS, reach, type AuditAction } from "@pageinator/contracts";
 import {
@@ -56,6 +57,9 @@ export const AUDIT_ACTION_KEYS = [
   "auditLog.action.ad_settings.set",
   "auditLog.action.engine_profile.retemplate",
   "auditLog.action.brand.set",
+  "auditLog.action.org.rename",
+  "auditLog.action.org.publication_add",
+  "auditLog.action.publication.settings_edit",
   "auditLog.action.print_profile.create",
   "auditLog.action.section.create",
   "auditLog.action.section.edit",
@@ -523,9 +527,5 @@ function FilterForm({
 
 function NoAccess() {
   const { t } = useI18n();
-  return (
-    <InlineMessage variant="info" heading={t("auditLog.noAccess.heading")} iconLabel={t("message.info")}>
-      {t("auditLog.noAccess.body")}
-    </InlineMessage>
-  );
+  return <SharedNoAccess heading={t("auditLog.noAccess.heading")} body={t("auditLog.noAccess.body")} />;
 }

@@ -1,8 +1,8 @@
 // The first Owner of an organisation (docs/product/10-l2-newsroom-plan.md §4.3 step 6), run on the server by
 // scripts/bootstrap-org.ts:
-//   1. the Owner's account, made from the server (sign-up over HTTP needs an invitation), with a random password
-//      nobody sees; Better Auth emails the verification link, and we email a password-reset link, so the Owner
-//      chooses their own password and confirms their address before they can sign in;
+//   1. the Owner's account, made from the server (sign-up over HTTP needs an invitation), with no password and its
+//      address unconfirmed; one email, a welcome with a link to choose a password (72 hours): choosing it through the
+//      emailed link confirms the address too (auth.ts onPasswordReset), so the Owner can sign in;
 //   2. the organisation, made by Better Auth as a system action (no session), with the Owner as its owner member;
 //   3. its settings, the Owner's directory row and the first publication, in one transaction under its wall, audited.
 // No one-time secret guards it: running it needs a shell on the server and the database settings, which already give
@@ -10,7 +10,9 @@
 import { randomBytes } from "node:crypto";
 import { recordAudit } from "../../db/audit.ts";
 import type { Database } from "../../db/pools.ts";
-import type { Auth } from "../identity/auth.ts";
+import { type Auth, WELCOMED } from "../identity/auth.ts";
+import { WELCOME_LINK_HOURS, welcomeEmail } from "../identity/emails.ts";
+import type { Mailer } from "../notifications/mailer.ts";
 
 export type Bootstrap = {
   owner: { name: string; email: string };
@@ -20,11 +22,38 @@ export type Bootstrap = {
 
 export class BootstrapError extends Error {}
 
-/** Where the Owner's confirmation link sends them once the address is confirmed. */
-export const CONFIRMED_PATH = "/verify?confirmed=1";
+/**
+ * The Owner's welcome: a link to choose their password, made as Better Auth's own reset link is (a "reset-password:"
+ * verification value, stored hashed, opened by /reset-password/:token), but living WELCOME_LINK_HOURS instead of the
+ * reset link's hour: Better Auth has one reset-token life for all, so the welcome makes its own token.
+ */
+async function sendWelcome(
+  auth: Auth,
+  mailer: Mailer,
+  owner: { id: string; name: string; email: string },
+  input: Bootstrap,
+) {
+  const context = await auth.$context;
+  const token = randomBytes(18).toString("base64url");
+  await context.internalAdapter.createVerificationValue({
+    identifier: `reset-password:${token}`,
+    value: owner.id,
+    expiresAt: new Date(Date.now() + WELCOME_LINK_HOURS * 3600_000),
+  });
+  const url = `${context.baseURL}/reset-password/${token}?callbackURL=${encodeURIComponent("/reset-password")}`;
+  const mail = welcomeEmail({
+    name: owner.name,
+    organization: input.organization.name,
+    url,
+    origin: new URL(context.baseURL).origin,
+    lang: input.publication.primaryLanguage === "mr" ? "mr" : "en",
+  });
+  mailer.send({ ...mail, to: owner.email });
+}
 
 export async function bootstrapOrg(
   auth: Auth,
+  mailer: Mailer,
   database: Database,
   input: Bootstrap,
   requestId = "bootstrap-org",
@@ -34,17 +63,12 @@ export async function bootstrapOrg(
   let owner = (await context.internalAdapter.findUserByEmail(email))?.user ?? null;
   if (!owner) {
     await auth.api.signUpEmail({
-      // the confirmation link lands on the web app's own page (apps/web VerifyEmailScreen: /verify?confirmed=1)
-      body: {
-        name: input.owner.name,
-        email,
-        password: randomBytes(32).toString("base64url"),
-        callbackURL: CONFIRMED_PATH,
-      },
+      // a server call with this callback sends no "confirm your address" email (auth.ts): the welcome is the only one
+      body: { name: input.owner.name, email, password: randomBytes(32).toString("base64url"), callbackURL: WELCOMED },
     });
     owner = (await context.internalAdapter.findUserByEmail(email))?.user ?? null;
     if (!owner) throw new BootstrapError("The owner's account was not made.");
-    await auth.api.requestPasswordReset({ body: { email, redirectTo: "/reset-password" } });
+    await sendWelcome(auth, mailer, owner, input);
   }
   const taken = await context.adapter.findOne({
     model: "organization",

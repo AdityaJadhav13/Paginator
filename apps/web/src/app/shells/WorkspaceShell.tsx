@@ -35,6 +35,7 @@ const SEGMENT_LABEL: Readonly<Record<string, PlainKey>> = {
   archive: "glossary.archive",
   brand: "nav.brand",
   "print-profiles": "nav.printProfiles",
+  "publication-settings": "nav.publicationSettings",
   content: "nav.content",
   generate: "glossary.generate",
   preflight: "glossary.preflight",

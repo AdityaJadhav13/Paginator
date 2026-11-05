@@ -56,6 +56,8 @@ export type IdentityStore = {
   countWrongPassword(key: string, limit: number, forMs: number): Promise<boolean>;
   /** Forgets the attempts of a key that is not locked. */
   clearAttempts(key: string): Promise<void>;
+  /** Marks the person's email confirmed; true when it was not confirmed before. */
+  confirmEmail(userId: string): Promise<boolean>;
   /** One step of a rate limit on identity."rateLimit", in one statement: true and counted while fewer than `max`
    * requests came within `windowMs` of the last one let through; otherwise false, with the seconds to wait. */
   consumeRateLimit(
@@ -89,6 +91,8 @@ export type IdentityStore = {
   pendingInvitations(orgId: string): Promise<Invitation[]>;
   /** The accepted invitations of this email, in every organisation. */
   acceptedInvitations(email: string): Promise<Invitation[]>;
+  /** The pending, unexpired invitations of this email, in every organisation, newest first. */
+  pendingInvitationsFor(email: string): Promise<Invitation[]>;
   /** Makes the person a member, unless they are one already; true when this call did (src/modules/people/grants.ts,
    * the repair of an accepted invitation whose membership was never made). */
   addMember(orgId: string, userId: string, role: string): Promise<boolean>;
@@ -193,6 +197,13 @@ export function identityStore(pool: Pool): IdentityStore {
         [key],
       );
     },
+    async confirmEmail(userId) {
+      const { rowCount } = await pool.query(
+        `update identity."user" set "emailVerified" = true, "updatedAt" = now() where id = $1 and not "emailVerified"`,
+        [userId],
+      );
+      return rowCount === 1;
+    },
     async consumeRateLimit(key, max, windowMs) {
       // Better Auth's own rule (src/api/rate-limiter): the window runs from the last request let through. A refused
       // request changes nothing, so no row comes back.
@@ -285,6 +296,14 @@ export function identityStore(pool: Pool): IdentityStore {
       const { rows } = await pool.query<Invitation>(
         `${INVITATION} where i."organizationId" = $1::uuid and i.status = 'pending' order by i."createdAt" desc, i.id`,
         [orgId],
+      );
+      return rows;
+    },
+    async pendingInvitationsFor(email) {
+      const { rows } = await pool.query<Invitation>(
+        `${INVITATION} where lower(i.email) = lower($1) and i.status = 'pending' and i."expiresAt" > now()
+         order by i."createdAt" desc, i.id`,
+        [email],
       );
       return rows;
     },

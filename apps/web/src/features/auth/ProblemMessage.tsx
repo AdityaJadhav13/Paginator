@@ -23,7 +23,15 @@ export function describeProblem(problem: ApiProblem, t: Translate): ProblemText 
   if (problem.kind === "network") return { heading: t("problem.network.heading"), body: t("problem.network.body") };
   const { code, status } = problem;
   if (code === "slow_down" || status === 429) {
-    return { heading: t("problem.slowDown.heading"), body: t("problem.slowDown.body") };
+    // the true wait, from the answer's Retry-After, when it gave one
+    const wait = problem.retryAfterSeconds;
+    const body =
+      wait === undefined
+        ? t("problem.slowDown.body")
+        : wait < 120
+          ? t("problem.slowDown.waitSeconds", { count: Math.max(wait, 2) })
+          : t("problem.slowDown.waitMinutes", { count: Math.ceil(wait / 60) });
+    return { heading: t("problem.slowDown.heading"), body };
   }
   if (code === "cookie_refused") return { heading: t("problem.cookies.heading"), body: t("problem.cookies.body") };
   if (code === "unexpected_answer") {

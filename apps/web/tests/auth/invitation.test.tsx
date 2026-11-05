@@ -43,6 +43,12 @@ describe("A pending invitation, signed out", () => {
     expect(screen.queryByText(pending.email)).not.toBeInTheDocument();
   });
 
+  it("fills in the invited address from the emailed link's fragment", async () => {
+    renderAuth(`/invite/${pending.id}#email=${encodeURIComponent(pending.email)}`, { preset: "signed-out" });
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Create an account" }));
+    expect(screen.getByLabelText(/^Email address/)).toHaveValue(pending.email);
+  });
+
   it("creates the account, and sends the person to confirm the address, coming back here", async () => {
     const environment = createMockApplicationEnvironment();
     const view = renderAuth(`/invite/${pending.id}`, { environment, preset: "signed-out" });
@@ -123,6 +129,16 @@ describe("A pending invitation, signed in", () => {
     const [first, second] = accept.mock.calls.map(([input]) => input.idempotencyKey);
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
     expect(second).toBe(first);
+  });
+
+  it("is offered with Join on a later sign-in when it was never accepted", async () => {
+    const environment = await signedInAsInvited();
+    renderAuth("/login", { environment });
+    expect(await screen.findByRole("heading", { level: 2, name: "Your invitations" })).toBeInTheDocument();
+    expect(screen.getByText("Ravi Kulkarni invited you to The Sahyadri Daily as Page designer.")).toBeInTheDocument();
+    expect(screen.queryByText(/not a member of any newsroom/)).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Join The Sahyadri Daily" }));
+    expect(await screen.findByRole("button", { name: "Open workspace" })).toBeInTheDocument();
   });
 
   it("refuses another person's account, and offers to sign out", async () => {

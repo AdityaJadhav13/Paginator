@@ -72,6 +72,23 @@ describe("request limits", () => {
   });
 });
 
+describe("the session check (get-session)", () => {
+  it("is never refused for page loads behind one address, while a made-up cookie still counts there", async () => {
+    const address = "203.0.113.10";
+    const session = (cookie: string) =>
+      it_.app.inject({ method: "GET", url: "/api/auth/get-session", headers: { cookie }, remoteAddress: address });
+    // far more than the signed-out budget (PER_ADDRESS); the per-address ceiling (100 here) still holds
+    for (let i = 0; i < 30; i += 1) expect((await session(i % 2 ? one.cookie : two.cookie)).statusCode).toBe(200);
+    // and Better Auth keeps no count of it at all
+    const counted = await su.query(`select key from identity."rateLimit" where key like $1`, [`${address}|%`]);
+    expect(counted.rows).toEqual([]);
+    const fake = "__Secure-pgn.session_token=made-up.cookie";
+    const made = [];
+    for (let i = 0; i < PER_ADDRESS + 1; i += 1) made.push((await session(fake)).statusCode);
+    expect(made.at(-1)).toBe(429);
+  });
+});
+
 describe("a made-up session cookie", () => {
   it("does not lift the signed-out limit for requests refused before the session is read", async () => {
     const address = "203.0.113.9";

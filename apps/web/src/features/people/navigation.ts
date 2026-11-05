@@ -26,7 +26,7 @@ const ORG_ENTRIES: readonly Rule[] = [
   { label: "nav.home", permission: "signed_in", built: true, to: (o) => paths.orgHome(o) },
   { label: "glossary.team", permission: "members.view", built: true, to: (o) => paths.orgTeam(o) },
   { label: "nav.audit", permission: "audit.view", built: true, to: (o) => paths.orgAudit(o) },
-  { label: "nav.orgSettings", permission: "org.settings", built: false, to: (o) => paths.orgSettings(o) },
+  { label: "nav.orgSettings", permission: "org.settings", built: true, to: (o) => paths.orgSettings(o) },
   { label: "nav.billing", permission: "billing.manage", built: false, to: (o) => paths.orgBilling(o) },
   { label: "nav.storage", permission: "org.settings", built: false, to: (o) => paths.orgStorage(o) },
 ];
@@ -44,6 +44,7 @@ const PUBLICATION_ENTRIES: readonly Rule[] = [
   { label: "glossary.archive", permission: "archive.view", built: true, to: (o, p) => paths.pubArchive(o, p) },
   { label: "nav.brand", permission: "brand.edit", built: true, to: (o, p) => paths.pubBrand(o, p) },
   { label: "nav.printProfiles", permission: "print_profiles.view", built: true, to: (o, p) => paths.pubPrintProfiles(o, p) },
+  { label: "nav.publicationSettings", permission: "settings.view", built: true, to: (o, p) => paths.pubSettings(o, p) },
   { label: "glossary.team", permission: "members.view", built: true, to: (o) => paths.orgTeam(o) },
   // 07 §12: the Chief Editor's "Audit log" sits under the publication; the log is the organisation's, filtered by the API
   { label: "nav.audit", permission: "audit.view", built: true, to: (o) => paths.orgAudit(o) },

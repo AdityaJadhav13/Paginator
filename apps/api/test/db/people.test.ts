@@ -77,7 +77,7 @@ async function organisation(twoStep = false): Promise<Org> {
   const owner = someone("owner");
   await account(owner, "Owner (fictional)");
   const n = ++counter;
-  const made = await bootstrapOrg(it_.server, it_.database, {
+  const made = await bootstrapOrg(it_.server, it_.mailer, it_.database, {
     owner: { name: "Owner (fictional)", email: owner },
     organization: { name: `Kalpaniknagar Media ${n} (fictional)`, slug: `kalpaniknagar-${n}-${Date.now()}` },
     publication: {
@@ -179,7 +179,7 @@ async function enableTwoStep(cookie: string) {
 describe("the first Owner (scripts/bootstrap-org.ts)", () => {
   it("makes the account, the organisation, its settings, the publication and the Owner, audited", async () => {
     const email = someone("owner");
-    const made = await bootstrapOrg(it_.server, it_.database, {
+    const made = await bootstrapOrg(it_.server, it_.mailer, it_.database, {
       owner: { name: "Owner (fictional)", email },
       organization: { name: "Bootstrapped Media (fictional)", slug: `bootstrapped-${Date.now()}` },
       publication: {
@@ -192,26 +192,32 @@ describe("the first Owner (scripts/bootstrap-org.ts)", () => {
     });
     expect(await memberships(made.ownerId, made.orgId)).toEqual([{ role: "owner" }]);
     const mails = it_.sent.filter((m) => m.to === email).map((m) => m.subject);
+    // one email: the welcome (no "confirm your address" beside it)
     expect(mails).toEqual([
-      expect.stringContaining("Confirm your email address"),
-      expect.stringContaining("Reset your password"),
+      "Pageinator: Welcome, choose your password · Pageinator: स्वागत आहे, तुमचा पासवर्ड निवडा", // the paper's language first
     ]);
-    // the Owner chooses a password through the reset link, confirms the address, and signs in
+    // a welcome, not a reset nobody asked for, and its link lasts 72 hours (a reset link keeps its hour)
+    const welcome = it_.sent.filter((m) => m.to === email).at(-1)?.text ?? "";
+    expect(welcome).toContain("Bootstrapped Media (fictional)");
+    expect(welcome).not.toMatch(/did not ask|मागितले नसेल/);
+    const { rows: links } = await su.query(
+      `select extract(epoch from "expiresAt" - now()) / 3600 as hours from identity.verification where value = $1`,
+      [made.ownerId],
+    );
+    expect(links.map((l) => Math.round(Number(l.hours)))).toContain(72);
+    // no sign-in before a password is chosen through the welcome link
+    expect((await signIn(email)).statusCode).not.toBe(200);
+    // the Owner chooses a password through the welcome link, which confirms the address too, and signs in
     const opened = await it_.app.inject({ url: lastLink(it_.sent, email), remoteAddress: address() });
     const token = new URL(String(opened.headers.location), ORIGIN).searchParams.get("token") ?? "";
     expect(new URL(String(opened.headers.location), ORIGIN).pathname).toBe("/reset-password");
     const reset = await call("POST", "/api/auth/reset-password", "", { newPassword: PASSWORD, token });
     expect(reset.statusCode).toBe(200);
-    expect((await signIn(email)).statusCode).toBe(403); // not confirmed yet
-    const verifyLink = it_.sent
-      .find((m) => m.to === email && m.subject.includes("Confirm"))
-      ?.text.match(/https:\S+/)?.[0];
-    // the link carries the web app's confirmation page, and lands there (F8)
-    expect(new URL(verifyLink ?? "", ORIGIN).searchParams.get("callbackURL")).toBe("/verify?confirmed=1");
-    const confirmed = await it_.app.inject({
-      url: new URL(verifyLink ?? "", ORIGIN).pathname + new URL(verifyLink ?? "", ORIGIN).search,
-    });
-    expect([confirmed.statusCode, confirmed.headers.location]).toEqual([302, "/verify?confirmed=1"]);
+    const { rows: events } = await su.query<{ kind: string }>(
+      "select kind from identity.auth_event where user_id = $1",
+      [made.ownerId],
+    );
+    expect(events.map((e) => e.kind)).toEqual(expect.arrayContaining(["password_reset", "email_verified"]));
     const cookie = await session(email);
     const me = await call("GET", "/api/v1/me", cookie);
     expect(me.json().memberships).toEqual([
@@ -232,7 +238,7 @@ describe("the first Owner (scripts/bootstrap-org.ts)", () => {
       org.orgId,
     ]);
     await expect(
-      bootstrapOrg(it_.server, it_.database, {
+      bootstrapOrg(it_.server, it_.mailer, it_.database, {
         owner: { name: "Owner (fictional)", email: org.owner },
         organization: { name: "Again (fictional)", slug: rows[0]?.slug ?? "" },
         publication: { name: "X", slug: "x", languages: ["en"], primaryLanguage: "en", digitStyle: "latin" },
@@ -364,7 +370,8 @@ describe("invitations", () => {
     const invitation = created.json();
     expect(invitation).toMatchObject({ email, orgRole: "member", state: "pending" });
     const mail = it_.sent.filter((m) => m.to === email).at(-1);
-    expect(mail?.text).toContain(`${ORIGIN}/invite/${invitation.id}`);
+    // the address in the fragment (never sent to a server) fills in the sign-up form
+    expect(mail?.text).toContain(`${ORIGIN}/invite/${invitation.id}#email=${encodeURIComponent(email)}`);
     expect(mail?.text).toContain("as Member, Reporter, Photo Editor");
     const { rows } = await su.query(
       "select roles, grants, applied_at from app.invitation_grant where invitation_id = $1",
@@ -389,7 +396,7 @@ describe("invitations", () => {
     expect((await invite(org, someone(), twice)).statusCode).toBe(400);
   });
 
-  it("shows anyone with the link only the organisation, inviter, roles, expiry and state; 20 lookups an hour", async () => {
+  it("shows anyone with the link only the organisation, inviter, roles, expiry and state; 300 lookups an hour", async () => {
     const org = await organisation();
     const created = (
       await invite(org, someone("invitee"), [{ publicationId: org.pubId, roles: ["editor"], grants: [] }])
@@ -407,10 +414,46 @@ describe("invitations", () => {
     expect(shown.body).not.toContain("@example.test");
     expect((await look("01900000-0000-7000-8000-00000000dead")).statusCode).toBe(404);
     expect((await look("not-a-uuid")).statusCode).toBe(404);
-    for (let i = 4; i <= 20; i += 1) await look(created.id);
-    const limited = await look(created.id);
-    expect(limited.statusCode).toBe(429);
-    expect(limited.json().error.code).toBe("slow_down");
+    // a newsroom of ~50 behind one address opens its links on day one (on an API whose signed-out budget allows it)
+    const roomy = await identityApp(db, { PGN_RATE_LIMIT_PER_MINUTE: "100000" });
+    try {
+      const lookThere = () => roomy.app.inject({ url: `/api/v1/invitations/${created.id}`, remoteAddress: from });
+      for (let i = 1; i <= 300; i += 1) expect((await lookThere()).statusCode).toBe(200);
+      const limited = await lookThere();
+      expect(limited.statusCode).toBe(429);
+      expect(limited.json().error.code).toBe("slow_down");
+      expect(Number(limited.headers["retry-after"])).toBeGreaterThan(3500); // the true wait: the hour's window
+    } finally {
+      await roomy.close();
+    }
+  });
+
+  it("are listed to their signed-in, verified invitee until accepted, so a closed tab loses nothing", async () => {
+    const org = await organisation();
+    const person = await invitee(org, [{ publicationId: org.pubId, roles: ["reporter"], grants: [] }]);
+    await invite(org, someone("other"), []); // someone else's: never listed
+    const listed = await call("GET", "/api/v1/me/invitations", person.cookie);
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().items).toEqual([
+      {
+        id: person.id,
+        organization: { name: expect.stringContaining("Kalpaniknagar Media") },
+        inviter: { name: "Owner (fictional)" },
+        roles: ["member", "reporter"],
+        expiresAt: expect.any(String),
+        state: "pending",
+      },
+    ]);
+    expect(listed.body).not.toContain("@example.test");
+    expect((await call("GET", "/api/v1/me/invitations", "")).statusCode).toBe(401);
+    expect((await call("POST", `/api/v1/invitations/${person.id}/accept`, person.cookie)).statusCode).toBe(200);
+    expect((await call("GET", "/api/v1/me/invitations", person.cookie)).json().items).toEqual([]);
+    // an expired one is not offered
+    const later = await invitee(org, []);
+    await su.query(`update identity.invitation set "expiresAt" = now() - interval '1 minute' where id = $1`, [
+      later.id,
+    ]);
+    expect((await call("GET", "/api/v1/me/invitations", later.cookie)).json().items).toEqual([]);
   });
 
   it("open sign-up only with the id of a pending invitation for exactly that email", async () => {
@@ -527,6 +570,39 @@ describe("invitations", () => {
 });
 
 describe("repairs on /me", () => {
+  it("log nothing after an accept that left nothing to repair, and at most one repair for a /me racing it", async () => {
+    const actions = async (orgId: string) =>
+      (
+        await su.query(
+          "select action from app.audit_event where org_id = $1 and action like 'invitation.%' order by at",
+          [orgId],
+        )
+      ).rows.map((r) => r.action);
+    const org = await organisation();
+    await member(org, [{ publicationId: org.pubId, roles: ["editor"], grants: [] }]);
+    const later = await member(org, [{ publicationId: org.pubId, roles: ["viewer"], grants: [] }]);
+    expect((await call("GET", "/api/v1/me", later.cookie)).statusCode).toBe(200);
+    expect((await call("GET", "/api/v1/me", later.cookie)).statusCode).toBe(200);
+    expect(await actions(org.orgId)).toEqual([
+      "invitation.create",
+      "invitation.accept",
+      "invitation.create",
+      "invitation.accept",
+    ]);
+
+    const raced = await organisation();
+    const person = await invitee(raced, [{ publicationId: raced.pubId, roles: ["editor"], grants: [] }]);
+    const [accepted] = await Promise.all([
+      call("POST", `/api/v1/invitations/${person.id}/accept`, person.cookie),
+      ...[1, 2, 3].map(() => call("GET", "/api/v1/me", person.cookie)),
+    ]);
+    expect(accepted.statusCode).toBe(200);
+    await call("GET", "/api/v1/me", person.cookie);
+    const all = await actions(raced.orgId);
+    expect(all.filter((a) => a !== "invitation.grants_repaired")).toEqual(["invitation.create", "invitation.accept"]);
+    expect(all.filter((a) => a === "invitation.grants_repaired").length).toBeLessThanOrEqual(1);
+  });
+
   it("applies grants an accept left pending", async () => {
     const org = await organisation();
     const person = await member(org, [{ publicationId: org.pubId, roles: ["editor"], grants: ["page_approve"] }]);
@@ -937,7 +1013,7 @@ describe("resending an expired invitation (review F3)", () => {
       state: "pending",
       publications: [{ publicationId: org.pubId, roles: ["editor"], grants: ["page_approve"] }],
     });
-    expect(lastLink(it_.sent, email)).toBe(`/invite/${fresh.id}`);
+    expect(lastLink(it_.sent, email)).toBe(`/invite/${fresh.id}#email=${encodeURIComponent(email)}`);
     const old = await su.query("select status from identity.invitation where id = $1", [created.id]);
     expect(old.rows).toEqual([{ status: "canceled" }]);
     const audit = await su.query(

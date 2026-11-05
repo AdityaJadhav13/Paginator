@@ -30,8 +30,10 @@ const labels = (entries: ReturnType<typeof navigation>) => entries.map((entry) =
 describe("Navigation from permissions", () => {
   it("gives the deployed app only built screens: Home for everyone, Team for whoever may see it", () => {
     const managers = ["nav.home /org/o", "glossary.team /org/o/team", "nav.audit /org/o/audit"];
-    expect(labels(navigation(org("owner", []), undefined, false))).toEqual(managers);
-    expect(labels(navigation(org("admin", []), undefined, false))).toEqual(managers);
+    // Organization settings (org.settings) are Owner's and Admin's
+    const owners = [...managers, "nav.orgSettings /org/o/settings"];
+    expect(labels(navigation(org("owner", []), undefined, false))).toEqual(owners);
+    expect(labels(navigation(org("admin", []), undefined, false))).toEqual(owners);
     expect(labels(navigation(org("member", ["chief_editor"]), undefined, false))).toEqual(managers);
     for (const role of ["editor", "sub_editor", "reporter", "page_designer", "photo_editor", "advertising", "prepress", "viewer"] as const) {
       expect(labels(navigation(org("member", [role]), undefined, false)), role).toEqual(["nav.home /org/o"]);
@@ -94,6 +96,17 @@ describe("Navigation from permissions", () => {
     }
   });
 
+  it("offers publication settings (settings.view) to the Chief Editor, Editor and Prepress, Owner and Admin", () => {
+    const entry = "nav.publicationSettings /org/o/pub/p/publication-settings";
+    for (const role of ["chief_editor", "editor", "prepress"] as const) {
+      expect(labels(navigation(org("member", [role]), "p", false)), role).toContain(entry);
+    }
+    expect(labels(navigation(org("owner", []), "p", false))).toContain(entry);
+    for (const role of ["sub_editor", "reporter", "page_designer", "photo_editor", "advertising", "viewer"] as const) {
+      expect(labels(navigation(org("member", [role]), "p", false)), role).not.toContain(entry);
+    }
+  });
+
   it("offers only Home while the organisation's two-step rule is unmet", () => {
     const blocked = org("owner", [], { required: true, satisfied: false });
     expect(labels(navigation(blocked, undefined, true))).toEqual(["nav.home /org/o"]);
@@ -102,6 +115,7 @@ describe("Navigation from permissions", () => {
       "nav.home /org/o",
       "glossary.team /org/o/team",
       "nav.audit /org/o/audit",
+      "nav.orgSettings /org/o/settings",
     ]);
   });
 });
@@ -123,7 +137,7 @@ describe("The organisation's home", () => {
       ["Audit log", "/org/org-demo-sahyadri/audit"],
       ["Account security", "/account/security"],
     ]);
-    expect(screen.getByText("The stories desk is open. The other newsroom screens are still being built.")).toBeInTheDocument();
+    expect(screen.getByText("Open a publication for its stories, editions and other screens: the menu lists what your roles may use.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Stories of Pune Daily Ledger" })).toHaveAttribute(
       "href",
       "/org/org-demo-sahyadri/pub/pub-demo-pune-daily/stories",

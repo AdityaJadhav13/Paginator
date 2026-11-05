@@ -524,6 +524,14 @@
   border-block-end: var(--pg-border-width) solid var(--pg-app-border);
 }
 
+/* a phone: the tabs wrap onto a second line, so none is hidden past the edge (the edition's Release tab was) */
+@media (max-width: 767px) {
+  .pg-tabs__list {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+}
+
 .pg-tabs__tab {
   position: relative;
   min-block-size: var(--pg-app-control-md);

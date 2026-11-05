@@ -12,6 +12,11 @@ export interface InvitationDto {
   readonly state: "pending" | "accepted" | "expired" | "revoked";
 }
 
+/** One of the signed-in person's own pending invitations (`GET /api/v1/me/invitations`), with its id to accept it. */
+export interface MyInvitationDto extends InvitationDto {
+  readonly id: string;
+}
+
 export interface SignUpInput {
   readonly invitationId: string;
   readonly name: string;
@@ -37,6 +42,8 @@ export interface AccountService {
     readonly returnPath: string;
   }): Promise<ServiceResult<void, ApiProblem>>;
   getInvitation(input: { readonly invitationId: string }): Promise<ServiceResult<InvitationDto, ApiProblem>>;
+  /** The signed-in person's pending, unexpired invitations to their confirmed address, to accept on any later visit. */
+  listMyInvitations(): Promise<ServiceResult<readonly MyInvitationDto[], ApiProblem>>;
   /**
    * Creates the account an invitation allows, then the API emails a confirmation link that brings the browser back to
    * `returnPath`. The answer is the same whether or not the address could sign up.

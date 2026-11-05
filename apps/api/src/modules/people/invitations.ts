@@ -77,6 +77,30 @@ async function view(database: Database, tenant: Tenant, invitation: StoredInvita
   };
 }
 
+const MyInvitation = PublicInvitation.extend({ id: z.string() });
+
+const rolesOf = (orgRole: string, grants: readonly PublicationGrant[]) => [
+  orgRole,
+  ...new Set(grants.flatMap((grant) => grant.roles)),
+];
+
+/** What an invitation's link shows: never its email address. */
+async function publicView(
+  database: Database,
+  invitation: StoredInvitation,
+  requestId: string,
+): Promise<PublicInvitation> {
+  const tenant = { orgId: invitation.orgId, userId: NOBODY, pubIds: [], requestId };
+  const grants = await grantsOf(database, tenant, invitation.id);
+  return {
+    organization: { name: invitation.orgName },
+    inviter: { name: invitation.inviterName },
+    roles: rolesOf(invitation.role === "admin" ? "admin" : "member", grants) as PublicInvitation["roles"],
+    expiresAt: invitation.expiresAt.toISOString(),
+    state: stateOf(invitation),
+  };
+}
+
 /** An invitation of this organisation, or 404. */
 async function ofOrg(database: Database, orgId: string, id: string): Promise<StoredInvitation> {
   const invitation = UUID.test(id) ? await database.identity.invitation(id) : null;
@@ -103,7 +127,9 @@ export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async 
       inviter,
       organization: invitation.orgName,
       roles,
-      url: `${origin}/invite/${invitation.id}`,
+      // the address rides in the fragment, which no server sees, so the sign-up form can fill it in; the public
+      // lookup still never names it
+      url: `${origin}/invite/${invitation.id}#email=${encodeURIComponent(invitation.email)}`,
       origin,
     });
     try {
@@ -113,11 +139,6 @@ export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async 
       app.log.warn({ kind: mail.kind }, error.message);
     }
   }
-  const rolesOf = (orgRole: string, grants: readonly PublicationGrant[]) => [
-    orgRole,
-    ...new Set(grants.flatMap((grant) => grant.roles)),
-  ];
-
   app.post(
     "/api/v1/orgs/:o/invitations",
     {
@@ -260,8 +281,10 @@ export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async 
     },
   );
 
-  // what anyone with the link sees, 20 times an hour per address (on top of the API's own per-address limit)
-  const lookups = app.createRateLimit({ max: 20, timeWindow: 3600_000, keyGenerator: (r) => `invitation:${r.ip}` });
+  // what anyone with the link sees, 300 times an hour per address (on top of the API's own per-address limit): a
+  // newsroom of ~50 behind one NAT, each opening their link a few times on day one; the id is a random UUID, so this
+  // limit only slows guessing, it is not what stops it
+  const lookups = app.createRateLimit({ max: 300, timeWindow: 3600_000, keyGenerator: (r) => `invitation:${r.ip}` });
   app.get(
     "/api/v1/invitations/:id",
     {
@@ -277,14 +300,29 @@ export const invitationRoutes: FastifyPluginAsyncZod<InvitationOptions> = async 
     async (request) => {
       const invitation = UUID.test(request.params.id) ? await database.identity.invitation(request.params.id) : null;
       if (!invitation) throw new ApiError("not_found");
-      const tenant = { orgId: invitation.orgId, userId: NOBODY, pubIds: [], requestId: request.id };
-      const grants = await grantsOf(database, tenant, invitation.id);
+      return publicView(database, invitation, request.id);
+    },
+  );
+
+  // the signed-in person's own pending invitations (to their verified address), so one never accepted can still be
+  // accepted on a later sign-in (the accept itself is the POST below: the person's own click)
+  app.get(
+    "/api/v1/me/invitations",
+    {
+      config: { access: "signed_in" },
+      schema: { response: { 200: z.strictObject({ items: z.array(MyInvitation) }) } },
+    },
+    async (request) => {
+      const actor = actorOf(request);
+      if (!actor.emailVerified) return { items: [] };
+      const pending = await database.identity.pendingInvitationsFor(actor.email);
       return {
-        organization: { name: invitation.orgName },
-        inviter: { name: invitation.inviterName },
-        roles: rolesOf(invitation.role === "admin" ? "admin" : "member", grants) as PublicInvitation["roles"],
-        expiresAt: invitation.expiresAt.toISOString(),
-        state: stateOf(invitation),
+        items: await Promise.all(
+          pending.map(async (invitation) => ({
+            id: invitation.id,
+            ...(await publicView(database, invitation, request.id)),
+          })),
+        ),
       };
     },
   );
