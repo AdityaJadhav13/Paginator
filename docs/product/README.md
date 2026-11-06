@@ -23,6 +23,7 @@
 - [12-l2.1-evidence.md](12-l2.1-evidence.md): the L2.1 verification (PR 26, 2026-11-02): what was run, with what result, and what is not yet verified
 - [13-news-finder.md](13-news-finder.md): the news finder, the sidebar's Sources (L2.7, owner request 2026-11-04)
 - [14-evidence-parity-and-gates.md](14-evidence-parity-and-gates.md): platform and colour parity, G1's L3 measured, the press test page (2026-11-05): what was measured and what the owner must still sign
+- [15-launch-checklist.md](15-launch-checklist.md): what is left after the internal-use build (2026-11-06): the owner's inputs, the deployment, before other papers, later
 
 ## 0. Context
 
