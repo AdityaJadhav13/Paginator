@@ -8,8 +8,9 @@
  *     (recorded by settings.edit);
  *   - the release: the candidate's files and "Approve release" (release.approve; a correction also release.correct),
  *     posting exactly the files shown;
- *   - the releases, newest first: their files by a 5-minute link (export.press), "Mark as sent", the press's
- *     confirmation, and the archive copy's check (archive.view). A release stays listed after a correction.
+ *   - the releases, newest first: their files by a 5-minute link or all in one ZIP with SHA256SUMS (export.press),
+ *     "Mark as sent" (an Idempotency-Key kept while its answer is unknown), the press's confirmation, and the archive
+ *     copy's check (archive.view). A release stays listed after a correction.
  * Nothing here says "press-ready" or "PDF/X-valid" (CONTRACT.md §5). Each control shows only for those the API allows.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,6 +21,7 @@ import {
   Cluster,
   Dialog,
   Field,
+  Icon,
   InlineMessage,
   Panel,
   ProgressIndicator,
@@ -97,11 +99,29 @@ export function useEditionRelease({ orgId, pubId, editionId }: Where): {
 }
 
 const isStale = (problem: ApiProblem) => problem.kind === "answer" && problem.code === "approval_stale";
-/** No answer came, or the server failed: the release may have been made, so a retry keeps the key. */
+/** No answer came, the server failed, or the first try is still running: it may have been recorded, so a retry keeps
+ * the key. */
 const unknownOutcome = (problem: ApiProblem) =>
-  problem.kind !== "answer" || (problem.status >= 500 && problem.code !== "archive_failed");
+  problem.kind !== "answer" ||
+  problem.code === "request_in_progress" ||
+  (problem.status >= 500 && problem.code !== "archive_failed");
 /** Exact byte counts: Marathi groups digits the Indian way (Latin digits, as the app's dates); English in thousands. */
 const bytes = (n: number, language: string) => new Intl.NumberFormat(language === "mr" ? "en-IN" : "en").format(n);
+
+/** Saves a file the browser holds, as a download (as EditionsScreen saves the Desk's story bundle). */
+function saveFile(file: Blob, filename: string): void {
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // some browsers read the URL after click() returns; 40 s is FileSaver.js's wait
+  setTimeout(() => URL.revokeObjectURL(url), 40_000);
+}
+/** What `getting` holds while the whole release's ZIP comes (a released file's name never is this). */
+const ALL = "*";
 
 // ------------------------------------------------------------------------------------------------ a page's approval
 
@@ -294,11 +314,10 @@ function Preflight({
                   ))}
                 {item.printsOld && (
                   <p className="pg-layout__note">
-                    {t(
-                      item.check === "folio"
-                        ? "editionRelease.check.printsOldFolio"
-                        : "editionRelease.check.printsOldArtwork",
-                    )}
+                    {item.check === "folio"
+                      ? t("editionRelease.check.printsOldFolio")
+                      : // the back page's ads are drawn again by Update text, as page 1's folio is
+                        `${t("editionRelease.check.printsOldArtwork")} ${t("editionRelease.check.printsOldArtworkSave")}`}
                   </p>
                 )}
                 {/* a folio fixed on the edition needs no page; one page 1 prints from before does */}
@@ -864,6 +883,12 @@ export function ReleaseItem({
   const [problem, setProblem] = useState<ApiProblem | null>(null);
   const [check, setCheck] = useState<ArchiveCheckDto | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const key = useRef<string | null>(null);
+  const sentNote = note.trim();
+  // a retry keeps its key only for the same note: another note is a new request
+  useEffect(() => {
+    key.current = null;
+  }, [sentNote]);
   const at = { orgId: where.orgId, pubId: where.pubId, releaseId: item.id };
   const title =
     item.kind === "correction"
@@ -878,11 +903,26 @@ export function ReleaseItem({
     if (!link.ok) return setProblem(link.error);
     follow(link.value.url, name);
   };
+  const downloadAll = async () => {
+    setGetting(ALL);
+    setProblem(null);
+    const zip = await release.downloadAll(at);
+    setGetting(null);
+    if (!zip.ok) return setProblem(zip.error);
+    saveFile(zip.value.file, zip.value.filename);
+  };
   const sent = async () => {
     setBusy(true);
     setProblem(null);
-    const result = await release.markSent({ ...at, ...(note.trim() ? { note: note.trim() } : {}) });
+    key.current ??= randomUuid();
+    const result = await release.markSent({
+      ...at,
+      ...(sentNote ? { note: sentNote } : {}),
+      idempotencyKey: key.current,
+    });
     setBusy(false);
+    // no answer, or the server failed: it may have been recorded, so the next click is a retry with the same key
+    if (result.ok || !unknownOutcome(result.error)) key.current = null;
     if (!result.ok) return setProblem(result.error);
     setNote("");
     onChanged();
@@ -958,6 +998,19 @@ export function ReleaseItem({
             ))}
           </tbody>
         </Table>
+        {access.press && (
+          <div>
+            <Button
+              variant="secondary"
+              disabled={getting !== null}
+              aria-busy={getting === ALL}
+              onClick={() => void downloadAll()}
+            >
+              <Icon name="download" size={16} />
+              {t("editionRelease.item.downloadAll")}
+            </Button>
+          </div>
+        )}
         <div aria-live="polite">
           {getting && <p className="pg-layout__note">{t("editionLayout.download.getting")}</p>}
         </div>

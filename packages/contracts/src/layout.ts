@@ -329,7 +329,15 @@ export const RunFinished = z.strictObject({
   pages: z
     .array(
       z.union([
-        z.strictObject({ ...PageFiles, state: z.literal("done"), check: PageCheck }),
+        z.strictObject({
+          ...PageFiles,
+          state: z.literal("done"),
+          check: PageCheck,
+          /** what the page prints (runs/<run>/printed.json's page: deskprinted's record), kept as run_page.printed so the
+           * API can tell when the edition no longer holds it; absent from an older worker (the page then reads as
+           * made without a record: it needs saving) */
+          printed: z.record(z.string(), z.unknown()).nullable().optional(),
+        }),
         z.strictObject({
           page: z.number().int().min(1).max(16),
           role: PageRole,
@@ -340,6 +348,9 @@ export const RunFinished = z.strictObject({
     )
     .max(16),
   not_placed: z.array(z.strictObject({ article: DeskArticleKey, reason: DeskText })).max(400),
+  /** the SHA-256 of each ad raster the run's pages print (its own copies, made when the engine started; {} unless
+   * done): kept as layout_run.ad_rasters. Absent from an older worker: the request's record stays */
+  ads: z.record(DeskSlot, Sha256).optional(),
   edition_pdf: StoredFile.nullable(),
   press_zip: StoredFile.nullable(),
   /** the independent checker's SHA-256 (experiments/phase0/pdfx1/check_pdfx1a_independent.py) */
@@ -477,6 +488,11 @@ export const LayoutPage = z.strictObject({
   check: z.strictObject({ passed: z.boolean(), fails: Count.nullable(), warnings: Count.nullable() }).nullable(),
   warnings: z.array(DeskText),
   message: DeskText.nullable(),
+  /** the page editor's save state (editor.ts pageState): changed and not saved; needs saving (the editor marked it, or
+   * it prints older text than the edition holds), and why: the editor's reason first, then each older text */
+  editedUnsaved: z.boolean(),
+  needsSave: z.boolean(),
+  needsSaveReasons: z.array(DeskText).max(51),
 });
 export type LayoutPage = z.infer<typeof LayoutPage>;
 

@@ -8,8 +8,9 @@
  *   - Lay out: start a run (layout.generate, an Idempotency-Key kept while its answer is unknown), its progress page by
  *     page and its time, cancel it; the last run's outcome in the Desk's words.
  *   - Pages: every page of the newest done run, its preview, its independent PDF/X-1a check, its stories and warnings,
- *     the stories not placed with the reason, the downloads each person may have (a 5-minute link each), and each
- *     page's approval (Approve / Unlock, from the release view).
+ *     the stories not placed with the reason, the downloads each person may have (a 5-minute link each), each page's
+ *     save state from the page editor ("Changed, not saved", "Needs saving" and why), and each page's approval
+ *     (Approve / Unlock, from the release view).
  *   - Release: features/release/ReleaseTab.tsx.
  * A live `layout` update of this edition, a story of the publication or a `resync` fetches it again; while a run is
  * active it is also fetched every 3 s, in case a live update is missed (as the Word import does).
@@ -980,6 +981,23 @@ function PagesTab({
                   <p>
                     {t("editionLayout.page.failed")} {page.message && <DeskWords text={page.message} />}
                   </p>
+                )}
+                {/* the page editor's save state, as the Desk's page card says it: "Needs saving" and why first */}
+                {page.state === "done" && (page.editedUnsaved || page.needsSave) && (
+                  <div>
+                    <Badge tone="warning" icon="triangle-alert">
+                      {t(page.needsSave ? "pageEditor.state.needsSave" : "pageEditor.state.changed")}
+                    </Badge>
+                    {page.needsSave && page.needsSaveReasons.length > 0 && (
+                      <ul className="pg-layout__list">
+                        {page.needsSaveReasons.map((reason, index) => (
+                          <li key={index}>
+                            <DeskWords text={reason} />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 )}
                 {page.state === "done" && approvals.has(page.page) && (
                   <PageApproval where={where} page={approvals.get(page.page)!} access={access} onChanged={onApproval} />

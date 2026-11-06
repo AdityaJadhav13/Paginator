@@ -5,7 +5,7 @@ import type { EditPageRow, LockRow } from "../../db/editor.ts";
 import type { DeskTextValue } from "../../db/layout.ts";
 
 /** A message of the Desk's messages.json, its {params} filled in. */
-const desk = (code: string, template: string, params: Record<string, number> | null = null): DeskTextValue => ({
+export const desk = (code: string, template: string, params: Record<string, number> | null = null): DeskTextValue => ({
   text: template.replace(/\{(\w+)\}/g, (_, name: string) => String(params?.[name] ?? "")),
   code,
   params,
@@ -17,12 +17,22 @@ export const MESSAGES = {
   "m.save.taking":
     "Page {page} is taking a story from this page: when page {page} has been saved, open this page, fill the space and save it.",
   "m.save.movedFrom": "A story moved from this page to page {page}: open it, fill the space and save it.",
+  "m.save.notPlacedEdited":
+    "Taken off the pages in the editor, or moved to a page not saved yet: bring it back onto a page, or save the page it moved to.",
+  "m.save.deletedAfter": "Deleted from the edition after the layout.",
 } as const;
 
 export const movedHere = (page: number) => desk("m.save.movedHere", MESSAGES["m.save.movedHere"], { page });
 export const UNFINISHED = desk("m.save.unfinished", MESSAGES["m.save.unfinished"]);
 export const taking = (page: number) => desk("m.save.taking", MESSAGES["m.save.taking"], { page });
 export const movedFrom = (page: number) => desk("m.save.movedFrom", MESSAGES["m.save.movedFrom"], { page });
+/** What a save writes (db/editor.ts afterSave): editing.py's words for a page a story left and the run's articles
+ * left on no page. */
+export const SAVE_WORDS = {
+  movedFrom,
+  notPlacedEdited: desk("m.save.notPlacedEdited", MESSAGES["m.save.notPlacedEdited"]),
+  deletedAfter: desk("m.save.deletedAfter", MESSAGES["m.save.deletedAfter"]),
+};
 
 const PLACEMENT = new Set(["overlap", "outside"]);
 

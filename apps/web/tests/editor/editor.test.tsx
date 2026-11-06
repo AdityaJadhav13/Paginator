@@ -335,6 +335,24 @@ describe("one person at a time", () => {
     lock: { ...page.lock, ...lock },
   });
 
+  it("a page changed here that another page's save took a story from says Needs saving and why, as the Desk", async () => {
+    const environment = createMockApplicationEnvironment();
+    const real = environment.editor.open.bind(environment.editor);
+    const why = { text: "A story moved from this page to page 3: open it, fill the space and save it.", code: null, params: null };
+    vi.spyOn(environment.editor, "open").mockImplementation(async (input) => {
+      const r = await real(input);
+      if (!r.ok) return r;
+      const older = { text: "An article on this page was changed since the page's PDF was made.", code: null, params: null };
+      const pageState = { ...r.value.pageState, editedUnsaved: true, needsSave: true, needsSaveReason: why, stale: [older] };
+      return { ok: true, value: { ...r.value, pageState } };
+    });
+    renderAuth(EDIT(), { preset: "sahyadri-editor", environment });
+    expect(await screen.findByText("Needs saving")).toBeInTheDocument();
+    expect(screen.getByText(why.text)).toBeInTheDocument();
+    expect(screen.getByText("An article on this page was changed since the page's PDF was made.")).toBeInTheDocument();
+    expect(screen.queryByText("Changed, not saved")).not.toBeInTheDocument();
+  });
+
   it("a page someone else holds is read-only, with Ask to take over", async () => {
     const environment = createMockApplicationEnvironment();
     const real = environment.editor.open.bind(environment.editor);

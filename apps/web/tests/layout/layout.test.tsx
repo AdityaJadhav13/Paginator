@@ -3,7 +3,8 @@
  * Overview's Today card and the engine profile screen, on the test double with fictional data: each tab's loading,
  * empty, error and live states, a run started, followed (live and by polling) and cancelled, an ad picked from the
  * library and cleared, the downloads each role may have, the board's exact check wording (never "PDF/X-valid" or
- * "press-ready"), the Desk's words in English and Marathi, the profile's upload, and axe on every new screen.
+ * "press-ready"), each page's save state from the page editor, the Desk's words in English and Marathi, the profile's
+ * upload, and axe on every new screen.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -402,6 +403,42 @@ describe("The Pages board", () => {
     await waitFor(() =>
       expect(saved).toEqual([{ href: "mock-store://runs/run-demo-001/press-files.zip", download: "press-files.zip" }]),
     );
+  });
+
+  it("marks a page changed and not saved, or needing saving with why, as the page editor says it", async () => {
+    const environment = createMockApplicationEnvironment();
+    const real = environment.layout.getLayout;
+    const older = { text: "“Fictional fair” changed after this page was saved.", code: null, params: null };
+    const why = { text: "The previews could not be made.", code: null, params: null };
+    vi.spyOn(environment.layout, "getLayout").mockImplementation(async (input) => {
+      const got = await real.call(environment.layout, input);
+      if (!got.ok || !got.value.board) return got;
+      const pages = got.value.board.pages.map((page) =>
+        page.page === 2
+          ? { ...page, editedUnsaved: true, needsSave: false, needsSaveReasons: [] }
+          : page.page === 3
+            ? { ...page, editedUnsaved: true, needsSave: true, needsSaveReasons: [older] }
+            : page.page === 4
+              ? { ...page, needsSave: true, needsSaveReasons: [why, older] }
+              : page,
+      );
+      return { ok: true, value: { ...got.value, board: { ...got.value.board, pages } } };
+    });
+    const { container } = renderAuth(LAYOUT(B, "pages"), { preset: "sahyadri-editor", environment });
+    const changed = within(await screen.findByRole("region", { name: "Page 2 · Inside page" }));
+    expect(changed.getByText("Changed, not saved")).toBeInTheDocument();
+    // changed AND needing saving (a story taken from it by another page's save): "Needs saving" and why, as the Desk
+    const both = within(screen.getByRole("region", { name: "Page 3 · Inside page" }));
+    expect(both.getByText("Needs saving")).toBeInTheDocument();
+    expect(both.queryByText("Changed, not saved")).not.toBeInTheDocument();
+    expect(both.getByText(older.text)).toBeInTheDocument();
+    const needs = within(screen.getByRole("region", { name: "Page 4 · Inside page" }));
+    expect(needs.getByText("Needs saving")).toBeInTheDocument();
+    // the editor's reason first, then the older text
+    expect(needs.getAllByRole("listitem").map((li) => li.textContent)).toEqual([why.text, older.text]);
+    const plain = within(screen.getByRole("region", { name: "Page 1 · Front page" }));
+    expect(plain.queryByText(/Changed, not saved|Needs saving/)).not.toBeInTheDocument();
+    expect(await seriousViolations(container)).toEqual([]);
   });
 
   it("says there are no pages yet before a layout is done", async () => {

@@ -48,7 +48,8 @@ export async function releasePages(
 ): Promise<ReleasePageRow[]> {
   const { rows } = await sql<ReleasePageRow>`
     select p.page_no, p.role, p.state, p.articles, p.checked, p.edited, p.edited_unsaved, p.needs_save,
-      p.needs_save_why, p.pdf_rev, p.rev_seen, p.layout_problems, p.layout_problems_now, p.stale, p.pdf, p.pdf_sha256, p.saved_at,
+      p.needs_save_why, p.pdf_rev, p.rev_seen, p.layout_problems, p.layout_problems_now, p.stale, p.printed, p.pdf, p.pdf_sha256,
+      p.saved_at,
       case when c.sha256 is not null
         then json_build_object('passed', c.passed, 'fails', c.fails, 'warnings', c.warnings) end as "check"
     from app.run_page p

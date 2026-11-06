@@ -17,6 +17,18 @@ export interface Grid {
   readonly snap_mm: number;
 }
 
+export type Pair = readonly [number, number];
+/** A photo's window: [x, y, w, h], pixels of the whole photo. */
+export type Win = readonly [number, number, number, number];
+
+/** A story's photo crop (deskedit.crop_value): the photo's id, the point of the photo (fractions of its width and height)
+ * the frame keeps as near its centre as the photo's edges allow, and how much it is enlarged (1: as the layout sets it). */
+export interface Crop {
+  readonly photo: string;
+  readonly focus: Pair;
+  readonly zoom: number;
+}
+
 export interface Module {
   readonly story: string;
   readonly x: number;
@@ -24,8 +36,24 @@ export interface Module {
   readonly w: number;
   readonly h: number;
   readonly locked?: boolean;
-  readonly crop?: unknown;
+  readonly crop?: Crop | null;
   readonly [more: string]: unknown;
+}
+
+/** A story's photo as the engine drew it (deskedit._apply_crops): the whole photo's pixels, its frame on the page (mm),
+ * the window of the photo the frame shows, the resolution it prints at, its zoom and the most it may have, the lowest
+ * resolution allowed for it, its crop's focus, and the raster key of the whole photo (null when it cannot be read). */
+export interface PhotoNote {
+  readonly id: string;
+  readonly px: Pair;
+  readonly box_mm: Win;
+  readonly window: Win;
+  readonly ppi: number;
+  readonly zoom: number;
+  readonly zoom_max: number;
+  readonly floor_ppi: number;
+  readonly focus: Pair | null;
+  readonly full: string | null;
 }
 
 export type Cmyk = readonly [number, number, number, number];
@@ -71,6 +99,7 @@ export interface Note {
   readonly by_mm: number;
   readonly articles: readonly string[];
   readonly headline: string;
+  readonly photo?: PhotoNote | null;
 }
 export interface Problem {
   readonly kind: string;
@@ -206,6 +235,129 @@ export function gridColumns(grid: Pick<Grid, "origin_mm" | "column_mm" | "gutter
     return { n: i + 1, x0, x1: x0 + grid.column_mm, mid: x0 + grid.column_mm / 2 };
   });
 }
+
+// ------------------------------------------------------------------------------------------- rulers
+
+/** Steps a ruler's numbered ticks may take (mm), and steps for the ticks between them. */
+const MAJOR_MM = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+const MINOR_MM = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500];
+const whole = (x: number) => Math.abs(x - Math.round(x)) < 1e-9;
+
+export interface RulerSteps {
+  readonly major: number;
+  readonly minor: number;
+}
+export interface Tick {
+  readonly mm: number;
+  readonly kind: "major" | "mid" | "minor";
+  readonly label: number | null;
+}
+
+/** A ruler's tick spacing at s px per mm: numbered ticks every major mm, the smallest of 1, 2, 5, 10, 20, 50 … mm that
+ * leaves labelPx between numbers; small ticks every minor mm, the smallest step that divides major evenly and leaves
+ * tickPx between ticks (major itself when none does). */
+export function rulerSteps(s: number, labelPx = 40, tickPx = 5): RulerSteps {
+  const px = s > 0 && Number.isFinite(s) ? s : 0;
+  const major = MAJOR_MM.find((mm) => mm * px >= labelPx) ?? MAJOR_MM[MAJOR_MM.length - 1]!;
+  const minor = MINOR_MM.find((mm) => mm < major && mm * px >= tickPx && whole(major / mm)) ?? major;
+  return { major, minor };
+}
+
+/** The ticks of a ruler from one mm to another, every minor mm. kind is "major" for a numbered tick (label: its mm, a
+ * whole number), "mid" halfway between two numbered ticks when the small steps split the gap evenly, else "minor". No
+ * ticks for an empty or reversed range, or for more than limit of them. */
+export function rulerTicks(from: number, to: number, { major, minor }: RulerSteps, limit = 4000): Tick[] {
+  const per = Math.round(major / minor); // small steps between two numbered ticks
+  const first = Math.ceil(from / minor - 1e-9);
+  const last = Math.floor(to / minor + 1e-9);
+  if (!(per >= 1) || !(last - first < limit)) return [];
+  const ticks: Tick[] = [];
+  for (let k = first; k <= last; k += 1) {
+    const numbered = k % per === 0;
+    const mid = !numbered && per % 2 === 0 && k % (per / 2) === 0;
+    ticks.push({
+      mm: k * minor,
+      kind: numbered ? "major" : mid ? "mid" : "minor",
+      label: numbered ? (k / per) * major : null,
+    });
+  }
+  return ticks;
+}
+
+/** A ruler's number as it is shown: a true minus sign left of and above the page's corner. */
+export const rulerLabel = (mm: number) => (mm < 0 ? `−${-mm}` : String(mm));
+
+// ------------------------------------------------------------------------------------------- photo crops
+
+/* The engine decides which pixels of a photo fill its frame (deskedit.crop_window) and sends them as the window; a crop
+ * is the photo's focus and zoom. These are the screen's side of it (editor-view.js): where the whole photo lies around
+ * its frame, and the focus a pan, a click or an arrow asks for. The engine's answer is what the page shows and prints. */
+
+/** Fractions kept to four places, as the engine keeps a crop. */
+const frac = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 1e4) / 1e4;
+
+/** The whole photo around its frame box (mm) when its window fills the frame. */
+export function photoExtent(box: Win, win: Win, px: Pair): Box {
+  const sx = (box[2] - box[0]) / win[2];
+  const sy = (box[3] - box[1]) / win[3];
+  const x0 = box[0] - win[0] * sx;
+  const y0 = box[1] - win[1] * sy;
+  return { x0, y0, x1: x0 + px[0] * sx, y1: y0 + px[1] * sy };
+}
+
+/** The window after the photo is dragged by (dx, dy) mm in its frame: the photo follows the pointer, so the window goes
+ * the other way, and it never leaves the photo. Its size stays. */
+export function panWindow(win: Win, px: Pair, box: Win, dx: number, dy: number): Win {
+  const [x, y, w, h] = win;
+  const nx = Math.min(px[0] - w, Math.max(0, x - (dx * w) / (box[2] - box[0])));
+  const ny = Math.min(px[1] - h, Math.max(0, y - (dy * h) / (box[3] - box[1])));
+  return [nx, ny, w, h];
+}
+
+/** The focus that keeps a window where it is: its centre, as fractions of the photo (half a pixel more, so the engine,
+ * which rounds down, puts it back exactly where it was, whatever the four places of the fractions cut off). */
+export const focusOf = (win: Win, px: Pair): Pair => [
+  frac((Math.round(win[0]) + win[2] / 2 + 0.5) / px[0]),
+  frac((Math.round(win[1]) + win[3] / 2 + 0.5) / px[1]),
+];
+
+/** The focus at a point of the page (mm) over the whole photo (photoExtent), kept on the photo. */
+export const focusAt = (x: number, y: number, ext: Box): Pair => [
+  frac((x - ext.x0) / (ext.x1 - ext.x0)),
+  frac((y - ext.y0) / (ext.y1 - ext.y0)),
+];
+
+/** The window of the same size that a focus gives, as the engine places it (centred, inside the photo; whole pixels). */
+export function windowAt(focus: Pair, win: Win, px: Pair): Win {
+  const [, , w, h] = win;
+  const x = Math.max(0, Math.min(px[0] - w, Math.floor(focus[0] * px[0] - w / 2)));
+  const y = Math.max(0, Math.min(px[1] - h, Math.floor(focus[1] * px[1] - h / 2)));
+  return [x, y, w, h];
+}
+
+/** The focus an arrow key asks for: the window's centre moved by (fx, fy) of the photo (0.02 a step). */
+export function stepFocus(win: Win, px: Pair, fx: number, fy: number): Pair {
+  const [cx, cy] = focusOf(win, px);
+  return [frac(cx + fx), frac(cy + fy)];
+}
+
+/** The resolution a photo prints at with another zoom: the window shrinks as the zoom grows. */
+export const ppiAt = (ppi: number, zoom: number, next: number) => (ppi * zoom) / next;
+
+/** The window the frame shows for a story now (editor.js shownWindow): the one its crop asks for (it may be on its way
+ * to the engine), else the engine's. */
+export const shownWindow = (m: Module, p: PhotoNote): Win =>
+  m.crop && m.crop.photo === p.id ? windowAt(m.crop.focus, p.window, p.px) : p.window;
+
+/** The same crop, to the places the engine keeps (editor.js sameCrop). */
+export const sameCrop = (a: Crop | null, b: Crop | null) =>
+  a === b ||
+  (!!a &&
+    !!b &&
+    a.photo === b.photo &&
+    Math.abs(a.focus[0] - b.focus[0]) < 1e-4 &&
+    Math.abs(a.focus[1] - b.focus[1]) < 1e-4 &&
+    Math.abs(a.zoom - b.zoom) < 1e-3);
 
 // ------------------------------------------------------------------------------------------- modules on the grid
 

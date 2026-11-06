@@ -1,7 +1,13 @@
 // The Release tab's rules (src/modules/release/preflight.ts): when an approval counts, each preflight item, the
-// candidate (first release, correction, nothing), the press file names, and the posted files' match. Fictional rows.
+// candidate (first release, correction, nothing), the press file names, and the posted files' match; "Download all"'s
+// ZIP (zip.ts): SHA256SUMS then the files, stored, and cut off before its end at bytes that are not the ones released.
+// Fictional rows.
+import { createHash } from "node:crypto";
+import { PassThrough } from "node:stream";
 import { PRESS_FILE, pressFileName } from "@pageinator/contracts";
+import { unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
+import { ArchiveMismatch, writeReleaseZip } from "../../src/modules/release/zip.ts";
 import type { ApprovalRow, ReleasePageRow } from "../../src/db/release.ts";
 import {
   type ReleaseState,
@@ -33,6 +39,7 @@ function page(n: number, over: Partial<ReleasePageRow> = {}): ReleasePageRow {
     layout_problems: [],
     layout_problems_now: [],
     stale: [],
+    printed: null,
     pdf: { key: `k${n}`, version_id: "v", sha256: sha(String(n)), bytes: 1000 + n },
     saved_at: null,
     check: { passed: true, fails: 0, warnings: 1 },
@@ -325,5 +332,51 @@ describe("the object store's time limit", () => {
     const { within } = await import("../../src/modules/release/routes.ts");
     await expect(within(Promise.resolve(7), 50)).resolves.toBe(7);
     await expect(within(new Promise(() => undefined), 20)).rejects.toThrow("more than 20 ms");
+  });
+});
+
+describe("Download all's ZIP", () => {
+  const bytesOf = (text: string) => new TextEncoder().encode(text);
+  const hex = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+  const pdfs = { "2027-02-01_P01.pdf": bytesOf("%PDF-1.4 fictional 1"), "2027-02-01_P02.pdf": bytesOf("%PDF-1.4 two") };
+  /** Reads the key's bytes in two chunks (as a store streams them). */
+  const read = (stored: Record<string, Uint8Array>) => async (key: string) =>
+    (async function* () {
+      const all = stored[key] ?? new Uint8Array(0);
+      yield all.slice(0, 5);
+      yield all.slice(5);
+    })();
+  async function zipOf(stored: Record<string, Uint8Array>, files = Object.entries(pdfs)) {
+    const out = new PassThrough();
+    const got: Buffer[] = [];
+    out.on("data", (chunk: Buffer) => got.push(chunk));
+    const list = files.map(([name, body]) => ({ name, sha256: hex(body), key: name, version: "v1" }));
+    let error: unknown = null;
+    await writeReleaseZip(out, list, read(stored), new Date("2027-02-01T10:00:00Z")).catch((e) => (error = e));
+    await new Promise((resolve) => setImmediate(resolve));
+    return { bytes: Buffer.concat(got), error };
+  }
+
+  it("holds SHA256SUMS first, then each file's exact bytes, every one stored", async () => {
+    const { bytes, error } = await zipOf(pdfs);
+    expect(error).toBeNull();
+    const files = unzipSync(bytes);
+    expect(Object.keys(files)).toEqual(["SHA256SUMS", "2027-02-01_P01.pdf", "2027-02-01_P02.pdf"]);
+    expect(new TextDecoder().decode(files["SHA256SUMS"])).toBe(
+      Object.entries(pdfs)
+        .map(([name, body]) => `${hex(body)}  ${name}\n`)
+        .join(""),
+    );
+    for (const [name, body] of Object.entries(pdfs)) {
+      expect(files[name]).toEqual(body);
+      expect(bytes.includes(Buffer.from(body))).toBe(true); // stored: the bytes as they are
+    }
+  });
+
+  it("throws at a file whose bytes are not the ones released, and never writes the end of central directory", async () => {
+    const { bytes, error } = await zipOf({ ...pdfs, "2027-02-01_P02.pdf": bytesOf("%PDF-1.4 other") });
+    expect(error).toBeInstanceOf(ArchiveMismatch);
+    expect(bytes.includes(Buffer.from("PK\x05\x06", "latin1"))).toBe(false);
+    expect(bytes.includes(Buffer.from("PK\x03\x04", "latin1"))).toBe(true); // what was sent before it
   });
 });

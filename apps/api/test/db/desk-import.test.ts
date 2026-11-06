@@ -16,6 +16,8 @@ import { strToU8, unzipSync, zipSync } from "fflate";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { type ImportReport, ImportRefused, importDesk } from "../../src/db/desk-import.ts";
+import { articleSig } from "../../src/modules/editor/printed.ts";
+import { deskText } from "../../src/modules/stories/desk-bundle.ts";
 import { s3Client, s3Store } from "../../src/storage/s3.ts";
 import { freshDatabase } from "./helpers.ts";
 import { type IdentityApp, ORIGIN, SECRET, identityApp } from "./identity-app.ts";
@@ -95,6 +97,9 @@ function write(path: string, content: string | Buffer | object) {
   writeFileSync(path, typeof content === "string" || Buffer.isBuffer(content) ? content : JSON.stringify(content));
 }
 
+/** A short item whose Desk text the import cleans into other lines (one paragraph per line): its page's record of what
+ * it prints is signed again over the hosted text. */
+const BRIEF_BODY = "A short fictional item.\nIt is pinned.";
 const article = (id: string, headline: string, body: string, extra: object = {}) => ({
   id,
   headline,
@@ -110,6 +115,7 @@ const article = (id: string, headline: string, body: string, extra: object = {})
   updated: "2026-10-21T09:30:00+05:30",
   ...extra,
 });
+const BRIEF = article("a-0000000003", "Pinned fictional brief", BRIEF_BODY, { page: 2, source: "pasted" });
 
 /** A fictional desk home and dataset, as the Desk lays them out (tools/desk/CONTRACT.md §1). */
 function fictionalHome(root: string): { home: string; dataset: string } {
@@ -154,7 +160,7 @@ function fictionalHome(root: string): { home: string; dataset: string } {
         photo: { id: "p-0000000001", caption: "नवा पूल", credit: "काल्पनिक छायाचित्रकार", width_px: 40, height_px: 30 },
       }),
       article("a-0000000002", "Fictional market opens", "The fictional market opened today.\n\n## Prices\n\nLow."),
-      article("a-0000000003", "Pinned fictional brief", "A short fictional item.", { page: 2, source: "pasted" }),
+      BRIEF,
       article("a-0000000004", "जुनी काल्पनिक बातमी", "नमुना मजकूर.", { source: "sample:kalpanik" }),
     ],
   });
@@ -188,6 +194,18 @@ function fictionalHome(root: string): { home: string; dataset: string } {
       message: "",
       warnings: no === 4 ? ["The page is not full."] : [],
       pdfx_check: { passed: true, fails: 0, warnings: 1 },
+      // what it prints (the Desk copies printed.json's page here): page 1 a record that no longer matches (changed in
+      // the Desk), page 2 its short item as the Desk signed it; page 4, made by an older Desk, has none
+      ...(no === 4
+        ? {}
+        : {
+            printed: {
+              v: 3,
+              articles: { [articles[0] ?? ""]: no === 2 ? articleSig(BRIEF, true) : "0".repeat(20) },
+              folio: null,
+              ads: {},
+            },
+          }),
     };
   };
   write(join(run, "status.json"), {
@@ -216,6 +234,9 @@ function fictionalHome(root: string): { home: string; dataset: string } {
   write(join(run, "edition.pdf"), pdf("whole edition"));
   write(join(run, "press-files.zip"), Buffer.from(zipSync({ "page-01.pdf": pdf("page 1") })));
   write(join(run, "plan.json"), { stories: {} });
+  // the run's own ads (what its pages print): back-2 is listed without its raster, so it prints none
+  write(join(run, "ads/back-1.cmyk.gz"), "the run's ad raster");
+  write(join(run, "ads/index.json"), { elements: { "back-1": { width_px: 20, height_px: 10 }, "back-2": {} } });
   write(join(run, "engine.log"), "engine output");
   write(join(ed, "runs", OLD_RUN, "request.json"), { edition: { id: ED } });
   write(join(ed, "runs", OLD_RUN, "status.json"), {
@@ -455,11 +476,33 @@ describe("import-desk", () => {
       request_sha256: sha(readFileSync(join(scratch, "home/editions", ED, "runs", RUN, "request.json"))),
       not_placed: [{ article: "a-0000000002", reason: { text: "It did not fit.", code: null, params: null } }],
       timings: { measure_s: 10, plan_s: 2, layout_s: 500 },
+      ad_rasters: { "back-1": sha("the run's ad raster") },
     });
     expect(layout.rows[0].request_version_id).toBeTruthy();
     expect(layout.rows[0].edition_pdf.key).toBe(
       `orgs/${a.orgId}/pubs/${a.pubId}/runs/${layout.rows[0].id}/edition.pdf`,
     );
+    const records = await su.query("select page_no, printed from app.run_page where org_id = $1 order by page_no", [
+      a.orgId,
+    ]);
+    expect(records.rows.find((row) => row.page_no === 1)?.printed).toEqual({
+      v: 3,
+      articles: { "a-0000000001": "0".repeat(20) },
+      folio: null,
+      ads: {},
+    });
+    expect(records.rows.find((row) => row.page_no === 4)?.printed).toBeNull();
+    // the short item, unchanged since its page was made, is signed again over the text the import stored
+    const stored = await su.query(
+      `select r.headline, r.body from app.story s join app.story_revision r on r.story_id = s.id and r.rev = s.current_rev
+       where s.org_id = $1 and s.desk_key = 'a-0000000003'`,
+      [a.orgId],
+    );
+    const hosted = { headline: stored.rows[0].headline, body: deskText(stored.rows[0].body).text };
+    expect(articleSig(hosted, true)).not.toBe(articleSig(BRIEF, true)); // the import changed its lines
+    expect(records.rows.find((row) => row.page_no === 2)?.printed.articles).toEqual({
+      "a-0000000003": articleSig(hosted, true),
+    });
     const pages = await su.query(
       "select page_no, role, state, articles, pdf, checked, warnings from app.run_page where org_id = $1 order by page_no",
       [a.orgId],
@@ -512,11 +555,16 @@ describe("import-desk", () => {
   it("--all-runs adds the earlier, failed run (without pages)", async () => {
     const report = await run(a, { allRuns: true });
     expect(report.counts.runs).toEqual({ found: 2, added: 1, existing: 1, skipped: 0 });
-    const old = await su.query("select state, error from app.layout_run where org_id = $1 and desk_key = $2", [
-      a.orgId,
-      OLD_RUN,
-    ]);
-    expect(old.rows[0]).toMatchObject({ state: "failed", error: { text: "The layout engine stopped." } });
+    const old = await su.query(
+      "select state, error, ad_rasters from app.layout_run where org_id = $1 and desk_key = $2",
+      [a.orgId, OLD_RUN],
+    );
+    // a run without its own ads folder keeps no record of what its pages print
+    expect(old.rows[0]).toMatchObject({
+      state: "failed",
+      error: { text: "The layout engine stopped." },
+      ad_rasters: null,
+    });
   });
 
   it("takes the sample articles when asked", async () => {

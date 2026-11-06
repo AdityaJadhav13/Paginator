@@ -48,7 +48,8 @@ type Result<T> = Promise<ServiceResult<T, ApiProblem>>;
 /**
  * An edition's release (plan §1 L2.5), under /api/v1/orgs/:o/pubs/:p: the preflight list, the pages' approval, the
  * release bound to its files' SHA-256 (409 approval_stale, release_refused; 502 archive_failed), the released files by
- * a 5-minute link, "Mark as sent", the press's confirmation, the archive copy's check and the G2 press test.
+ * a 5-minute link or all in one ZIP, "Mark as sent", the press's confirmation, the archive copy's check and the G2 press
+ * test.
  */
 export interface ReleaseService {
   get(input: Where & { readonly editionId: string }): Result<EditionReleaseDto>;
@@ -65,7 +66,12 @@ export interface ReleaseService {
     },
   ): Result<ReleaseItemDto>;
   fileLink(input: Where & { readonly releaseId: string; readonly name: string }): Result<FileLinkDto>;
-  markSent(input: Where & { readonly releaseId: string; readonly note?: string }): Result<ReleaseItemDto>;
+  /** "Download all": the release's files and their SHA256SUMS in one ZIP, with the file name the API gives it. */
+  downloadAll(input: Where & { readonly releaseId: string }): Result<{ readonly file: Blob; readonly filename: string }>;
+  /** The same key on a retry of one click records one delivery. */
+  markSent(
+    input: Where & { readonly releaseId: string; readonly note?: string; readonly idempotencyKey: string },
+  ): Result<ReleaseItemDto>;
   confirm(
     input: Where & {
       readonly releaseId: string;

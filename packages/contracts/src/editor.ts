@@ -11,11 +11,14 @@
 // engine made whose answer the API did not keep yet: a call in flight, or an answer lost to a crash) is never written
 // back; the gateway reports it in `edits` instead, so the API catches up (Postgres then has it). A file at the state's
 // rev or lower, or with other modules at the same rev, is rewritten from the state.
+// "Update text" and a save bring the edition's live content (`live`: its text, folio and ready ads) into the run; a save
+// reports the ad rasters its page prints (SavedPage.ads), which the API keeps in layout_run.ad_rasters, so the release's
+// ad check passes for artwork changed after the layout once its page is updated and saved, without a new layout.
 // Wording (plan §2.3): "Independent PDF/X-1a check"; never "PDF/X-valid" or "press-ready".
 import { z } from "zod";
 
 import { OrgId, Uuid7 } from "./ids.ts";
-import { DeskEditionKey, DeskRunKey, DeskText, StoredFile } from "./layout.ts";
+import { DeskEditionKey, DeskRunKey, DeskSlot, DeskText, RasterRef, StoredFile } from "./layout.ts";
 import { PageApproval } from "./release.ts";
 
 const Sha256 = z.string().regex(/^[0-9a-f]{64}$/);
@@ -96,13 +99,15 @@ export const EDIT_CALL_FORMAT = "pageinator.edit-call/1";
 /** POST /v1/call (signed). The gateway checks the run's working files are in the home (request.json, plan.json,
  * printed.json, the page's manifest; else 409 editor.run_missing), writes `state` (each page's edit file whose
  * {rev, modules} differ from the file, and edit-articles.json when `text` differs; an open page whose file it rewrote is
- * opened again, reload), and for refresh and save first writes the edition's live `articles` and `edition` (with their
- * photo rasters, pinned, as the layout's request names them) to editions/<edition>/. Then the engine command:
+ * opened again, reload), and for refresh and save first writes the edition's live `articles`, `edition` and `ads` (with
+ * their photo and ad rasters, pinned, as a layout's request names them) to editions/<edition>/, so "Update text" brings
+ * the edition's current ads onto the page as it brings its text. Then the engine command:
  *  open → the engine's open (draw); state → state; set → set(modules, base_rev); alternative → alternative(variant,
  *  base_rev); refresh → refresh(base_rev); move → move(story, to, base_rev);
  *  save → the Desk's save: state, refused when a story is locked elsewhere, export(base_rev), the page's previews
  *  (render_page), the run's page PDFs merged into edition.pdf and press-files.zip, each stored under
- *  runs/<run_id>/pages/NN/edit-<rev>.{pdf,png,thumb.png} and runs/<run_id>/edition.pdf, press-files.zip;
+ *  runs/<run_id>/pages/NN/edit-<rev>.{pdf,png,thumb.png} and runs/<run_id>/edition.pdf, press-files.zip, and the
+ *  SHA-256 of each ad raster the page prints (SavedPage.ads, which the API keeps in layout_run.ad_rasters);
  *  check → the independent PDF/X-1a check of the page's PDF `pdf` (pinned), its report stored beside it. */
 export const EditCall = z.strictObject({
   format: z.literal(EDIT_CALL_FORMAT),
@@ -134,10 +139,22 @@ export const EditCall = z.strictObject({
       .max(16)
       .optional(),
   }),
-  /** refresh and save: the edition's live content in the Desk's shape (the layout request's `articles` and `edition`,
-   * built now) */
+  /** refresh and save: the edition's live content in the Desk's shape (a layout request's `edition`, `articles` and
+   * `ads`, built now: modules/layout/request.ts frozenRequest) */
   live: z
-    .strictObject({ edition: z.record(z.string(), z.unknown()), articles: z.array(z.unknown()).max(2000) })
+    .strictObject({
+      edition: z.record(z.string(), z.unknown()),
+      articles: z.array(z.unknown()).max(2000),
+      ads: z.record(
+        DeskSlot,
+        z.strictObject({
+          width_px: z.number().int().min(1).max(100_000),
+          height_px: z.number().int().min(1).max(100_000),
+          ppi: z.number().int().min(1).max(10_000),
+          raster: RasterRef,
+        }),
+      ),
+    })
     .optional(),
 });
 export type EditCall = z.infer<typeof EditCall>;
@@ -157,6 +174,9 @@ export const SavedPage = z.strictObject({
   pages_changed: z.record(z.string().regex(/^([1-9]|1[0-6])$/), z.array(z.string())),
   /** what the page prints (deskprinted) */
   printed: z.record(z.string(), z.unknown()).nullable(),
+  /** each ad slot of the page: the SHA-256 of the ad raster it prints, null when it prints none or the run's raster
+   * is not provably the one printed (an older gateway's answer without it: none) */
+  ads: z.record(DeskSlot, Sha256.nullable()).default({}),
   /** the problem kinds a print file must never have (overlap, outside; "unreadable" fails closed) */
   layout_problems: z.array(z.string().max(40)).max(20),
   /** the page card's warnings after the save (editing._warnings and deskprinted.unset) */

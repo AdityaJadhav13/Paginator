@@ -135,6 +135,12 @@ const desk = (code: string, text: string, params: Record<string, string | number
   code,
   params,
 });
+/** A page as the layout made it: nothing edited in the page editor (the double does not model saves). */
+const SAVED: Pick<LayoutPageDto, "editedUnsaved" | "needsSave" | "needsSaveReasons"> = {
+  editedUnsaved: false,
+  needsSave: false,
+  needsSaveReasons: [],
+};
 
 const SAHYADRI = "org-demo-sahyadri";
 const PUNE = "pub-demo-pune-daily";
@@ -434,6 +440,7 @@ export function createMockLayout(deps: MockLayoutDeps): {
             ]
           : [],
       message: null,
+      ...SAVED,
     };
   }
 
@@ -860,6 +867,7 @@ export function createMockLayout(deps: MockLayoutDeps): {
           check: null,
           warnings: [],
           message: null,
+          ...SAVED,
         })),
         notPlaced: [],
         files: { editionPdf: false, pressZip: false },

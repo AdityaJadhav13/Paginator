@@ -523,6 +523,8 @@ export type RunUpdate = {
   checkerSha256?: string;
   timings?: Record<string, number>;
   notPlaced?: { article: string; reason: DeskTextValue }[];
+  /** the ad rasters the run's pages print (slot → SHA-256) */
+  adRasters?: Record<string, string>;
   editionPdf?: Stored | null;
   pressZip?: Stored | null;
 };
@@ -542,6 +544,7 @@ export async function updateRun(tx: Tx, publicationId: string, runId: string, u:
       checker_sha256 = coalesce(${u.checkerSha256 ?? null}, checker_sha256),
       timings = coalesce(${json(u.timings) ?? null}::jsonb, timings),
       not_placed = coalesce(${json(u.notPlaced) ?? null}::jsonb, not_placed),
+      ad_rasters = coalesce(${json(u.adRasters) ?? null}::jsonb, ad_rasters),
       edition_pdf = case when ${u.editionPdf !== undefined} then ${json(u.editionPdf) ?? null}::jsonb else edition_pdf end,
       press_zip = case when ${u.pressZip !== undefined} then ${json(u.pressZip) ?? null}::jsonb else press_zip end,
       updated_at = now()
@@ -561,12 +564,20 @@ export type PageRow = {
   checked: { passed: boolean; fails: number | null; warnings: number | null } | null;
   warnings: DeskTextValue[];
   message: DeskTextValue | null;
+  /** the page editor's save state (db/editor.ts) */
+  edited_unsaved: boolean;
+  needs_save: boolean;
+  needs_save_why: DeskTextValue | null;
+  stale: DeskTextValue[];
+  /** what the page's PDF prints (deskprinted's record; null: none recorded) */
+  printed: Record<string, unknown> | null;
 };
 
 export async function runPages(tx: Tx, publicationId: string, runIds: readonly string[]): Promise<PageRow[]> {
   if (runIds.length === 0) return [];
   const { rows } = await sql<PageRow>`
-    select run_id, page_no, role, state, articles, pdf, png, thumb, report, checked, warnings, message
+    select run_id, page_no, role, state, articles, pdf, png, thumb, report, checked, warnings, message,
+      edited_unsaved, needs_save, needs_save_why, stale, printed
     from app.run_page where publication_id = ${publicationId} and run_id = any (${[...runIds]}::uuid[])
     order by run_id, page_no`.execute(tx);
   return rows;
@@ -592,6 +603,8 @@ export async function putPage(
     warnings?: DeskTextValue[];
     message?: DeskTextValue | null;
     seconds?: number | null;
+    /** what the page prints (runs/<run>/printed.json's page, deskprinted's record) */
+    printed?: Record<string, unknown> | null;
   },
   progressOnly = false,
 ): Promise<void> {
@@ -599,11 +612,12 @@ export async function putPage(
   const has = (value: unknown) => value !== undefined;
   await sql`
     insert into app.run_page (org_id, publication_id, run_id, page_no, role, state, articles, pdf, png, thumb, report,
-      pdf_sha256, checked, warnings, message, seconds)
+      pdf_sha256, checked, warnings, message, seconds, printed)
     values (${who.orgId}, ${publicationId}, ${runId}, ${page.page}, ${page.role}, ${page.state},
       coalesce(${j(page.articles)}::jsonb, '[]'), ${j(page.pdf)}::jsonb, ${j(page.png)}::jsonb, ${j(page.thumb)}::jsonb,
       ${j(page.report)}::jsonb, ${page.pdf?.sha256 ?? null}, ${j(page.checked)}::jsonb,
-      coalesce(${j(page.warnings)}::jsonb, '[]'), ${j(page.message)}::jsonb, ${page.seconds ?? null})
+      coalesce(${j(page.warnings)}::jsonb, '[]'), ${j(page.message)}::jsonb, ${page.seconds ?? null},
+      ${j(page.printed)}::jsonb)
     on conflict (org_id, publication_id, run_id, page_no) do update set
       role = excluded.role,
       state = case when ${progressOnly} and run_page.state = 'done' then run_page.state else excluded.state end,
@@ -617,6 +631,7 @@ export async function putPage(
       warnings = case when ${has(page.warnings)} then excluded.warnings else run_page.warnings end,
       message = case when ${has(page.message)} then excluded.message else run_page.message end,
       seconds = coalesce(excluded.seconds, run_page.seconds),
+      printed = case when ${has(page.printed)} then excluded.printed else run_page.printed end,
       updated_at = now()`.execute(tx);
 }
 

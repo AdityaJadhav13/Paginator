@@ -23,6 +23,7 @@ import { EDITION_EDIT_MR } from "./screens/editionEdit.mr.ts";
 import { DAILY_PATH_MR } from "./screens/dailyPath.mr.ts";
 import { ENGINE_WORDS_MR } from "./screens/engineWords.mr.ts";
 import { DEPLOY_MR } from "./screens/deploy.mr.ts";
+import { EDITOR_BATCH_MR } from "./screens/editorBatch.mr.ts";
 
 export const MR: Readonly<Record<CatalogueKey, string>> = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -1841,4 +1842,5 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   ...DAILY_PATH_MR,
   ...ENGINE_WORDS_MR,
   ...DEPLOY_MR,
+  ...EDITOR_BATCH_MR,
 };

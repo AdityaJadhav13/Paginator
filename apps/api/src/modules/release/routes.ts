@@ -59,6 +59,7 @@ import type { Tenant, Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 import type { ObjectStore } from "../../storage/object-store.ts";
 import { type Access, accessOf, auditRefusals, refused } from "../access/access.ts";
+import { liveArticles, withPrinted } from "../editor/printed.ts";
 import { planFor, slotsOf } from "../layout/request.ts";
 import { DOWNLOAD_SECONDS } from "../media/photos.ts";
 import { idempotent } from "../requests/idempotency.ts";
@@ -66,6 +67,7 @@ import { archiveRoutes } from "./archive.ts";
 import { type ReleaseState, candidate, needsPressTest, preflight, releasePage, sameFiles } from "./preflight.ts";
 import { printProfileRoutes } from "./print-profiles.ts";
 import { releaseNow, releaseView, releaseViews } from "./views.ts";
+import { releaseZipRoutes } from "./zip.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE = /^([1-9]|1[0-6])$/;
@@ -114,7 +116,8 @@ export async function stateOf(tx: Tx, pub: string, editionId: string, lock = fal
   const edition = UUID.test(editionId) ? await layoutEdition(tx, pub, editionId, lock) : undefined;
   if (!edition) return undefined;
   const run = await boardRun(tx, pub, editionId);
-  const pages = run ? await releasePages(tx, pub, run, lock) : [];
+  // each page's articles checked against the edition now: a story changed after the page was made needs it saved
+  const pages = run ? withPrinted(await releasePages(tx, pub, run, lock), await liveArticles(tx, pub, editionId)) : [];
   const artwork = await editionArtwork(tx, pub, editionId);
   const profile = await profileInUse(tx, pub);
   const left = run?.not_placed ?? [];
@@ -149,6 +152,7 @@ export const releaseRoutes: FastifyPluginAsyncZod<ReleaseOptions> = async (app, 
   auditRefusals(app, database);
   await app.register(archiveRoutes, { database });
   await app.register(printProfileRoutes, { database });
+  await app.register(releaseZipRoutes, { database, store });
 
   /** Writes bytes to the archive under Object Lock and reads that version back: its SHA-256 must be theirs. Any
    * failure (or a store slower than STORE_MS) is 502 `failed` (archive_failed: nothing released; receipt_failed: the
@@ -444,24 +448,32 @@ export const releaseRoutes: FastifyPluginAsyncZod<ReleaseOptions> = async (app, 
     async (request) => {
       const tenant = accessOf(request).tenant;
       const { p: pub, id } = request.params;
-      return database.withTenant(tenant, async (tx) => {
-        const release = await lockedRelease(tx, pub, id);
-        const files = (await releaseFiles(tx, pub, [id])).map((f) => ({
-          name: f.name,
-          sha256: f.sha256,
-          bytes: f.bytes,
-        }));
-        const delivery = await addDelivery(tx, tenant, pub, id, request.body.note || null, files);
-        await writeReceipts(request.log, tx, tenant, pub, release);
-        await recordAudit(tx, tenant, {
-          action: "release.send",
-          targetType: "release",
-          targetId: id,
-          publicationId: pub,
-          data: { delivery, files: files.length },
-        });
-        return releaseNow(tx, pub, id);
-      });
+      // a retried "Mark as sent" (the same key) records one delivery, and answers the release as it is now
+      const answer = await idempotent(
+        database,
+        request,
+        tenant,
+        async (tx) => {
+          const release = await lockedRelease(tx, pub, id);
+          const files = (await releaseFiles(tx, pub, [id])).map((f) => ({
+            name: f.name,
+            sha256: f.sha256,
+            bytes: f.bytes,
+          }));
+          const delivery = await addDelivery(tx, tenant, pub, id, request.body.note || null, files);
+          await writeReceipts(request.log, tx, tenant, pub, release);
+          await recordAudit(tx, tenant, {
+            action: "release.send",
+            targetType: "release",
+            targetId: id,
+            publicationId: pub,
+            data: { delivery, files: files.length },
+          });
+          return { status: 200, body: await releaseNow(tx, pub, id), stored: { releaseId: id } };
+        },
+        (_stored, tx) => releaseView(tx, pub, id),
+      );
+      return answer.body as Release;
     },
   );
 

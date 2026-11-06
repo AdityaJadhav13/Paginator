@@ -27,7 +27,12 @@
 //        nothing changed since the last release (nothing_to_release). The files are copied to the archive under Object
 //        Lock and read back; their SHA-256 must match, or 502 archive_failed and nothing is released.
 //   GET  releases/:id/files/:name (export.press) → FileLink: the archived file (5 minutes), exactly the released version.
-//   POST releases/:id/deliveries DeliveryInput (export.press) → Release: "Mark as sent" (time, person, files, hashes).
+//   POST releases/:id/zip (export.press) → application/zip, `<edition key>_release-<n>.zip` (Content-Disposition):
+//        "Download all", streamed as it is made, every file stored: SHA256SUMS first (`sha256sum` lines, "<hex>  <name>"),
+//        then each released file read from its archived version, its SHA-256 checked as it streams (a mismatch cuts
+//        the ZIP off before its central directory, so it never opens whole).
+//   POST releases/:id/deliveries DeliveryInput (export.press; Idempotency-Key) → Release: "Mark as sent" (time,
+//        person, files, hashes); the same key again records no second delivery and answers the release as it is now.
 //        Each delivery and confirmation writes receipts.json to the archive again: when that fails, 502 receipt_failed
 //        and nothing is recorded (the release itself stands).
 //   POST releases/:id/deliveries/:d/confirm ConfirmInput (export.press) → Release: the press's confirmation, once
@@ -97,7 +102,8 @@ export const PreflightItem = z.strictObject({
   /** ad_artwork: the slots without ready artwork, or whose artwork the pages do not print */
   slots: z.array(DeskSlot).max(40),
   /** folio, ad_artwork: the pages print an older folio or older artwork than the edition has now. The fix is to lay
-   * out again (the folio: or Update text on page 1, then save it) */
+   * out again, or Update text on the page that prints it (the folio: page 1; the artwork: the back page), then save
+   * it */
   printsOld: z.boolean(),
   /** not_placed: the stories left out, with the engine's reason */
   stories: z.array(z.strictObject({ ...StoryRef.shape, reason: DeskText.nullable() })).max(400),

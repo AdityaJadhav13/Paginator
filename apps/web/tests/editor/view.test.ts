@@ -23,8 +23,22 @@ import {
   snapModule,
   unionBox,
   zoomToRect,
+  focusAt,
+  focusOf,
+  panWindow,
+  photoExtent,
+  ppiAt,
+  rulerLabel,
+  rulerSteps,
+  rulerTicks,
+  sameCrop,
+  shownWindow,
+  stepFocus,
+  windowAt,
   type Grid,
   type PageView,
+  type PhotoNote,
+  type Win,
 } from "../../src/features/editor/view.ts";
 
 const PAGE_W = 300;
@@ -88,6 +102,173 @@ describe("the view's arithmetic (the Desk's cases)", () => {
     expect(zoomToRect({ x0: 0, y0: 0, x1: 0.01, y1: 0.01 }, area, base)!.zoom).toBe(ZOOM_MAX);
     expect(zoomToRect(null, area, base)).toBeNull();
     expect(zoomToRect({ x0: 0, y0: 0, x1: 1, y1: 1 }, area, 0)).toBeNull();
+  });
+});
+
+describe("the rulers (the Desk's cases)", () => {
+  const divides = (step: number, mm: number) => Math.abs(mm / step - Math.round(mm / step)) < 1e-9;
+  const SCALES = Array.from({ length: 120 }, (_, i) => 0.05 * 1.08 ** i); // 0.05 … about 450 px per mm
+  const MAJORS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+
+  it("steps: numbered ticks at least 40 px apart, at the smallest of 1, 2, 5, 10, 20, 50 … mm", () => {
+    for (const s of SCALES) {
+      const { major } = rulerSteps(s);
+      const i = MAJORS.indexOf(major);
+      expect(i, `${major} mm at ${s} px/mm`).toBeGreaterThanOrEqual(0);
+      if (major * s < 40) expect(major).toBe(1000);
+      if (i > 0) expect(MAJORS[i - 1]! * s).toBeLessThan(40);
+    }
+  });
+
+  it("steps: small ticks divide the numbered step evenly, far enough apart, as fine as they can be", () => {
+    const MINORS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500];
+    for (const [labelPx, tickPx] of [
+      [40, 5],
+      [40, 15],
+      [30, 3],
+      [60, 8],
+      [40, 25],
+    ] as const) {
+      for (const s of SCALES) {
+        const { major, minor } = rulerSteps(s, labelPx, tickPx);
+        expect(divides(minor, major), `${minor} | ${major} at ${s}`).toBe(true);
+        expect(minor === major || minor * s >= tickPx, `${minor} mm at ${s}`).toBe(true);
+        for (const finer of MINORS.filter((m) => m < minor && divides(m, major)))
+          expect(finer * s).toBeLessThan(tickPx);
+      }
+    }
+    expect(rulerSteps(10, 40, 15)).toEqual({ major: 5, minor: 5 }); // 2 mm is far enough apart, but 5 / 2 is not whole
+  });
+
+  it("ticks at every zoom: numbered with whole millimetres where they stand, evenly spaced", () => {
+    for (const s of SCALES) {
+      const steps = rulerSteps(s);
+      const ticks = rulerTicks(-60, -60 + 3000 / s, steps); // a ruler 3000 px long, from left of the page
+      expect(ticks.length > 0 && ticks.length <= 3000 / 5 + 1, `${ticks.length} ticks at ${s}`).toBe(true);
+      for (const [i, t] of ticks.entries()) {
+        if (i) near(t.mm - ticks[i - 1]!.mm, steps.minor);
+        if (t.kind !== "major") continue;
+        expect(Number.isInteger(t.label)).toBe(true);
+        near(t.label!, t.mm);
+      }
+    }
+  });
+
+  it("steps at the zooms an editor shows, and for a scale that is none", () => {
+    expect(rulerSteps(1.67)).toEqual({ major: 50, minor: 5 }); // a page fitted to a laptop's view
+    expect(rulerSteps(2.09)).toEqual({ major: 20, minor: 5 });
+    expect(rulerSteps(5)).toEqual({ major: 10, minor: 1 });
+    expect(rulerSteps(13.4)).toEqual({ major: 5, minor: 0.5 });
+    expect(rulerSteps(50)).toEqual({ major: 1, minor: 0.1 });
+    for (const bad of [0, -2, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(rulerSteps(bad)).toEqual({ major: 1000, minor: 1000 });
+  });
+
+  it("ticks: every small step, numbered at the numbered steps, mid ticks halfway, also left of the page", () => {
+    const ticks = rulerTicks(-12, 64, { major: 20, minor: 5 });
+    expect(ticks.map((t) => t.mm)).toEqual([-10, -5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]);
+    expect(ticks.filter((t) => t.kind === "major").map((t) => t.label)).toEqual([0, 20, 40, 60]);
+    expect(ticks.filter((t) => t.kind === "mid").map((t) => t.mm)).toEqual([-10, 10, 30, 50]);
+    for (const t of ticks) if (t.kind !== "major") expect(t.label).toBeNull();
+    expect(rulerTicks(0, 100, { major: 50, minor: 10 }).every((t) => t.kind !== "mid")).toBe(true);
+  });
+
+  it("ticks: whole-mm numbers and even spacing with tenth-of-a-mm steps", () => {
+    const ticks = rulerTicks(0.05, 10.01, { major: 1, minor: 0.1 });
+    expect(ticks.length).toBe(100); // 0.1 … 10.0
+    expect(ticks.filter((t) => t.kind === "major").map((t) => t.label)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    for (let i = 1; i < ticks.length; i += 1) near(ticks[i]!.mm - ticks[i - 1]!.mm, 0.1, 1e-12);
+    const mids = ticks.filter((t) => t.kind === "mid").map((t) => t.mm);
+    expect(mids.length).toBe(10);
+    for (const [i, mm] of mids.entries()) near(mm, i + 0.5, 1e-12);
+  });
+
+  it("ticks: none for an empty, reversed or unreadable range, or one too long to draw", () => {
+    expect(rulerTicks(10, 5, { major: 10, minor: 1 })).toEqual([]);
+    expect(rulerTicks(Number.NaN, 5, { major: 10, minor: 1 })).toEqual([]);
+    expect(rulerTicks(0, 1e6, { major: 1, minor: 0.1 })).toEqual([]);
+    expect(rulerTicks(0, 0, { major: 10, minor: 1 }).length).toBe(1);
+  });
+
+  it("labels: a true minus sign left of and above the page's corner", () => {
+    expect(rulerLabel(-20)).toBe("−20");
+    expect(rulerLabel(0)).toBe("0");
+    expect(rulerLabel(-0)).toBe("0");
+    expect(rulerLabel(340)).toBe("340");
+  });
+});
+
+describe("photo crops (the Desk's cases)", () => {
+  // a fictional 2000 × 1500 photo whose window [500, 375, 1000, 750] fills a frame 100 × 75 mm at (50, 200)
+  const PX = [2000, 1500] as const;
+  const WIN = [500, 375, 1000, 750] as const;
+  const BOX = [50, 200, 150, 275] as const;
+
+  it("the whole photo lies around its frame at the window's scale", () => {
+    const ext = photoExtent(BOX, WIN, PX);
+    near(ext.x0, 0); // 500 px at 0.1 mm a pixel left of the frame
+    near(ext.y0, 162.5);
+    near(ext.x1, 200);
+    near(ext.y1, 312.5);
+  });
+
+  it("a pan moves the window against the pointer and never out of the photo", () => {
+    expect(panWindow(WIN, PX, BOX, 10, -5)).toEqual([400, 425, 1000, 750]); // 10 mm right: 100 px to the left
+    expect(panWindow(WIN, PX, BOX, 1000, 1000)).toEqual([0, 0, 1000, 750]);
+    expect(panWindow(WIN, PX, BOX, -1000, -1000)).toEqual([1000, 750, 1000, 750]);
+    expect(panWindow([0, 0, 2000, 1500], PX, BOX, 30, 30)).toEqual([0, 0, 2000, 1500]); // all of it: nowhere to go
+  });
+
+  it("a window's focus brings the engine back to the same window, pixel for pixel", () => {
+    for (const px of [PX, [1999, 1333], [37, 1000], [640, 480]] as const)
+      for (const w of [1, 7, 333, Math.min(px[0], 1000)].filter((v) => v <= px[0]))
+        for (const x of [0, 1, Math.floor((px[0] - w) / 3), px[0] - w].filter((v) => v <= px[0] - w)) {
+          const win: Win = [x, 0, w, Math.min(px[1], 5)];
+          expect(windowAt(focusOf(win, px), win, px), `${px} ${win}`).toEqual(win);
+        }
+  });
+
+  it("a click sets the focus under it, kept on the photo", () => {
+    const ext = photoExtent(BOX, WIN, PX);
+    expect(focusAt(50, 200, ext)).toEqual([0.25, 0.25]); // the frame's top left corner
+    expect(focusAt(-20, 400, ext)).toEqual([0, 1]);
+  });
+
+  it("an arrow moves the focus a step from the window's centre", () => {
+    const [fx, fy] = stepFocus(WIN, PX, 0.02, -0.1);
+    near(fx, 0.5203); // the centre (half a pixel on) and 2 %
+    near(fy, 0.4003);
+    expect(stepFocus([1000, 750, 1000, 750], PX, 0.5, 0.5)).toEqual([1, 1]); // kept on the photo
+  });
+
+  it("a photo prints sharper as its zoom falls", () => {
+    near(ppiAt(200, 2, 1), 400);
+    near(ppiAt(200, 1, 1.25), 160);
+  });
+
+  it("the window shown is the one the story's own crop asks for, else the engine's; crops compare to its places", () => {
+    const note: PhotoNote = {
+      id: "p-00000000c3",
+      px: PX,
+      box_mm: BOX,
+      window: WIN,
+      ppi: 254,
+      zoom: 1,
+      zoom_max: 1.69,
+      floor_ppi: 150,
+      focus: null,
+      full: null,
+    };
+    const m = { story: "d0000000001", x: 50, y: 190, w: 2, h: 100 };
+    expect(shownWindow(m, note)).toEqual(WIN);
+    expect(shownWindow({ ...m, crop: { photo: note.id, focus: [0, 0], zoom: 1 } }, note)).toEqual([0, 0, 1000, 750]);
+    expect(shownWindow({ ...m, crop: { photo: "p-00000000d4", focus: [0, 0], zoom: 1 } }, note)).toEqual(WIN); // another photo's
+    const crop = { photo: note.id, focus: [0.5, 0.5] as const, zoom: 1.5 };
+    expect(sameCrop(crop, { ...crop, focus: [0.50004, 0.5], zoom: 1.5004 })).toBe(true);
+    expect(sameCrop(crop, { ...crop, focus: [0.5002, 0.5] })).toBe(false);
+    expect(sameCrop(crop, { ...crop, zoom: 1.502 })).toBe(false);
+    expect(sameCrop(crop, null)).toBe(false);
+    expect(sameCrop(null, null)).toBe(true);
   });
 });
 

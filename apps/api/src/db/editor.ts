@@ -54,12 +54,14 @@ export type EditPageRow = {
   layout_problems: string[] | null;
   layout_problems_now: string[] | null;
   stale: DeskTextValue[];
+  /** what the page's PDF prints (deskprinted's record; null: none recorded): modules/editor/printed.ts reads it */
+  printed: Record<string, unknown> | null;
 };
 
 export async function editPages(tx: Tx, publicationId: string, runId: string): Promise<EditPageRow[]> {
   const { rows } = await sql<EditPageRow>`
     select page_no, role, state, articles, checked, edited, edited_unsaved, needs_save, needs_save_why, pdf_rev,
-      pdf_sha256, rev_seen, layout_problems, layout_problems_now, stale
+      pdf_sha256, rev_seen, layout_problems, layout_problems_now, stale, printed
     from app.run_page where publication_id = ${publicationId} and run_id = ${runId} order by page_no`.execute(tx);
   return rows;
 }
@@ -196,11 +198,28 @@ export async function transactionTime(tx: Tx): Promise<Date> {
   return rows[0].at;
 }
 
+/** The Desk's words a save writes (modules/editor/views.ts SAVE_WORDS). */
+export type SaveWords = {
+  movedFrom: (page: number) => DeskTextValue;
+  notPlacedEdited: DeskTextValue;
+  deletedAfter: DeskTextValue;
+};
+
+/** The articles on the run's pages, in page order. */
+async function onPages(tx: Tx, publicationId: string, runId: string): Promise<string[]> {
+  const { rows } = await sql<{ articles: string[] }>`select articles from app.run_page
+    where publication_id = ${publicationId} and run_id = ${runId} order by page_no`.execute(tx);
+  return rows.flatMap((row) => row.articles);
+}
+
 /** editing.saved_page and after_save, from the gateway's SavedPage: the pages a story left take their article lists
  * and need saving; the page records its files, what it prints, its problems and warnings, and stays "needs saving"
  * when a step after the export failed (saved.error). Its check is recorded separately (recordPageCheck). A PDF that
  * could not be stored (saved.pdf null) records nothing of the page but why it still needs saving. Its saved_at is
- * liveAt: when the save read the live edition it prints (the release's folio check compares it). */
+ * liveAt: when the save read the live edition it prints (the release's folio check compares it). A stored PDF's ad
+ * rasters (saved.ads) go into the run's ad_rasters (null takes the slot out), which the release compares with each
+ * slot's artwork now. Then the run's not_placed is counted again (editing._recount_not_placed): live holds the
+ * edition's live article ids (the call's `live`). */
 export async function afterSave(
   tx: Tx,
   who: Tenant,
@@ -208,19 +227,21 @@ export async function afterSave(
   runId: string,
   page: number,
   saved: SavedPage,
-  movedFrom: (page: number) => DeskTextValue,
+  words: SaveWords,
   liveAt: Date,
+  live: ReadonlySet<string>,
 ): Promise<void> {
+  const before = await onPages(tx, publicationId, runId);
   for (const [n, articles] of Object.entries(saved.pages_changed)) {
     await sql`update app.run_page set articles = ${JSON.stringify(articles)}::jsonb, needs_save = true,
-        needs_save_why = ${JSON.stringify(movedFrom(page))}::jsonb, updated_at = now()
+        needs_save_why = ${JSON.stringify(words.movedFrom(page))}::jsonb, updated_at = now()
       where publication_id = ${publicationId} and run_id = ${runId} and page_no = ${Number(n)}`.execute(tx);
   }
   const j = (value: unknown) => (value === null ? null : JSON.stringify(value));
   if (saved.pdf === null) {
     await sql`update app.run_page set needs_save = true, needs_save_why = ${j(saved.error)}::jsonb, updated_at = now()
       where publication_id = ${publicationId} and run_id = ${runId} and page_no = ${page}`.execute(tx);
-    return;
+    return recountNotPlaced(tx, publicationId, runId, before, words, live);
   }
   await sql`update app.run_page set
       pdf = ${j(saved.pdf)}::jsonb, pdf_sha256 = ${saved.pdf.sha256},
@@ -233,10 +254,41 @@ export async function afterSave(
       needs_save = ${saved.error !== null}, needs_save_why = ${j(saved.error)}::jsonb,
       checked = null, report = null, saved_at = ${liveAt}, saved_by = ${who.userId}, updated_at = now()
     where publication_id = ${publicationId} and run_id = ${runId} and page_no = ${page}`.execute(tx);
+  // ad_rasters' values are SHA-256 strings, so stripping nulls takes out exactly the slots the page prints no ad in
   await sql`update app.layout_run set
       edition_pdf = coalesce(${j(saved.edition_pdf)}::jsonb, edition_pdf),
-      press_zip = coalesce(${j(saved.press_zip)}::jsonb, press_zip), updated_at = now()
+      press_zip = coalesce(${j(saved.press_zip)}::jsonb, press_zip),
+      ad_rasters = jsonb_strip_nulls(coalesce(ad_rasters, '{}'::jsonb) || ${JSON.stringify(saved.ads)}::jsonb),
+      updated_at = now()
     where publication_id = ${publicationId} and id = ${runId}`.execute(tx);
+  await recountNotPlaced(tx, publicationId, runId, before, words, live);
+}
+
+/** The run's articles (those on its pages before the save, and those it left out: every save keeps them in this set)
+ * on no page now are listed, in a stable order: "deleted after the layout" when the edition no longer has them, else
+ * as listed before, else taken off in the editor. An article back on a page leaves the list. */
+async function recountNotPlaced(
+  tx: Tx,
+  publicationId: string,
+  runId: string,
+  before: readonly string[],
+  words: SaveWords,
+  live: ReadonlySet<string>,
+): Promise<void> {
+  const { rows } = await sql<{ not_placed: { article: string; reason: DeskTextValue }[] }>`select not_placed
+    from app.layout_run where publication_id = ${publicationId} and id = ${runId}`.execute(tx);
+  const earlier = new Map((rows[0]?.not_placed ?? []).map((entry) => [entry.article, entry]));
+  const placed = new Set(await onPages(tx, publicationId, runId));
+  const left = [...new Set([...earlier.keys(), ...before])]
+    .filter((article) => !placed.has(article))
+    .map((article) =>
+      !live.has(article)
+        ? { article, reason: words.deletedAfter }
+        : (earlier.get(article) ?? { article, reason: words.notPlacedEdited }),
+    );
+  await sql`update app.layout_run set not_placed = ${JSON.stringify(left)}::jsonb, updated_at = now()
+    where publication_id = ${publicationId} and id = ${runId}
+      and not_placed is distinct from ${JSON.stringify(left)}::jsonb`.execute(tx);
 }
 
 export type CheckVerdict = { passed: boolean; fails: number | null; warnings: number | null };

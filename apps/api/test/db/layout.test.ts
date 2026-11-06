@@ -687,6 +687,8 @@ describe("a layout run", () => {
           warnings: [],
           state: "done",
           check: { passed: true, fails: 0, warnings: 2, report: report_ },
+          // what the page prints (printed.json's page): kept for the API to compare with the edition
+          printed: { v: 3, articles: { [placed.desk]: "1".repeat(20) }, folio: null, ads: {} },
         },
         {
           page: 2,
@@ -701,6 +703,8 @@ describe("a layout run", () => {
           reason: { text: "these stories do not fill the page exactly", code: "m.run.notFillExactly", params: null },
         },
       ],
+      // what the pages print (the run's own copies), not the request's record
+      ads: { "back-1": "e".repeat(64) },
       edition_pdf: await put(`${folder}edition.pdf`, "%PDF edition"),
       press_zip: await put(`${folder}press-files.zip`, "zip"),
       checker_sha256: "9".repeat(64),
@@ -718,6 +722,10 @@ describe("a layout run", () => {
     expect(got.notPlaced).toEqual([
       { storyId: left.id, deskKey: left.desk, headline: expect.any(String), reason: finished.not_placed[0]?.reason },
     ]);
+    const kept = await su.query("select ad_rasters from app.layout_run where id = $1", [runId]);
+    expect(kept.rows[0].ad_rasters).toEqual({ "back-1": "e".repeat(64) });
+    const record = await su.query("select printed from app.run_page where run_id = $1 and page_no = 1", [runId]);
+    expect(record.rows[0].printed).toEqual(finished.pages[0]?.printed);
     const statuses = await su.query<{ id: string; status: string }>(
       "select id, status from app.story where id = any ($1)",
       [[placed.id, left.id, unplaced.id]],

@@ -14,10 +14,14 @@
  *  - someone else holding the page: read-only, with "Ask to take over"; the holder sees the ask and may hand over;
  *  - an approved page (L2.5) is read-only, with who approved it and "Unlock" (page.unlock); a saved page with its check
  *    known may be approved here (page.approve, with the revision and SHA-256 of the release view); a change the API
- *    refuses as approved meanwhile (409 page_approved) reloads the page and says why.
+ *    refuses as approved meanwhile (409 page_approved) reloads the page and says why;
+ *  - a story's photo crop (its focus and zoom, set by a drag, a click, an arrow or the slider, or reset) is one change
+ *    and one undo step, sent as a nudge is (a crop keeps the lock key, so it merges in the queue); a crop sent for a
+ *    photo the story no longer has comes back none, and the editor says so, as after "Update text" (crops_reset).
+ * The view's own choices (zoom, zoom to the selected story, the rulers, kept in this browser) never change the page.
  * Desktop first: under 900 px the page gives way to "Use a larger screen to edit pages", and is not opened (no lock).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { Badge, Button, Field, InlineMessage, PageHeader, Panel, Select, Stack, Toolbar } from "../../ui/index.ts";
 import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
@@ -42,9 +46,24 @@ import { useLayout } from "../layout/layout-context.tsx";
 import { checkText, roleText } from "../layout/layout-words.tsx";
 import { useRelease } from "../release/release-context.tsx";
 import { useEditor } from "./editor-context.tsx";
-import { PageCanvas } from "./PageCanvas.tsx";
+import { PageCanvas, type Mode, type PageCanvasHandle } from "./PageCanvas.tsx";
 import { StoryText, type ArticleRef, type Draft } from "./StoryText.tsx";
-import { clampZoom, missingGlyphs, problemMsg, readView, snapModule, type Module, type PageView } from "./view.ts";
+import {
+  boxOf,
+  clampZoom,
+  focusOf,
+  missingGlyphs,
+  ppiAt,
+  problemMsg,
+  readView,
+  sameCrop,
+  snapModule,
+  type Crop,
+  type Module,
+  type PageView,
+  type Pair,
+  type PhotoNote,
+} from "./view.ts";
 import "../layout/layout.css";
 import "./editor.css";
 
@@ -63,6 +82,16 @@ const lockKey = (mods: readonly Module[] | null) =>
     .map((m) => `${m.story}@${m.x},${m.y},${m.w},${m.h}`)
     .sort()
     .join("|");
+
+/** Where the rulers' choice is kept in this browser: shown unless hidden, as the Desk. */
+export const RULERS_KEY = "pageinator.editor.rulers";
+function readRulers(): boolean {
+  try {
+    return window.localStorage.getItem(RULERS_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
 
 const WIDE = "(min-width: 900px)";
 /** Wide enough to edit a page (a browser without matchMedia counts as wide). */
@@ -173,6 +202,10 @@ function PageEditor({
   /** the page in the release view: its revision, SHA-256 and check, for "Approve" */
   const [releasePage, setReleasePage] = useState<ReleasePageDto | null>(null);
   const [approving, setApproving] = useState(false);
+  /** photo or focal mode, for this story's photo (selecting another story leaves it) */
+  const [photoMode, setPhotoMode] = useState<{ readonly story: string; readonly mode: "photo" | "focal" } | null>(null);
+  const [rulers, setRulers] = useState(readRulers);
+  const canvasRef = useRef<PageCanvasHandle>(null);
 
   // what the callbacks need now, whatever render they were made in
   const q = useRef({
@@ -213,6 +246,19 @@ function PageEditor({
     if (q.current.alive && r.ok) setHistory(r.value.items);
   }, [editor, where]);
 
+  /** A picture the page or a photo's crop needs, loaded once (the page is drawn again when it has come). */
+  const picture = useCallback(
+    (key: string) => {
+      if (images.current.has(key)) return;
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => setDrawn((n) => n + 1);
+      img.src = editor.rasterUrl({ ...where, key });
+      images.current.set(key, img);
+    },
+    [editor, where],
+  );
+
   /** The engine's answer on screen (outlines first, so the page never draws with missing letters). */
   const accept = useCallback(
     async function accept(next: EditorPageDto, again = true): Promise<boolean> {
@@ -238,14 +284,7 @@ function PageEditor({
         }
       }
       if (!q.current.alive || next.rev < q.current.rev) return false;
-      for (const it of v.items) {
-        if (it.t !== "img" || images.current.has(it.src)) continue;
-        const img = new Image();
-        img.decoding = "async";
-        img.onload = () => setDrawn((n) => n + 1);
-        img.src = editor.rasterUrl({ ...where, key: it.src });
-        images.current.set(it.src, img);
-      }
+      for (const it of v.items) if (it.t === "img") picture(it.src);
       q.current.rev = next.rev;
       q.current.shown = true;
       setUnreadable(false);
@@ -259,7 +298,7 @@ function PageEditor({
       void loadHistory();
       return true;
     },
-    [editor, where, loadHistory],
+    [editor, where, loadHistory, picture],
   );
 
   const reload = useCallback(async () => {
@@ -316,8 +355,12 @@ function PageEditor({
     setProblem(null);
     const r = await editor.change({ ...where, change: { kind: "set", rev: c.rev, modules: mods } });
     if (!c.alive) return;
-    if (r.ok) await accept(r.value);
-    else await failed(r.error);
+    if (r.ok) {
+      // a crop sent for a photo the story no longer has comes back none (its photo was replaced or removed)
+      const now = (await accept(r.value)) ? (readView(r.value.view)?.modules ?? []) : null;
+      const lost = now ? mods.filter((m) => m.crop && !now.find((x) => x.story === m.story)?.crop) : [];
+      if (lost.length) setNotice(lost.map((m) => t("pageEditor.photo.cropReset", { name: nameOf(m.story) })).join(" "));
+    } else await failed(r.error);
     c.sending = false;
     c.inflight = null;
     const next = c.queued?.shift() ?? null; // the oldest waiting change goes next
@@ -386,7 +429,14 @@ function PageEditor({
     });
   };
   const refresh = () =>
-    void exclusive("refresh", { kind: "refresh", rev: q.current.rev }, () => setNotice(t("pageEditor.refreshed")));
+    void exclusive("refresh", { kind: "refresh", rev: q.current.rev }, (next) => {
+      const list = (key: string) => (Array.isArray(next.view[key]) ? (next.view[key] as unknown[]) : []);
+      const said = [t("pageEditor.refreshed")];
+      if (list("ads_changed").length) said.push(t("pageEditor.adsSet"));
+      for (const story of list("crops_reset"))
+        said.push(t("pageEditor.photo.cropReset", { name: nameOf(String(story)) }));
+      setNotice(said.join(" "));
+    });
   refreshRef.current = refresh;
   /** After a text save: now, or once the changes on their way have settled. */
   const refreshSoon = () => {
@@ -535,7 +585,56 @@ function PageEditor({
       setNotice(null);
       return swap(selected, story);
     }
+    if (story !== selected) setPhotoMode(null);
     setSelected(story);
+  };
+
+  // ---------------------------------------------------------------------------------------- photo crops
+  const photoOf = (story: string | null): PhotoNote | null => (story ? (noteOf(story)?.photo ?? null) : null);
+  const setMode = (mode: Mode) => {
+    const p = photoOf(selected);
+    const to = mode === "select" || !selected || !p ? "select" : mode;
+    const now = selected && photoMode?.story === selected ? photoMode.mode : "select";
+    // said in the status (a live region), as the Desk says it
+    if (to !== now)
+      setNotice(
+        to === "photo"
+          ? t("pageEditor.photo.sayPhoto", { name: nameOf(selected ?? "") })
+          : to === "focal"
+            ? t("pageEditor.photo.sayFocal")
+            : t("pageEditor.photo.saySelect"),
+      );
+    if (to === "select" || !selected || !p) return setPhotoMode(null);
+    if (p.full) picture(p.full); // the whole photo, once photo mode needs it
+    setSwapping(false); // (its notice was replaced by the mode's above)
+    setPhotoMode({ story: selected, mode: to });
+  };
+  /** A story's crop changed (its focus, its zoom, or both), its place kept: one change and one undo step. */
+  const setCrop = (story: string, change: { readonly focus?: Pair; readonly zoom?: number }) => {
+    const m = modulesRef.current.find((x) => x.story === story);
+    const p = photoOf(story);
+    if (!m || !p) return;
+    const own = m.crop && m.crop.photo === p.id ? m.crop : null;
+    const crop: Crop = {
+      photo: p.id,
+      focus: change.focus ?? own?.focus ?? focusOf(p.window, p.px),
+      zoom: change.zoom ?? own?.zoom ?? 1,
+    };
+    if (sameCrop(crop, m.crop ?? null)) return;
+    commit(modulesRef.current.map((x) => (x.story === story ? { ...x, crop } : { ...x })));
+  };
+  /** The photo printed as the layout crops it again. */
+  const resetCrop = (story: string) => {
+    if (modulesRef.current.some((m) => m.story === story && m.crop))
+      commit(modulesRef.current.map((m) => (m.story === story ? { ...m, crop: null } : { ...m })));
+  };
+  const toggleRulers = () => {
+    setRulers(!rulers);
+    try {
+      window.localStorage.setItem(RULERS_KEY, rulers ? "0" : "1");
+    } catch {
+      // a browser that refuses storage still shows or hides them, for this visit
+    }
   };
   const change = (next: Module) => {
     if (lockedHere(next.story)) return setNotice(t("pageEditor.lockedMove", { name: nameOf(next.story) }));
@@ -613,6 +712,8 @@ function PageEditor({
   }
 
   const sel = modules.find((m) => m.story === selected) ?? null;
+  const selPhoto = photoOf(sel?.story ?? null);
+  const mode: Mode = sel && selPhoto && photoMode?.story === sel.story ? photoMode.mode : "select";
   const otherPages = data.pages.filter((p) => p.page !== data.page && p.state === "done");
   const role =
     view.role === "front" || view.role === "inside" || view.role === "back" ? roleText(view.role, t) : view.role;
@@ -625,10 +726,10 @@ function PageEditor({
   const ps = data.pageState;
   const status = sending
     ? t("pageEditor.state.setting")
-    : ps.editedUnsaved
-      ? t("pageEditor.state.changed")
-      : ps.needsSave || ps.stale.length > 0
-        ? t("pageEditor.state.needsSave")
+    : ps.needsSave || ps.stale.length > 0 // the Desk's order (editor.js sayOpened): "Needs saving" and why first
+      ? t("pageEditor.state.needsSave")
+      : ps.editedUnsaved
+        ? t("pageEditor.state.changed")
         : t("pageEditor.state.saved");
   const approveWhy =
     ps.editedUnsaved || ps.needsSave || ps.stale.length > 0 || releasePage?.needsSave
@@ -730,12 +831,31 @@ function PageEditor({
           <Button variant="quiet" size="sm" onClick={() => setZoom((z) => clampZoom(z * 1.25))}>
             {t("pageEditor.zoomIn")}
           </Button>
+          <Button
+            variant="quiet"
+            size="sm"
+            disabled={!sel}
+            onClick={() => sel && canvasRef.current?.zoomTo(boxOf(view.grid, sel))}
+          >
+            {t("pageEditor.zoomSelection")}
+          </Button>
+          <Button variant="quiet" size="sm" aria-pressed={rulers} onClick={toggleRulers}>
+            {t("pageEditor.rulers")}
+          </Button>
         </Toolbar>
         <div aria-live="polite" className="pg-editor__status">
-          <Badge tone={sending || busy ? "info" : ps.editedUnsaved || ps.needsSave ? "warning" : "success"}>
+          <Badge
+            tone={
+              sending || busy ? "info" : ps.editedUnsaved || ps.needsSave || ps.stale.length > 0 ? "warning" : "success"
+            }
+          >
             {busy ? busyText[busy] : status}
           </Badge>
-          {ps.needsSaveReason && !ps.editedUnsaved && <DeskWords text={ps.needsSaveReason} />}
+          {ps.needsSaveReason && ps.needsSave && <DeskWords text={ps.needsSaveReason} />}
+          {/* what the page prints that the edition no longer holds (the API decides it at every read) */}
+          {ps.stale.map((why, i) => (
+            <DeskWords key={i} text={why} />
+          ))}
           {notice && <p className="pg-editor__notice">{notice}</p>}
         </div>
         {problem && <Problem problem={problem} />}
@@ -749,11 +869,23 @@ function PageEditor({
             glyphs={glyphs.current}
             images={images.current}
             drawn={drawn}
-            label={t("pageEditor.canvas")}
+            label={t(
+              mode === "photo"
+                ? "pageEditor.photo.canvas"
+                : mode === "focal"
+                  ? "pageEditor.photo.canvasFocal"
+                  : "pageEditor.canvas",
+            )}
             sizeText={sizeText}
             onPick={pick}
             onChange={change}
             onLocked={(story) => setNotice(t("pageEditor.lockedMove", { name: nameOf(story) }))}
+            mode={mode}
+            onMode={setMode}
+            onCrop={(story, focus) => setCrop(story, { focus })}
+            rulers={rulers}
+            onZoom={setZoom}
+            ref={canvasRef}
           />
           <div className="pg-editor__side">
             <Panel title={t("pageEditor.selected")} headingLevel={2}>
@@ -783,6 +915,18 @@ function PageEditor({
                       {sel.locked ? t("pageEditor.unlock") : t("pageEditor.lock")}
                     </Button>
                   </div>
+                  {selPhoto && (
+                    <PhotoTools
+                      key={sel.story}
+                      note={selPhoto}
+                      crop={sel.crop ?? null}
+                      mode={mode}
+                      disabled={!canEdit}
+                      onMode={setMode}
+                      onZoom={(zoom) => setCrop(sel.story, { zoom })}
+                      onReset={() => resetCrop(sel.story)}
+                    />
+                  )}
                   {otherPages.length === 0 ? (
                     <p className="pg-layout__note">{t("pageEditor.noOtherPage")}</p>
                   ) : (
@@ -925,6 +1069,103 @@ const CATALOGUE_ONE = {
   "pageEditor.p.oversetWords.one": true,
   "pageEditor.p.unset.one": true,
 } as const;
+
+/** Below this resolution the panel warns that a photo may print soft (editor.js ppiBadge). */
+const SHARP_PPI = 150;
+
+/** The selected story's photo (editor.js photoPanel, zoomShown): crop and focal point, reset, the zoom as far as it
+ * prints sharp, the resolution it would print at, and why the zoom stops where it does. The slider's value is sent
+ * when it is let go (one change). */
+function PhotoTools({
+  note,
+  crop,
+  mode,
+  disabled,
+  onMode,
+  onZoom,
+  onReset,
+}: {
+  readonly note: PhotoNote;
+  readonly crop: Crop | null;
+  readonly mode: Mode;
+  /** nothing may be sent (the modes may still be viewed) */
+  readonly disabled: boolean;
+  readonly onMode: (mode: Mode) => void;
+  readonly onZoom: (zoom: number) => void;
+  readonly onReset: () => void;
+}) {
+  const { t } = useI18n();
+  const id = useId();
+  const [moving, setMoving] = useState<number | null>(null); // the slider while it is moved (%)
+  const most = Math.floor(note.zoom_max * 100 + 1e-6); // %
+  const own = crop && crop.photo === note.id ? Math.min(crop.zoom, note.zoom_max) : 1;
+  const pct = moving ?? Math.round(own * 100);
+  const ppi = ppiAt(note.ppi, note.zoom, pct / 100);
+  const floor = String(Math.round(note.floor_ppi * 10) / 10);
+  const end = () => {
+    if (moving === null) return;
+    setMoving(null);
+    onZoom(moving / 100);
+  };
+  return (
+    <div role="group" aria-labelledby={id} className="pg-editor__photo">
+      <p id={id} className="pg-editor__head">
+        {t("pageEditor.photo.heading")}
+      </p>
+      <Badge tone={ppi < SHARP_PPI ? "warning" : "success"}>
+        {t(ppi < SHARP_PPI ? "pageEditor.photo.ppiSoft" : "pageEditor.photo.ppiSharp", { n: Math.round(ppi) })}
+      </Badge>
+      <div className="pg-editor__row">
+        <Field label={t("pageEditor.photo.enlarge")}>
+          <input
+            type="range"
+            min={100}
+            max={Math.max(100, most)}
+            step={1}
+            value={pct}
+            disabled={disabled || most <= 100}
+            aria-valuetext={`${pct} %`}
+            onChange={(e) => setMoving(Number(e.target.value))}
+            onPointerUp={end}
+            onKeyUp={end}
+            onBlur={end}
+          />
+        </Field>
+        <output>{pct} %</output>
+      </div>
+      {(most <= 100 || pct >= most) && (
+        <p className="pg-layout__note">
+          {most <= 100
+            ? t("pageEditor.photo.zoomFloor", { ppi: floor })
+            : most < 400
+              ? t("pageEditor.photo.zoomSharp", { ppi: floor })
+              : t("pageEditor.photo.zoomMax")}
+        </p>
+      )}
+      <div className="pg-editor__actions">
+        <Button
+          variant="secondary"
+          size="sm"
+          aria-pressed={mode === "photo"}
+          onClick={() => onMode(mode === "photo" ? "select" : "photo")}
+        >
+          {t("pageEditor.photo.crop")}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          aria-pressed={mode === "focal"}
+          onClick={() => onMode(mode === "focal" ? "photo" : "focal")}
+        >
+          {t("pageEditor.photo.focal")}
+        </Button>
+        <Button variant="quiet" size="sm" disabled={disabled || !crop} onClick={onReset}>
+          {t("pageEditor.photo.reset")}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 /** A problem; the engine's refusal in its own words. */
 function Problem({ problem }: { readonly problem: ApiProblem }) {

@@ -36,6 +36,22 @@ const STORIES: Readonly<Record<string, { headline: string; articles: string[] }>
 };
 const ME = { id: "01900000-0000-7000-8000-000000000001", name: "Fictional Editor" };
 
+/** The lead story's photo (a fictional 2400 × 1600 px picture) as the engine notes it: its frame across the story's top,
+ * the layout's centre crop of it, and the whole photo's raster. A crop sent is kept on the module; the note stays the
+ * layout's. */
+const PHOTO = { story: "d0000000001", id: "p-00000000a1", full: "00000000000000000000a1f0" };
+function photoNote(m: Module) {
+  const [W, H] = [2400, 1600];
+  const box = [m.x, m.y + 12, m.x + span(m.w), m.y + 12 + Math.round(m.h / 2)] as const;
+  const [fw, fh] = [box[2] - box[0], box[3] - box[1]];
+  const [w, h] = [Math.min(W, Math.floor((H * fw) / fh)), Math.min(H, Math.floor((W * fh) / fw))];
+  const window = [Math.floor((W - w) / 2), Math.floor((H - h) / 2), w, h] as const;
+  const ppi = Math.round((w / (fw / 25.4)) * 10) / 10;
+  const note = { id: PHOTO.id, px: [W, H], box_mm: box, window, ppi, zoom: 1, floor_ppi: 150, focus: null };
+  const item = { t: "img", x: box[0], y: box[1], w: fw, h: fh, src: PHOTO.full, sub: [window[0] / W, window[1] / H, w / W, h / H] };
+  return { note: { ...note, zoom_max: Math.min(4, Math.floor((ppi / 150) * 1000) / 1000), full: PHOTO.full }, item };
+}
+
 interface PageRow {
   rev: number;
   modules: Module[];
@@ -80,7 +96,13 @@ export function createMockEditor(
         role: page === 1 ? "front" : "inside",
         rev: r.rev,
         modules: r.modules.map((m) => ({ ...m })),
-        notes: r.modules.map((m) => ({ story: m.story, fit: "fits", by_mm: 0, ...STORIES[m.story] })),
+        notes: r.modules.map((m) => ({
+          story: m.story,
+          fit: "fits",
+          by_mm: 0,
+          ...STORIES[m.story],
+          photo: m.story === PHOTO.story ? photoNote(m).note : null,
+        })),
         problems: [],
         pool: Object.entries(STORIES)
           .filter(([story]) => !on.has(story))
@@ -90,6 +112,7 @@ export function createMockEditor(
         locked_on_pages: {},
         items: [
           ...r.modules.map((m) => ({ t: "rect", x: m.x, y: m.y, w: span(m.w), h: 8, c: [0, 0, 0, 0.2] })),
+          ...r.modules.filter((m) => m.story === PHOTO.story).map((m) => photoNote(m).item),
           ...r.modules.map((m) => ({
             t: "text",
             f: "F0",

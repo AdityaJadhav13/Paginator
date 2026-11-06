@@ -82,6 +82,13 @@
   gap: var(--pg-space-2);
 }
 
+/* the selected story's photo: its resolution, zoom and crop */
+.pg-editor__photo {
+  display: grid;
+  justify-items: start;
+  gap: var(--pg-space-2);
+}
+
 .pg-editor__row {
   display: flex;
   align-items: center;

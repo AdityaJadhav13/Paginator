@@ -899,6 +899,15 @@
                 "sha256": "eaec54a9106b6c33b25b5c165eaf4087aafac1216e8d006c5a310fdeba47d01d",
                 "bytes": 3587
               }
+            },
+            "printed": {
+              "v": 3,
+              "articles": {
+                "a-0000000001": "d82bff888b6de6c639d6",
+                "a-0000000003": "89ffa9a2d4c355ec622c"
+              },
+              "folio": null,
+              "ads": {}
             }
           },
           {
@@ -947,6 +956,14 @@
                 "sha256": "ba62fa30f50352e43d7efe2f4e248c2ccdf2a9cb9a506ffacbee1a200e7c1a3c",
                 "bytes": 3587
               }
+            },
+            "printed": {
+              "v": 3,
+              "articles": {
+                "a-0000000002": "dd252b4a2a739bd71034"
+              },
+              "folio": null,
+              "ads": {}
             }
           }
         ],
@@ -960,6 +977,7 @@
             }
           }
         ],
+        "ads": {},
         "edition_pdf": {
           "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/edition.pdf",
           "version_id": "d10fa36bd2e7bdcd322be28fc7a39c5a18ba82319c732e9eb6966c221c966804",
@@ -1015,6 +1033,7 @@
           }
         ],
         "not_placed": [],
+        "ads": {},
         "edition_pdf": null,
         "press_zip": null,
         "checker_sha256": "307bfc4df43837725f94ebc9619c54ad2815abdae4e9159ae14cca7039aef14b",
@@ -1064,6 +1083,7 @@
         "error": null,
         "pages": [],
         "not_placed": [],
+        "ads": {},
         "edition_pdf": null,
         "press_zip": null,
         "checker_sha256": "307bfc4df43837725f94ebc9619c54ad2815abdae4e9159ae14cca7039aef14b",

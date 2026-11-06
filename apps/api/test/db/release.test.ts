@@ -4,10 +4,12 @@
 // to the work bucket and checked (app.pdf_check). The edit gateway is a small stub (open and set only) so that the page
 // editor's lock on an approved page can be seen. Page approval and unlocking, the editor's 409 page_approved, the
 // preflight's refusals (approvals, the G2 press test), a release archived under Object Lock and read back, the archived
-// version refusing a delete without the governance bypass, the download link, "Mark as sent", the confirmation (once),
-// the archive check, a late correction (_v2), a copy that does not match (502, nothing released); at the same time: two
-// releases, an unlock during a release (held by a slow archive), an approval during a save (held by a slow engine),
-// and a save taking a story off an approved page; the write-once columns; who may do what, and another organisation.
+// version refusing a delete without the governance bypass, the download link, "Download all" (the ZIP's SHA256SUMS and
+// exact archived bytes, cut off at a damaged archive read), "Mark as sent" (one delivery per Idempotency-Key), the
+// confirmation (once), the archive check, a late correction (_v2), a copy that does not match (502, nothing released);
+// at the same time: two releases, an unlock during a release (held by a slow archive), an approval during a save (held
+// by a slow engine), and a save taking a story off an approved page; the write-once columns; who may do what, another
+// organisation; and the Pages board's save marks from the page editor.
 import { createHash, randomUUID } from "node:crypto";
 import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -18,6 +20,7 @@ import {
   type S3Client,
 } from "@aws-sdk/client-s3";
 import { GATEWAY_TEST_VECTOR } from "@pageinator/contracts";
+import { unzipSync } from "fflate";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it, inject } from "vitest";
 import type { ObjectStore } from "../../src/storage/object-store.ts";
@@ -48,6 +51,8 @@ function gate(): Gate {
 /** The engine's next state call (a save's first) and the archive's next write stop at these when set. */
 let stateHold: Gate | undefined;
 let archiveHold: Gate | undefined;
+/** An archive read of a key ending so answers its bytes with the first one changed (a damaged copy), when set. */
+let damaged: string | undefined;
 async function pass(hold: Gate | undefined) {
   if (!hold) return;
   hold.enter();
@@ -142,6 +147,21 @@ beforeAll(async () => {
       await pass(hold);
       return plain.archivePut(input);
     },
+    async archiveRead(key, versionId) {
+      const chunks = await plain.archiveRead(key, versionId);
+      if (!damaged || !key.endsWith(damaged)) return chunks;
+      return (async function* () {
+        let first = true;
+        for await (const chunk of chunks) {
+          const copy = Uint8Array.from(chunk);
+          if (first && copy.length > 0) {
+            copy[0] = (copy[0] ?? 0) ^ 1;
+            first = false;
+          }
+          yield copy;
+        }
+      })();
+    },
   }));
   const storage = it_.config.storage;
   if (!storage) throw new Error("the database tests need the object store");
@@ -172,8 +192,9 @@ beforeAll(async () => {
   runId = run.rows[0]?.id ?? "";
   for (const p of [1, 2, 3, 4]) {
     await su.query(
-      `insert into app.run_page (org_id, publication_id, run_id, page_no, role, state, articles, checked)
-       values ($1, $2, $3, $4, $5, 'done', $6, '{"passed": true, "fails": 0, "warnings": 0}')`,
+      // printed: a record of no article (what the pages print is printed.ts's own test)
+      `insert into app.run_page (org_id, publication_id, run_id, page_no, role, state, articles, checked, printed)
+       values ($1, $2, $3, $4, $5, 'done', $6, '{"passed": true, "fails": 0, "warnings": 0}', '{"v": 3, "articles": {}}')`,
       [
         a.orgId,
         a.pubId,
@@ -432,8 +453,45 @@ describe("a release", () => {
     );
   });
 
+  it("downloads all as one ZIP to prepress: SHA256SUMS, then exactly the archived bytes of each file", async () => {
+    const zipUrl = `${pubPath()}/releases/${firstId}/zip`;
+    expect((await call("POST", zipUrl, reporter.cookie)).statusCode).toBe(403);
+    expect((await call("POST", `${pubPath()}/releases/${randomUUID()}/zip`, prepress.cookie)).statusCode).toBe(404);
+    const res = await call("POST", zipUrl, prepress.cookie);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/zip");
+    expect(res.headers["content-disposition"]).toBe(`attachment; filename="${DATE}_release-1.zip"`);
+    const { rows } = await su.query<{ name: string; sha256: string; archive_key: string; archive_version_id: string }>(
+      "select name, sha256, archive_key, archive_version_id from app.release_file where release_id = $1 order by page_no",
+      [firstId],
+    );
+    const files = unzipSync(res.rawPayload);
+    expect(Object.keys(files)).toEqual(["SHA256SUMS", ...rows.map((row) => row.name)]);
+    expect(new TextDecoder().decode(files["SHA256SUMS"])).toBe(
+      rows.map((row) => `${row.sha256}  ${row.name}\n`).join(""),
+    );
+    for (const row of rows) {
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of await store.archiveRead(row.archive_key, row.archive_version_id)) chunks.push(chunk);
+      expect(Buffer.from(files[row.name] ?? [])).toEqual(Buffer.concat(chunks));
+      expect(sha(Buffer.from(files[row.name] ?? []))).toBe(row.sha256);
+    }
+  });
+
+  it("cuts the ZIP off when an archived file reads back as other bytes", async () => {
+    damaged = `${DATE}_P02.pdf`;
+    try {
+      // the answer began before the file was read: it is cut off (the connection is destroyed), never completed
+      await expect(call("POST", `${pubPath()}/releases/${firstId}/zip`, prepress.cookie)).rejects.toThrow(
+        "response destroyed before completion",
+      );
+    } finally {
+      damaged = undefined;
+    }
+  });
+
   it("is marked as sent with its files' hashes, and confirmed once; each writes the receipts again", async () => {
-    const sent = await call("POST", `${pubPath()}/releases/${firstId}/deliveries`, prepress.cookie, {
+    const sent = await change("POST", `${pubPath()}/releases/${firstId}/deliveries`, prepress.cookie, {
       note: "Sent by email (fictional)",
     });
     expect(sent.statusCode).toBe(200);
@@ -462,6 +520,24 @@ describe("a release", () => {
     expect(receipts.Versions).toHaveLength(2);
     expect((await audits("release.send")).length).toBe(1);
     expect((await audits("release.confirm")).length).toBe(1);
+  });
+
+  it("records one delivery for a retried Mark as sent (one key), another for a new key, and none without a key", async () => {
+    const url = `${pubPath()}/releases/${firstId}/deliveries`;
+    const count = async () =>
+      (await su.query("select 1 from app.delivery where release_id = $1", [firstId])).rowCount ?? 0;
+    const before = await count();
+    const missing = await call("POST", url, prepress.cookie, {});
+    expect([missing.statusCode, err(missing).code]).toEqual([400, "invalid_request"]);
+    const key = randomUUID();
+    const first = await change("POST", url, prepress.cookie, { note: "Sent again (fictional)" }, key);
+    const retry = await change("POST", url, prepress.cookie, { note: "Sent again (fictional)" }, key);
+    expect([first.statusCode, retry.statusCode]).toEqual([200, 200]);
+    expect(retry.json()).toEqual(first.json());
+    expect(await count()).toBe(before + 1);
+    expect((await change("POST", url, prepress.cookie, { note: "Sent again (fictional)" })).statusCode).toBe(200);
+    expect(await count()).toBe(before + 2);
+    expect((await audits("release.send")).length).toBe(3);
   });
 
   it("has nothing to release again while no page changed", async () => {
@@ -639,5 +715,37 @@ describe("another organisation", () => {
       (await call("GET", theirs(`${pubPath()}/releases/${firstId}/files/${DATE}_P01.pdf`), b.ownerCookie)).statusCode,
     ).toBe(404);
     expect((await call("POST", theirs(`${pubPath()}/releases/${firstId}/verify`), b.ownerCookie)).statusCode).toBe(404);
+    expect((await call("POST", theirs(`${pubPath()}/releases/${firstId}/zip`), b.ownerCookie)).statusCode).toBe(404);
+  });
+});
+
+describe("the Pages board", () => {
+  it("shows each page's save state from the page editor: changed and not saved, or needs saving and why", async () => {
+    const why = { text: "The previews could not be made (fictional).", code: null, params: null };
+    const older = { text: "A story changed after this page was saved (fictional).", code: null, params: null };
+    // the last test: the flags are left as set
+    await su.query(
+      `update app.run_page set edited_unsaved = page_no = 2, needs_save = page_no = 3,
+         needs_save_why = case when page_no = 3 then $2::jsonb end,
+         stale = case when page_no in (3, 4) then $3::jsonb else '[]' end
+       where run_id = $1`,
+      [runId, JSON.stringify(why), JSON.stringify([older])],
+    );
+    const run = await call("GET", `${pubPath()}/runs/${runId}`, reporter.cookie);
+    expect(run.statusCode).toBe(200);
+    const marks = run
+      .json()
+      .pages.map((p: { page: number; editedUnsaved: boolean; needsSave: boolean; needsSaveReasons: unknown[] }) => [
+        p.page,
+        p.editedUnsaved,
+        p.needsSave,
+        p.needsSaveReasons,
+      ]);
+    expect(marks).toEqual([
+      [1, false, false, []],
+      [2, true, false, []],
+      [3, false, true, [why, older]],
+      [4, false, true, [older]],
+    ]);
   });
 });

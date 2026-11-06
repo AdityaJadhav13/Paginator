@@ -2,9 +2,10 @@
  * The release (plan §1 L2.5), on the test double with fictional data: the Release tab's preflight list in words, the
  * pages' approval (Approve with the revision and SHA-256 shown, Unlock, 409 approval_stale), the G2 press test (the
  * warning, the evidence, the form), "Approve release" posting exactly the files shown (disabled while a check fails;
- * 409 approval_stale, release_refused, 502 archive_failed), a correction, the releases with their downloads, "Mark as
- * sent", the press's confirmation (409 already_confirmed) and the archive check; approval on the Pages board; what each
- * role sees; the live refresh; axe in English and Marathi. Never "press-ready" or "PDF/X-valid".
+ * 409 approval_stale, release_refused, 502 archive_failed), a correction, the releases with their downloads (one file,
+ * or all in one ZIP), "Mark as sent" (its Idempotency-Key), the press's confirmation (409 already_confirmed) and the
+ * archive check; older ad images on the back page; approval on the Pages board; what each role sees; the live
+ * refresh; axe in English and Marathi. Never "press-ready" or "PDF/X-valid".
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -310,6 +311,33 @@ describe("the folio", () => {
   });
 });
 
+describe("older ad images", () => {
+  it("say the back page can be updated and saved instead of laying out again, in English and Marathi", async () => {
+    const view = ready({
+      preflight: {
+        passed: false,
+        items: [{ check: "ad_artwork", state: "failed", pages: [2], slots: ["back-1"], printsOld: true, stories: [] }],
+      },
+    });
+    const { environment } = withView(view);
+    const { unmount } = renderAuth(TAB(), { preset: "sahyadri-chief-editor", environment });
+    const checks = within(await screen.findByRole("region", { name: "Checks before release" }));
+    expect(
+      await checks.findByText(
+        "The pages print older ad images than the ads have now: lay out again. Or update the text on the back page, then save it.",
+      ),
+    ).toBeInTheDocument();
+    expect(checks.getByRole("link", { name: "Edit page 2" })).toBeInTheDocument();
+    unmount();
+    renderAuth(TAB(), { preset: "sahyadri-chief-editor", environment: withView(view).environment, language: "mr" });
+    expect(
+      await screen.findByText(
+        "जाहिरातींकडे आता असलेल्या चित्रांपेक्षा जुनी चित्रे पानांवर छापली जातात: पुन्हा मांडणी करा. किंवा मागील पानावरील मजकूर अद्ययावत करून ते जतन करा.",
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("approving the release", () => {
   it("posts exactly the files it shows, with their SHA-256 and an Idempotency-Key", async () => {
     const { environment } = withView(ready());
@@ -540,9 +568,78 @@ describe("the releases", () => {
       pubId: PUB,
       releaseId: view.releases[0]!.id,
       note: "Fictional mail",
+      idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
     expect(await one.findByText("Sent by Fictional Chief, 24 Oct 2026, 10:00 am")).toBeInTheDocument();
     expect(one.getByText("The press has not confirmed yet.")).toBeInTheDocument();
+  });
+
+  it("keeps the sending's Idempotency-Key when no answer came, and takes a new one after an answer or a new note", async () => {
+    const { environment } = withView(ready({ candidate: null, releases: [released(1, "release", [file(1)])] }));
+    const send = vi
+      .spyOn(environment.release, "markSent")
+      .mockResolvedValueOnce({ ok: false, error: { kind: "network" } })
+      .mockResolvedValueOnce({ ok: true, value: sentOne() })
+      .mockResolvedValueOnce({ ok: false, error: { kind: "network" } })
+      .mockResolvedValueOnce({ ok: false, error: { kind: "network" } });
+    renderAuth(TAB(), { preset: "sahyadri-chief-editor", environment });
+    const user = userEvent.setup();
+    const one = within(await screen.findByRole("region", { name: "Release 1" }));
+    const click = () => user.click(one.getByRole("button", { name: "Mark as sent" }));
+    await click();
+    await one.findByText("Pageinator cannot be reached");
+    await click(); // the retry of that click: recorded once, whichever of the two reached the server
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    await click(); // a new sending after an answer
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(3));
+    await user.type(one.getByLabelText("Note on the sending (optional)"), "Fictional"); // another request
+    await click();
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(4));
+    const keys = send.mock.calls.map((call) => call[0].idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+    expect(new Set([keys[1], keys[2], keys[3]]).size).toBe(3);
+  });
+
+  it("keeps the sending's key while the first try is still running (409 request_in_progress)", async () => {
+    const { environment } = withView(ready({ candidate: null, releases: [released(1, "release", [file(1)])] }));
+    const busy = { kind: "answer", status: 409, code: "request_in_progress", message: "" } as const;
+    const send = vi
+      .spyOn(environment.release, "markSent")
+      .mockResolvedValueOnce({ ok: false, error: busy })
+      .mockResolvedValueOnce({ ok: true, value: sentOne() });
+    renderAuth(TAB(), { preset: "sahyadri-chief-editor", environment });
+    const user = userEvent.setup();
+    const one = within(await screen.findByRole("region", { name: "Release 1" }));
+    await user.click(one.getByRole("button", { name: "Mark as sent" }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    await user.click(one.getByRole("button", { name: "Mark as sent" }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(send.mock.calls[1]![0].idempotencyKey).toBe(send.mock.calls[0]![0].idempotencyKey);
+  });
+
+  it("downloads all of a release as one ZIP with its file name (export.press)", async () => {
+    const { environment } = withView(
+      ready({
+        candidate: null,
+        releases: [released(2, "correction", [file(1, 2)]), released(1, "release", [file(1), file(2)])],
+      }),
+    );
+    const all = vi
+      .spyOn(environment.release, "downloadAll")
+      .mockResolvedValueOnce(answer(404, "not_found"))
+      .mockResolvedValueOnce({ ok: true, value: { file: new Blob(["PK"]), filename: "2026-10-24_release-1.zip" } });
+    renderAuth(TAB(), { preset: "sahyadri-chief-editor", environment });
+    const user = userEvent.setup();
+    const one = within(await screen.findByRole("region", { name: "Release 1" }));
+    // its files' SHA-256 are on screen beside it
+    expect(one.getByText(SHA(2))).toBeInTheDocument();
+    await user.click(one.getByRole("button", { name: "Download all (ZIP)" }));
+    expect(await one.findByRole("alert")).toBeInTheDocument();
+    expect(saved).toEqual([]);
+    await user.click(one.getByRole("button", { name: "Download all (ZIP)" }));
+    await waitFor(() => expect(saved).toEqual([{ href: "blob:fictional", download: "2026-10-24_release-1.zip" }]));
+    expect(all).toHaveBeenCalledWith({ orgId: ORG, pubId: PUB, releaseId: released(1, "release", []).id });
+    expect(one.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("records the press's confirmation once, and says so on 409 already_confirmed", async () => {
