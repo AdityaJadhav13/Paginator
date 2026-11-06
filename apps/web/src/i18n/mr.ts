@@ -13,6 +13,7 @@ import { ARCHIVE_MR } from "./screens/archive.mr.ts";
 import { BRAND_MR } from "./screens/brand.mr.ts";
 import { SETTINGS_MR } from "./screens/settings.mr.ts";
 import { PRINT_PROFILES_MR } from "./screens/printProfiles.mr.ts";
+import { EVIDENCE_MR } from "./screens/evidence.mr.ts";
 import { AUTH_MR } from "./screens/auth.mr.ts";
 import { SITE_MR } from "./screens/site.mr.ts";
 
@@ -1826,6 +1827,7 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   ...BRAND_MR,
   ...SETTINGS_MR,
   ...PRINT_PROFILES_MR,
+  ...EVIDENCE_MR,
   ...AUTH_MR,
   ...SITE_MR,
 

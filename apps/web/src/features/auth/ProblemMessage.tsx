@@ -37,8 +37,8 @@ export function describeProblem(problem: ApiProblem, t: Translate): ProblemText 
   if (code === "unexpected_answer") {
     return { heading: t("problem.unexpected.heading"), body: t("problem.unexpected.body") };
   }
-  // editor_unavailable (503), archive_failed and receipt_failed (502) have words of their own
-  const own = code === "editor_unavailable" || code === "archive_failed" || code === "receipt_failed";
+  // editor_unavailable and press_test_unavailable (503), archive_failed and receipt_failed (502) have words of their own
+  const own = ["editor_unavailable", "press_test_unavailable", "archive_failed", "receipt_failed"].includes(code);
   if (code === "server_error" || (status >= 500 && !own)) {
     return {
       heading: t("problem.server.heading"),

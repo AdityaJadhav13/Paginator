@@ -22,6 +22,7 @@
 - [11-fix-before-launch.md](11-fix-before-launch.md): the minor findings left for the end, fixed before launch (owner decision 2026-10-21)
 - [12-l2.1-evidence.md](12-l2.1-evidence.md): the L2.1 verification (PR 26, 2026-11-02): what was run, with what result, and what is not yet verified
 - [13-news-finder.md](13-news-finder.md): the news finder, the sidebar's Sources (L2.7, owner request 2026-11-04)
+- [14-evidence-parity-and-gates.md](14-evidence-parity-and-gates.md): platform and colour parity, G1's L3 measured, the press test page (2026-11-05): what was measured and what the owner must still sign
 
 ## 0. Context
 
@@ -48,8 +49,9 @@
   - a mock session.
 - **Gate status today.**
   - **G0 NOT MET:** pilot agreement and press questionnaire not done.
-  - **G1 pending:** signed sheet, plus L3 to measure.
-  - **G2 met only for type and colour:** the page with photos and an ad, and the record sheet, are still to do.
+  - **G1 pending:** the signed sheet. L3 is measured (2026-11-05, doc 14): 0.04 % of lines outside the spacing policy, limit 2 %.
+  - **G2 met only for type and colour:** the page with photos and an ad, and the record sheet, are still to do. The
+    product now makes that page (Print profiles → "Download press test page", doc 14); the press has not printed it.
 - **The architecture:** `docs/architecture/v2`, with gates G0–G7.
 - **The original product brief:** `docs/context/ORIGINAL_PRODUCT_CONTEXT.md` (OPC).
 

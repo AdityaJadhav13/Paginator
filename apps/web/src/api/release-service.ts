@@ -21,6 +21,8 @@ import type { ApiClient, ApiResult } from "./client.ts";
 
 /** Approving a release copies its files to the archive and reads them back: it may take longer than a plain call. */
 export const RELEASE_TIMEOUT_MS = 180_000;
+/** The engine makes and checks the press test page on the first call (the API waits 300 s for it). */
+export const PRESS_TEST_TIMEOUT_MS = 310_000;
 
 const UNEXPECTED: ApiProblem = { kind: "answer", status: 200, code: "unexpected_answer", message: "" };
 
@@ -97,6 +99,19 @@ export function createApiReleaseService(client: ApiClient): ReleaseService {
     async addPrintProfile({ orgId, pubId, pressName, contact, note, idempotencyKey }) {
       const body = { pressName, ...(contact ? { contact } : {}), ...(note ? { note } : {}) };
       return read(PrintProfile, await client.post(`${pub(orgId, pubId)}/print-profiles`, body, { idempotencyKey }));
+    },
+    async pressTestPage({ orgId, pubId }) {
+      const answer = await client.download(`${pub(orgId, pubId)}/print-profiles/press-test`, undefined, {
+        headers: { Accept: "application/pdf, application/json" },
+        timeoutMs: PRESS_TEST_TIMEOUT_MS,
+      });
+      if (!answer.ok) return { ok: false, error: answer.problem };
+      const { blob, headers } = answer.value;
+      const sha256 = headers.get("X-Pageinator-Sha256") ?? "";
+      const warnings = headers.get("X-Pageinator-Check-Warnings") ?? "";
+      if (!/^[0-9a-f]{64}$/.test(sha256) || !/^\d{1,6}$/.test(warnings)) return { ok: false, error: UNEXPECTED };
+      const filename = `pageinator-press-test-${sha256.slice(0, 12)}.pdf`;
+      return { ok: true, value: { file: blob, filename, sha256, warnings: Number(warnings) } };
     },
   };
 }

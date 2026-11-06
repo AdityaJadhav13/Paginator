@@ -17,10 +17,11 @@ from deskserver import docx, engine_client, images, util, ziplimits  # noqa: E40
 from deskserver import jobs as runs  # noqa: E402  (the Desk's run steps: previews, the check, merge, ZIP)
 from deskserver import messages  # noqa: E402
 from deskserver import editing  # noqa: E402  (the page editor's engine service and save steps: gateway.py)
+from deskserver import presstest  # noqa: E402  (the press test page: gateway.py)
 from deskmsg import MESSAGES  # noqa: E402  (the engine's folder is on the path: deskserver.messages)
 
-__all__ = ["DESK", "REPO", "desk_text", "docx", "editing", "engine_client", "images", "messages", "runs", "util",
-           "ziplimits"]
+__all__ = ["DESK", "REPO", "desk_text", "docx", "editing", "engine_client", "images", "messages", "presstest", "runs",
+           "util", "ziplimits"]
 M = messages
 
 

@@ -15,6 +15,7 @@ import { ARCHIVE_EN } from "./screens/archive.en.ts";
 import { BRAND_EN } from "./screens/brand.en.ts";
 import { SETTINGS_EN } from "./screens/settings.en.ts";
 import { PRINT_PROFILES_EN } from "./screens/printProfiles.en.ts";
+import { EVIDENCE_EN } from "./screens/evidence.en.ts";
 import { AUTH_EN } from "./screens/auth.en.ts";
 import { SITE_EN } from "./screens/site.en.ts";
 
@@ -1820,6 +1821,7 @@ export const EN = {
   ...BRAND_EN,
   ...SETTINGS_EN,
   ...PRINT_PROFILES_EN,
+  ...EVIDENCE_EN,
   ...AUTH_EN,
   ...SITE_EN,
 

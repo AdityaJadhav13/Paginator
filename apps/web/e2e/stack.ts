@@ -213,6 +213,7 @@ export async function startStack(production: boolean): Promise<() => Promise<voi
       PGN_GATEWAY_SECRET: gateway.PGN_GATEWAY_SECRET,
       PGN_GATEWAY_PORT: String(PORTS.gateway),
       PGN_WORKER_HOMES: homes,
+      PAGEINATOR_ICC: icc, // the press test page's colour profile
     });
     // it refuses an unsigned request (401) once it listens
     await until("the edit gateway", async () => (await fetch(`${gateway.PGN_GATEWAY_URL}/v1/call`)).status === 401, editGateway);

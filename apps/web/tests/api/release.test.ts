@@ -126,4 +126,24 @@ describe("the release service", () => {
     expect(await release.create(input)).toMatchObject({ ok: false, error: { status: 409, code: "approval_stale" } });
     expect(await release.create(input)).toMatchObject({ ok: false, error: { status: 502, code: "archive_failed" } });
   });
+
+  it("downloads the press test page with a GET and reads its SHA-256; a wrong header is unexpected", async () => {
+    const pdf = (sha: string) =>
+      new Response("%PDF-fictional", {
+        status: 200,
+        headers: { "Content-Type": "application/pdf", "X-Pageinator-Sha256": sha, "X-Pageinator-Check-Warnings": "8" },
+      });
+    const answers = [pdf(SHA), pdf("not a hash")];
+    const { fetch, calls } = fakeFetch(() => answers.shift()!);
+    const release = createApiReleaseService(createApiClient({ fetch }));
+    expect(await release.pressTestPage(O)).toMatchObject({
+      ok: true,
+      value: { sha256: SHA, warnings: 8, filename: `pageinator-press-test-${SHA.slice(0, 12)}.pdf` },
+    });
+    expect(await release.pressTestPage(O)).toMatchObject({ ok: false, error: { code: "unexpected_answer" } });
+    expect(calls.map((c) => [c.method, path(c.url), c.body])).toEqual([
+      ["GET", `${BASE}/print-profiles/press-test`, undefined],
+      ["GET", `${BASE}/print-profiles/press-test`, undefined],
+    ]);
+  });
 });

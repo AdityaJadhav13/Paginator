@@ -88,6 +88,16 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
     message: "This layout's files are not on the engine's computer. Lay the edition out again to edit its pages.",
   },
   editor_unavailable: { status: 503, message: "The page editor is not available just now. Try again in a minute." },
+  // the G2 press test page (print-profiles.ts)
+  press_test_unavailable: {
+    status: 503,
+    message: "The press test page cannot be made just now. Try again in a few minutes.",
+  },
+  press_test_refused: {
+    status: 409,
+    message:
+      "The press test page was not given: it failed its check, or it does not match this paper's page size or colour profile.",
+  },
   // release (L2.5)
   approval_stale: {
     status: 409,

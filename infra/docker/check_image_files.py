@@ -27,7 +27,8 @@ ENGINE_CODE = ("tools/oracle/v0/", *(f"experiments/phase0/{d}/" for d in (
 TAKEN = ("tools/desk/deskserver/", "tools/desk/engine/", "tools/onboard/chain/", "apps/engine-worker/pgn_worker/",
          "apps/engine-queue/src/", "packages/contracts/src/", *ENGINE_CODE)
 TAKEN_FILES = ("apps/engine-worker/requirements.lock", "apps/engine-queue/package.json", "packages/contracts/package.json",
-               "tools/onboard/onboard.py", "tools/onboard/intake.py", "tools/onboard/autocorrect.py")
+               "tools/onboard/onboard.py", "tools/onboard/intake.py", "tools/onboard/autocorrect.py",
+               "fixtures/typeset/v1/corpus/texts.json")
 ROOT = "opt/pageinator/"
 VENV = ROOT + "venv/"
 ENGINE_VENV = ROOT + "engine-venv/"             # the engine's environment: the frozen oracle lock (L2.3)

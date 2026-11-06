@@ -42,6 +42,7 @@ import { adsRoutes } from "./modules/ads/routes.ts";
 import { layoutRoutes } from "./modules/layout/routes.ts";
 import { onboardingRoutes } from "./modules/onboarding/routes.ts";
 import { releaseRoutes } from "./modules/release/routes.ts";
+import { pressTestRoutes } from "./modules/release/print-profiles.ts";
 import { type PhotoFetch, newsRoutes } from "./modules/news/routes.ts";
 import { startNewsSchedule } from "./modules/news/schedule.ts";
 import { adSettingsRoutes, startAdCutoffSchedule } from "./modules/ads/cutoff.ts";
@@ -224,10 +225,9 @@ export async function buildApp(deps: AppDeps) {
     await app.register(settingsRoutes, { auth: people.auth, database: people.database });
     await app.register(auditRoutes, { database: people.database });
     // the page editor: through the edit gateway (without its settings, its routes answer 503 editor_unavailable)
-    await app.register(editorRoutes, {
-      database: people.database,
-      gateway: config.gateway ? gatewayClient(config.gateway.url, config.gateway.secret) : undefined,
-    });
+    const gateway = config.gateway ? gatewayClient(config.gateway.url, config.gateway.secret) : undefined;
+    await app.register(editorRoutes, { database: people.database, gateway });
+    await app.register(pressTestRoutes, { database: people.database, gateway });
     if (live) {
       await app.register(notificationRoutes, {
         database: people.database,

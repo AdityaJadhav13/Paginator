@@ -10,6 +10,7 @@ import {
   GATEWAY_SIGNATURE_HEADER,
   GATEWAY_TIME_HEADER,
   GlyphOutlines,
+  PressTestPage,
   gatewaySigningText,
 } from "@pageinator/contracts";
 import { ApiError } from "../../http/errors.ts";
@@ -17,11 +18,16 @@ import { ApiError } from "../../http/errors.ts";
 /** The Desk's longest wait (editing.py OPEN_TIMEOUT_S: the first open of a page may measure its stories). */
 export const CALL_TIMEOUT_MS = 900_000;
 const FILE_TIMEOUT_MS = 30_000;
+/** The press test page: a cold make takes seconds (6–60 s measured), then the gateway keeps it. Its own limits (engine
+ * 300 s, check 300 s) are longer, so a stuck make is 503 here while the gateway finishes and keeps it for the next try. */
+const PRESS_TEST_TIMEOUT_MS = 300_000;
 
 export type Gateway = {
   call(call: EditCall): Promise<EditAnswer>;
   glyphs(org: string, pub: string, face: string, ids: string): Promise<GlyphOutlines | null>;
   raster(org: string, pub: string, key: string): Promise<Buffer | null>;
+  /** The G2 press test page (print-profiles.ts); its 500 {"error"} is editor_unavailable with that reason. */
+  pressTest(): Promise<PressTestPage>;
 };
 
 /** The X-Pgn-Signature of a request. */
@@ -86,6 +92,16 @@ export function gatewayClient(url: string, secretHex: string, now: () => number 
       } catch (error) {
         throw unavailable(error instanceof Error ? error.message : String(error));
       }
+    },
+    async pressTest() {
+      const reply = await send("GET", "/v1/press-test", "", PRESS_TEST_TIMEOUT_MS);
+      const body: unknown = await reply.json().catch(() => null);
+      const parsed = PressTestPage.safeParse(reply.ok ? body : null);
+      if (parsed.success) return parsed.data;
+      const said = (body as { error?: unknown } | null)?.error;
+      throw unavailable(
+        `the gateway answered ${reply.status} for the press test${typeof said === "string" ? `: ${said}` : ""}`,
+      );
     },
   };
 }

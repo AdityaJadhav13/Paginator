@@ -6,8 +6,8 @@
  * the press's confirmation (409 already_confirmed), the archive check and the press test. Every page PDF's SHA-256 is
  * fictional and never changes here, so a correction is not modelled (tests stub one). The archive lists the releases made
  * here (the search over stories is not modelled: a search finds nothing); print profiles are kept in memory, and a
- * release pins the newest. Permissions are not modelled: the screen hides what the API would refuse. Fictional data
- * only.
+ * release pins the newest; the press test page is a fictional file with a fictional SHA-256. Permissions are not
+ * modelled: the screen hides what the API would refuse. Fictional data only.
  */
 import type {
   ApiProblem,
@@ -311,6 +311,12 @@ export function createMockRelease(deps: MockReleaseDeps): {
       };
       profiles = [made, ...profiles];
       return { ok: true, value: structuredClone(made) };
+    },
+    async pressTestPage() {
+      // a fictional file: not a PDF, never made or checked by the engine here
+      const sha256 = "e".repeat(64);
+      const file = new Blob(["fictional press test page"], { type: "application/pdf" });
+      return { ok: true, value: { file, filename: `pageinator-press-test-${sha256.slice(0, 12)}.pdf`, sha256, warnings: 2 } };
     },
   };
   return {

@@ -21,11 +21,15 @@ publication home, on the engine host's private port.
   independent PDF/X-1a checker on the stored PDF it names and stores its report beside it.
 - **GET /v1/glyphs/<org>/<pub>/<face>?ids=…** and **GET /v1/raster/<org>/<pub>/<key>.jpg**: the engine's cache, as
   the Desk serves it (404 when unknown).
+- **GET /v1/press-test**: the press test page (G2-1, deskserver/presstest.py) as {format "pageinator.press-test/1", pdf
+  (base64), sha256, bytes, icc_sha256, check {passed, fails, warnings}, maker, page_mm}; made once per colour profile
+  (the page is deterministic) and kept in memory; 500 {error} when it cannot be made.
 Calls of one publication take turns (the engine is one process per home); a save, and a move, hold the run's save
 lock (one at a time in a run, as the Desk). Errors are the Desk's words (DeskText), never a path or a credential.
 Settings as the worker's (pgn_worker/engine.py Settings, PGN_S3_*); a setting missing or not valid exits 78."""
 from __future__ import annotations
 
+import base64
 import contextlib
 import hashlib
 import hmac
@@ -45,7 +49,7 @@ from typing import Callable
 from urllib.parse import parse_qs, urlsplit
 
 from . import engine, home
-from .desk import REPO, desk_text, editing, messages as M, runs, util
+from .desk import REPO, desk_text, editing, images, messages as M, presstest, runs, util
 from .keys import ORG_UUID, KeyGuard, KeyRefused, uuid
 from .launcher import CHECKER_SHA256, _stored
 from .media import Mismatch
@@ -318,6 +322,8 @@ class Gateway:
         self.settings, self.storage_for = settings, storage_for
         self.homes: dict[tuple[str, str], Home] = {}
         self.lock = threading.Lock()
+        self.press_lock = threading.Lock()                 # one press test page made at a time; the others wait for it
+        self.press_cache: tuple[str, tuple[int, str, bytes]] | None = None   # (the profile's SHA-256, the answer)
 
     def close(self) -> None:
         with self.lock:
@@ -351,6 +357,8 @@ class Gateway:
                 return self.glyphs(parts[3], parts[4], parts[5], parse_qs(url.query).get("ids", [""])[0])
             if method == "GET" and len(parts) == 6 and parts[:3] == ["", "v1", "raster"]:
                 return self.raster(parts[3], parts[4], parts[5])
+            if method == "GET" and url.path == "/v1/press-test":
+                return self.press_test()
         except (KeyRefused, RunMissing, Refused, util.DeskError):
             pass
         except Exception:  # noqa: BLE001 — a font or raster in the cache that cannot be read (logged here)
@@ -369,6 +377,29 @@ class Gateway:
             return _json(404, {"error": "not found"})
         _, h = self._home(KeyGuard(org, pub))
         return 200, "image/jpeg", h.service.raster(name[:-4]).read_bytes()
+
+    def press_test(self) -> tuple[int, str, bytes]:
+        """The press test page, made again only when the colour profile changed (the page is deterministic)."""
+        with self.press_lock:
+            try:
+                icc = hashlib.sha256(images.icc_path().read_bytes()).hexdigest()
+            except OSError:
+                return _json(500, {"error": presstest.NO_PROFILE})
+            try:
+                if self.press_cache is None or self.press_cache[0] != icc:
+                    with tempfile.TemporaryDirectory(prefix="pgn-press-test-") as tmp:
+                        made = presstest.make(REPO, self.settings.python, Path(tmp))
+                    pdf = made["pdf"]
+                    self.press_cache = (made["icc_sha256"], _json(200, {
+                        "format": "pageinator.press-test/1", "pdf": base64.b64encode(pdf).decode("ascii"),
+                        "sha256": made["sha256"], "bytes": len(pdf), "icc_sha256": made["icc_sha256"],
+                        "check": made["check"], "maker": made["maker"], "page_mm": [347, 540]}))
+                return self.press_cache[1]
+            except util.DeskError as e:
+                return _json(500, {"error": str(e.message)})
+            except Exception:  # noqa: BLE001 — the engine host's fault, said without its details (logged here)
+                traceback.print_exc(file=sys.stderr)
+                return _json(500, {"error": presstest.ENGINE_FAILED})
 
     # ---------------------------------------------------------------------------------------- POST /v1/call
 

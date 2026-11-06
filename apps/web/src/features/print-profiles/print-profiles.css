@@ -14,6 +14,13 @@
   margin: 0;
 }
 
+/* the press test page's SHA-256: read character by character, selected whole, broken anywhere on a narrow screen */
+.pg-print__sha {
+  font-family: var(--pg-font-mono);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 @media (max-width: 40rem) {
   .pg-print__facts {
     grid-template-columns: 1fr;

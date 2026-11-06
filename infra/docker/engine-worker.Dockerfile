@@ -99,6 +99,8 @@ COPY experiments/phase0/page1 /opt/pageinator/experiments/phase0/page1
 COPY experiments/phase0/pdfx1 /opt/pageinator/experiments/phase0/pdfx1
 COPY experiments/phase0/typeset_harness /opt/pageinator/experiments/phase0/typeset_harness
 COPY experiments/phase0/results/page1 /opt/pageinator/experiments/phase0/results/page1
+# the synthetic Marathi corpus the press test page sets (tools/desk/engine/deskpresstest.py)
+COPY fixtures/typeset/v1/corpus/texts.json /opt/pageinator/fixtures/typeset/v1/corpus/texts.json
 
 RUN groupadd --system --gid 10001 pgn \
  && useradd --system --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin pgn \

@@ -30,6 +30,14 @@ export type ArchiveReleaseDto = ArchiveRelease;
 export type PrintProfileDto = PrintProfile;
 export type PrintProfilesDto = PrintProfiles;
 export type PreflightItemDto = EditionRelease["preflight"]["items"][number];
+/** The G2 press test page as downloaded: its bytes, its file name, its SHA-256 (the press accepts it by this) and the
+ * independent PDF/X-1a check's warnings (the API gives it only when the check passed). */
+export interface PressTestPageDto {
+  readonly file: Blob;
+  readonly filename: string;
+  readonly sha256: string;
+  readonly warnings: number;
+}
 
 interface Where {
   readonly orgId: string;
@@ -92,4 +100,7 @@ export interface ReleaseService {
       readonly idempotencyKey: string;
     },
   ): Result<PrintProfileDto>;
+  /** The press test page (print_profiles.view; 503 press_test_unavailable, 409 press_test_refused). It may take
+   * minutes on the first call. */
+  pressTestPage(input: Where): Result<PressTestPageDto>;
 }

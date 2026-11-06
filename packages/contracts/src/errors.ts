@@ -37,6 +37,8 @@ export const ERROR_CODES = [
   "edit_refused",
   "run_missing",
   "editor_unavailable",
+  "press_test_unavailable",
+  "press_test_refused",
   "approval_stale",
   "page_approved",
   "not_approved",

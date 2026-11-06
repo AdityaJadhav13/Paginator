@@ -6,7 +6,16 @@
 // Routes, under /api/v1/orgs/:o/pubs/:p:
 //   GET  print-profiles (print_profiles.view) → PrintProfiles: every version, newest first, and the facts.
 //   POST print-profiles PrintProfileInput (print_profiles.edit; Idempotency-Key) → 201 PrintProfile: the next version.
-// Audit: print_profile.create.
+//   GET  print-profiles/press-test (print_profiles.view) → 200 application/pdf: the G2 press test page (a fictional
+//        photo and ad, rules, tints and registration marks, PDF/X-1a, 347 × 540 mm) the engine made through the edit
+//        gateway (PressTestPage) and the independent PDF/X-1a check passed. Content-Disposition attachment
+//        pageinator-press-test-<first 12 of its SHA-256>.pdf, Cache-Control no-store, X-Pageinator-Sha256 (the press
+//        accepts it by this; the Release tab records it), X-Pageinator-Icc-Sha256, X-Pageinator-Check-Warnings.
+//        503 press_test_unavailable: no gateway, unreachable, an answer outside PressTestPage or bytes whose SHA-256
+//        is not the one given. 409 press_test_refused: the check failed, the recorded trim is not 347 × 540 mm (±1 mm),
+//        or the recorded colour profile (PressFacts.iccSha256) is not the gateway's.
+//        The trim is compared with page_mm (the pilot's format, the only one the gateway makes).
+// Audit: print_profile.create (the press test page is a read-only download of fictional content: not audited).
 import { z } from "zod";
 
 const Sha256 = z.string().regex(/^[0-9a-f]{64}$/);
@@ -60,3 +69,25 @@ export const PrintProfiles = z.strictObject({
   facts: PressFacts,
 });
 export type PrintProfiles = z.infer<typeof PrintProfiles>;
+
+/** The edit gateway's answer to its signed GET /v1/press-test (500 {"error"} when it cannot be made). */
+export const PressTestPage = z.strictObject({
+  format: z.literal("pageinator.press-test/1"),
+  /** the PDF, base64 */
+  pdf: z.base64().min(1),
+  /** of the PDF's bytes */
+  sha256: Sha256,
+  bytes: z.number().int().positive(),
+  /** the colour profile the photo and the ad were converted with (the gateway's PAGEINATOR_ICC) */
+  icc_sha256: Sha256,
+  /** the independent PDF/X-1a check of the page */
+  check: z.strictObject({
+    passed: z.boolean(),
+    fails: z.number().int().min(0),
+    warnings: z.number().int().min(0),
+  }),
+  maker: z.string(),
+  /** its size: [347, 540], the pilot's format, the only one it is made in */
+  page_mm: z.tuple([z.number().positive(), z.number().positive()]),
+});
+export type PressTestPage = z.infer<typeof PressTestPage>;

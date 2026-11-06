@@ -1,6 +1,7 @@
 /**
  * Print profiles on the test double with fictional data: none yet, a save making version 1 then 2 (the earlier one in
  * the history), the read-only facts in words (no setting for them), view-only for a chief editor; axe in English and Marathi.
+ * The press test page: saved as a download with its SHA-256 shown, and a refusal in its own words.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -55,6 +56,31 @@ describe("print profiles", () => {
     expect(await screen.findByText("अजून छपाई प्रोफाइल नाही")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "नवी आवृत्ती म्हणून जतन करा" })).not.toBeInTheDocument();
     expect(await seriousViolations(container)).toEqual([]);
+  });
+
+  it("downloads the press test page and shows its SHA-256 and check; a refusal in its own words", async () => {
+    URL.createObjectURL = vi.fn(() => "blob:fictional");
+    URL.revokeObjectURL = vi.fn();
+    const saved: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      saved.push(this.download);
+    });
+    const environment = createMockApplicationEnvironment();
+    const user = userEvent.setup();
+    renderAuth(PAGE, { preset: "sahyadri-chief-editor", environment });
+    await user.click(await screen.findByRole("button", { name: "Download press test page" }));
+    expect(await screen.findByText("e".repeat(64))).toBeInTheDocument();
+    expect(screen.getByText(/Independent PDF\/X-1a check: passed \(2 warnings\)/)).toBeInTheDocument();
+    expect(saved).toEqual([`pageinator-press-test-${"e".repeat(12)}.pdf`]);
+
+    vi.spyOn(environment.release, "pressTestPage").mockResolvedValueOnce({
+      ok: false,
+      error: { kind: "answer", status: 503, code: "press_test_unavailable", message: "" },
+    });
+    await user.click(screen.getByRole("button", { name: "Download press test page" }));
+    expect(
+      await screen.findByText("The press test page cannot be made just now. Try again in a few minutes."),
+    ).toBeInTheDocument();
   });
 
   it("keeps every version on the double, newest first", async () => {

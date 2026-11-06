@@ -21,6 +21,7 @@
 !experiments/phase0/pdfx1
 !experiments/phase0/typeset_harness
 !experiments/phase0/results/page1
+!fixtures/typeset/v1/corpus/texts.json
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml

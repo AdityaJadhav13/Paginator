@@ -4,7 +4,8 @@
  * an Idempotency-Key kept for a retry); a release records the version in use when it is approved. Beside it, read-only
  * facts of what the engine and the checks actually do: the trim size of the front template, the PDF standard the
  * independent check tests, its checker, the output intent's colour profile, the minimum resolutions, and the delivery
- * method (the only one built).
+ * method (the only one built). "Download press test page" (GET …/print-profiles/press-test) saves the G2 press test page
+ * the engine made and the independent PDF/X-1a check passed, and shows its SHA-256, by which the press accepts it.
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router";
@@ -32,6 +33,7 @@ import type { PrintProfilesDto } from "../../services/release-service.ts";
 import { OfflineNotice } from "../auth/connection.tsx";
 import { ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useSession } from "../auth/SessionProvider.tsx";
+import { checkText, follow } from "../layout/layout-words.tsx";
 import { may } from "../people/navigation.ts";
 import { useRelease } from "../release/release-context.tsx";
 import "./print-profiles.css";
@@ -174,6 +176,7 @@ function ProfilesContent({ orgId, pubId, edit }: { readonly orgId: string; reado
           </dl>
         </Stack>
       </Panel>
+      <PressTestPanel orgId={orgId} pubId={pubId} />
       {earlier.length > 0 && (
         <Panel title={t("printProfiles.history")} flush>
           <Table caption={t("printProfiles.history")}>
@@ -199,6 +202,54 @@ function ProfilesContent({ orgId, pubId, edit }: { readonly orgId: string; reado
         </Panel>
       )}
     </Stack>
+  );
+}
+
+type Made =
+  | { readonly state: "idle" | "making" }
+  | { readonly state: "failed"; readonly problem: ApiProblem }
+  | { readonly state: "made"; readonly sha256: string; readonly warnings: number };
+
+/** The G2 press test page: made by the engine on the first call (minutes), saved as a download, its SHA-256 shown. */
+function PressTestPanel({ orgId, pubId }: { readonly orgId: string; readonly pubId: string }) {
+  const release = useRelease();
+  const { t } = useI18n();
+  const [made, setMade] = useState<Made>({ state: "idle" });
+  const make = async () => {
+    setMade({ state: "making" });
+    const result = await release.pressTestPage({ orgId, pubId });
+    if (!result.ok) return setMade({ state: "failed", problem: result.error });
+    const url = URL.createObjectURL(result.value.file);
+    follow(url, result.value.filename);
+    // some browsers read the URL after click() returns; 40 s is FileSaver.js's wait
+    setTimeout(() => URL.revokeObjectURL(url), 40_000);
+    setMade({ state: "made", sha256: result.value.sha256, warnings: result.value.warnings });
+  };
+  const busy = made.state === "making";
+  return (
+    <Panel title={t("evidence.pressTest.title")}>
+      <Stack gap="3">
+        <p className="pg-layout__note">{t("evidence.pressTest.lede")}</p>
+        <div>
+          <Button variant="secondary" disabled={busy} aria-busy={busy} onClick={() => void make()}>
+            {t("evidence.pressTest.download")}
+          </Button>
+        </div>
+        <div aria-live="polite">
+          {busy && <p>{t("evidence.pressTest.making")}</p>}
+          {made.state === "made" && (
+            <>
+              <p>
+                {t("evidence.pressTest.sha")} <code className="pg-print__sha">{made.sha256}</code> ·{" "}
+                {checkText({ passed: true, fails: 0, warnings: made.warnings }, t)}
+              </p>
+              <p className="pg-layout__note">{t("evidence.pressTest.note")}</p>
+            </>
+          )}
+        </div>
+        {made.state === "failed" && <ProblemMessage problem={made.problem} />}
+      </Stack>
+    </Panel>
   );
 }
 

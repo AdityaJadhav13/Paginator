@@ -142,6 +142,7 @@ describe("the pilot compose and its settings", () => {
     for (const name of secrets) expect(name).not.toMatch(/PASSWORD|^PGN_AUTH_SECRET$|ANTHROPIC|^PGN_S3_SECRET/);
     const service = compose.slice(compose.indexOf("\n  gateway:\n"), compose.indexOf("# ---- pilot-local"));
     expect(service).toContain("engine-homes:/var/lib/pageinator/homes");
+    expect(service).toContain("${PGN_ICC_FILE:?}:/run/pageinator/newsprint.icc:ro"); // the press test page's profile
     expect(service).not.toMatch(/ports:/); // only the API reaches it
     // the API is signed to it, at the one http address its settings allow
     const config = loadConfig({

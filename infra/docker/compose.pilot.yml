@@ -299,6 +299,7 @@ services:
     profiles: [pilot]
     volumes:
       - engine-homes:/var/lib/pageinator/homes
+      - ${PGN_ICC_FILE:?}:/run/pageinator/newsprint.icc:ro # the press test page converts its pictures with it
     networks: [pilot]
     logging: *aws-logs
 
@@ -447,6 +448,7 @@ services:
     volumes:
       - local-ca:/etc/pageinator/ca:ro
       - engine-homes:/var/lib/pageinator/homes
+      - ${PGN_ICC_FILE:?}:/run/pageinator/newsprint.icc:ro # the press test page converts its pictures with it
     environment:
       <<: *gateway-environment
       AWS_CA_BUNDLE: /etc/pageinator/ca/root.crt # boto3 trusts Caddy's local CA, as the engine's runner does
