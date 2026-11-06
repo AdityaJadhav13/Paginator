@@ -9,6 +9,9 @@ export const DAILY_PATH_EN = {
     "The subheading “## {subheading}” in “{headline}” starts with #, which the Desk cannot print as a subheading: change it in the story.",
   "detail.bundle.photo_unusable":
     "“{headline}” has a photo that was rejected or deleted: take it off the story, or give it another, then send again.",
+  "detail.bundle.too_many_ads": "This edition has more than {max} ads: the Desk takes at most {max}.",
+  "detail.bundle.ad_unusable":
+    "The picture of the ad in {slot} (page {page}) was rejected, could not be read or was deleted: set the slot again, or clear it, then send again.",
 
   // what an audit event is about (features/people/AuditScreen.tsx TARGET_KEYS)
   "auditLog.target.publication": "Publication",

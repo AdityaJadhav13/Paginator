@@ -125,6 +125,9 @@ describe("Permitted link destinations", () => {
     "/contact?intent=pilot",
     "/contact?intent=other",
     "/login",
+    "/legal/privacy",
+    "/legal/terms",
+    "/legal/grievance",
     SIGNED_IN_DESTINATION,
   ]);
 

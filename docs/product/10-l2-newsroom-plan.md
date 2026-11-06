@@ -543,6 +543,13 @@ The plan as written before the build:
 | Desk data | Stays on the Mac | Imported once (§3.8); afterwards hosted is the record |
 | Fallback | — | "Edition for the Desk" bundle: stories, photos, ads, settings, so a laptop with the Desk can make the pages offline (ADR-020) |
 
+**As built (fallback, A21, 2026-11-06):** the "Edition for the Desk" is the story bundle, now
+`pageinator.story-bundle/2` (the Desk still reads `/1`): the stories and photo originals, plus the edition's settings
+(back-page ads on or off, volume, issue, price) and the original artwork of every back-page ad the engine would place
+(ready, in a slot of the plan in use; at most 16). The Desk takes a setting only where its own is empty and an ad only
+into an empty slot of its own plan; a differing value or artwork is kept as the Desk has it and noted
+(`tools/desk/CONTRACT.md` §6). `edition.produced_in` and the banner are not built: the bundle marks nothing.
+
 **Rules:**
 - **One producer per edition.** `edition.produced_in` is `hosted` or `desk`. Exporting a bundle marks the edition "being laid out in the Desk" and shows a banner.
 - **The Desk never calls the hosted product** unless the owner approves the optional pull (decision D-4). The bundle is a file the owner downloads and imports.

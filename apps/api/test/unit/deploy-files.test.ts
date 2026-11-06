@@ -118,6 +118,21 @@ describe("the pilot's deployment files", () => {
       ["Allow", ["s3:PutObject"], "arn:aws:s3:::${PGN_S3_WORK_BUCKET}/orgs/*/pubs/*/onboarding/*/dataset.zip"],
     ]);
   });
+
+  it("serves the owner's legal texts from a read-only host folder, the six names only, never the app's page (L2-230)", () => {
+    const caddy = read("infra/caddy/Caddyfile");
+    const legal = caddy.slice(caddy.indexOf("handle /legal-text/* {"), caddy.indexOf("# Any other path"));
+    expect(legal).toContain("@other not path_regexp ^/legal-text/(privacy|terms|grievance)\\.(en|mr)\\.txt$");
+    expect(legal).toContain("error @other 404");
+    expect(legal).toContain("import spa_headers");
+    expect(legal).toMatch(/root \* \/srv\n\t\tfile_server\n/);
+    expect(legal).not.toMatch(/try_files|index\.html/);
+    // before the app's catch-all, which would answer index.html
+    expect(caddy.indexOf("handle /legal-text/*")).toBeLessThan(caddy.indexOf("\thandle {"));
+    const compose = read("infra/docker/compose.pilot.yml");
+    expect(compose).toContain("- ${PGN_LEGAL_DIR:-/etc/pageinator/legal}:/srv/legal-text:ro"); // pilot: x-caddy
+    expect(compose).toContain("- ${PGN_LEGAL_DIR:-legal-text-local}:/srv/legal-text:ro"); // pilot-local: caddy-local
+  });
 });
 
 describe("the pilot compose and its settings", () => {
@@ -128,6 +143,25 @@ describe("the pilot compose and its settings", () => {
     const required = new Set([...compose.matchAll(/\$\{([A-Z0-9_]+):\?/g)].map((m) => m[1] ?? ""));
     required.delete("PGN_IMAGE_TAG"); // deploy.sh sets it
     for (const name of required) expect(setup, name).toContain(`\`${name}\``);
+    // optional: passed only when the env file has it, so the contact form can stay unconnected (L2-230)
+    expect(compose).toMatch(/^ {2}PGN_CONTACT_TO:$/m);
+  });
+
+  it("has an ECR repository (aws-setup.md §8) and a build line (deploy.md) for every image the pilot runs", () => {
+    const compose = read("infra/docker/compose.pilot.yml");
+    const repos = /for r in ([^;]+); do\n {2}aws ecr create-repository/.exec(read("docs/runbooks/aws-setup.md"));
+    const deploy = read("docs/runbooks/deploy.md");
+    const images = new Set([...compose.matchAll(/\/(pageinator-[a-z-]+):\$\{PGN_IMAGE_TAG/g)].map((m) => m[1] ?? ""));
+    expect([...images].sort()).toEqual([
+      "pageinator-api",
+      "pageinator-backup",
+      "pageinator-engine-worker",
+      "pageinator-web",
+    ]);
+    for (const image of images) {
+      expect(repos?.[1]?.split(" "), image).toContain(image);
+      expect(deploy, image).toContain(`$reg/${image}:$tag --push`);
+    }
   });
 
   it("runs the edit gateway hardened on the engine's homes, with the engine's S3 key and no database or Claude key", () => {

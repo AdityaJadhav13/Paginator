@@ -10,6 +10,9 @@ export const DAILY_PATH_MR: Readonly<Record<keyof typeof DAILY_PATH_EN, string>>
     "“{headline}” मधील उपशीर्षक “## {subheading}” # ने सुरू होते, आणि Desk ते उपशीर्षक म्हणून छापू शकत नाही: बातमीत ते बदला.",
   "detail.bundle.photo_unusable":
     "“{headline}” चे छायाचित्र नाकारले गेले आहे किंवा काढून टाकले आहे: ते बातमीवरून काढा, किंवा दुसरे द्या, मग पुन्हा पाठवा.",
+  "detail.bundle.too_many_ads": "या आवृत्तीत {max} पेक्षा जास्त जाहिराती आहेत: Desk जास्तीत जास्त {max} घेते.",
+  "detail.bundle.ad_unusable":
+    "{slot} (पान {page}) मधील जाहिरातीचे चित्र नाकारले गेले, वाचता आले नाही किंवा काढून टाकले गेले: ती जागा पुन्हा भरा, किंवा रिकामी करा, मग पुन्हा पाठवा.",
 
   "auditLog.target.publication": "प्रकाशन",
   "auditLog.target.release": "प्रकाशित आवृत्ती",

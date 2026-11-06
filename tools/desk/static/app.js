@@ -2684,7 +2684,7 @@ async function importWordFiles(files) {
 
 let bundleBusy = false;
 
-/** Opens the file chooser for one Pageinator stories file (pageinator.story-bundle/1: a .zip made by Pageinator). */
+/** Opens the file chooser for one Pageinator stories file (pageinator.story-bundle/1 or /2: a .zip made by Pageinator). */
 function chooseBundle() {
   if (!state.detail || bundleBusy) return;
   const input = document.createElement("input");
@@ -2721,10 +2721,14 @@ async function importBundle(file) {
   if (state.editionId === eid && state.step === "articles") renderMain();
 }
 
-/** What an import did, in the language shown when it is drawn: the counts, then each story kept or not added, and
- * why, then the server's notes. */
+/** What an import did, in the language shown when it is drawn: the counts (stories, then the ads added and the edition
+ * settings filled in), then each story kept or not added, and why, then the server's notes (each ad kept or not added,
+ * each setting kept: a warning). */
 function bundleNote(file, res) {
-  const count = (k) => arr(res[k]).filter(isObj).length;
+  const ads = isObj(res.ads) ? res.ads : {};
+  const set = isObj(res.settings) && isObj(res.settings.set) ? res.settings.set : {};
+  const n = { adsAdded: arr(ads.added).filter(isObj).length, settingsSet: Object.keys(set).length };
+  const count = (k) => (k in n ? n[k] : arr(res[k]).filter(isObj).length);
   const counts = [
     ["added", "bundle.added"],
     ["replaced", "bundle.replaced"],
@@ -2732,6 +2736,8 @@ function bundleNote(file, res) {
     ["kept", "bundle.kept"],
     ["deleted", "bundle.deleted"],
     ["refused", "bundle.refusedN"],
+    ["adsAdded", "bundle.adsAdded"],
+    ["settingsSet", "bundle.settingsSet"],
   ];
   const line = (s) => () =>
     t("bundle.line", {
@@ -2739,7 +2745,10 @@ function bundleNote(file, res) {
       reason: said(s.reason, res.msgs) || t("common.notAccepted"),
     });
   return {
-    kind: count("kept") || count("deleted") || count("refused") ? "warn" : "ok",
+    kind:
+      count("kept") || count("deleted") || count("refused") || arr(res.notes).length || arr(ads.refused).length
+        ? "warn"
+        : "ok",
     text: () => {
       const list = counts.filter(([k]) => count(k)).map(([k, key]) => t(key, { n: count(k) }));
       return list.length ? t("bundle.summary", { file, list: list.join("; ") }) : t("bundle.nothing", { file });

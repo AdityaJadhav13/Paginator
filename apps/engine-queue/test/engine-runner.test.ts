@@ -112,7 +112,8 @@ describe("the runner for the engine's kinds", () => {
   it("kills an engine job that ignores SIGTERM after the grace, and any other kind at once", async () => {
     const ignore = "process.on('SIGTERM',()=>{});" + FOREVER;
     let started = Date.now();
-    expect(await runJob(engineJob("engine.setup"), stub(ignore, 200))).toMatchObject({ code: "worker.timeout" });
+    // the stop comes once node has started and set its handler (seconds on a busy machine); the grace is what counts
+    expect(await runJob(engineJob("engine.setup"), stub(ignore, 5_000))).toMatchObject({ code: "worker.timeout" });
     expect(Date.now() - started).toBeGreaterThanOrEqual(STOP_GRACE_MS);
     started = Date.now();
     const answer = lines(doneResult(finished("cancelled")));

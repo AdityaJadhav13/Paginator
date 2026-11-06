@@ -8,6 +8,12 @@ import { configDefaults, defineConfig } from "vitest/config";
 const privateRun = process.env["PAGEINATOR_PRIVATE_RUN"] === "1";
 const dbRun = process.env["PAGEINATOR_DB_RUN"] === "1";
 const DB_TESTS = ["apps/api/test/db/**/*.test.ts", "apps/api/test/tenancy/**/*.test.ts"];
+// The database tests share one Postgres with every worktree's run (max_connections 100, its default), and each file's
+// API holds up to ~12 connections: 11 files at once (12 CPUs) took 91 of them, and a second run was refused (53300).
+// Three files at once, as on CI's 4-CPU runner, keep a run near 36; their own group, so the other projects keep theirs.
+// Their tests and hooks do real HTTP, SQL and S3 work in that shared Docker (a database's drop waits for a checkpoint):
+// on a busy machine they overran the 5 s and 10 s defaults.
+const DB_PROJECT = { maxWorkers: 3, sequence: { groupOrder: 1 }, testTimeout: 30_000, hookTimeout: 60_000 };
 // shared packages (tools/ts/workspace.json, as eslint.config.js and tools/ts/check-graph.ts read it) are not kernel code
 const workspace = JSON.parse(readFileSync(new URL("./tools/ts/workspace.json", import.meta.url), "utf8")) as {
   sharedPackages: string[];
@@ -48,6 +54,7 @@ export default defineConfig({
                 environment: "node",
                 include: ["apps/api/test/db/**/*.test.ts"],
                 globalSetup: ["apps/api/test/db/global-setup.ts"],
+                ...DB_PROJECT,
               },
             },
             {
@@ -57,6 +64,7 @@ export default defineConfig({
                 environment: "node",
                 include: ["apps/api/test/tenancy/**/*.test.ts"],
                 globalSetup: ["apps/api/test/db/global-setup.ts"],
+                ...DB_PROJECT,
               },
             },
           ]

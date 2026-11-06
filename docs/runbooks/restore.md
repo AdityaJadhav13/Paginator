@@ -21,6 +21,26 @@ aws rds restore-db-instance-to-point-in-time --source-db-instance-identifier pgn
 aws rds wait db-instance-available --db-instance-identifier pgn-pilot-restore-<yyyymmdd>
 ```
 
+Check it before anything points at it: `verify-restore.ts` in its point-in-time mode, in the backup image, as below
+(`c` as in "Drill"), with the restore time exactly as given to RDS:
+
+```sh
+c run --rm -e PGN_RESTORE_TARGET_HOST=<pgn-pilot-restore-<yyyymmdd> endpoint> -e PGN_RESTORE_TIME=<UTC time> \
+  backup node scripts/verify-restore.ts
+```
+
+It reads the live database and the restored instance as `pgn_backup` in read-only sessions (its roles and passwords
+came with the restore) and writes nothing. The live database has moved on since the restore time, so it compares only
+what cannot change after it: every audit event (append-only) and every closed story revision (never changed once
+closed) up to a minute before the restore time must be the same in both, and the restored instance may hold no audit
+event from more than a minute after it. Its applied migrations must be live's first ones (any others are applied by
+the deploy that points the pilot at it); its RLS policies must be live's when the migrations are the same (else SKIP:
+run it again after that deploy), and every `app` table must have RLS and FORCE RLS. With `PGN_S3_WORK_BUCKET`, the
+newest photos' originals must be in S3. PASS, FAIL or SKIP per check; it exits 1 on any FAIL. A transaction that was
+open for more than a minute across the restore time can make an honest restore FAIL the audit or revision check
+(its rows carry its start time but appear only at its commit): when a check FAILs by a row or two, look at the rows
+written in the minutes before the restore time, in both, before calling the restore wrong.
+
 Then either point the pilot at it (`PGN_DB_HOST` in SSM, `deploy.sh deploy <current tag>`; the roles and passwords
 came with it), or copy the rows needed out of it. Keep the old instance until the owner agrees.
 
@@ -53,8 +73,12 @@ exits 1 on any FAIL or failure, and drops the restored database (`PGN_RESTORE_KE
 database as `pgn_backup` in read-only sessions; the admin connects to the `postgres` database only, to make the restored
 database under a name of its own (`<live>_restore_<time>_<random>`) and to drop it: it never drops a database it did
 not make. **Each run writes one more dump to the backups bucket**, under the same 35-day GOVERNANCE lock as a nightly
-one (a run that fails after the backup leaves its dump too). It checks a restore from a dump (B) only: it has no mode
-for an already restored point-in-time target (A; 11-fix-before-launch L2-344).
+one (a run that fails after the backup leaves its dump too). With `PGN_RESTORE_TARGET_HOST` set, it checks an instance
+already restored to a point in time instead (A, above). To rehearse A on pilot-local, where there is no second
+instance: run the drill with `PGN_RESTORE_KEEP=1`, then the point-in-time check against the database it kept
+(`PGN_RESTORE_TARGET_HOST=db-local`, `PGN_RESTORE_TARGET_DB=<the kept database>`, `PGN_RESTORE_TIME=<the dump's
+time>`: the UTC time in its key, `…-<YYYYMMDD>T<hhmmss>Z.dump`, written as `YYYY-MM-DDThh:mm:ssZ`; an event written
+between the dump and a later time would rightly fail), and drop that database afterwards.
 
 ```sh
 c() { docker compose -p <project> --profile <profile> --env-file <file> -f infra/docker/compose.pilot.yml "$@"; }

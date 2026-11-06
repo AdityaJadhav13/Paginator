@@ -9,7 +9,8 @@
 #                (-p pgn-pilot-local), never the development stack's (pageinator).
 # Every setting comes from one env file (--env-file): in the pilot /etc/pageinator/pilot.env, root-only, which deploy.sh
 # writes from SSM Parameter Store (docs/runbooks/aws-setup.md lists every name). Each service gets only the settings
-# listed under it, and compose refuses to start while one of them is missing or empty. No secret is in an image.
+# listed under it, and compose refuses to start while one of them is missing or empty (but the optional ones:
+# PGN_CONTACT_TO, PGN_ANTHROPIC_API_KEY and those with a default). No secret is in an image.
 # Images: ${PGN_REGISTRY}/pageinator-{api,web,backup,engine-worker}:${PGN_IMAGE_TAG}, built from infra/docker/*.Dockerfile (the
 # pilot pushes them to ECR; deploy.sh sets the tag). Other images are pinned by digest, with the tag in the comment.
 #
@@ -83,8 +84,10 @@ x-api-environment: &api-environment
   PGN_SMTP_USER: ${PGN_SMTP_USER:?}
   PGN_SMTP_PASSWORD: ${PGN_SMTP_PASSWORD:?}
   PGN_MAIL_FROM: ${PGN_MAIL_FROM:?}
-  # the public website's contact form sends its messages here (owner's choice, D-2; the deploy stops without it)
-  PGN_CONTACT_TO: ${PGN_CONTACT_TO:?}
+  # the public website's contact form sends its messages here (owner's choice, D-2). No value here: compose passes the
+  # env file's when it has one, and none otherwise, so the form stays unconnected until the privacy notice is
+  # published (D-6; 11-fix-before-launch L2-230). An empty value would stop the API (not one plain address).
+  PGN_CONTACT_TO:
   PGN_S3_ENDPOINT: ${PGN_S3_ENDPOINT:?}
   PGN_S3_REGION: ap-south-1
   PGN_S3_ACCESS_KEY_ID: ${PGN_S3_ACCESS_KEY_ID:?}
@@ -239,6 +242,9 @@ x-caddy: &caddy
   volumes:
     - caddy-data:/data # the certificates and their ACME account: kept across deploys
     - caddy-config:/config
+    # the owner's legal texts (<doc>.<lang>.txt, docs/runbooks/deploy.md): a host folder, read only; a file copied into
+    # it is served at once, with no new image (Caddy runs as 10001: the folder 0755, the files 0644)
+    - ${PGN_LEGAL_DIR:-/etc/pageinator/legal}:/srv/legal-text:ro
   restart: unless-stopped
   stop_grace_period: 10s
 
@@ -331,6 +337,8 @@ services:
       - caddy-data:/data
       - caddy-config:/config
       - ../caddy/local-s3.caddy:/etc/caddy/local/local-s3.caddy:ro
+      # PGN_LEGAL_DIR, a folder of this machine, or by default an empty volume: every legal page says its text is to come
+      - ${PGN_LEGAL_DIR:-legal-text-local}:/srv/legal-text:ro
     ports:
       - "127.0.0.1:${PGN_HTTP_PORT:-59080}:${PGN_HTTP_PORT:-59080}"
       - "127.0.0.1:${PGN_HTTPS_PORT:-59443}:${PGN_HTTPS_PORT:-59443}"
@@ -482,6 +490,9 @@ services:
     image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # postgres:18.6-trixie
     profiles: [pilot-local]
     mem_limit: 512m
+    # tini reaps a health check's psql orphaned by its timeout; Postgres as PID 1 took its exit for a crashed backend
+    # and restarted every session (seen under load, A22)
+    init: true
     environment:
       POSTGRES_DB: ${PGN_DB_NAME:?}
       # (pilot-local only: not :?, which the pilot's settings would then need too; empty, Postgres refuses to start)
@@ -550,3 +561,4 @@ volumes:
   engine-homes:
   db-local-data:
   s3-local-data:
+  legal-text-local:

@@ -258,7 +258,7 @@ Medians measured on the paper's own printed pages (one front, `pages − 2` insi
 | DELETE | `/api/editions/<id>/articles/<aid>` | → `{"ok": true}` |
 | POST | `/api/editions/<id>/articles/bulk` | `{"text": "…"}` (articles separated by a line `---`; first line headline; an optional line `Byline: …`; the rest body) → `{"created": n, "articles": [...], "skipped": [{"headline", "reason"}]}` |
 | POST | `/api/editions/<id>/articles/import-docx` | the raw `.docx` file (at most 20 MB, at most 200 stories) → `{"created", "articles", "skipped", "notes"}`: a Title or Heading 1 paragraph starts a story (else the first paragraph is the headline); a short first line under it can be the byline (`Byline: …` / `वार्ताहर: …` with a colon, `By A. Writer`, `प्रतिनिधी, काल्पनिकनगर`, `वार्ताहर, काल्पनिकनगर`); Heading 2–4 become subheadings. Only the body's own paragraphs are read: tables, text boxes, pictures, deleted (tracked) text and formatting are not taken, and `notes` say what was left out. A damaged file is refused with a plain message (400) |
-| POST | `/api/editions/<id>/articles/import-bundle` | the raw Pageinator stories file (`pageinator.story-bundle/1`, §6; at most 200 MB) → `{"bundle": {"id", "edition", "stories"}, "added", "replaced", "unchanged", "kept", "deleted", "refused", "notes", "articles"}`. Each list holds `{"story", "headline", "article"?}` (`kept`, `deleted` and `refused` also `"reason"`); `articles` are those added or replaced. A bundle that is not sound is refused whole (400/413, nothing written) |
+| POST | `/api/editions/<id>/articles/import-bundle` | the raw Pageinator stories file (`pageinator.story-bundle/1` or `/2`, §6; at most 200 MB) → `{"bundle": {"id", "edition", "stories"}, "added", "replaced", "unchanged", "kept", "deleted", "refused", "notes", "articles", "ads", "settings"}`. Each list holds `{"story", "headline", "article"?}` (`kept`, `deleted` and `refused` also `"reason"`); `articles` are those added or replaced; `ads` is `{"added", "unchanged", "kept", "refused"}`, each a list of `{"slot", "reason"?}`; `settings` is `{"set": {"<key>": value}, "kept": {"<key>": {"file", "desk"}}}` (empty for `/1`). A bundle that is not sound is refused whole (400/413, nothing written) |
 | PUT | `/api/editions/<id>/articles/<aid>/photo` | raw image bytes (`Content-Type: image/jpeg|image/png|image/webp`), query `caption`, `credit` → photo record |
 | PUT | `/api/editions/<id>/articles/<aid>/photo-text` | `{"caption", "credit"}` → photo record |
 | DELETE | `/api/editions/<id>/articles/<aid>/photo` | → `{"ok": true}` |
@@ -325,41 +325,50 @@ The UI never says "press-ready". It says: the page PDFs are PDF/X-1a files made 
 text-only test page the press accepted; **pages with photos or ads have not yet been press-tested — print one
 test page before a real edition.**
 
-## 6. Pageinator story bundles (`pageinator.story-bundle/1`)
+## 6. Pageinator story bundles (`pageinator.story-bundle/1` and `/2`)
 
 The hosted newsroom's "Send to the Desk" makes a **Pageinator stories file**: one edition's stories and their photo
-originals in a ZIP the owner downloads and imports with **Pageinator stories…** on the articles step
-(`POST /api/editions/<id>/articles/import-bundle`, `deskserver/bundle.py`). The Desk never calls the hosted product: the
-file is the bridge. The hosted side writes exactly this format; the Desk refuses anything else.
+originals, and (from `/2`) the edition's settings and its back-page ad artwork, in a ZIP the owner downloads and imports
+with **Pageinator stories…** on the articles step (`POST /api/editions/<id>/articles/import-bundle`,
+`deskserver/bundle.py`). It is also how the Desk finishes an edition when the hosted engine is down near the deadline
+(`docs/runbooks/engine-down-near-deadline.md`). The Desk never calls the hosted product: the file is the bridge. The
+hosted side writes exactly `/2`; the Desk reads `/1` (as before) and `/2`, and refuses anything else. `/2` is `/1` plus
+four settings in `edition` and a top-level `ads` list; everything else is the same.
 
 ### The ZIP
-- Its files: `bundle.json`, and one `photos/<sha256>.<ext>` per distinct photo original (`<sha256>`: the file's SHA-256,
-  64 lowercase hex; `<ext>`: `jpg`, `jpeg`, `png` or `webp`). A `photos/` folder entry may be there. Nothing else: any
-  other name (a path with `..`, an absolute path, a backslash, another folder), a repeated name, a symbolic link, an
-  encrypted file, or a photo no story names refuses the file.
-- Stored or deflated only. At most 200 MB packed, 300 MB unpacked, 202 files, 200 stories; `bundle.json` at most 32 MB
-  unpacked, a photo at most 40 MB (as an upload); a file over 1 MB unpacked may unpack to at most 100 times its packed
-  size. Every file is read no further than the size the ZIP lists, and a file that is not that size, or fails its
-  checksum, is damaged.
-- **No ZIP64.** A bundle never needs it (at most 202 files and 200 MB), so a ZIP with the ZIP64 end records is refused
-  (`m.bundle.zip64`). Before the ZIP is opened, its end-of-central-directory record must list at most 202 entries and a
+- Its files: `bundle.json`, one `photos/<sha256>.<ext>` per distinct photo original and (`/2`) one `ads/<sha256>.<ext>`
+  per distinct ad original (`<sha256>`: the file's SHA-256, 64 lowercase hex; `<ext>`: `jpg`, `jpeg`, `png` or `webp`).
+  A `photos/` or `ads/` folder entry may be there. Nothing else: any other name (a path with `..`, an absolute path, a
+  backslash, another folder), a repeated name, a symbolic link, an encrypted file, or a photo no story names or an ad
+  file no ad names refuses the file (`m.bundle.badMember`); an ad file the `ads` list names that is not there refuses
+  it too (`m.bundle.adMissing`).
+- Stored or deflated only. At most 200 MB packed, 300 MB unpacked, 219 files, 200 stories, 16 ads; `bundle.json` at
+  most 32 MB unpacked, a photo or ad at most 40 MB (as an upload); a file over 1 MB unpacked may unpack to at most 100
+  times its packed size. Every file is read no further than the size the ZIP lists, and a file that is not that size,
+  or fails its checksum, is damaged.
+- **No ZIP64.** A bundle never needs it (at most 219 files and 200 MB), so a ZIP with the ZIP64 end records is refused
+  (`m.bundle.zip64`). Before the ZIP is opened, its end-of-central-directory record must list at most 219 entries and a
   central directory of at most 1 MB (`deskserver/ziplimits.py`; a Word file is checked the same way, at 5,000 entries
   and 4 MB, ZIP64 allowed there).
 
 ### bundle.json (UTF-8 JSON)
 ```json
-{"format": "pageinator.story-bundle/1",
+{"format": "pageinator.story-bundle/2",
  "bundle": {"id": "b-0001", "created": "2026-08-01T06:00:00+05:30"},
  "source": {"organisation_id": "org-…", "publication_id": "pub-…"},
- "edition": {"date": "2026-08-01", "pages": 8},
+ "edition": {"date": "2026-08-01", "pages": 8,
+             "back_page_ads": true, "volume": "…", "issue": "…", "price": "…"},
  "stories": [{
    "id": "st-0001", "revision": 3,
    "headline": "…", "kicker": "", "deck": "", "byline": "…",
    "body": "First paragraph.\n\n## A subheading\n\nSecond paragraph.", "body_format": "desk-text/1",
    "section": "शहर", "priority": 3, "page": null, "language": "mr",
    "photo": {"file": "photos/<sha256>.jpg", "sha256": "<sha256>", "filename": "p-0123456789.jpg",
-             "caption": "…", "credit": "…"}}]}
+             "caption": "…", "credit": "…"}}],
+ "ads": [{"slot": "back-1", "page": 8, "file": "ads/<sha256>.png", "sha256": "<sha256>",
+          "filename": "p-0123456789.png"}]}
 ```
+`/1` is the same without `back_page_ads`, `volume`, `issue`, `price` and `ads` (each an unknown key there).
 - **Every key is required** (`null` where allowed); an unknown key anywhere refuses the file, naming it. `format` is
   checked first: another version is refused as one ("update the Desk, or make the file again"). Every text, keys
   included, is Unicode characters: a lone surrogate (`"\ud800"`) refuses the file, naming its field.
@@ -377,6 +386,16 @@ file is the bridge. The hosted side writes exactly this format; the Desk refuses
 - `photo`: `null`, or one photo: `file` (its file in the ZIP), `sha256` (the same as the name's), `filename` (the
   hosted picture's Desk id and its type, `p-0123456789.jpg`: the hosted product does not keep the name a picture was
   uploaded with; at most 255 characters), `caption`, `credit` (text). Two stories may name one file.
+- `/2` `edition.back_page_ads`: `true` or `false`; `edition.volume`, `issue`, `price`: text of at most 200 characters
+  (`""`: not set in the hosted edition).
+- `/2` `ads`: a list (at most 16, possibly empty) of the hosted edition's back-page ads: each slot of the plan of the
+  profile in use that has artwork set, **whatever the artwork's state** (with the engine down, an ad set meanwhile is
+  still being prepared), with the **original** picture (stored, ready or not yet checked by the hosted media job; the
+  Desk fits it to its own slot and refuses that ad alone if it is not a picture, below). `slot`: the slot's name (1–40
+  letters, digits, `_` or `-`), each slot at most once (a repeat refuses the file, naming the field); `page`: 1–16;
+  `file`: `ads/<sha256>.<ext>`; `sha256`: the same as the name's; `filename`: as a photo's. Two slots may name one
+  file. The hosted product refuses to make the file (409, naming the slot) when an ad's picture was rejected, could
+  not be read or was deleted, rather than leave the ad out.
 
 ### desk-text/1 (the body)
 Exactly what the engine prints, one block for one printed paragraph or subheading (`deskarticles.blocks`):
@@ -391,8 +410,9 @@ Exactly what the engine prints, one block for one printed paragraph or subheadin
 
 ### Import
 - **Checks before anything is written** (the whole file is refused, with the reason's code, and nothing is written):
-  the ZIP and its limits, `bundle.json` against the format, the edition's date, every photo's SHA-256, and the colour
-  profile (a photo conversion that fails for want of it).
+  the ZIP and its limits, `bundle.json` against the format, the edition's date, every photo's and ad's SHA-256, the
+  colour profile (a photo or ad conversion that fails for want of it), and for a file with ads the engine's page plan
+  (a Desk that is not set up).
 - **Each story then** is matched to an article by (`organisation_id`, `publication_id`, story `id`) through the
   article's `bundle` record:
   - no such article, but one imported from it was **deleted in the Desk**: **deleted**, never added again
@@ -410,10 +430,35 @@ Exactly what the engine prints, one block for one printed paragraph or subheadin
     cleaned as typed ones (NFC, line ends, control characters, trailing spaces; the same length limits), a headline
     and body text are needed, the priority and page as §1 says; a photo goes through the upload pipeline (§4: not a
     picture, damaged, too many pixels are refused).
-- **One write**: the articles, the photos (linked from a staging folder in the edition beside `photos/`) and the
-  photos' index, under the edition's lock; if it fails part-way, the photos it added are removed and `articles.json`
-  (written atomically) is as it was. Then every finished layout is checked against the edition again, and the edition
-  is measured again.
+- **Settings** (`/2`): `volume`, `issue` and `price` each fill only what the Desk's edition has empty (`settings.set`,
+  cleaned as typed text); the same value changes nothing; a file's `""` changes nothing; another value the Desk has is
+  **kept**, never overwritten, and noted with both values (`settings.kept`, and a note `m.bundle.keptVolume`,
+  `keptIssue` or `keptPrice`: change it in the edition's settings if the file's is right). A setting is applied
+  through the Desk's own edition update, so the finished layouts are checked again as for a typed change (page 1's
+  folio "needs saving"). `back_page_ads` different from the edition's is only noted, saying what to change
+  (`m.bundle.backAdsOn` / `backAdsOff`), as `pages` is; the Desk's plan stays its own.
+- **Ads** (`/2`), each matched by its slot against the Desk's own page plan for the edition's pages and back-page ads
+  (the engine's `plan`):
+  - a slot that plan does not have: **refused** (`m.bundle.adNoSlot`), the others go on;
+  - the Desk's slot is empty (no file and no index entry): **added** through the Desk's ad pipeline, fitted to the
+    slot exactly as an upload is (§4: `<slot>.orig.<ext>`, `<slot>.jpg`, `<slot>.cmyk.gz` and the ads index), so a
+    laid-out back page "needs saving" as for an uploaded ad;
+  - the Desk's slot holds the same original (the SHA-256 of `ads/<slot>.orig.*`): **unchanged**;
+  - other artwork: **kept** as the Desk has it (`m.bundle.adKept`: remove it in the Desk and import the file again to
+    take the file's);
+  - a picture the Desk cannot read (not a picture, damaged, too many pixels) is **refused** with that reason; and so
+    is every ad to add while the edition's pages are being made (`m.store.adBusy`, as an upload: import the file again
+    afterwards; its stories are still imported), or when the slot changed while the file was read (`m.bundle.retry`).
+  - An ad the Desk has in a slot of its plan that a `/2` file does not name (an ad cancelled in the hosted edition
+    after an earlier import, or one only the Desk has) stays as it is, never removed by an import, and is noted
+    (`m.bundle.adNotInFile`: remove it in the Desk if it should not print). A `/1` file says nothing of ads.
+  - Each ad kept or refused is also in `notes`, by its slot (`m.bundle.adKept`, or `m.bundle.adRefused` with the
+    reason), so the articles step shows it; there the summary also counts the ads added and the settings filled in,
+    and any note makes it a warning.
+- **One write**: the settings, the articles, the photos and ads (linked from a staging folder in the edition beside
+  `photos/`) and their indexes, under the edition's lock; if it fails part-way, the photos and ads it added are removed,
+  their indexes and `edition.json` are put back, and `articles.json` (written atomically) is as it was. Then every
+  finished layout is checked against the edition again, and the edition is measured again.
 - A story left out of a later file stays as it is.
 - The answer's `headline` is the one the Desk has (a story kept or unchanged) or sets (cleaned, as typed text is), at
   most 200 characters; names from the file echoed in a refusal (a member, a field) are cut to 200 characters.

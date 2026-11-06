@@ -20,7 +20,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))      # the repository: tools.desk.test.test_server
 
-from tools.desk.test.test_server import DeskCase, png_bytes, word_file, words  # noqa: E402
+from tools.desk.test.test_server import DeskCase, jpeg_bytes, png_bytes, word_file, words  # noqa: E402
 
 from deskserver import bundle, docx  # noqa: E402
 from deskserver.app import Desk  # noqa: E402
@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 import deskarticles  # noqa: E402
 
 FORMAT = "pageinator.story-bundle/1"
+FORMAT2 = "pageinator.story-bundle/2"
 URL = "/api/editions/{}/articles/import-bundle"
 
 
@@ -66,6 +67,23 @@ def bundle_zip(stories: list[dict], files: dict[str, bytes] | None = None, *, da
     return buf.getvalue()
 
 
+def ad(data: bytes, slot: str = "back-1", page: int = 8, ext: str = "png") -> dict:
+    """A fictional ad as the hosted newsroom sends it (its original artwork for a back-page slot)."""
+    sha = hashlib.sha256(data).hexdigest()
+    return {"slot": slot, "page": page, "file": f"ads/{sha}.{ext}", "sha256": sha, "filename": f"p-0123456789.{ext}"}
+
+
+def bundle2(stories: list[dict], ads: list[dict] = (), files: dict[str, bytes] | None = None, *, day: str,
+            pages: int = 8, back: bool = True, extra: list = (), **settings) -> bytes:
+    """A pageinator.story-bundle/2 ZIP: /1 plus the edition's settings (volume, issue, price: empty unless given) and
+    its ads."""
+    edition = {"date": day, "pages": pages, "back_page_ads": back, "volume": "", "issue": "", "price": "", **settings}
+    return bundle_zip(stories, files, extra=extra, doc={
+        "format": FORMAT2, "bundle": {"id": "b-fictional-2", "created": "2026-09-01T06:00:00+05:30"},
+        "source": {"organisation_id": "org-fictional", "publication_id": "pub-fictional"}, "edition": edition,
+        "stories": stories, "ads": list(ads)})
+
+
 def as_zip64(data: bytes, entries: int | None = None) -> bytes:
     """The same ZIP with the ZIP64 end records (zipfile reads its counts from them); entries: the count it then lists."""
     at = len(data) - 22
@@ -96,6 +114,9 @@ def snapshot(folder: Path) -> dict[str, tuple[int, str] | None]:
 class BundleCase(DeskCase):
     def send(self, eid: str, data: bytes, expect: int = 200):
         return self.call("POST", URL.format(eid), raw=data, headers={"Content-Type": "application/zip"}, expect=expect)
+
+    def ads_dir(self, eid: str) -> Path:
+        return self.edition_dir(eid) / "ads"
 
     def articles(self, eid: str) -> list[dict]:
         return self.call("GET", f"/api/editions/{eid}").json()["articles"]
@@ -209,7 +230,7 @@ class RefusalTests(BundleCase):
         day = "2026-08-04"
         self.refused(eid, b"plain fictional text", "m.bundle.notZip")
         self.refused(eid, bundle_zip([good], files, day=day)[:200], "m.bundle.damaged")
-        self.refused(eid, bundle_zip([good], files, day=day, doc={"format": "pageinator.story-bundle/2"}),
+        self.refused(eid, bundle_zip([good], files, day=day, doc={"format": "pageinator.story-bundle/3"}),
                      "m.bundle.version")
         r = self.refused(eid, bundle_zip([{**good, "colour": "red"}], files, day=day), "m.bundle.unknownField")
         self.assertEqual(r["msgs"][r["error"]]["params"]["field"], {"data": "stories[0].colour"})
@@ -427,6 +448,175 @@ class PrintSafetyTests(BundleCase):
         self.assertEqual((st["press_ready"], st["pages_to_save"]), (False, [1]))
         page = next(p for p in st["pages"] if p["page"] == 1)
         self.assertEqual(st["msgs"][page["stale"][0]]["code"], "m.press.changed1")
+
+    def test_a_setting_and_an_ad_from_a_file_mark_laid_out_pages_and_wait_for_a_running_layout(self):
+        eid = self.edition("2026-08-16", volume="slow")
+        day = "2026-08-16"
+        self.article(eid, headline="Lead story", body=words(80), priority=1)
+        art = png_bytes((120, 60))
+        data = bundle2([story(1)], [ad(art)], {ad(art)["file"]: art}, day=day, issue="77")
+        rid = self.call("POST", f"/api/editions/{eid}/runs").json()["run"]
+        self.wait_run(eid, rid, states=("layout",), finished=False)
+        res = self.send(eid, data).json()                       # while the pages are made: no ad, as for an upload
+        self.assertEqual([(r["slot"], res["msgs"][r["reason"]]["code"]) for r in res["ads"]["refused"]],
+                         [("back-1", "m.store.adBusy")])
+        self.assertEqual((len(res["added"]), res["settings"]["set"]), (1, {"issue": "77"}))
+        self.assertEqual([p.name for p in self.ads_dir(eid).iterdir() if p.name != "index.json"], [])
+        self.call("POST", f"/api/editions/{eid}/runs/{rid}/cancel")
+        self.wait_run(eid, rid)
+        done = self.edition("2026-08-17")
+        self.article(done, headline="Lead story", body=words(80), priority=1)
+        rid = self.call("POST", f"/api/editions/{done}/runs").json()["run"]
+        self.assertEqual(self.wait_run(done, rid)["state"], "done")
+        status = lambda: self.call("GET", f"/api/editions/{done}/runs/{rid}").json()       # noqa: E731
+        before = status()
+        self.assertTrue(before["press_ready"])
+        res = self.send(done, bundle2([], [ad(art)], {ad(art)["file"]: art}, day="2026-08-17", issue="78")).json()
+        self.assertEqual((res["ads"]["added"], res["settings"]["set"]), ([{"slot": "back-1"}], {"issue": "78"}))
+        st = status()
+        self.assertFalse(st["press_ready"])
+        stale = {p["page"]: [st["msgs"][r]["code"] for r in p["stale"]] for p in st["pages"] if p["stale"]}
+        self.assertEqual(stale, {1: ["m.press.folio"], 2: ["m.press.ad"]})     # as a typed issue and an uploaded ad
+
+
+
+class AdsAndSettingsTests(BundleCase):
+    """pageinator.story-bundle/2: the edition's back-page ad artwork and its volume, issue and price."""
+
+    def codes(self, res: dict, items: list) -> list:
+        return [res["msgs"][item]["code"] for item in items]
+
+    def test_ads_and_empty_settings_are_added_as_an_upload_and_a_typed_change_are(self):
+        eid = self.edition("2026-09-01")
+        day = "2026-09-01"
+        art = png_bytes((400, 400), (255, 0, 0, 255))
+        a = ad(art)
+        data = bundle2([story(1)], [a], {a["file"]: art}, day=day, volume="वर्ष ५", issue="301", price="₹ 5")
+        res = self.send(eid, data).json()
+        self.assertEqual(len(res["added"]), 1)
+        self.assertEqual(res["ads"], {"added": [{"slot": "back-1"}], "unchanged": [], "kept": [], "refused": []})
+        self.assertEqual(res["settings"], {"set": {"volume": "वर्ष ५", "issue": "301", "price": "₹ 5"}, "kept": {}})
+        self.assertEqual(res["notes"], [])
+        got = self.call("GET", f"/api/editions/{eid}").json()
+        self.assertEqual([got["edition"][k] for k in ("volume", "issue", "price")], ["वर्ष ५", "301", "₹ 5"])
+        adir = self.ads_dir(eid)
+        self.assertEqual((adir / "back-1.orig.png").read_bytes(), art)                  # the original, unchanged
+        upload = self.edition("2026-09-02")                                            # the same artwork, uploaded
+        self.assertEqual(self.call("PUT", f"/api/editions/{upload}/ads/back-1", raw=art).json(),
+                         {"slot": "back-1", "w_px": 787, "h_px": 394})
+        self.assertEqual((adir / "back-1.cmyk.gz").read_bytes(), (self.ads_dir(upload) / "back-1.cmyk.gz").read_bytes())
+        self.assertEqual(json.loads((adir / "index.json").read_text()),
+                         {"elements": {"back-1": {"width_px": 787, "height_px": 394, "ppi": None}}})
+        self.assertEqual(got["ads"]["back-1"]["w_px"], 787)
+        self.assertFalse(any(p.name.startswith(".bundle-") for p in self.edition_dir(eid).iterdir()))
+        again = self.send(eid, data).json()                                             # the same file again: nothing
+        self.assertEqual(again["ads"]["unchanged"], [{"slot": "back-1"}])
+        self.assertEqual((again["settings"], again["notes"]), ({"set": {}, "kept": {}}, []))
+        # a /1 file is still taken, with no ads and no settings; /1 with an "ads" key is not /1
+        old = self.send(eid, bundle_zip([story(2)], day=day)).json()
+        self.assertEqual((len(old["added"]), old["ads"]["added"], old["settings"]), (1, [], {"set": {}, "kept": {}}))
+        self.refused(eid, bundle_zip([story(3)], day=day, doc={
+            "format": FORMAT, "bundle": {"id": "b-1", "created": "x"},
+            "source": {"organisation_id": "o", "publication_id": "p"}, "edition": {"date": day, "pages": 8},
+            "stories": [], "ads": []}), "m.bundle.unknownField")
+
+    def test_other_artwork_is_kept_a_slot_not_in_the_plan_and_a_bad_picture_refused(self):
+        eid = self.edition("2026-09-03")
+        day = "2026-09-03"
+        mine = jpeg_bytes((300, 200))
+        self.call("PUT", f"/api/editions/{eid}/ads/back-1", raw=mine)
+        theirs, junk = png_bytes((200, 100)), b"not a picture, only fictional bytes"
+        ads = [ad(theirs), ad(theirs, slot="back-9")]
+        res = self.send(eid, bundle2([story(1)], ads, {ads[0]["file"]: theirs}, day=day)).json()
+        self.assertEqual(len(res["added"]), 1)                                          # the stories go on
+        self.assertEqual([k["slot"] for k in res["ads"]["kept"]], ["back-1"])
+        self.assertEqual(self.codes(res, [k["reason"] for k in res["ads"]["kept"]]), ["m.bundle.adKept"])
+        self.assertEqual([(r["slot"], res["msgs"][r["reason"]]["code"]) for r in res["ads"]["refused"]],
+                         [("back-9", "m.bundle.adNoSlot")])
+        self.assertEqual(self.codes(res, res["notes"]), ["m.bundle.adKept", "m.bundle.adRefused"])
+        self.assertEqual(sorted(p.name for p in self.ads_dir(eid).iterdir()),
+                         ["back-1.cmyk.gz", "back-1.jpg", "back-1.orig.jpg", "index.json"])
+        self.assertEqual((self.ads_dir(eid) / "back-1.orig.jpg").read_bytes(), mine)     # the Desk's own, kept
+        # the Desk's ad removed: the file's comes in; a picture the Desk cannot read is refused with the reason
+        self.call("DELETE", f"/api/editions/{eid}/ads/back-1")
+        res = self.send(eid, bundle2([], [ad(junk)], {ad(junk)["file"]: junk}, day=day)).json()
+        self.assertEqual([(r["slot"], res["msgs"][r["reason"]]["code"]) for r in res["ads"]["refused"]],
+                         [("back-1", "m.img.notAPicture")])
+        self.assertEqual([p.name for p in self.ads_dir(eid).iterdir()], ["index.json"])
+        res = self.send(eid, bundle2([], [ad(theirs)], {ad(theirs)["file"]: theirs}, day=day)).json()
+        self.assertEqual(res["ads"]["added"], [{"slot": "back-1"}])
+        self.assertEqual((self.ads_dir(eid) / "back-1.orig.png").read_bytes(), theirs)
+
+    def test_a_desk_setting_is_kept_and_noted_and_back_page_ads_noted(self):
+        eid = self.edition("2026-09-04", volume="११", price="₹ 4", back_page_ads=False)
+        day = "2026-09-04"
+        art = png_bytes((100, 50))
+        res = self.send(eid, bundle2([story(1)], [ad(art)], {ad(art)["file"]: art}, day=day, volume="१२",
+                                     issue="302", price="₹ 4")).json()
+        self.assertEqual(res["settings"], {"set": {"issue": "302"}, "kept": {"volume": {"file": "१२", "desk": "११"}}})
+        self.assertEqual(self.codes(res, res["notes"]), ["m.bundle.keptVolume", "m.bundle.backAdsOn",
+                                                         "m.bundle.adRefused"])
+        self.assertEqual(res["msgs"][res["notes"][0]]["params"], {"sent": {"data": "१२"}, "desk": {"data": "११"}})
+        self.assertEqual(res["msgs"][res["ads"]["refused"][0]["reason"]]["code"], "m.bundle.adNoSlot")
+        got = self.call("GET", f"/api/editions/{eid}").json()["edition"]
+        self.assertEqual((got["volume"], got["issue"], got["price"], got["back_page_ads"]), ("११", "302", "₹ 4", False))
+        on = self.edition("2026-09-05")                                                 # the other way round
+        res = self.send(on, bundle2([], day="2026-09-05", back=False)).json()
+        self.assertEqual(self.codes(res, res["notes"]), ["m.bundle.backAdsOff"])
+
+    def test_files_the_ads_do_not_name_and_ads_not_in_the_file_are_refused_whole(self):
+        eid = self.edition("2026-09-06")
+        day = "2026-09-06"
+        art = png_bytes((60, 30))
+        stray = f"ads/{hashlib.sha256(art).hexdigest()}.png"
+        r = self.refused(eid, bundle2([story(1)], day=day, extra=[(stray, art)]), "m.bundle.badMember")
+        self.assertEqual(r["msgs"][r["error"]]["params"]["name"], {"data": stray})
+        self.refused(eid, bundle_zip([story(1)], day=day, extra=[(stray, art)]), "m.bundle.badMember")    # /1
+        self.refused(eid, bundle2([story(1)], [ad(art)], day=day), "m.bundle.adMissing")
+        self.refused(eid, bundle2([story(1)], [ad(art)], {ad(art)["file"]: png_bytes((61, 30))}, day=day),
+                     "m.bundle.badSha")
+        for bad in ({"page": 0}, {"slot": "../x"}, {"sha256": "0" * 64}, {"file": "photos/" + "0" * 64 + ".png"}):
+            self.refused(eid, bundle2([], [{**ad(art), **bad}], {ad(art)["file"]: art}, day=day), "m.bundle.badField")
+        again = png_bytes((62, 30))                                        # one slot twice: refused, naming it
+        r = self.refused(eid, bundle2([], [ad(art), ad(again)], {ad(art)["file"]: art, ad(again)["file"]: again},
+                                      day=day), "m.bundle.badField")
+        self.assertEqual(r["msgs"][r["error"]]["params"]["field"], {"data": "ads[1].slot"})
+        self.refused(eid, bundle2([], day=day, volume=None), "m.bundle.badField")
+        self.refused(eid, bundle2([], day=day, price="x" * 201), "m.bundle.badField")
+        self.refused(eid, bundle2([], [ad(art, slot=f"s-{n}") for n in range(bundle.MAX_ADS + 1)],
+                                  {ad(art)["file"]: art}, day=day), "m.bundle.badField")
+        self.assertEqual(self.articles(eid), [])
+
+    def test_an_ad_the_desk_has_that_a_later_file_does_not_name_is_kept_and_noted(self):
+        eid = self.edition("2026-09-08")
+        day = "2026-09-08"
+        art = png_bytes((100, 50))
+        self.assertEqual(self.send(eid, bundle2([], [ad(art)], {ad(art)["file"]: art}, day=day)).json()["notes"], [])
+        res = self.send(eid, bundle2([story(1)], [], day=day)).json()          # the ad cancelled in the hosted edition
+        self.assertEqual(self.codes(res, res["notes"]), ["m.bundle.adNotInFile"])
+        self.assertEqual(res["msgs"][res["notes"][0]]["params"], {"slot": {"data": "back-1"}})
+        self.assertEqual(res["ads"], {"added": [], "unchanged": [], "kept": [], "refused": []})
+        self.assertEqual((self.ads_dir(eid) / "back-1.orig.png").read_bytes(), art)      # never removed by an import
+        self.assertEqual(self.send(eid, bundle_zip([story(2)], day=day)).json()["notes"], [])   # /1: nothing of ads
+
+    def test_a_write_that_fails_part_way_leaves_no_ad_and_no_setting(self):
+        eid = self.edition("2026-09-07")
+        art = png_bytes((80, 40))
+        store = self.desk.store
+
+        def broken(d, doc):
+            raise OSError("the disk is full (fictional)")
+        store._save, saved = broken, store._save
+        try:
+            self.send(eid, bundle2([story(1)], [ad(art)], {ad(art)["file"]: art}, day="2026-09-07", issue="9"),
+                      expect=500)
+        finally:
+            store._save = saved
+        self.assertEqual(self.articles(eid), [])
+        self.assertEqual([p.name for p in self.ads_dir(eid).iterdir() if p.name != "index.json"], [])
+        self.assertEqual(json.loads((self.ads_dir(eid) / "index.json").read_text())["elements"], {})
+        self.assertEqual(self.call("GET", f"/api/editions/{eid}").json()["edition"]["issue"], "")
+        self.assertFalse(any(p.name.startswith(".bundle-") for p in self.edition_dir(eid).iterdir()))
 
 
 if __name__ == "__main__":

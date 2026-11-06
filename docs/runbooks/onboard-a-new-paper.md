@@ -17,7 +17,11 @@ runbook is used for test papers and the pilot only. Nothing on the website may s
    `pnpm --filter @pageinator/api review-paper -- list` (waiting applications), then
    `review-paper -- approve <id> [--slug s] --by "Your name"` (makes the organisation, the Owner and the first
    publication through the bootstrap, audited, and emails the Owner) or `review-paper -- refuse <id> [reason] --by "…"`.
-   Who decided and when is kept on the application.
+   Who decided and when is kept on the application. On the pilot's app host there is no pnpm: run the same script in
+   the API's image, as `deploy.md` runs `bootstrap-org.ts` (`PGN_IMAGE_TAG` from `deploy.sh status`):
+   `sudo PGN_IMAGE_TAG=<tag> docker compose -p pageinator-pilot --profile pilot --env-file /etc/pageinator/pilot.env
+   -f infra/docker/compose.pilot.yml run --rm --no-deps api node scripts/review-paper.ts list` (then `approve …` or
+   `refuse …` in place of `list`).
 2. **Their paper is theirs.** Get the paper's permission to process its archive in writing (the DPA and terms). In the
    app, the owner also ticks the permission box before uploading; the onboarding row records who and when.
 3. **Ask for the right files:** 12–20 whole editions over at least 3 weeks, all in the current design, including

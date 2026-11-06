@@ -24,6 +24,7 @@ import { PAPER_SIGNUP_EN } from "./screens/paperSignup.en.ts";
 import { EDITION_EDIT_EN } from "./screens/editionEdit.en.ts";
 import { DAILY_PATH_EN } from "./screens/dailyPath.en.ts";
 import { ENGINE_WORDS_EN } from "./screens/engineWords.en.ts";
+import { DEPLOY_EN } from "./screens/deploy.en.ts";
 
 export const EN = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -1833,6 +1834,7 @@ export const EN = {
   ...EDITION_EDIT_EN,
   ...DAILY_PATH_EN,
   ...ENGINE_WORDS_EN,
+  ...DEPLOY_EN,
 } as const;
 
 export type CatalogueKey = keyof typeof EN;
