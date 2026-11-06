@@ -192,8 +192,9 @@ beforeAll(async () => {
   runId = run.rows[0]?.id ?? "";
   for (const p of [1, 2, 3, 4]) {
     await su.query(
-      `insert into app.run_page (org_id, publication_id, run_id, page_no, role, state, articles, checked)
-       values ($1, $2, $3, $4, $5, 'done', $6, '{"passed": true, "fails": 0, "warnings": 0}')`,
+      // printed: a record of no article (what the pages print is printed.ts's own test)
+      `insert into app.run_page (org_id, publication_id, run_id, page_no, role, state, articles, checked, printed)
+       values ($1, $2, $3, $4, $5, 'done', $6, '{"passed": true, "fails": 0, "warnings": 0}', '{"v": 3, "articles": {}}')`,
       [
         a.orgId,
         a.pubId,

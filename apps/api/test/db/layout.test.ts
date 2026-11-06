@@ -687,6 +687,8 @@ describe("a layout run", () => {
           warnings: [],
           state: "done",
           check: { passed: true, fails: 0, warnings: 2, report: report_ },
+          // what the page prints (printed.json's page): kept for the API to compare with the edition
+          printed: { v: 3, articles: { [placed.desk]: "1".repeat(20) }, folio: null, ads: {} },
         },
         {
           page: 2,
@@ -722,6 +724,8 @@ describe("a layout run", () => {
     ]);
     const kept = await su.query("select ad_rasters from app.layout_run where id = $1", [runId]);
     expect(kept.rows[0].ad_rasters).toEqual({ "back-1": "e".repeat(64) });
+    const record = await su.query("select printed from app.run_page where run_id = $1 and page_no = 1", [runId]);
+    expect(record.rows[0].printed).toEqual(finished.pages[0]?.printed);
     const statuses = await su.query<{ id: string; status: string }>(
       "select id, status from app.story where id = any ($1)",
       [[placed.id, left.id, unplaced.id]],

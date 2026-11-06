@@ -329,7 +329,15 @@ export const RunFinished = z.strictObject({
   pages: z
     .array(
       z.union([
-        z.strictObject({ ...PageFiles, state: z.literal("done"), check: PageCheck }),
+        z.strictObject({
+          ...PageFiles,
+          state: z.literal("done"),
+          check: PageCheck,
+          /** what the page prints (runs/<run>/printed.json's page: deskprinted's record), kept as run_page.printed so the
+           * API can tell when the edition no longer holds it; absent from an older worker (the page then reads as
+           * made without a record: it needs saving) */
+          printed: z.record(z.string(), z.unknown()).nullable().optional(),
+        }),
         z.strictObject({
           page: z.number().int().min(1).max(16),
           role: PageRole,

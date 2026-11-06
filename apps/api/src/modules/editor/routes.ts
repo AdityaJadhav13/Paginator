@@ -79,6 +79,7 @@ import { type Access, accessOf, auditRefusals, refused } from "../access/access.
 import { frozenRequest, planFor } from "../layout/request.ts";
 import { approvalOf } from "../release/preflight.ts";
 import type { Gateway } from "./gateway.ts";
+import { liveArticles, withPrinted } from "./printed.ts";
 import { SAVE_WORDS, UNFINISHED, editorPage, lockView, movedHere, placement, taking } from "./views.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -134,12 +135,17 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
   async function editable(tx: Tx, pub: string, r: string, n: number) {
     const run = UUID.test(r) ? await editRun(tx, pub, r) : undefined;
     if (!run) throw new ApiError("not_found");
-    const pages = await editPages(tx, pub, r);
+    const pages = await pagesNow(tx, pub, run);
     const row = pages.find((p) => p.page_no === n);
     if (!row) throw new ApiError("not_found");
     if (run.state !== "done" || row.state !== "done") throw new ApiError("not_editable");
     return { run, pages };
   }
+
+  /** The run's pages, each one's articles checked against the edition now (printed.ts: a story changed after the page
+   * was made marks it "needs saving", and an approval of it no longer counts). */
+  const pagesNow = async (tx: Tx, pub: string, run: Pick<EditRun, "id" | "edition_id">) =>
+    withPrinted(await editPages(tx, pub, run.id), await liveArticles(tx, pub, run.edition_id));
 
   /** An approved page is locked (L2.5): 409 page_approved, with its approval and its page number (ApprovedPage), when
    * one of these pages has one that counts (a change or a save of it, a move to it, or a save that takes a story off it). */
@@ -231,7 +237,7 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
   }
 
   async function pageNow(tx: Tx, tenant: Tenant, pub: string, run: EditRun, n: number, view: Record<string, unknown>) {
-    const pages = await editPages(tx, pub, run.id);
+    const pages = await pagesNow(tx, pub, run);
     const row = pages.find((p) => p.page_no === n);
     const approval = row ? approvalOf(row, await standingApprovals(tx, pub, run.id)) : null;
     return editorPage(run, pages, n, view, lockView(await lockOf(tx, pub, run.id, n), tenant.userId), null, approval);
@@ -399,7 +405,7 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
           held !== undefined && held !== null && (typeof held !== "object" || Object.keys(held).length > 0);
         const { call, marks, liveAt } = await database.withTenant(tenant, async (tx) => {
           // in the run's turn, before the engine: this page and every page it takes a story from must not be approved
-          await notApproved(tx, pub, r, await editPages(tx, pub, r), [n, ...others]);
+          await notApproved(tx, pub, r, await pagesNow(tx, pub, run), [n, ...others]);
           const marks: Mark[] = refusing
             ? []
             : await beforeSave(

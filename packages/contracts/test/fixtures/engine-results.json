@@ -899,6 +899,15 @@
                 "sha256": "eaec54a9106b6c33b25b5c165eaf4087aafac1216e8d006c5a310fdeba47d01d",
                 "bytes": 3587
               }
+            },
+            "printed": {
+              "v": 3,
+              "articles": {
+                "a-0000000001": "d82bff888b6de6c639d6",
+                "a-0000000003": "89ffa9a2d4c355ec622c"
+              },
+              "folio": null,
+              "ads": {}
             }
           },
           {
@@ -947,6 +956,14 @@
                 "sha256": "ba62fa30f50352e43d7efe2f4e248c2ccdf2a9cb9a506ffacbee1a200e7c1a3c",
                 "bytes": 3587
               }
+            },
+            "printed": {
+              "v": 3,
+              "articles": {
+                "a-0000000002": "dd252b4a2a739bd71034"
+              },
+              "folio": null,
+              "ads": {}
             }
           }
         ],

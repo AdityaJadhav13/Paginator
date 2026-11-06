@@ -59,6 +59,7 @@ import type { Tenant, Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 import type { ObjectStore } from "../../storage/object-store.ts";
 import { type Access, accessOf, auditRefusals, refused } from "../access/access.ts";
+import { liveArticles, withPrinted } from "../editor/printed.ts";
 import { planFor, slotsOf } from "../layout/request.ts";
 import { DOWNLOAD_SECONDS } from "../media/photos.ts";
 import { idempotent } from "../requests/idempotency.ts";
@@ -115,7 +116,8 @@ export async function stateOf(tx: Tx, pub: string, editionId: string, lock = fal
   const edition = UUID.test(editionId) ? await layoutEdition(tx, pub, editionId, lock) : undefined;
   if (!edition) return undefined;
   const run = await boardRun(tx, pub, editionId);
-  const pages = run ? await releasePages(tx, pub, run, lock) : [];
+  // each page's articles checked against the edition now: a story changed after the page was made needs it saved
+  const pages = run ? withPrinted(await releasePages(tx, pub, run, lock), await liveArticles(tx, pub, editionId)) : [];
   const artwork = await editionArtwork(tx, pub, editionId);
   const profile = await profileInUse(tx, pub);
   const left = run?.not_placed ?? [];

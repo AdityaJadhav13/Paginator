@@ -39,6 +39,7 @@ function page(n: number, over: Partial<ReleasePageRow> = {}): ReleasePageRow {
     layout_problems: [],
     layout_problems_now: [],
     stale: [],
+    printed: null,
     pdf: { key: `k${n}`, version_id: "v", sha256: sha(String(n)), bytes: 1000 + n },
     saved_at: null,
     check: { passed: true, fails: 0, warnings: 1 },

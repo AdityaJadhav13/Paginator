@@ -5,7 +5,7 @@ import type { EditPageRow, LockRow } from "../../db/editor.ts";
 import type { DeskTextValue } from "../../db/layout.ts";
 
 /** A message of the Desk's messages.json, its {params} filled in. */
-const desk = (code: string, template: string, params: Record<string, number> | null = null): DeskTextValue => ({
+export const desk = (code: string, template: string, params: Record<string, number> | null = null): DeskTextValue => ({
   text: template.replace(/\{(\w+)\}/g, (_, name: string) => String(params?.[name] ?? "")),
   code,
   params,

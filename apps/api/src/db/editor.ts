@@ -54,12 +54,14 @@ export type EditPageRow = {
   layout_problems: string[] | null;
   layout_problems_now: string[] | null;
   stale: DeskTextValue[];
+  /** what the page's PDF prints (deskprinted's record; null: none recorded): modules/editor/printed.ts reads it */
+  printed: Record<string, unknown> | null;
 };
 
 export async function editPages(tx: Tx, publicationId: string, runId: string): Promise<EditPageRow[]> {
   const { rows } = await sql<EditPageRow>`
     select page_no, role, state, articles, checked, edited, edited_unsaved, needs_save, needs_save_why, pdf_rev,
-      pdf_sha256, rev_seen, layout_problems, layout_problems_now, stale
+      pdf_sha256, rev_seen, layout_problems, layout_problems_now, stale, printed
     from app.run_page where publication_id = ${publicationId} and run_id = ${runId} order by page_no`.execute(tx);
   return rows;
 }

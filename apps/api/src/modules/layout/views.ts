@@ -4,6 +4,7 @@ import type { EngineProfile, LayoutPage, LayoutRun } from "@pageinator/contracts
 import type { DeskTextValue, PageRow, ProfileRow, RunRow } from "../../db/layout.ts";
 import type { Tx } from "../../db/tenant.ts";
 import { storiesByDeskKey } from "../../db/layout.ts";
+import { liveArticles, withPrinted } from "../editor/printed.ts";
 
 const desk = (code: string, text: string): DeskTextValue => ({ text, code, params: null });
 
@@ -59,11 +60,20 @@ export async function runViews(tx: Tx, publicationId: string, runs: RunRow[], pa
   for (const page of pages) for (const key of page.articles) keys.add(key);
   for (const run of runs) for (const left of run.not_placed) keys.add(left.article);
   const stories = await storiesByDeskKey(tx, publicationId, [...keys]);
+  // a done run's pages checked against the edition now (modules/editor/printed.ts), as the release checks them; a run
+  // still going has no record of its pages yet (run.finished brings it)
+  const live = new Map<string, Map<string, Record<string, unknown>>>();
+  for (const run of runs) {
+    if (run.state === "done" && !live.has(run.edition_id))
+      live.set(run.edition_id, await liveArticles(tx, publicationId, run.edition_id));
+  }
   const story = (deskKey: string) => {
     const found = stories.get(deskKey);
     return { storyId: found?.id ?? null, deskKey, headline: found?.headline ?? null };
   };
   return runs.map((run) => {
+    const own = pages.filter((page) => page.run_id === run.id);
+    const ownPages = run.state === "done" ? withPrinted(own, live.get(run.edition_id) ?? new Map()) : own;
     const end = run.finished_at ?? new Date();
     const elapsed =
       run.elapsed_s ?? (run.started_at ? Math.max(0, (end.getTime() - run.started_at.getTime()) / 1000) : 0);
@@ -80,23 +90,21 @@ export async function runViews(tx: Tx, publicationId: string, runs: RunRow[], pa
       startedAt: run.started_at?.toISOString() ?? null,
       finishedAt: run.finished_at?.toISOString() ?? null,
       elapsedS: elapsed,
-      pages: pages
-        .filter((page) => page.run_id === run.id)
-        .map((page): LayoutPage => ({
-          page: page.page_no,
-          role: page.role,
-          state: page.state,
-          stories: page.articles.map(story),
-          pdf: page.pdf !== null,
-          preview: page.png !== null,
-          check: page.checked,
-          warnings: page.warnings,
-          message: page.message,
-          // as the page editor says it (editor/views.ts pageState, pressFlags' "saved")
-          editedUnsaved: page.edited_unsaved,
-          needsSave: page.needs_save || page.stale.length > 0,
-          needsSaveReasons: [...(page.needs_save && page.needs_save_why ? [page.needs_save_why] : []), ...page.stale],
-        })),
+      pages: ownPages.map((page): LayoutPage => ({
+        page: page.page_no,
+        role: page.role,
+        state: page.state,
+        stories: page.articles.map(story),
+        pdf: page.pdf !== null,
+        preview: page.png !== null,
+        check: page.checked,
+        warnings: page.warnings,
+        message: page.message,
+        // as the page editor says it (editor/views.ts pageState, pressFlags' "saved")
+        editedUnsaved: page.edited_unsaved,
+        needsSave: page.needs_save || page.stale.length > 0,
+        needsSaveReasons: [...(page.needs_save && page.needs_save_why ? [page.needs_save_why] : []), ...page.stale],
+      })),
       notPlaced: run.not_placed.map((left) => ({ ...story(left.article), reason: left.reason })),
       files: { editionPdf: run.edition_pdf !== null, pressZip: run.press_zip !== null },
       timings: run.timings,

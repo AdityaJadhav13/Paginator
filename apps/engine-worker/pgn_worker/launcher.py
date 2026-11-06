@@ -370,12 +370,13 @@ class Layout:
         """run.finished. A page stored but not checked (a run that failed or was cancelled after it was laid out)
         is done with a check that did not run: passed false, fails and warnings null, no report."""
         ended = None if state == "done" else state
+        printed = run_printed(getattr(self, "run_dir", None))
         pages = []
         for p in self._pages():
             n = p["page"]
             if n in self.files:
                 check = self.checks.get(n) or {"passed": False, "fails": None, "warnings": None, "report": None}
-                pages.append({**self._page_facts(p), "state": "done", "check": check})
+                pages.append({**self._page_facts(p), "state": "done", "check": check, "printed": printed.get(str(n))})
             else:
                 st = p["state"]
                 if ended and st in ("waiting", "working", "done"):
@@ -397,6 +398,17 @@ class Layout:
                 "press_zip": getattr(self, "press_zip", None) if state == "done" else None,
                 "checker_sha256": CHECKER_SHA256, "engine_version": engine.ENGINE_VERSION,
                 "timings": timings, "elapsed_s": self._elapsed()}
+
+
+def run_printed(run_dir: Path | None) -> dict[str, dict]:
+    """runs/<run>/printed.json's pages (what each laid-out page prints, desk_engine.write_printed): {"<n>": record}; {}
+    without one or when it cannot be read (each page then has no record, and the API counts it as needing saving)."""
+    try:
+        doc = util.read_json(run_dir / "printed.json", {}) if run_dir is not None else {}
+    except util.DeskError:
+        return {}
+    pages = doc.get("pages") if isinstance(doc, dict) else None
+    return {k: v for k, v in pages.items() if isinstance(v, dict)} if isinstance(pages, dict) else {}
 
 
 def run_ads(run_dir: Path | None) -> dict[str, str]:

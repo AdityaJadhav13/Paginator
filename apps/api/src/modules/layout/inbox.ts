@@ -278,6 +278,7 @@ export async function applyLayoutEvent(
       checked,
       warnings: page.warnings,
       seconds: page.seconds,
+      printed: page.printed ?? null,
     });
   }
   const message: DeskTextValue | null = event.message;

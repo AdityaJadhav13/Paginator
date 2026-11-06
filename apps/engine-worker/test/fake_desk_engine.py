@@ -130,6 +130,12 @@ if cmd == "generate":
             time.sleep(60)
     status.update(state="done", message="Two pages.",
                   not_placed=[{"article": req["articles"][0]["id"], "reason": DM.msg("m.plan.needsText")}])
+    # what each page prints (desk_engine.write_printed's file; the signatures are the real ones)
+    import deskprinted as DPR
+    by_id = {a["id"]: a for a in req["articles"]}
+    write_atomic(run / "printed.json", {"schema": "pageinator.desk.printed/1", "pages": {
+        str(p["page"]): {"v": DPR.VERSION, "articles": {a: DPR.article_sig(by_id[a], False) for a in p["articles"]},
+                         "folio": None, "ads": {}} for p in pages if p["state"] == "done"}})
     write_atomic(run / "engine-status.json", status)
     reply({"pages": 2, "failed": 0})
 if cmd == "edit-service":

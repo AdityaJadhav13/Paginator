@@ -844,10 +844,18 @@ function PageEditor({
           </Button>
         </Toolbar>
         <div aria-live="polite" className="pg-editor__status">
-          <Badge tone={sending || busy ? "info" : ps.editedUnsaved || ps.needsSave ? "warning" : "success"}>
+          <Badge
+            tone={
+              sending || busy ? "info" : ps.editedUnsaved || ps.needsSave || ps.stale.length > 0 ? "warning" : "success"
+            }
+          >
             {busy ? busyText[busy] : status}
           </Badge>
           {ps.needsSaveReason && ps.needsSave && <DeskWords text={ps.needsSaveReason} />}
+          {/* what the page prints that the edition no longer holds (the API decides it at every read) */}
+          {ps.stale.map((why, i) => (
+            <DeskWords key={i} text={why} />
+          ))}
           {notice && <p className="pg-editor__notice">{notice}</p>}
         </div>
         {problem && <Problem problem={problem} />}

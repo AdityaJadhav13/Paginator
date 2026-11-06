@@ -341,6 +341,10 @@ class LayoutTests(Case):
         self.assertEqual(ev["timings"], {"measure_s": 0.1, "plan_s": 0.2, "layout_s": 0.3})
         run_dir = self.home / "editions" / EID / "runs" / RKEY
         self.assertEqual(ev["ads"], launcher.run_ads(run_dir))              # what the run's pages print
+        # and each page's record of the articles it prints (printed.json's), for the API to compare with the edition
+        printed = json.loads((run_dir / "printed.json").read_text(encoding="utf-8"))["pages"]
+        self.assertEqual([p["printed"] for p in ev["pages"]], [printed["1"], printed["2"]])
+        self.assertEqual(sorted(ev["pages"][0]["printed"]["articles"]), sorted(ev["pages"][0]["articles"]))
         # the progress lines: run.progress, and run.page for each page once its files are stored
         kinds = [e["kind"] for e in self.lines]
         self.assertEqual(kinds[0], "run.progress")

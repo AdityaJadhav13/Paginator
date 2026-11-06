@@ -1,7 +1,8 @@
 // What the Release tab shows and a release checks again (docs/product/10-l2-newsroom-plan.md §1 L2.5; packages/
 // contracts/src/release.ts), from the rows src/db/release.ts reads. Pure: the caller reads the rows.
 //   - An approval counts only while its (rev, pdfSha256) are the page's own (run_page.pdf_rev, pdf_sha256) and the page
-//     has no unsaved edit and does not need saving.
+//     has no unsaved edit, does not need saving and prints what the edition holds (stale, decided again at every read:
+//     modules/editor/printed.ts).
 //   - The preflight is exactly PREFLIGHT_CHECKS: every item but not_placed stops a release (nothing can be overridden).
 //   - The candidate: every page for the first release; afterwards only the pages whose bytes differ from their newest
 //     released file (a correction), each named for its n-th release (_v2, _v3, …).
@@ -37,11 +38,19 @@ export type ReleaseState = {
   pressTest: PressTest | null;
 };
 
-type ApprovalPage = Pick<ReleasePageRow, "page_no" | "pdf_rev" | "pdf_sha256" | "needs_save" | "edited_unsaved">;
+type ApprovalPage = Pick<
+  ReleasePageRow,
+  "page_no" | "pdf_rev" | "pdf_sha256" | "needs_save" | "edited_unsaved" | "stale"
+>;
+
+/** The page needs saving before it is approved or released: changed and not saved, marked, or printing older content
+ * than the edition holds. */
+export const unsaved = (page: Pick<ReleasePageRow, "needs_save" | "edited_unsaved" | "stale">) =>
+  page.needs_save || page.edited_unsaved || page.stale.length > 0;
 
 /** The page's approval that counts now, or null. */
 export function approvalOf(page: ApprovalPage, approvals: readonly ApprovalRow[]): PageApproval | null {
-  if (page.pdf_sha256 === null || page.needs_save || page.edited_unsaved) return null;
+  if (page.pdf_sha256 === null || unsaved(page)) return null;
   const found = approvals.find(
     (a) => a.page_no === page.page_no && a.rev === page.pdf_rev && a.pdf_sha256 === page.pdf_sha256,
   );
@@ -64,7 +73,7 @@ export function releasePage(state: ReleaseState, page: ReleasePageRow): ReleaseP
     rev: page.pdf_rev,
     pdfSha256: page.pdf_sha256,
     check: page.check,
-    needsSave: page.needs_save || page.edited_unsaved,
+    needsSave: unsaved(page),
     approval: approvalOf(page, state.approvals),
     released: released
       ? { name: released.name, sha256: released.sha256, changed: released.sha256 !== page.pdf_sha256 }

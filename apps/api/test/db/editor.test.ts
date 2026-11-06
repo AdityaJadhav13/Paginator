@@ -18,6 +18,7 @@ import {
 import type { Client, Notification } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { signature } from "../../src/modules/editor/gateway.ts";
+import { articleSig } from "../../src/modules/editor/printed.ts";
 import { freshDatabase } from "./helpers.ts";
 import { FROM_APP, type IdentityApp, identityApp } from "./identity-app.ts";
 import { type Org, type Person, newsroom } from "./newsroom.ts";
@@ -91,7 +92,7 @@ function engine(call: EditCall): unknown {
           press_zip: file(call, "press-files.zip"),
           articles: ["a-0000000001"],
           pages_changed: {},
-          printed: { articles: {} },
+          printed: { v: 3, articles: {} },
           layout_problems: [],
           warnings: [],
           stale: [],
@@ -200,8 +201,9 @@ async function run(state: "done" | "layout", date: string): Promise<string> {
   const id = made.rows[0]?.id ?? "";
   for (const p of [1, 2, 3, 4]) {
     await su.query(
-      `insert into app.run_page (org_id, publication_id, run_id, page_no, role, state, articles, checked)
-       values ($1, $2, $3, $4, $5, 'done', $6, '{"passed": true, "fails": 0, "warnings": 0}')`,
+      // printed: a record of no article (these tests are not about what the pages print: printed.ts has its own)
+      `insert into app.run_page (org_id, publication_id, run_id, page_no, role, state, articles, checked, printed)
+       values ($1, $2, $3, $4, $5, 'done', $6, '{"passed": true, "fails": 0, "warnings": 0}', '{"v": 3, "articles": {}}')`,
       [a.orgId, a.pubId, id, p, p === 1 ? "front" : p === 4 ? "back" : "inside", JSON.stringify([`a-000000000${p}`])],
     );
   }
@@ -645,6 +647,58 @@ describe("what a save counts again", () => {
     );
     const item = tab.json().preflight.items.find((i: { check: string }) => i.check === "not_placed");
     expect(item.stories.map((s: { deskKey: string }) => s.deskKey)).toEqual(["a-0000000003"]);
+  });
+
+  it("marks a page whose story changed after the layout: it needs saving, its approval and the release are refused, until it is saved", async () => {
+    const { id: r, editionId } = await freshRun("2027-02-07");
+    const key = (p: number) => `a-00000000${p}7`; // stories of this test's own (desk keys are one per publication)
+    for (const p of [1, 2, 3, 4]) await story(editionId, key(p));
+    const sigOf = (body: string) => articleSig({ headline: "काल्पनिक बातमी (fictional)", body }, false);
+    const printed = (p: number, body: string) => ({
+      v: 3,
+      articles: { [key(p)]: sigOf(body) },
+      folio: null,
+      ads: {},
+    });
+    // each page prints its story as laid out (the engine's record, which run.finished keeps)
+    for (const p of [1, 2, 3, 4]) {
+      const pdf = { key: `laid-out-${p}.pdf`, version_id: "v", sha256: sha(`laid out ${p}`), bytes: 100 };
+      await su.query(
+        "update app.run_page set articles = $6, printed = $3, pdf = $4, pdf_sha256 = $5 where run_id = $1 and page_no = $2",
+        [r, p, printed(p, "शब्द शब्द"), pdf, pdf.sha256, JSON.stringify([key(p)])],
+      );
+    }
+    const base = `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}`;
+    const board = async () => (await call("GET", `${base}/runs/${r}`, viewer.cookie)).json().pages[0];
+    const tab = async () => (await call("GET", `${base}/editions/${editionId}/release`, chief.cookie)).json();
+    const approve = (rev: number, pdfSha256: string) =>
+      call("POST", `${base}/runs/${r}/pages/1/approve`, chief.cookie, { rev, pdfSha256 });
+    expect(await board()).toMatchObject({ needsSave: false, needsSaveReasons: [] });
+    // page 1's story corrected after the layout, whatever path wrote it (here straight in the database)
+    const { rows } = await su.query<{ id: string }>(
+      "select id from app.story where edition_id = $1 and desk_key = $2",
+      [editionId, key(1)],
+    );
+    await su.query("update app.story_revision set body = 'नवे शब्द' where story_id = $1", [rows[0]?.id]);
+    // the board and the editor say it, with the Desk's reason; the release refuses: saved fails, no approval
+    expect(await board()).toMatchObject({ needsSave: true, needsSaveReasons: [reason("m.press.changed1")] });
+    expect((await call("GET", `${page(1, r)}/edit`, viewer.cookie)).json().pageState.stale).toEqual([
+      reason("m.press.changed1"),
+    ]);
+    const before = await tab();
+    expect(before.preflight.items.find((i: { check: string }) => i.check === "saved")).toMatchObject({
+      state: "failed",
+      pages: [1],
+    });
+    expect(before.pages[0]).toMatchObject({ page: 1, needsSave: true });
+    expect((await approve(before.pages[0].rev, before.pages[0].pdfSha256)).statusCode).toBe(409);
+    // Update text and Save: the page prints the new text (the engine's record of it) and is current again
+    await save(r, 1, { articles: [key(1)], printed: printed(1, "नवे शब्द") });
+    expect(await board()).toMatchObject({ needsSave: false, needsSaveReasons: [] });
+    const after = await tab();
+    expect(after.preflight.items.find((i: { check: string }) => i.check === "saved").pages).not.toContain(1);
+    expect(after.pages[0]).toMatchObject({ page: 1, needsSave: false });
+    expect((await approve(after.pages[0].rev, after.pages[0].pdfSha256)).statusCode).toBe(200);
   });
 
   it("keeps the ad rasters a saved page prints, so the release's ad check passes without a new layout", async () => {

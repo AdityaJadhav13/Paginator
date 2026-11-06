@@ -44,6 +44,7 @@ import { BODY_FORMAT, BODY_LIMIT, DeskTextError, LINE_LIMIT, bodyWords, cleanTex
 import { Unzip, UnzipInflate } from "fflate";
 import { sql } from "kysely";
 import { z } from "zod";
+import { liveArticles, resigned } from "../modules/editor/printed.ts";
 import { articleLanguage } from "../modules/media/imports.ts";
 import { JpegScan, NotAPicture, picture } from "../modules/media/picture.ts";
 import type { ObjectStore } from "../storage/object-store.ts";
@@ -265,6 +266,8 @@ const PageStatus = z.object({
       warnings: z.number().int().min(0).nullable(),
     })
     .optional(),
+  /** what the page prints (deskprinted's record, which the Desk copies from printed.json): compared with the edition */
+  printed: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 const RunStatus = z.object({
   state: z.enum(["done", "failed", "cancelled"]),
@@ -465,8 +468,11 @@ async function importEdition(c: Context, name: string, allRuns: boolean, include
   );
   const publication = await publicationOf(c.tx, c.pub);
   const doc = ArticlesDoc.safeParse(readJson(join(c.dir, folder, "articles.json")));
+  /** the Desk's articles as it signed them (a page's record of what it prints is signed again over the hosted text) */
+  const desk = new Map<string, Record<string, unknown>>();
   for (const raw of doc.success ? doc.data.articles : []) {
     const article = Article.safeParse(raw);
+    if (article.success) desk.set(article.data.id, raw as Record<string, unknown>);
     if (article.success && article.data.source?.startsWith("sample:")) {
       c.report.samples += 1;
       if (!includeSamples) continue; // test material from the private dataset
@@ -567,7 +573,7 @@ async function importEdition(c: Context, name: string, allRuns: boolean, include
   }
 
   await importAds(c, editionId, e, folder);
-  for (const run of runs) await importRun(c, editionId, `${folder}/runs/${run.key}`, run.key, run.status);
+  for (const run of runs) await importRun(c, editionId, `${folder}/runs/${run.key}`, run.key, run.status, desk);
 }
 
 /** The slot's size in the plan of the profile in use for this edition's pages and back-page ads, or null. */
@@ -656,7 +662,14 @@ const json = (value: object | null) => (value === null ? null : JSON.stringify(v
 
 const TYPES: Record<string, string> = { pdf: "application/pdf", png: "image/png", txt: "text/plain; charset=utf-8" };
 
-async function importRun(c: Context, editionId: string, folder: string, key: string, status: RunStatus) {
+async function importRun(
+  c: Context,
+  editionId: string,
+  folder: string,
+  key: string,
+  status: RunStatus,
+  desk: ReadonlyMap<string, Record<string, unknown>>,
+) {
   const { counts, notes } = c.report;
   counts.runs.found += 1;
   const there = await c.tx
@@ -676,6 +689,8 @@ async function importRun(c: Context, editionId: string, folder: string, key: str
     return;
   }
   const msgs = status.msgs ?? {};
+  let laid: Map<string, Record<string, unknown>> | undefined; // the edition's laid-out articles, read once
+  const live = async () => (laid ??= await liveArticles(c.tx, c.pub, editionId));
   const text = (value: unknown) => deskText(value, msgs);
   const notPlaced = (status.not_placed ?? []).flatMap((item) => {
     const { article, reason } = (item ?? {}) as { article?: unknown; reason?: unknown };
@@ -761,6 +776,7 @@ async function importRun(c: Context, editionId: string, folder: string, key: str
         warnings: JSON.stringify((page.warnings ?? []).flatMap((w) => text(w) ?? [])),
         message: json(text(page.message)),
         seconds: page.seconds ?? null,
+        printed: json(page.state === "done" ? resigned(page.printed ?? null, desk, await live()) : null),
       })
       .execute();
     if (pdf && check && c.checker) {
