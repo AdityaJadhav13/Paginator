@@ -578,3 +578,141 @@ describe("without the gateway", () => {
     }
   });
 });
+
+describe("what a save counts again", () => {
+  const reason = (code: string) => ({ code, params: null, text: expect.any(String) });
+  /** A run of a new edition (its pages print a-0000000001 … a-0000000004), and its edition. */
+  async function freshRun(date: string) {
+    const id = await run("done", date);
+    const edition = await su.query<{ edition_id: string }>("select edition_id from app.layout_run where id = $1", [id]);
+    return { id, editionId: edition.rows[0]?.edition_id ?? "" };
+  }
+  /** A story of the edition (a ready one is in the live content the save is sent). */
+  async function story(editionId: string, desk: string, status = "ready") {
+    const { rows } = await su.query<{ id: string }>(
+      `insert into app.story (org_id, publication_id, edition_id, desk_key, status, reporter_id, language)
+       values ($1, $2, $3, $4, $6, $5, 'mr') returning id`,
+      [a.orgId, a.pubId, editionId, desk, ownerId, status],
+    );
+    await su.query(
+      `insert into app.story_revision (org_id, publication_id, story_id, rev, headline, body, words, author_id)
+       values ($1, $2, $3, 1, 'काल्पनिक बातमी (fictional)', 'शब्द शब्द', 2, $4)`,
+      [a.orgId, a.pubId, rows[0]?.id, ownerId],
+    );
+  }
+  /** Saves page p of run r at its revision now, the engine answering with the changes given. */
+  async function save(r: string, p: number, change: Record<string, unknown>) {
+    const rev = (await call("GET", `${page(p, r)}/edit`, viewer.cookie)).json().rev as number;
+    hook = (c) => {
+      if (c.cmd !== "save") return undefined;
+      const answer = engine(c) as { saved: Record<string, unknown> };
+      return { ...answer, saved: { ...answer.saved, ...change } };
+    };
+    try {
+      const reply = await call("POST", `${page(p, r)}/edit/save`, designer.cookie, { rev });
+      expect(reply.statusCode, reply.body).toBe(200);
+    } finally {
+      hook = undefined;
+    }
+  }
+  const runRow = async (r: string) =>
+    (await su.query("select not_placed, ad_rasters from app.layout_run where id = $1", [r])).rows[0] as {
+      not_placed: unknown;
+      ad_rasters: unknown;
+    };
+
+  it("lists the run's articles on no page after a save, as the Desk does; one back on a page leaves the list", async () => {
+    const { id: r, editionId } = await freshRun("2027-02-05");
+    // the layout left out a-0000000005; a-0000000003 was deleted from the edition after it
+    const left = { article: "a-0000000005", reason: { text: "It did not fit.", code: null, params: null } };
+    await su.query("update app.layout_run set not_placed = $2 where id = $1", [r, JSON.stringify([left])]);
+    for (const desk of ["a-0000000001", "a-0000000004", "a-0000000005"]) await story(editionId, desk);
+    await story(editionId, "a-0000000002", "held"); // still in the edition, not laid out: never "deleted"
+    // page 1 now prints the story left out, and takes the stories of pages 2 and 3
+    await save(r, 1, { articles: ["a-0000000001", "a-0000000005"], pages_changed: { "2": [], "3": [] } });
+    expect(calls.filter((c) => c.cmd === "save").at(-1)?.live?.articles).toHaveLength(3);
+    expect((await runRow(r)).not_placed).toEqual([
+      { article: "a-0000000002", reason: reason("m.save.notPlacedEdited") },
+      { article: "a-0000000003", reason: reason("m.save.deletedAfter") },
+    ]);
+    // a-0000000002 brought back onto page 1; the earlier entries keep their reasons
+    await save(r, 1, { articles: ["a-0000000001", "a-0000000005", "a-0000000002"] });
+    expect((await runRow(r)).not_placed).toEqual([{ article: "a-0000000003", reason: reason("m.save.deletedAfter") }]);
+    const tab = await call(
+      "GET",
+      `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}/editions/${editionId}/release`,
+      chief.cookie,
+    );
+    const item = tab.json().preflight.items.find((i: { check: string }) => i.check === "not_placed");
+    expect(item.stories.map((s: { deskKey: string }) => s.deskKey)).toEqual(["a-0000000003"]);
+  });
+
+  it("keeps the ad rasters a saved page prints, so the release's ad check passes without a new layout", async () => {
+    const { id: r, editionId } = await freshRun("2027-02-06");
+    await su.query("update app.edition set back_page_ads = true where id = $1", [editionId]);
+    await su.query("update app.layout_run set ad_rasters = $2 where id = $1", [r, { "back-1": "d".repeat(64) }]);
+    // the profile in use plans back-1 on page 4; the slot's artwork was replaced after the layout (ready now)
+    const upload = await su.query<{ id: string }>(
+      `insert into app.upload (org_id, publication_id, user_id, purpose, declared_type, declared_bytes, expires_at)
+       values ($1, $2, $3, 'engine_dataset', 'application/zip', 100, now()) returning id`,
+      [a.orgId, a.pubId, ownerId],
+    );
+    const plan = {
+      pages: 4,
+      back_page_ads: true,
+      page_plan: [
+        {
+          page: 4,
+          role: "back",
+          template_role: "back",
+          news_mm2: 1,
+          ad_slots: [{ slot: "back-1", w_mm: 120, h_mm: 80 }],
+        },
+      ],
+    };
+    await su.query(
+      `insert into app.engine_profile (org_id, publication_id, version, state, upload_id, dataset_sha256, dataset_bytes,
+         config_version_id, config_sha256, engine_version, templates, grid, plans, created_by)
+       values ($1, $2, 1, 'ready', $3, $4, 100, 'v1', $4, 'desk-engine/fictional', '{}', '{}', $5, $6)`,
+      [a.orgId, a.pubId, upload.rows[0]?.id, "a".repeat(64), JSON.stringify([plan]), ownerId],
+    );
+    const asset = await su.query<{ id: string }>(
+      `insert into app.asset (org_id, publication_id, desk_key, sha256, bytes, mime, width_px, height_px, uploaded_by)
+       values ($1, $2, 'p-00000000a1', $3, 1024, 'image/jpeg', 945, 634, $4) returning id`,
+      [a.orgId, a.pubId, "1".repeat(64), ownerId],
+    );
+    const raster = {
+      key: `orgs/${a.orgId}/pubs/${a.pubId}/assets/x/r/ad.cmyk.gz`,
+      version_id: "v1",
+      sha256: "e".repeat(64),
+    };
+    await su.query(
+      `insert into app.ad_slot_artwork (org_id, publication_id, edition_id, slot, asset_id, w_mm, h_mm, state, raster,
+         set_by)
+       values ($1, $2, $3, 'back-1', $4, 120, 80, 'ready', $5, $6)`,
+      [a.orgId, a.pubId, editionId, asset.rows[0]?.id, { ...raster, bytes: 9, width_px: 945, height_px: 634 }, ownerId],
+    );
+    const adCheck = async () => {
+      const tab = await call(
+        "GET",
+        `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}/editions/${editionId}/release`,
+        chief.cookie,
+      );
+      return tab.json().preflight.items.find((i: { check: string }) => i.check === "ad_artwork");
+    };
+    expect(await adCheck()).toMatchObject({ state: "failed", slots: ["back-1"], printsOld: true });
+    // "Update text" and "Save" on the back page: the save is sent the ad, and answers the raster the page prints
+    await save(r, 4, { ads: { "back-1": "e".repeat(64) } });
+    expect(calls.filter((c) => c.cmd === "save").at(-1)?.live?.ads).toEqual({
+      "back-1": { width_px: 945, height_px: 634, ppi: 200, raster: { ...raster, width_px: 945, height_px: 634 } },
+    });
+    expect((await runRow(r)).ad_rasters).toEqual({ "back-1": "e".repeat(64) });
+    expect(await adCheck()).toMatchObject({ state: "passed", slots: [] });
+    // a save whose PDF could not be stored records nothing; one that prints no ad there takes the slot out
+    await save(r, 4, { ads: { "back-1": "f".repeat(64) }, pdf: null, png: null, thumb: null });
+    expect((await runRow(r)).ad_rasters).toEqual({ "back-1": "e".repeat(64) });
+    await save(r, 4, { ads: { "back-1": null } });
+    expect((await runRow(r)).ad_rasters).toEqual({});
+    expect(await adCheck()).toMatchObject({ state: "failed", slots: ["back-1"] });
+  });
+});

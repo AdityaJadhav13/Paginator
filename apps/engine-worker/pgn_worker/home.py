@@ -16,8 +16,8 @@ Then it writes:
   editions/<edition>/runs/<run>/request.json (the Desk's shape, the raster references taken out), in a run folder
   emptied first, so nothing of an earlier attempt (a PDF, a ZIP) can be taken for this one's.
 A photo or ad file of an earlier request that this one does not name is removed (links are left alone). write_live
-writes the edition's live edition.json, articles.json and photos the same way (the page editor's gateway), never
-touching a run folder or the ads. Both take the edition's lock (editions/<edition>/.lock, flock) while they write, so a
+writes the edition's live edition.json, articles.json, photos and ads the same way (the page editor's gateway, for
+"Update text" and a save), never touching a run folder. Both take the edition's lock (editions/<edition>/.lock, flock) while they write, so a
 layout job and the editor's gateway (other processes) never write one edition's files at once. Folders 0700,
 files 0600. The home holds no previews or originals: the engine reads only the rasters."""
 from __future__ import annotations
@@ -151,13 +151,34 @@ def _photos(storage: Storage, guard: KeyGuard, articles: list) -> tuple[list, di
     return plain, photo_files, photo_index
 
 
-def _write_live(ed: Path, pdir: Path, edition: dict, plain: list, photo_files: dict, photo_index: dict) -> None:
-    """The edition's own files: its photos (an earlier request's swept), edition.json and articles.json."""
-    _sweep(pdir, set(photo_files))
-    for pid, data in photo_files.items():
-        util.write_bytes(pdir / f"{pid}.cmyk.gz", data)
-    util.write_json(pdir / "index.json", {"elements": {pid: {"width_px": w, "height_px": h, "ppi": None}
-                                                       for pid, (w, h) in photo_index.items()}})
+def _ads(storage: Storage, guard: KeyGuard, ads: object) -> tuple[dict, dict]:
+    """Every ad's slot and raster checked → ({slot: raster bytes}, {slot: its index.json entry})."""
+    if not isinstance(ads, dict):
+        raise BadRequest("the ads are not an object")
+    ad_files, ad_index = {}, {}
+    for slot, entry in ads.items():
+        _id(util.SLOT_ID, slot, "an ad slot")
+        if not isinstance(entry, dict):
+            raise BadRequest(f"ad {slot} is not an object")
+        w = _size(entry.get("width_px"), f"ad {slot}'s width")
+        h = _size(entry.get("height_px"), f"ad {slot}'s height")
+        ad_files[slot] = _raster(storage, guard, entry.get("raster"), w, h, f"ad {slot}")
+        ad_index[slot] = {"width_px": w, "height_px": h, "ppi": entry.get("ppi")}
+    return ad_files, ad_index
+
+
+def _write_live(ed: Path, edition: dict, plain: list, photo_files: dict, photo_index: dict, ad_files: dict | None,
+                ad_index: dict | None) -> None:
+    """The edition's own files: its photos and ads (an earlier request's swept), edition.json and articles.json."""
+    photos = {pid: {"width_px": w, "height_px": h, "ppi": None} for pid, (w, h) in photo_index.items()}
+    pdir, adir = _folder(ed, "photos"), _folder(ed, "ads")                 # both checked before anything is written
+    for folder, files, index in ((pdir, photo_files, photos), (adir, ad_files, ad_index)):
+        if files is None:                                                  # ads not given: left as they are
+            continue
+        _sweep(folder, set(files))
+        for name, data in files.items():
+            util.write_bytes(folder / f"{name}.cmyk.gz", data)
+        util.write_json(folder / "index.json", {"elements": index})
     util.write_json(ed / "edition.json", edition)
     util.write_json(ed / "articles.json", {"schema": ARTICLES_SCHEMA,
                                            "articles": [{k: v for k, v in a.items() if k not in DERIVED}
@@ -165,9 +186,10 @@ def _write_live(ed: Path, pdir: Path, edition: dict, plain: list, photo_files: d
 
 
 def write_live(storage: Storage, homes: Path, org_id: str, pub_id: str, edition_id: str, edition: object,
-               articles: object) -> Path:
-    """The edition's live content (the editor's Update text and save, gateway.py): edition.json, articles.json and
-    their photo rasters, checked as materialise checks them, written WITHOUT touching any run folder or the ads. →
+               articles: object, ads: object = None) -> Path:
+    """The edition's live content (the editor's Update text and save, gateway.py): edition.json, articles.json, their
+    photo rasters and the ads (the engine's Update text brings them into the run), checked as materialise checks them,
+    written WITHOUT touching any run folder; ads None (an older API's call) leaves the edition's ads as they are. →
     the edition's folder."""
     guard = KeyGuard(org_id, pub_id)
     eid = _id(EDITION_ID, edition_id, "the edition")
@@ -176,9 +198,10 @@ def write_live(storage: Storage, homes: Path, org_id: str, pub_id: str, edition_
     if edition.get("id") != eid:
         raise BadRequest("the live content is for another edition")
     plain, photo_files, photo_index = _photos(storage, guard, articles)
+    ad_files, ad_index = _ads(storage, guard, ads) if ads is not None else (None, None)
     ed = _folder(util.ensure_dir(Path(homes)), guard.org_id, guard.pub_id, "editions", eid)
     with _locked(ed):
-        _write_live(ed, _folder(ed, "photos"), edition, plain, photo_files, photo_index)
+        _write_live(ed, edition, plain, photo_files, photo_index, ad_files, ad_index)
     return ed
 
 
@@ -204,28 +227,15 @@ def materialise(storage: Storage, homes: Path, org_id: str, pub_id: str, edition
         raise BadRequest("the request is for another edition than the job's")
 
     plain, photo_files, photo_index = _photos(storage, guard, articles)    # every check and raster first, then writes
-    ad_files, ad_index = {}, {}
-    for slot, entry in ads.items():
-        _id(util.SLOT_ID, slot, "an ad slot")
-        if not isinstance(entry, dict):
-            raise BadRequest(f"ad {slot} is not an object")
-        w = _size(entry.get("width_px"), f"ad {slot}'s width")
-        h = _size(entry.get("height_px"), f"ad {slot}'s height")
-        ad_files[slot] = _raster(storage, guard, entry.get("raster"), w, h, f"ad {slot}")
-        ad_index[slot] = {"width_px": w, "height_px": h, "ppi": entry.get("ppi")}
+    ad_files, ad_index = _ads(storage, guard, ads)
 
     home = _folder(util.ensure_dir(Path(homes)), guard.org_id, guard.pub_id)   # homes: the worker's own setting
     ed = _folder(home, "editions", eid)
     with _locked(ed):
-        pdir, adir = _folder(ed, "photos"), _folder(ed, "ads")
         run = None if rid is None else _folder(ed, "runs", rid)
         if run is not None:
             _empty(run)
-        _sweep(adir, set(ad_files))
-        for slot, data in ad_files.items():
-            util.write_bytes(adir / f"{slot}.cmyk.gz", data)
-        util.write_json(adir / "index.json", {"elements": ad_index})
-        _write_live(ed, pdir, edition, plain, photo_files, photo_index)
+        _write_live(ed, edition, plain, photo_files, photo_index, ad_files, ad_index)
         desk_ads = {slot: {**ad_index[slot], "slot": slot, "w_px": ad_index[slot]["width_px"],
                            "h_px": ad_index[slot]["height_px"]} for slot in ads}
         if run is not None:

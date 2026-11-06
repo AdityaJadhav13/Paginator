@@ -216,6 +216,9 @@ function fictionalHome(root: string): { home: string; dataset: string } {
   write(join(run, "edition.pdf"), pdf("whole edition"));
   write(join(run, "press-files.zip"), Buffer.from(zipSync({ "page-01.pdf": pdf("page 1") })));
   write(join(run, "plan.json"), { stories: {} });
+  // the run's own ads (what its pages print): back-2 is listed without its raster, so it prints none
+  write(join(run, "ads/back-1.cmyk.gz"), "the run's ad raster");
+  write(join(run, "ads/index.json"), { elements: { "back-1": { width_px: 20, height_px: 10 }, "back-2": {} } });
   write(join(run, "engine.log"), "engine output");
   write(join(ed, "runs", OLD_RUN, "request.json"), { edition: { id: ED } });
   write(join(ed, "runs", OLD_RUN, "status.json"), {
@@ -455,6 +458,7 @@ describe("import-desk", () => {
       request_sha256: sha(readFileSync(join(scratch, "home/editions", ED, "runs", RUN, "request.json"))),
       not_placed: [{ article: "a-0000000002", reason: { text: "It did not fit.", code: null, params: null } }],
       timings: { measure_s: 10, plan_s: 2, layout_s: 500 },
+      ad_rasters: { "back-1": sha("the run's ad raster") },
     });
     expect(layout.rows[0].request_version_id).toBeTruthy();
     expect(layout.rows[0].edition_pdf.key).toBe(
@@ -512,11 +516,16 @@ describe("import-desk", () => {
   it("--all-runs adds the earlier, failed run (without pages)", async () => {
     const report = await run(a, { allRuns: true });
     expect(report.counts.runs).toEqual({ found: 2, added: 1, existing: 1, skipped: 0 });
-    const old = await su.query("select state, error from app.layout_run where org_id = $1 and desk_key = $2", [
-      a.orgId,
-      OLD_RUN,
-    ]);
-    expect(old.rows[0]).toMatchObject({ state: "failed", error: { text: "The layout engine stopped." } });
+    const old = await su.query(
+      "select state, error, ad_rasters from app.layout_run where org_id = $1 and desk_key = $2",
+      [a.orgId, OLD_RUN],
+    );
+    // a run without its own ads folder keeps no record of what its pages print
+    expect(old.rows[0]).toMatchObject({
+      state: "failed",
+      error: { text: "The layout engine stopped." },
+      ad_rasters: null,
+    });
   });
 
   it("takes the sample articles when asked", async () => {

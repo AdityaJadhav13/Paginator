@@ -2,7 +2,8 @@
  * The release over the API (docs/product/10-l2-newsroom-plan.md §1 L2.5), under /api/v1/orgs/:o/pubs/:p: every answer
  * read with the API's own schema (@pageinator/contracts release.ts), so a change of shape shows as an error, never as
  * a wrong screen. A refusal (409 approval_stale, release_refused, already_confirmed; 502 archive_failed) comes back as
- * the problem; the screen fetches the release again to show what it is now.
+ * the problem; the screen fetches the release again to show what it is now. "Download all" takes the release's ZIP as a
+ * Blob, with its file name from Content-Disposition.
  */
 import {
   ArchiveCheck,
@@ -38,6 +39,12 @@ const page = (o: string, p: string, runId: string, n: number) =>
   `${pub(o, p)}/runs/${encodeURIComponent(runId)}/pages/${n}`;
 const release = (o: string, p: string, id: string) => `${pub(o, p)}/releases/${encodeURIComponent(id)}`;
 
+/** filename="…" from Content-Disposition, kept only when it is a plain ZIP file name. */
+function filenameOf(headers: Headers): string | undefined {
+  const name = /filename="([^"/\\]+)"/.exec(headers.get("Content-Disposition") ?? "")?.[1];
+  return name && name.endsWith(".zip") ? name : undefined;
+}
+
 export function createApiReleaseService(client: ApiClient): ReleaseService {
   return {
     async get({ orgId, pubId, editionId }) {
@@ -57,8 +64,19 @@ export function createApiReleaseService(client: ApiClient): ReleaseService {
     async fileLink({ orgId, pubId, releaseId, name }) {
       return read(FileLink, await client.get(`${release(orgId, pubId, releaseId)}/files/${encodeURIComponent(name)}`));
     },
-    async markSent({ orgId, pubId, releaseId, note }) {
-      return read(Release, await client.post(`${release(orgId, pubId, releaseId)}/deliveries`, note ? { note } : {}));
+    async downloadAll({ orgId, pubId, releaseId }) {
+      const answer = await client.download(
+        `${release(orgId, pubId, releaseId)}/zip`,
+        {},
+        { headers: { Accept: "application/zip, application/json" }, timeoutMs: RELEASE_TIMEOUT_MS },
+      );
+      if (!answer.ok) return { ok: false, error: answer.problem };
+      const filename = filenameOf(answer.value.headers);
+      return filename ? { ok: true, value: { file: answer.value.blob, filename } } : { ok: false, error: UNEXPECTED };
+    },
+    async markSent({ orgId, pubId, releaseId, note, idempotencyKey }) {
+      const path = `${release(orgId, pubId, releaseId)}/deliveries`;
+      return read(Release, await client.post(path, note ? { note } : {}, { idempotencyKey }));
     },
     async confirm({ orgId, pubId, releaseId, deliveryId, pressPerson, at, note }) {
       const path = `${release(orgId, pubId, releaseId)}/deliveries/${encodeURIComponent(deliveryId)}/confirm`;

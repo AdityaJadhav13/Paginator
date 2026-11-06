@@ -686,6 +686,17 @@ async function importRun(c: Context, editionId: string, folder: string, key: str
     Object.entries(status.timings ?? {}).filter(([, v]) => typeof v === "number" && v >= 0),
   );
   const finished = moment(status.finished) ?? moment(status.created);
+  // the ads the run's pages print: its own ads folder's rasters. The release passes them only while the hosted media.ad
+  // (the Desk's convert_ad, gzip mtime 0) makes the same bytes of the slot's artwork; else it asks for a new layout
+  const ads = IndexDoc.safeParse(readJson(join(c.dir, folder, "ads", "index.json")));
+  const adRasters = ads.success
+    ? Object.fromEntries(
+        Object.keys(ads.data.elements).flatMap((slot) => {
+          const sha256 = c.manifest.get(`${folder}/ads/${slot}.cmyk.gz`)?.sha256;
+          return DeskSlot.safeParse(slot).success && sha256 ? [[slot, sha256]] : [];
+        }),
+      )
+    : null;
   const run = await c.tx
     .insertInto("app.layout_run")
     .values({
@@ -700,6 +711,7 @@ async function importRun(c: Context, editionId: string, folder: string, key: str
       checker_sha256: c.checker,
       timings: JSON.stringify(timings),
       not_placed: JSON.stringify(notPlaced),
+      ad_rasters: json(adRasters),
       message: json(text(status.message)),
       error: json(text(status.error)),
       elapsed_s: status.elapsed_s ?? null,

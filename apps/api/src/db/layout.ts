@@ -523,6 +523,8 @@ export type RunUpdate = {
   checkerSha256?: string;
   timings?: Record<string, number>;
   notPlaced?: { article: string; reason: DeskTextValue }[];
+  /** the ad rasters the run's pages print (slot → SHA-256) */
+  adRasters?: Record<string, string>;
   editionPdf?: Stored | null;
   pressZip?: Stored | null;
 };
@@ -542,6 +544,7 @@ export async function updateRun(tx: Tx, publicationId: string, runId: string, u:
       checker_sha256 = coalesce(${u.checkerSha256 ?? null}, checker_sha256),
       timings = coalesce(${json(u.timings) ?? null}::jsonb, timings),
       not_placed = coalesce(${json(u.notPlaced) ?? null}::jsonb, not_placed),
+      ad_rasters = coalesce(${json(u.adRasters) ?? null}::jsonb, ad_rasters),
       edition_pdf = case when ${u.editionPdf !== undefined} then ${json(u.editionPdf) ?? null}::jsonb else edition_pdf end,
       press_zip = case when ${u.pressZip !== undefined} then ${json(u.pressZip) ?? null}::jsonb else press_zip end,
       updated_at = now()
@@ -561,12 +564,18 @@ export type PageRow = {
   checked: { passed: boolean; fails: number | null; warnings: number | null } | null;
   warnings: DeskTextValue[];
   message: DeskTextValue | null;
+  /** the page editor's save state (db/editor.ts) */
+  edited_unsaved: boolean;
+  needs_save: boolean;
+  needs_save_why: DeskTextValue | null;
+  stale: DeskTextValue[];
 };
 
 export async function runPages(tx: Tx, publicationId: string, runIds: readonly string[]): Promise<PageRow[]> {
   if (runIds.length === 0) return [];
   const { rows } = await sql<PageRow>`
-    select run_id, page_no, role, state, articles, pdf, png, thumb, report, checked, warnings, message
+    select run_id, page_no, role, state, articles, pdf, png, thumb, report, checked, warnings, message,
+      edited_unsaved, needs_save, needs_save_why, stale
     from app.run_page where publication_id = ${publicationId} and run_id = any (${[...runIds]}::uuid[])
     order by run_id, page_no`.execute(tx);
   return rows;

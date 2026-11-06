@@ -2,8 +2,8 @@
  * The release's double (docs/product/10-l2-newsroom-plan.md §1 L2.5), answered as the API's release routes, built on
  * the layout double's board run: the preflight list (laid out, the independent check, approval, ad images, the press
  * test, stories not placed), page approval and unlocking (409 approval_stale on another revision or bytes, not_approved),
- * a release bound to the candidate's SHA-256 (409 approval_stale, release_refused), its files by link, "Mark as sent",
- * the press's confirmation (409 already_confirmed), the archive check and the press test. Every page PDF's SHA-256 is
+ * a release bound to the candidate's SHA-256 (409 approval_stale, release_refused), its files by link or as one
+ * fictional ZIP, "Mark as sent" (one delivery per Idempotency-Key), the press's confirmation (409 already_confirmed), the archive check and the press test. Every page PDF's SHA-256 is
  * fictional and never changes here, so a correction is not modelled (tests stub one). The archive lists the releases made
  * here (the search over stories is not modelled: a search finds nothing); print profiles are kept in memory, and a
  * release pins the newest. Permissions are not modelled: the screen hides what the API would refuse. Fictional data
@@ -46,6 +46,8 @@ export function createMockRelease(deps: MockReleaseDeps): {
   let pressTest: PressTestDto | null = null;
   let profiles: PrintProfileDto[] = [];
   let counter = 0;
+  /** the Idempotency-Keys "Mark as sent" has recorded a delivery for */
+  let sentKeys = new Set<string>();
   /** the newest view of each run's pages, for an approval */
   let runs = new Map<string, { editionId: string; pages: ReleasePageDto[] }>();
   const key = (runId: string, page: number) => `${runId}:${page}`;
@@ -200,9 +202,24 @@ export function createMockRelease(deps: MockReleaseDeps): {
         value: { url: `mock-store://releases/${releaseId}/${name}`, expiresAt: "2099-01-01T00:05:00.000Z" },
       };
     },
-    async markSent({ releaseId, note }) {
+    async downloadAll({ releaseId }) {
       const found = releaseOf(releaseId);
       if (!found) return fail(404, "not_found");
+      const editionKey = found.files[0]!.name.replace(/_P\d\d.*$/, "");
+      const sums = found.files.map((f) => `${f.sha256}  ${f.name}\n`).join("");
+      return {
+        ok: true,
+        value: {
+          file: new Blob([sums], { type: "application/zip" }),
+          filename: `${editionKey}_release-${found.number}.zip`,
+        },
+      };
+    },
+    async markSent({ releaseId, note, idempotencyKey }) {
+      const found = releaseOf(releaseId);
+      if (!found) return fail(404, "not_found");
+      if (sentKeys.has(idempotencyKey)) return { ok: true, value: structuredClone(found) };
+      sentKeys.add(idempotencyKey);
       counter += 1;
       found.deliveries.push({
         id: id(200 + counter),
@@ -322,6 +339,7 @@ export function createMockRelease(deps: MockReleaseDeps): {
       pressTest = null;
       profiles = [];
       counter = 0;
+      sentKeys = new Set();
       runs = new Map();
     },
   };

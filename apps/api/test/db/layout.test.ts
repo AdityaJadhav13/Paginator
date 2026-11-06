@@ -701,6 +701,8 @@ describe("a layout run", () => {
           reason: { text: "these stories do not fill the page exactly", code: "m.run.notFillExactly", params: null },
         },
       ],
+      // what the pages print (the run's own copies), not the request's record
+      ads: { "back-1": "e".repeat(64) },
       edition_pdf: await put(`${folder}edition.pdf`, "%PDF edition"),
       press_zip: await put(`${folder}press-files.zip`, "zip"),
       checker_sha256: "9".repeat(64),
@@ -718,6 +720,8 @@ describe("a layout run", () => {
     expect(got.notPlaced).toEqual([
       { storyId: left.id, deskKey: left.desk, headline: expect.any(String), reason: finished.not_placed[0]?.reason },
     ]);
+    const kept = await su.query("select ad_rasters from app.layout_run where id = $1", [runId]);
+    expect(kept.rows[0].ad_rasters).toEqual({ "back-1": "e".repeat(64) });
     const statuses = await su.query<{ id: string; status: string }>(
       "select id, status from app.story where id = any ($1)",
       [[placed.id, left.id, unplaced.id]],

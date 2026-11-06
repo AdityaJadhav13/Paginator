@@ -1,7 +1,8 @@
 /**
  * The real release service over a recording fetch (L2.5): each call's method, path and body as the contract's header
- * lists them, the release's Idempotency-Key and longer wait, answers read with the contract's schemas (a wrong shape is
- * unexpected_answer), and a refusal passed on with its code. Fictional.
+ * lists them, the release's and "Mark as sent"'s Idempotency-Keys and the longer wait, answers read with the contract's
+ * schemas (a wrong shape is unexpected_answer), a refusal passed on with its code, and "Download all" as a Blob with its
+ * file name. Fictional.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../../src/api/client.ts";
@@ -76,7 +77,7 @@ describe("the release service", () => {
       await release.unlockPage({ ...O, runId: "r", page: 3 }),
       await release.create({ ...O, editionId: "e", files: [{ page: 1, sha256: SHA }], note: "n", idempotencyKey: "k" }),
       await release.fileLink({ ...O, releaseId: ID, name: FILE.name }),
-      await release.markSent({ ...O, releaseId: ID }),
+      await release.markSent({ ...O, releaseId: ID, idempotencyKey: "s" }),
       await release.confirm({ ...O, releaseId: ID, deliveryId: "d", pressPerson: "Fictional Press", at: AT }),
       await release.verify({ ...O, releaseId: ID }),
       await release.setPressTest({ ...O, pageSha256: SHA, acceptedOn: "2026-10-20", note: "t" }),
@@ -94,6 +95,40 @@ describe("the release service", () => {
       ["PUT", `${BASE}/press-test`, { pageSha256: SHA, acceptedOn: "2026-10-20", note: "t" }],
     ]);
     expect(calls[3]!.headers.get("Idempotency-Key")).toBe("k");
+    expect(calls[5]!.headers.get("Idempotency-Key")).toBe("s");
+  });
+
+  it("downloads all: POST {} answered by the ZIP as a Blob, with its file name; no name or a refusal is not a file", async () => {
+    const zip = (disposition?: string) =>
+      new Response(new Uint8Array([0x50, 0x4b, 3, 4]), {
+        status: 200,
+        headers: { "Content-Type": "application/zip", ...(disposition ? { "Content-Disposition": disposition } : {}) },
+      });
+    const answers = [
+      zip('attachment; filename="2026-10-24_release-1.zip"'),
+      zip(),
+      zip('attachment; filename="../x.pdf"'),
+      json(404, { error: { code: "not_found", message: "Nothing here.", requestId: "q" } }),
+    ];
+    const { fetch, calls } = fakeFetch(() => answers.shift()!);
+    const release = createApiReleaseService(createApiClient({ fetch }));
+    const got = await release.downloadAll({ ...O, releaseId: ID });
+    expect(calls[0]).toMatchObject({ method: "POST", body: {} });
+    expect(path(calls[0]!.url)).toBe(`${BASE}/releases/${ID}/zip`);
+    expect(calls[0]!.headers.get("Accept")).toBe("application/zip, application/json");
+    expect(calls[0]!.headers.get("Idempotency-Key")).toBeNull();
+    if (!got.ok) throw new Error("no ZIP");
+    expect([got.value.filename, got.value.file.size]).toEqual(["2026-10-24_release-1.zip", 4]);
+    for (let n = 0; n < 2; n += 1) {
+      expect(await release.downloadAll({ ...O, releaseId: ID })).toMatchObject({
+        ok: false,
+        error: { code: "unexpected_answer" },
+      });
+    }
+    expect(await release.downloadAll({ ...O, releaseId: ID })).toMatchObject({
+      ok: false,
+      error: { status: 404, code: "not_found" },
+    });
   });
 
   it("waits for the archive past the client's own time limit", async () => {

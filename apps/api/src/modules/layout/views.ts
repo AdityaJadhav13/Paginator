@@ -92,6 +92,10 @@ export async function runViews(tx: Tx, publicationId: string, runs: RunRow[], pa
           check: page.checked,
           warnings: page.warnings,
           message: page.message,
+          // as the page editor says it (editor/views.ts pageState, pressFlags' "saved")
+          editedUnsaved: page.edited_unsaved,
+          needsSave: page.needs_save || page.stale.length > 0,
+          needsSaveReasons: [...(page.needs_save && page.needs_save_why ? [page.needs_save_why] : []), ...page.stale],
         })),
       notPlaced: run.not_placed.map((left) => ({ ...story(left.article), reason: left.reason })),
       files: { editionPdf: run.edition_pdf !== null, pressZip: run.press_zip !== null },

@@ -27,6 +27,7 @@ export function recordingContext() {
           calls.push([prop, ...args]);
           if (prop === "setTransform") m = args as unknown as Matrix;
           if (prop === "fill") filled.push({ path: args[0], m });
+          if (prop === "measureText") return { width: 6 * String(args[0]).length }; // 6 px a character
         };
       },
       set: () => true,

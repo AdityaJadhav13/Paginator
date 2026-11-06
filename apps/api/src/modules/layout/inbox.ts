@@ -291,6 +291,8 @@ export async function applyLayoutEvent(
     checkerSha256: event.checker_sha256,
     timings: event.timings,
     notPlaced: event.not_placed,
+    // what the pages print, not what the request held (an edition ad rewritten before the engine copied it)
+    ...(event.state === "done" && event.ads ? { adRasters: event.ads } : {}),
     editionPdf: event.edition_pdf,
     pressZip: event.press_zip,
   });

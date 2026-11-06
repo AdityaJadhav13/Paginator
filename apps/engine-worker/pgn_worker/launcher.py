@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import engine, home
-from .desk import REPO, desk_text, messages as M, runs, util
+from .desk import REPO, desk_text, editing, messages as M, runs, util
 from .keys import KeyGuard, uuid
 from .media import Mismatch
 from .storage import Storage
@@ -392,10 +392,25 @@ class Layout:
         return {"kind": "run.finished", **self.base, "state": state,
                 "message": self._text(message), "error": self._text(error),
                 "pages": pages, "not_placed": not_placed,
+                "ads": run_ads(getattr(self, "run_dir", None)) if state == "done" else {},
                 "edition_pdf": getattr(self, "edition_pdf", None) if state == "done" else None,
                 "press_zip": getattr(self, "press_zip", None) if state == "done" else None,
                 "checker_sha256": CHECKER_SHA256, "engine_version": engine.ENGINE_VERSION,
                 "timings": timings, "elapsed_s": self._elapsed()}
+
+
+def run_ads(run_dir: Path | None) -> dict[str, str]:
+    """{slot: SHA-256} of the ads a run's pages print: the run's own copies (runs/<run>/ads, which the engine made from
+    the edition's when it started, desk_engine.run_pictures), not the request's, so an edition ad rewritten meanwhile is
+    never recorded as printed. {} without a run folder or with an ads index that cannot be read (fail closed: the
+    release's ad check then asks for a new layout)."""
+    ads = run_dir / "ads" if run_dir is not None else None
+    try:
+        slots = editing.deskprinted.ad_elements(ads) if ads is not None else {}
+    except editing.deskprinted.AdIndexDamaged:
+        return {}
+    return {slot: hashlib.sha256((ads / f"{slot}.cmyk.gz").read_bytes()).hexdigest() for slot in slots
+            if util.SLOT_ID.fullmatch(slot) and (ads / f"{slot}.cmyk.gz").is_file()}
 
 
 def layout(storage: Storage, args: dict, settings: engine.Settings, progress: Progress,

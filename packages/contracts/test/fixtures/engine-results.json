@@ -960,6 +960,7 @@
             }
           }
         ],
+        "ads": {},
         "edition_pdf": {
           "key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/runs/01890a5d-ac96-774b-bcce-b302099a8063/edition.pdf",
           "version_id": "d10fa36bd2e7bdcd322be28fc7a39c5a18ba82319c732e9eb6966c221c966804",
@@ -1015,6 +1016,7 @@
           }
         ],
         "not_placed": [],
+        "ads": {},
         "edition_pdf": null,
         "press_zip": null,
         "checker_sha256": "307bfc4df43837725f94ebc9619c54ad2815abdae4e9159ae14cca7039aef14b",
@@ -1064,6 +1066,7 @@
         "error": null,
         "pages": [],
         "not_placed": [],
+        "ads": {},
         "edition_pdf": null,
         "press_zip": null,
         "checker_sha256": "307bfc4df43837725f94ebc9619c54ad2815abdae4e9159ae14cca7039aef14b",

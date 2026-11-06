@@ -6,6 +6,7 @@ is the fake one (test/fake_desk_engine.py's edit-service, on fictional data); th
 from __future__ import annotations
 
 import contextlib
+import gzip
 import hashlib
 import io
 import json
@@ -136,9 +137,18 @@ class Case(unittest.TestCase):
         self.assertEqual((status, answer.get("ok")), (200, True), answer)
         return answer
 
-    def live(self, **headlines) -> dict:
+    def live(self, ads: dict | None = None, **headlines) -> dict:
         arts = [article(n, headlines.get(f"a{n}")) for n in (1, 2, 3)]
-        return {"edition": json.loads((self.home / "editions" / EID / "edition.json").read_text()), "articles": arts}
+        return {"edition": json.loads((self.home / "editions" / EID / "edition.json").read_text()), "articles": arts,
+                "ads": ads or {}}
+
+    def ad(self, w: int = 4, h: int = 2, fill: int = 7) -> tuple[dict, bytes]:
+        """An ad's entry in `live` (its CMYK raster stored as a rendition), and the raster's bytes."""
+        data = gzip.compress(bytes([fill]) * (w * h * 4), mtime=0)
+        key = self.guard.key("assets", "01890a5d-ac96-7001-b000-000000000000", "r", "cmyk-" + "0" * 32 + ".cmyk.gz")
+        raster = {"key": key, "version_id": self.store.put(key, data, "application/gzip"),
+                  "sha256": hashlib.sha256(data).hexdigest(), "width_px": w, "height_px": h}
+        return {"width_px": w, "height_px": h, "ppi": 200, "raster": raster}, data
 
     def edit_file(self, page: int) -> dict | None:
         path = self.rundir / f"page-{page:02d}.edit.json"
@@ -184,7 +194,9 @@ class SignatureTests(Case):
         for bad in ({"cmd": "state"}, {"modules": [{"story": "x"}]}, {"page": 17}, {"cmd": "set"},
                     {"cmd": "move", "story": S1}, {"run_key": "../x"}, {"org_id": "nope"}, {"extra": 1},
                     {"variant": True, "cmd": "alternative"}, {"state": {"pages": [{"page": 1, "rev": -1, "modules": []}],
-                                                                       "text": None}}):
+                                                                       "text": None}},
+                    {"live": {"edition": {}, "ads": {}}}, {"live": {"edition": {}, "articles": [], "ads": {}, "more": 1}},
+                    {"live": {"edition": {}, "articles": [], "ads": []}}):
             c = {"format": gateway.FORMAT, "org_id": ORG, "pub_id": PUB, "run_id": RUN_ID, "edition_key": EID,
                  "run_key": RKEY, "page": 1, "cmd": "state", "base_rev": None, "state": {"pages": [], "text": None}}
             c.update(bad)
@@ -319,6 +331,38 @@ class CallTests(Case):
         self.assertTrue(all(s["code"].startswith("m.press.") for s in saved["stale"]), saved["stale"])
         self.assertEqual(saved["layout_problems"], ["overlap"])
         self.assertIn("m.warn.overlap", [w["code"] for w in saved["warnings"]])
+
+    def test_live_ads_reach_the_edition_and_a_save_reports_the_ads_it_prints(self):
+        self.ok("open")
+        entry, data = self.ad()
+        page1 = self.ok("refresh", base_rev=0, live=self.live(ads={"back-1": entry}))["edits"][0]
+        ads = self.home / "editions" / EID / "ads"
+        self.assertEqual((ads / "back-1.cmyk.gz").read_bytes(), data)
+        self.assertEqual(json.loads((ads / "index.json").read_text()),
+                         {"elements": {"back-1": {"width_px": 4, "height_px": 2, "ppi": 200}}})
+        self.assertFalse((self.rundir / "ads").exists())                 # the engine's Update text brings them in
+        (self.rundir / "ads").mkdir()                                     # as deskedit._refresh_ads leaves them
+        shutil.copyfile(ads / "back-1.cmyk.gz", self.rundir / "ads" / "back-1.cmyk.gz")
+        shutil.copyfile(ads / "index.json", self.rundir / "ads" / "index.json")
+        saved = self.ok("save", base_rev=1, pages=[page1], live=self.live(ads={"back-1": entry}))["saved"]
+        self.assertEqual(saved["ads"], {"back-1": hashlib.sha256(data).hexdigest()})
+        self.assertEqual(saved["printed"]["ads"], {"back-1": gateway.editing.deskprinted.file_sig(ads / "back-1.cmyk.gz")})
+        # the edition's ad taken out: its file is swept; the run's copy is the engine's to change, never write_live's
+        self.ok("refresh", base_rev=1, pages=[page1], live=self.live())
+        self.assertEqual(sorted(p.name for p in ads.iterdir()), ["index.json"])
+        self.assertTrue((self.rundir / "ads" / "back-1.cmyk.gz").is_file())
+
+    def test_printed_ads_name_only_the_file_the_page_printed(self):
+        ads = self.rundir / "ads"
+        ads.mkdir()
+        (ads / "back-1.cmyk.gz").write_bytes(b"fictional ad raster")
+        sig = gateway.editing.deskprinted.file_sig(ads / "back-1.cmyk.gz")
+        sha = hashlib.sha256(b"fictional ad raster").hexdigest()
+        self.assertEqual(gateway.printed_ads(self.rundir, {"ads": {"back-1": sig}}), {"back-1": sha})
+        # another file now than the one printed, no ad printed, no file, a slot that is not one: fail closed
+        printed = {"ads": {"back-1": "0" * 20, "back-2": None, "back-3": sig, "../x": sig}}
+        self.assertEqual(gateway.printed_ads(self.rundir, printed), {"back-1": None, "back-2": None, "back-3": None})
+        self.assertEqual([gateway.printed_ads(self.rundir, p) for p in (None, {}, {"ads": None})], [{}, {}, {}])
 
     def test_a_save_refused(self):
         self.ok("open")

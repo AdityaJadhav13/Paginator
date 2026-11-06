@@ -13,6 +13,9 @@ const workspace = JSON.parse(readFileSync(new URL("./tools/ts/workspace.json", i
   sharedPackages: string[];
 };
 const SHARED = workspace.sharedPackages.map((dir) => `packages/${dir}`);
+// The database tests do real Postgres and S3 work (a database cloned for each file and dropped after it): vitest's 5 s
+// and 10 s defaults overran when several suites shared one machine and its Postgres (2026-11-06), so honest limits.
+const DB_LIMITS = { testTimeout: 30_000, hookTimeout: 60_000 };
 
 export default defineConfig({
   test: {
@@ -46,6 +49,7 @@ export default defineConfig({
                 environment: "node",
                 include: ["apps/api/test/db/**/*.test.ts"],
                 globalSetup: ["apps/api/test/db/global-setup.ts"],
+                ...DB_LIMITS,
               },
             },
             {
@@ -54,6 +58,7 @@ export default defineConfig({
                 environment: "node",
                 include: ["apps/api/test/tenancy/**/*.test.ts"],
                 globalSetup: ["apps/api/test/db/global-setup.ts"],
+                ...DB_LIMITS,
               },
             },
           ]

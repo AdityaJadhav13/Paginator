@@ -223,11 +223,39 @@ class MaterialiseTests(unittest.TestCase):
         done = threading.Event()
         with home._locked(run.parent.parent):                                         # a layout job writing
             t = threading.Thread(target=lambda: (home.write_live(self.bucket, self.homes, ORG, PUB, EID, edition,
-                                                                 articles), done.set()))
+                                                                 articles, {}), done.set()))
             t.start()
             self.assertFalse(done.wait(0.3))
         t.join(10)
         self.assertTrue(done.is_set())
+
+    def test_write_live_writes_the_editions_ads_as_materialise_does_and_never_a_run_folder(self):
+        run = self.run_it(self.hosted())
+        ed = run.parent.parent
+        (ed / "ads" / "back-1.cmyk.gz").unlink()                                       # what write_live must bring
+        (run / "page-01.pdf").write_bytes(b"%PDF the layout's page")
+        files = lambda folder: {p.name: p.read_bytes() for p in folder.iterdir()}  # noqa: E731
+        before = files(run)
+        live = lambda ads: home.write_live(self.bucket, self.homes, ORG, PUB, EID, self.snapshot["edition"],  # noqa: E731
+                                           self.hosted()["articles"], ads)
+        self.assertEqual(live(self.hosted()["ads"]), ed)
+        self.assertEqual((ed / "ads" / "back-1.cmyk.gz").read_bytes(), (self.ed / "ads" / "back-1.cmyk.gz").read_bytes())
+        self.assertEqual(json.loads((ed / "ads" / "index.json").read_text("utf-8")),
+                         json.loads((self.ed / "ads" / "index.json").read_text("utf-8")))
+        self.assertEqual(files(run), before)                                            # the run folder untouched
+        # an ad whose raster is not the one named, or ads that are no object: refused, nothing written
+        bad = self.hosted()["ads"]
+        bad["back-1"]["raster"]["sha256"] = "0" * 64
+        for ads in (bad, [], {"../x": self.hosted()["ads"]["back-1"]}):
+            with self.subTest(ads=str(ads)[:40]), self.assertRaises(home.BadRequest):
+                live(ads)
+            self.assertTrue((ed / "ads" / "back-1.cmyk.gz").is_file())
+        live(None)                                            # an older API's call without ads: the ads stay
+        self.assertTrue((ed / "ads" / "back-1.cmyk.gz").is_file())
+        live({})                                                                        # the ad taken out: swept
+        self.assertEqual(sorted(p.name for p in (ed / "ads").iterdir()), ["index.json"])
+        self.assertEqual(json.loads((ed / "ads" / "index.json").read_text("utf-8")), {"elements": {}})
+        self.assertEqual(files(run), before)
 
 
 if __name__ == "__main__":

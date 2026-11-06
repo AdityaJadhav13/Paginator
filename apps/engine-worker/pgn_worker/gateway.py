@@ -13,11 +13,13 @@ publication home, on the engine host's private port.
   for null), and an engine session of a page whose file changed is opened again (reload). A page file whose rev is
   higher than the state's (a change whose answer the API has not kept yet) is never moved back: it is reported in
   `edits`, so the API catches up. refresh and save write the
-  edition's `live` content first (home.write_live: no run folder is touched). Every ok answer carries `edits`: each
+  edition's `live` content first, its ads too (home.write_live: no run folder is touched; the engine's Update text
+  brings them into the run). Every ok answer carries `edits`: each
   page file the call changed (this page's, a move's target, the pages a save took a story from, the engine's own
   changes), and `text` when edit-articles.json changed. A save stores the page's PDF and previews at
   runs/<run>/pages/NN/edit-<rev>.{pdf,png,thumb.png} and the run's edition.pdf and press-files.zip (made from the
-  pages' PDFs Postgres holds, state.pdfs: a local one that differs is fetched again); a check runs the
+  pages' PDFs Postgres holds, state.pdfs: a local one that differs is fetched again) and reports `ads`, the SHA-256
+  of each ad raster the page prints (printed_ads: null when not provably that file); a check runs the
   independent PDF/X-1a checker on the stored PDF it names and stores its report beside it.
 - **GET /v1/glyphs/<org>/<pub>/<face>?ids=…** and **GET /v1/raster/<org>/<pub>/<key>.jpg**: the engine's cache, as
   the Desk serves it (404 when unknown).
@@ -60,6 +62,7 @@ NEEDS = {"set": "modules", "alternative": "variant", "move": ("story", "to"), "c
 CALL_KEYS = {"format", "org_id", "pub_id", "run_id", "edition_key", "run_key", "page", "cmd", "base_rev", "state"}
 OPTIONAL = {"modules", "variant", "story", "to", "pdf", "live"}
 STORY = re.compile(r"d[0-9a-f]{10}|dbriefs[0-9]{1,3}", re.ASCII)
+SLOT = re.compile(r"[A-Za-z0-9_-]{1,40}", re.ASCII)                  # the contract's DeskSlot
 SHA256 = re.compile(r"[0-9a-f]{64}", re.ASCII)
 NONCE = re.compile(r"[0-9a-f]{32}", re.ASCII)
 FACE = re.compile(r"[0-9a-f]{24}", re.ASCII)
@@ -186,9 +189,11 @@ def check_call(c: object) -> dict:
         _stored_file(c["pdf"], "pdf")
     if "live" in c:
         live = c["live"]
-        if (not isinstance(live, dict) or set(live) != {"edition", "articles"} or not isinstance(live["edition"], dict)
-                or not isinstance(live["articles"], list) or len(live["articles"]) > 2000):
-            raise Refused("live is not an edition and its articles")
+        # ads may be missing (an API older than this gateway): the edition's ads are then left as they are
+        if (not isinstance(live, dict) or not {"edition", "articles"} <= set(live) <= {"edition", "articles", "ads"}
+                or not isinstance(live["edition"], dict) or not isinstance(live["articles"], list)
+                or len(live["articles"]) > 2000 or not isinstance(live.get("ads", {}), dict)):
+            raise Refused("live is not an edition, its articles and its ads")
     state = c["state"]
     if not isinstance(state, dict) or not {"pages", "text"} <= set(state) <= {"pages", "text", "pdfs"} \
             or not isinstance(state["pages"], list) or len(state["pages"]) > 16:
@@ -289,6 +294,20 @@ def sync(run_dir: Path, state: dict) -> tuple[set[int], set[int]]:
     elif text_overrides(run_dir) != state["text"] or not path.is_file():
         util.write_json(path, {"schema": EDIT_ARTICLES, "articles": state["text"]})
     return changed, ahead
+
+
+def printed_ads(run_dir: Path, printed: object) -> dict[str, str | None]:
+    """{slot: the SHA-256 of runs/<run>/ads/<slot>.cmyk.gz} for each ad slot of a page's printed record (deskprinted),
+    None when the page prints no ad there or the file now is not the one printed (its signature differs): fail closed."""
+    ads = printed.get("ads") if isinstance(printed, dict) else None
+    out: dict[str, str | None] = {}
+    for slot, sig in ads.items() if isinstance(ads, dict) else ():
+        if not isinstance(slot, str) or not SLOT.fullmatch(slot):   # not a slot the API takes: not reported
+            continue
+        path = run_dir / "ads" / f"{slot}.cmyk.gz"
+        same = sig is not None and editing.deskprinted.file_sig(path) == sig
+        out[slot] = hashlib.sha256(path.read_bytes()).hexdigest() if same else None
+    return out
 
 
 def edits_since(before: dict[int, dict], run_dir: Path) -> list[dict]:
@@ -405,7 +424,7 @@ class Gateway:
         if not all(f.is_file() for f in [*needed, home_dir / "config.json"]):
             raise RunMissing()
         svc, session = h.service, f"{eid}/{rk}/{page}"
-        saved = None
+        saved = ads = None
         with editing.save_lock(run_dir) if cmd in ("save", "move") else contextlib.nullcontext():
             with h.lock:
                 changed, ahead = sync(run_dir, c["state"])
@@ -417,7 +436,7 @@ class Gateway:
                         svc.open(eid, rk, n, reload=True)
                 if cmd in ("refresh", "save"):
                     home.write_live(self.storage_for(guard), self.settings.homes, guard.org_id, guard.pub_id, eid,
-                                    c["live"]["edition"], c["live"]["articles"])
+                                    c["live"]["edition"], c["live"]["articles"], c["live"].get("ads"))
                 h.opened.add(session)
                 if cmd == "open":
                     result = svc.open(eid, rk, page, reload=page in changed)
@@ -440,9 +459,10 @@ class Gateway:
                     if held:
                         raise util.DeskError(400, held)
                     result = svc.export(session, base)
+                    ads = printed_ads(run_dir, result.get("printed"))   # in the home's turn: no Update text between
                 edits, text_after = edits_since(before, run_dir), text_overrides(run_dir)
             if cmd == "save":
-                saved = self._save_files(guard, c, run_dir, result)
+                saved = {**self._save_files(guard, c, run_dir, result), "ads": ads}
         answer = {"ok": True, "result": result, "edits": edits,
                   "text": text_after if text_after != text_before else None}
         if saved is not None:

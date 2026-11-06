@@ -7,7 +7,7 @@ import { type IncomingMessage, type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
   EDIT_CALL_FORMAT,
-  type EditCall,
+  EditCall,
   GATEWAY_NONCE_HEADER,
   GATEWAY_SIGNATURE_HEADER,
   GATEWAY_TEST_VECTOR,
@@ -118,6 +118,33 @@ describe("the gateway client", () => {
     await expect(late.call(CALL)).rejects.toMatchObject({ code: "editor_unavailable" });
     const nobody = gatewayClient("http://127.0.0.1:9", V.secret);
     await expect(nobody.call(CALL)).rejects.toMatchObject({ code: "editor_unavailable" });
+  });
+
+  it("reads the ad rasters a save prints (none from an older gateway), each a SHA-256 or null", async () => {
+    const g = gatewayClient(url, V.secret);
+    const none = { pdf: null, png: null, thumb: null, edition_pdf: null, press_zip: null, printed: null, error: null };
+    const saved = { rev: 2, ...none, articles: [], pages_changed: {}, layout_problems: [], warnings: [], stale: [] };
+    const ok = (ads?: unknown) => ({ ok: true, result: {}, edits: [], text: null, saved: { ...saved, ads } });
+    answer = ok({ "back-1": "a".repeat(64), "back-2": null });
+    expect(await g.call(CALL)).toMatchObject({ saved: { ads: { "back-1": "a".repeat(64), "back-2": null } } });
+    answer = ok();
+    expect(await g.call(CALL)).toMatchObject({ saved: { ads: {} } });
+    answer = ok({ "back-1": "not a SHA-256" });
+    await expect(g.call(CALL)).rejects.toMatchObject({ code: "editor_unavailable" });
+  });
+});
+
+describe("the edit call's live content", () => {
+  const raster = { key: "orgs/o/pubs/p/assets/a/r/cmyk.gz", version_id: "v1", sha256: "b".repeat(64) };
+  const ad = { width_px: 945, height_px: 634, ppi: 200, raster: { ...raster, width_px: 945, height_px: 634 } };
+  const live = { edition: { id: "2027-01-02" }, articles: [], ads: { "back-1": ad } };
+
+  it("carries the edition's ads in the frozen request's shape", () => {
+    expect(EditCall.safeParse({ ...CALL, cmd: "save", live }).success).toBe(true);
+    expect(EditCall.safeParse({ ...CALL, cmd: "save", live: { ...live, ads: undefined } }).success).toBe(false);
+    const unnamed = { "back-1": { ...ad, raster: { ...ad.raster, sha256: undefined } } };
+    expect(EditCall.safeParse({ ...CALL, cmd: "save", live: { ...live, ads: unnamed } }).success).toBe(false);
+    expect(EditCall.safeParse({ ...CALL, cmd: "save", live: { ...live, ads: { "../x": ad } } }).success).toBe(false);
   });
 });
 

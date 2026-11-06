@@ -11,7 +11,8 @@
 //   - POST pages/:n/edit/save (layout.edit) {rev} → EditorPage with `saved`: the page's state first (its revision must
 //     be `rev`; the pages it takes stories from; a story locked elsewhere leaves the refusal to the gateway, nothing
 //     marked), those pages and this one marked "needs saving" (the marks taken back when the gateway refuses), the
-//     gateway's save, then the page's files, flags and the run's edition.pdf and press-files.zip; then the independent
+//     gateway's save, then the page's files, flags and the run's edition.pdf, press-files.zip, ad rasters (what its
+//     ads print, for the release) and articles not placed (counted again, as the Desk does); then the independent
 //     check, read from app.pdf_check when these bytes were checked before, else asked of the gateway (cmd check) and
 //     kept. Moves and saves of one run take turns (Database.withLock), so a save never clears a move's newer mark.
 //   - GET pages/:n/edit/history (pages.view) → PageHistory.
@@ -69,16 +70,16 @@ import {
   transactionTime,
   unmark,
 } from "../../db/editor.ts";
-import { layoutEdition, layoutStories, recordCheck } from "../../db/layout.ts";
+import { editionArtwork, layoutEdition, layoutStories, profileInUse, recordCheck } from "../../db/layout.ts";
 import type { Database } from "../../db/pools.ts";
 import { standingApprovals } from "../../db/release.ts";
 import type { Tenant, Tx } from "../../db/tenant.ts";
 import { ApiError } from "../../http/errors.ts";
 import { type Access, accessOf, auditRefusals, refused } from "../access/access.ts";
-import { frozenRequest } from "../layout/request.ts";
+import { frozenRequest, planFor } from "../layout/request.ts";
 import { approvalOf } from "../release/preflight.ts";
 import type { Gateway } from "./gateway.ts";
-import { UNFINISHED, editorPage, lockView, movedFrom, movedHere, placement, taking } from "./views.ts";
+import { SAVE_WORDS, UNFINISHED, editorPage, lockView, movedHere, placement, taking } from "./views.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE = /^([1-9]|1[0-6])$/;
@@ -163,12 +164,18 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
    * pages is approved or unlocked (db/editor.ts runTurn). */
   const oneAtATime = <T>(r: string, fn: () => Promise<T>) => runTurn(database, r, fn);
 
-  /** The edition's live content in the Desk's shape, as a layout request would hold it now. */
+  /** The edition's live content in the Desk's shape, as a layout request would hold it now (its ready ads of the plan
+   * of the profile in use, too: "Update text" brings them onto the page). */
   async function liveOf(tx: Tx, pub: string, editionId: string) {
     const edition = await layoutEdition(tx, pub, editionId);
     if (!edition) throw new ApiError("not_found");
-    const doc = frozenRequest(edition, await layoutStories(tx, pub, editionId), undefined, []);
-    return { edition: doc.edition, articles: doc.articles };
+    const plan = planFor((await profileInUse(tx, pub))?.plans ?? null, edition);
+    return frozenRequest(
+      edition,
+      await layoutStories(tx, pub, editionId),
+      plan,
+      await editionArtwork(tx, pub, editionId),
+    );
   }
 
   async function callOf(
@@ -422,7 +429,9 @@ export const editorRoutes: FastifyPluginAsyncZod<EditorOptions> = async (app, { 
         const causes = new Map<number, Cause>(Object.keys(saved.pages_changed).map((page) => [Number(page), "taken"]));
         await database.withTenant(tenant, async (tx) => {
           await keep(tx, tenant, pub, run, n, "save", answer, causes);
-          await afterSave(tx, tenant, pub, r, n, saved, movedFrom, liveAt);
+          // the edition's stories now, whatever their status (an article of the run not among them was deleted)
+          const live = new Set((await layoutStories(tx, pub, run.edition_id)).map((story) => story.desk_key));
+          await afterSave(tx, tenant, pub, r, n, saved, SAVE_WORDS, liveAt, live);
           if (saved.pdf) await recordSave(tx, tenant, pub, r, n, saved.rev, saved.pdf.sha256);
           await recordAudit(tx, tenant, {
             action: "editor.page_save",

@@ -339,6 +339,8 @@ class LayoutTests(Case):
         self.assertEqual(ev["not_placed"], [{"article": article(1)["id"], "reason": {
             "text": M.msg("m.plan.needsText"), "code": "m.plan.needsText", "params": {}}}])
         self.assertEqual(ev["timings"], {"measure_s": 0.1, "plan_s": 0.2, "layout_s": 0.3})
+        run_dir = self.home / "editions" / EID / "runs" / RKEY
+        self.assertEqual(ev["ads"], launcher.run_ads(run_dir))              # what the run's pages print
         # the progress lines: run.progress, and run.page for each page once its files are stored
         kinds = [e["kind"] for e in self.lines]
         self.assertEqual(kinds[0], "run.progress")
@@ -537,6 +539,22 @@ class LayoutTests(Case):
 
 
 # ------------------------------------------------------------------------------------------- engine.measure
+
+
+class RunAdsTests(unittest.TestCase):
+    def test_a_run_records_the_ad_rasters_its_own_folder_holds_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            ads = run_dir / "ads"
+            self.assertEqual(launcher.run_ads(None), {})
+            self.assertEqual(launcher.run_ads(run_dir), {})                   # no ads folder: no ads
+            ads.mkdir()
+            (ads / "back-1.cmyk.gz").write_bytes(b"raster one")
+            (ads / "stray.cmyk.gz").write_bytes(b"no index entry")
+            (ads / "index.json").write_text(json.dumps({"elements": {"back-1": {}, "back-2": {}}}), encoding="utf-8")
+            self.assertEqual(launcher.run_ads(run_dir), {"back-1": hashlib.sha256(b"raster one").hexdigest()})
+            (ads / "index.json").write_text("{not json", encoding="utf-8")
+            self.assertEqual(launcher.run_ads(run_dir), {})                   # a damaged index: nothing recorded
 
 
 class MeasureTests(Case):

@@ -276,7 +276,8 @@ if cmd == "edit-service":
                     over = (read(s["dir"] / "edit-articles.json", {}) or {}).get("articles") or {}
                     by_id = {a["id"]: over.get(a["id"], a) for a in read(s["dir"] / "request.json")["articles"]}
                     printed = {"v": DPR.VERSION, "articles": {a: DPR.article_sig(by_id[a], False) for a in arts
-                                                              if by_id.get(a)}, "folio": None, "ads": {}}
+                                                              if by_id.get(a)}, "folio": None,
+                               "ads": DPR.ad_sigs(s["dir"] / "ads")}     # the run's own ads, as the engine prints them
                     res = {"pdf": name, "sha256": H.sha256((s["dir"] / name).read_bytes()).hexdigest(), "rev": s["rev"],
                            "problems": problems(s), "articles": arts, "pages_changed": taken, "printed": printed}
                 else:
