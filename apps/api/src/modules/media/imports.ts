@@ -139,13 +139,19 @@ export const importRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
           const version = arrived.versionId;
           if (!version) throw new Error("The work bucket gave the upload no version: its versioning must be Enabled.");
           const read = await readDocx(store, upload.key, version);
-          const refuse = (message?: string): never => {
+          const refuse = (why?: Parameters<typeof docxRefused>[1]): never => {
             void store.removeAll(upload.key).catch(() => undefined); // the lifecycle rule would, within two days
-            throw docxRefused("file", message);
+            throw docxRefused("file", why);
           };
-          if (read.bytes !== upload.declared_bytes || arrived.bytes !== upload.declared_bytes)
-            refuse(`The file is not the ${upload.declared_bytes} bytes the upload said.`);
-          if (read.head.equals(OLE)) refuse(PROTECTED);
+          if (read.bytes !== upload.declared_bytes || arrived.bytes !== upload.declared_bytes) {
+            const bytes = upload.declared_bytes;
+            refuse({
+              message: `The file is not the ${bytes} bytes the upload said.`,
+              reason: "docx.size_mismatch",
+              params: { bytes },
+            });
+          }
+          if (read.head.equals(OLE)) refuse({ message: PROTECTED, reason: "docx.protected" });
           if (!read.head.subarray(0, ZIP.length).equals(ZIP)) refuse();
           const made = await createImport(tx, access.tenant, pub, {
             uploadId,

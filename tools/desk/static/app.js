@@ -2654,7 +2654,7 @@ async function importWordFiles(files) {
           problems.push(
             `${file.name}: “${clip(str(s.headline), 50)}” (${said(s.reason, res.msgs) || t("common.notAccepted")})`,
           );
-        for (const n of arr(res.notes)) notes.push(`${file.name}: ${str(n)}`);
+        for (const n of arr(res.notes)) notes.push(`${file.name}: ${said(n, res.msgs)}`); // by its code, as the problems
       } catch (err) {
         problems.push(`${file.name}: ${err.message}`); // the server's words (or the Desk's, in the language then)
       }

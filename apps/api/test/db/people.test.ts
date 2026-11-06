@@ -396,37 +396,42 @@ describe("invitations", () => {
     expect((await invite(org, someone(), twice)).statusCode).toBe(400);
   });
 
-  it("shows anyone with the link only the organisation, inviter, roles, expiry and state; 300 lookups an hour", async () => {
-    const org = await organisation();
-    const created = (
-      await invite(org, someone("invitee"), [{ publicationId: org.pubId, roles: ["editor"], grants: [] }])
-    ).json();
-    const from = "203.0.113.150";
-    const look = (id: string) => it_.app.inject({ url: `/api/v1/invitations/${id}`, remoteAddress: from });
-    const shown = await look(created.id);
-    expect(shown.statusCode).toBe(200);
-    expect(Object.keys(shown.json()).sort()).toEqual(["expiresAt", "inviter", "organization", "roles", "state"]);
-    expect(shown.json()).toMatchObject({
-      inviter: { name: "Owner (fictional)" },
-      roles: ["member", "editor"],
-      state: "pending",
-    });
-    expect(shown.body).not.toContain("@example.test");
-    expect((await look("01900000-0000-7000-8000-00000000dead")).statusCode).toBe(404);
-    expect((await look("not-a-uuid")).statusCode).toBe(404);
-    // a newsroom of ~50 behind one address opens its links on day one (on an API whose signed-out budget allows it)
-    const roomy = await identityApp(db, { PGN_RATE_LIMIT_PER_MINUTE: "100000" });
-    try {
-      const lookThere = () => roomy.app.inject({ url: `/api/v1/invitations/${created.id}`, remoteAddress: from });
-      for (let i = 1; i <= 300; i += 1) expect((await lookThere()).statusCode).toBe(200);
-      const limited = await lookThere();
-      expect(limited.statusCode).toBe(429);
-      expect(limited.json().error.code).toBe("slow_down");
-      expect(Number(limited.headers["retry-after"])).toBeGreaterThan(3500); // the true wait: the hour's window
-    } finally {
-      await roomy.close();
-    }
-  });
+  // three hundred lookups and more: seconds alone, a minute on a busy machine
+  it(
+    "shows anyone with the link only the organisation, inviter, roles, expiry and state; 300 lookups an hour",
+    { timeout: 60_000 },
+    async () => {
+      const org = await organisation();
+      const created = (
+        await invite(org, someone("invitee"), [{ publicationId: org.pubId, roles: ["editor"], grants: [] }])
+      ).json();
+      const from = "203.0.113.150";
+      const look = (id: string) => it_.app.inject({ url: `/api/v1/invitations/${id}`, remoteAddress: from });
+      const shown = await look(created.id);
+      expect(shown.statusCode).toBe(200);
+      expect(Object.keys(shown.json()).sort()).toEqual(["expiresAt", "inviter", "organization", "roles", "state"]);
+      expect(shown.json()).toMatchObject({
+        inviter: { name: "Owner (fictional)" },
+        roles: ["member", "editor"],
+        state: "pending",
+      });
+      expect(shown.body).not.toContain("@example.test");
+      expect((await look("01900000-0000-7000-8000-00000000dead")).statusCode).toBe(404);
+      expect((await look("not-a-uuid")).statusCode).toBe(404);
+      // a newsroom of ~50 behind one address opens its links on day one (on an API whose signed-out budget allows it)
+      const roomy = await identityApp(db, { PGN_RATE_LIMIT_PER_MINUTE: "100000" });
+      try {
+        const lookThere = () => roomy.app.inject({ url: `/api/v1/invitations/${created.id}`, remoteAddress: from });
+        for (let i = 1; i <= 300; i += 1) expect((await lookThere()).statusCode).toBe(200);
+        const limited = await lookThere();
+        expect(limited.statusCode).toBe(429);
+        expect(limited.json().error.code).toBe("slow_down");
+        expect(Number(limited.headers["retry-after"])).toBeGreaterThan(3500); // the true wait: the hour's window
+      } finally {
+        await roomy.close();
+      }
+    },
+  );
 
   it("are listed to their signed-in, verified invitee until accepted, so a closed tab loses nothing", async () => {
     const org = await organisation();

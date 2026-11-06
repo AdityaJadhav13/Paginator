@@ -29,8 +29,10 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
+import traceback
 from pathlib import Path
 
 from fontTools.pens.svgPathPen import SVGPathPen
@@ -223,7 +225,11 @@ class EditService:
             raw = d / f"{key}.cmyk"
             if not isinstance(meta, dict) or not raw.is_file():
                 raise DeskError(404, "There is no such picture.")
-            img = Image.frombytes("CMYK", (int(meta["width_px"]), int(meta["height_px"])), raw.read_bytes()).convert("RGB")
+            try:
+                data = raw.read_bytes()
+            except FileNotFoundError:                     # pruned since (deskedit.prune_rasters): the next draw writes it
+                raise DeskError(404, "There is no such picture.") from None
+            img = Image.frombytes("CMYK", (int(meta["width_px"]), int(meta["height_px"])), data).convert("RGB")
             img.thumbnail((PREVIEW_LONG_PX, PREVIEW_LONG_PX), Image.Resampling.LANCZOS)
             with atomic_file(jpg) as f:
                 img.save(f, "JPEG", quality=82)
@@ -450,8 +456,9 @@ def save_files(run_dir: Path, page: int, repo_root: Path, pdfs: list[Path]) -> t
         verdict = jobs.check_pdfx(repo_root, pdf)
         jobs.merge_pdfs(pdfs, run_dir / "edition.pdf")
         jobs.zip_pdfs(pdfs, run_dir / "press-files.zip")
-    except Exception as e:  # noqa: BLE001 — said on the page; the files are made again by the next save
-        return verdict, M.msg("m.save.filesNotFinished", error=M.data(str(e)))
+    except Exception:  # noqa: BLE001 — said on the page; the files are made again by the next save
+        traceback.print_exc(file=sys.stderr)            # the file error's own words: the server's window, not the page
+        return verdict, M.msg("m.save.filesNotFinished")
     return verdict, None
 
 

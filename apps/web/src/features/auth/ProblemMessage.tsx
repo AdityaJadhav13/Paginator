@@ -4,8 +4,15 @@
  * not know shows the API's own English message, marked as English.
  */
 import { InlineMessage } from "../../ui/index.ts";
-import { isCatalogueKey, useI18n, type CatalogueKey, type Translate } from "../../i18n/index.ts";
-import type { ApiProblem } from "../../services/index.ts";
+import {
+  CATALOGUES,
+  formatMessage,
+  isCatalogueKey,
+  useI18n,
+  type CatalogueKey,
+  type Translate,
+} from "../../i18n/index.ts";
+import type { ApiProblem, FieldProblemDto } from "../../services/index.ts";
 
 type ErrorKey = Extract<CatalogueKey, `error.${string}`>;
 
@@ -55,6 +62,21 @@ export interface ProblemMessageProps {
   readonly problem: ApiProblem;
   /** True when a person's own action caused it (role="alert"); false for a problem already there on arrival. */
   readonly live?: boolean;
+}
+
+/** One of a refusal's details in the reader's language: the catalogue's `detail.<reason>` with its values, else the
+ * API's English (marked as English on a Marathi page). A sentence is never shown with a hole in it. */
+export function DetailWords({ detail }: { readonly detail: FieldProblemDto }) {
+  const { language } = useI18n();
+  const key = detail.reason ? `detail.${detail.reason}` : "";
+  if (isCatalogueKey(key)) {
+    try {
+      return <span>{formatMessage(CATALOGUES[language][key], detail.params ?? {})}</span>;
+    } catch {
+      // a value its sentence needs is missing: the API's English, whole
+    }
+  }
+  return <span {...(language !== "en" ? { lang: "en" } : {})}>{detail.message}</span>;
 }
 
 export function ProblemMessage({ problem, live = true }: ProblemMessageProps) {

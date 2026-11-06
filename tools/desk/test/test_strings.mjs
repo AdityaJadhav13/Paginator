@@ -236,3 +236,26 @@ test("tm(): a server message in the language shown, its own English text otherwi
   assert.equal(tm("z", { z: parts }), "4 पाने तयार झाली. 1 पान तयार होऊ शकले नाही: त्या पानावरच्या नोंदी पाहा.");
   setLang("en");
 });
+
+test("a Word file's refusals and notes are said in Marathi (MSG-5)", () => {
+  const refused =
+    "No story was found in this Word file: it needs a headline and some text. 1 table was not imported: …";
+  const why = {
+    parts: [
+      { code: "m.docx.noStory", params: {} },
+      { code: "m.docx.table1", params: {} },
+    ],
+  };
+  setLang("mr");
+  assert.equal(
+    tm(refused, { [refused]: why }),
+    "या Word फाइलमध्ये एकही बातमी सापडली नाही: बातमीला मथळा आणि थोडा मजकूर हवा. 1 तक्ता आयात केला नाही: त्यातील मजकूर हवा असेल तर तो बातमीत कॉपी करा.",
+  );
+  assert.equal(
+    tm("n", { n: { code: "m.docx.picturesN", params: { n: 3 } } }),
+    "3 चित्रे आयात केली नाहीत: छायाचित्रे Desk मध्ये जोडा.",
+  );
+  setLang("en");
+  // the Word import's notes are said by their codes, as its refusals (the server's error, by api())
+  assert.match(APP, /notes\.push\(`\$\{file\.name\}: \$\{said\(n, res\.msgs\)\}`\)/);
+});

@@ -3,7 +3,8 @@
  * the stories, "Create edition" with an Idempotency-Key (the same on a retry) and edition_exists, "Send to the Desk"
  * (nothing Ready, spiked never sent, in progress, done, refused with each story named), the master table and the chosen
  * edition's detail, the Create edition sheet, the role rules, live updates,
- * the story editor's Edition, the Stories filter's real editions, Marathi and axe. On the test double; fictional data.
+ * the story editor's Edition, the Stories filter's real editions, Marathi and axe, and "Correct date and pages" (only
+ * the fields changed sent, its refusals, none once released). On the test double; fictional data.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -183,7 +184,8 @@ describe("Editions for the desk", () => {
     );
     await user.click(newer.getByRole("button", { name: "Send to the Desk" }));
     expect(await newer.findByText("Some stories cannot be sent to the Desk as they are. Change them, then send again.")).toBeInTheDocument();
-    expect(newer.getByText("The story “Fictional water cut” has a photo the Desk cannot read.").closest("ul")).toHaveAttribute("lang", "en");
+    // a reason the web does not word: the API's English, in the list (Marathi: tests/editions/bundle-marathi.test.tsx)
+    expect(newer.getByText("The story “Fictional water cut” has a photo the Desk cannot read.").closest("li")).toBeInTheDocument();
   });
 
   it("fetches the list again when an edition or a story of the publication changes", async () => {
@@ -439,5 +441,113 @@ describe("Editions: Marathi and axe", () => {
     await user.keyboard("{Enter}");
     expect(table.getByRole("button", { name: "23 October 2026" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("region", { name: "23 October 2026" })).toBeInTheDocument();
+  });
+});
+
+describe("Correcting an edition's date and pages", () => {
+  const CORRECT = "Correct date and pages";
+  /** Opens the correction sheet from the chosen edition's detail. */
+  const correctSheet = async (detail: ReturnType<typeof within>) => {
+    await userEvent.click(detail.getByRole("button", { name: CORRECT }));
+    return within(await screen.findByRole("dialog", { name: CORRECT }));
+  };
+
+  it("opens a sheet for the desk, sends only the fields changed, and says it is done", async () => {
+    const environment = createMockApplicationEnvironment();
+    const update = vi.spyOn(environment.editions, "update");
+    const view = renderAuth(EDITIONS, { preset: "sahyadri-editor", environment });
+    const user = userEvent.setup();
+    const sheet = await correctSheet(within(await item("23 October 2026")));
+    expect(sheet.getByRole("heading", { level: 2, name: CORRECT })).toHaveFocus();
+    expect(sheet.getByText(/^Layouts already made for this edition are set aside/)).toBeInTheDocument();
+    expect(sheet.getByLabelText(/^Date/)).toHaveValue("2026-10-23");
+    expect(sheet.getByRole("combobox", { name: "Pages" })).toHaveValue("8");
+    expect(sheet.getByRole("checkbox", { name: "Ads on the back page" })).toBeChecked();
+    expect(await seriousViolations(view.container)).toEqual([]);
+    // nothing changed: nothing is sent
+    await user.click(sheet.getByRole("button", { name: "Save the correction" }));
+    expect(await sheet.findByText("Nothing is changed yet.")).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+
+    const date = sheet.getByLabelText(/^Date/);
+    await user.clear(date);
+    await user.type(date, "2026-10-25");
+    await user.selectOptions(sheet.getByRole("combobox", { name: "Pages" }), "4");
+    await user.click(sheet.getByRole("button", { name: "Save the correction" }));
+    expect(await screen.findByText("The edition is corrected: 25 October 2026, 4 pages.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(update.mock.calls.map(([input]) => [input.editionId, input.patch])).toEqual([
+      [A, { date: "2026-10-25", pages: 4 }],
+    ]);
+    // now the newest, and still the one chosen
+    const corrected = within(await screen.findByRole("region", { name: "25 October 2026" }));
+    expect(corrected.getByText(/^4 pages · Ads on the back page/)).toBeInTheDocument();
+    const rows = within(await list()).getAllByRole("row").slice(1);
+    expect(rows.map((row) => within(row).getByRole("button").textContent)).toEqual(["25 October 2026", "24 October 2026"]);
+    expect(corrected.getByRole("button", { name: CORRECT })).toHaveFocus();
+  });
+
+  it("says when another edition has that date, or a layout is running, and keeps the sheet open", async () => {
+    const environment = createMockApplicationEnvironment();
+    renderAuth(EDITIONS, { preset: "sahyadri-editor", environment });
+    const user = userEvent.setup();
+    const sheet = await correctSheet(within(await item("23 October 2026")));
+    const date = sheet.getByLabelText(/^Date/);
+    await user.clear(date);
+    await user.type(date, "2026-10-24");
+    await user.click(sheet.getByRole("button", { name: "Save the correction" }));
+    expect(await sheet.findByText("There is already an edition for that date. Open it instead.")).toBeInTheDocument();
+
+    environment.sessionController.setProblem(
+      { kind: "answer", status: 409, code: "run_active", message: "A run is active.", requestId: "req-2" },
+      ["editions.update"],
+    );
+    await user.clear(date);
+    await user.type(date, "2026-10-26");
+    await user.click(sheet.getByRole("button", { name: "Save the correction" }));
+    expect(await sheet.findByText("A layout of this edition is already running. Wait for it, or cancel it first.")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: CORRECT })).toBeInTheDocument();
+  });
+
+  it("shows a released edition one plain line and no button; a role without edition.edit sees neither", async () => {
+    const environment = createMockApplicationEnvironment();
+    const real = await environment.editions.list({ orgId: ORG, pubId: PUB });
+    if (!real.ok) throw new Error("no editions");
+    vi.spyOn(environment.editions, "list").mockResolvedValue({
+      ok: true,
+      value: real.value.map((edition) => (edition.id === B ? { ...edition, status: "released" as const } : edition)),
+    });
+    const view = renderAuth(EDITIONS, { preset: "sahyadri-editor", environment });
+    const released = within(await item("24 October 2026"));
+    expect(released.getByText("This edition is released: its date and pages can no longer change.")).toBeInTheDocument();
+    expect(released.queryByRole("button", { name: CORRECT })).not.toBeInTheDocument();
+    expect(within(await item("23 October 2026")).getByRole("button", { name: CORRECT })).toBeInTheDocument();
+    view.unmount();
+
+    renderAuth(EDITIONS, { preset: "sahyadri-subeditor" });
+    const newer = within(await item("24 October 2026"));
+    expect(newer.queryByRole("button", { name: CORRECT })).not.toBeInTheDocument();
+    expect(newer.queryByText(/its date and pages can no longer change/)).not.toBeInTheDocument();
+  });
+
+  it("the test double, as the API, refuses a date another edition has (409 edition_exists, that edition)", async () => {
+    const environment = createMockApplicationEnvironment();
+    const where = { orgId: ORG, pubId: PUB, editionId: A };
+    expect((await environment.editions.update({ ...where, patch: { pages: 4 } })).ok).toBe(true);
+    const taken = await environment.editions.update({ ...where, patch: { date: "2026-10-24" } });
+    expect(taken).toMatchObject({ ok: false, error: { status: 409, code: "edition_exists", current: { id: B } } });
+  });
+
+  it("is in Marathi", async () => {
+    renderAuth(EDITIONS, { preset: "sahyadri-editor", language: "mr" });
+    const user = userEvent.setup();
+    await screen.findByRole("table", { name: "Pune Daily Ledger चे अंक" });
+    await user.click(screen.getByRole("button", { name: "तारीख आणि पाने दुरुस्त करा" }));
+    const sheet = within(await screen.findByRole("dialog", { name: "तारीख आणि पाने दुरुस्त करा" }));
+    expect(sheet.getByLabelText(/^तारीख/)).toBeInTheDocument();
+    expect(sheet.getByRole("combobox", { name: "पाने" })).toBeInTheDocument();
+    expect(sheet.getByRole("checkbox", { name: "शेवटच्या पानावर जाहिराती" })).toBeInTheDocument();
+    expect(sheet.getByRole("button", { name: "दुरुस्ती जतन करा" })).toBeInTheDocument();
+    expect(sheet.getByText(/^या अंकाच्या आधी केलेल्या मांडण्या बाजूला ठेवल्या जातात/)).toBeInTheDocument();
   });
 });

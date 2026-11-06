@@ -203,6 +203,10 @@ describe("a Word file's import", () => {
     });
     expect(locked.statusCode).toBe(422);
     expect(locked.json().error.details[0].message).toMatch(/^This Word file is protected with a password/);
+    // each refusal's reason, for the web to word in the reader's language (L2-401)
+    expect(refused.json().error.details).toBeUndefined();
+    expect(locked.json().error.details[0]).toMatchObject({ field: "file", reason: "docx.protected" });
+    expect(locked.json().error.details[0].params).toBeUndefined();
     const big = await change("POST", `${base()}/uploads`, reporter.cookie, {
       purpose: "docx",
       filename: "fictional.docx",
@@ -211,7 +215,28 @@ describe("a Word file's import", () => {
     });
     expect(big.statusCode).toBe(422);
     expect(big.json().error).toMatchObject({ code: "docx_refused", message: "This Word file is larger than 10 MB." });
-    expect(big.json().error.details[0].message).toBe("This Word file is larger than 10 MB.");
+    expect(big.json().error.details).toEqual([
+      {
+        field: "body.bytes",
+        message: "This Word file is larger than 10 MB.",
+        reason: "docx.over_size",
+        params: { mb: 10 },
+      },
+    ]);
+    // a file of another size than its upload said
+    const file = docx("Fictional headline", "Text.");
+    const other = await uploaded(reporter.cookie, file);
+    await su.query("update app.upload set declared_bytes = declared_bytes + 1 where id = $1", [other]);
+    const mismatch = await change("POST", `${base()}/imports/docx`, reporter.cookie, { uploadId: other });
+    expect(mismatch.statusCode).toBe(422);
+    expect(mismatch.json().error.details).toEqual([
+      {
+        field: "file",
+        message: `The file is not the ${file.length + 1} bytes the upload said.`,
+        reason: "docx.size_mismatch",
+        params: { bytes: file.length + 1 },
+      },
+    ]);
     // and a picture's upload is never imported, nor a Word file's completed as a picture
     const picture = await change("POST", `${base()}/uploads`, reporter.cookie, {
       purpose: "docx",

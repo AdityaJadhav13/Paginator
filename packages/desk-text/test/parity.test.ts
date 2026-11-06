@@ -147,7 +147,8 @@ describe("Python's characters, on every code point", () => {
     expect(every((ch) => ch.length === 1 && isSpace(ch.charCodeAt(0)))).toEqual(chars["isspace"]);
   });
 
-  it("the separator and the byline marker match what the Desk's expressions match", () => {
+  // about twenty passes over every code point: seconds alone, more on a busy machine (as NFC's below)
+  it("the separator and the byline marker match what the Desk's expressions match", { timeout: 120_000 }, () => {
     const byline = (ch: string) => bylineOf(ch) !== null;
     expect(every((ch) => isSeparator(`${ch}---${ch}`))).toEqual(chars["separator_space"]);
     expect(every((ch) => byline(`${ch}byline:x`))).toEqual(chars["byline_space_before"]);

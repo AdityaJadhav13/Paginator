@@ -19,10 +19,16 @@
 # so compose waits 20 s before it kills it. init: true puts tini in front, so a second stop signal still kills it.
 # Memory: every container has a ceiling (mem_limit), so one that grows cannot take the host down with it: Caddy 128 MB,
 # the API 640 MB, the backup 256 MB, the engine 2 GB (two jobs at once, PGN_QUEUE_CONCURRENCY 2, so photos are not held
-# behind a layout: 1 GB each, a 100-megapixel photo's conversion), the edit gateway 1 GB (one Desk edit session per
+# behind a layout; layouts take turns on the engine-cpu queue), the edit gateway 1 GB (one Desk edit session per
 # publication), 4 GB together, and the migration step's 384 MB while it runs: the host must be a t3.large (8 GB) once
 # the engine and the gateway run on it (plan §8.1 puts them on an engine host of their own later). pilot-local's
 # scratch database gets 512 MB, its file store 1 GB.
+# The engine's layout pool follows its container's CPUs and memory (desk_engine.py pool_workers: one process per CPU but
+# one, each budgeted 768 MiB beside 1.4 GiB for the engine's own process, the queue and the other job), so 2 GB runs one
+# layout process. Measured in the worker image at 2 CPUs and 2 GB: an 8-page edition peaked at 754 MiB (the engine 256,
+# its layout process 368), no kill. The other job, a photo's conversion, peaked at 99 MB for the pilot's largest real
+# photo; a 100-megapixel picture (the API's largest) at 186 MB as a JPEG, 387 MB as a progressive JPEG, 886 MB as a PNG
+# and 1.66 GB as a PNG with transparency: over its 1 GB, so beside a layout the kernel kills one of them (doc 11 L2-325).
 # The engine (the queue, apps/engine-queue/src/main.ts) stops only after its running jobs end: at most
 # PGN_RUNNER_TIMEOUT_S (180 s), then 5 s; a layout run still going then gets SIGTERM and 10 s more (L2.3: it is failed
 # with the Desk's RESTARTED message), so compose waits 210 s before it kills it (a job killed mid-run stays locked
@@ -423,9 +429,9 @@ services:
   engine-local:
     <<: *engine
     profiles: [pilot-local]
-    # the Desk's engine lays pages out in one process per core but one (desk_engine.py): 1 on the pilot's 2-vCPU host,
-    # but up to 4 (an edition's pages) on a developer's machine, which 2 GB does not hold
-    mem_limit: 4g
+    # the pilot's engine as it runs on its 2-vCPU t3.large: 2 GB (from x-engine) and 2 CPUs, so its layout pool is the
+    # pilot's (one process) on any machine
+    cpus: 2
     volumes:
       - local-ca:/etc/pageinator/ca:ro
       - ${PGN_ICC_FILE:?}:/run/pageinator/newsprint.icc:ro

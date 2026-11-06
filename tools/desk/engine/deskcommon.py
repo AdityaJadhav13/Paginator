@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import tempfile
+import traceback
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -93,6 +94,24 @@ def one_line(text: str | None) -> str:
 
 def log(*parts) -> None:
     print(*parts, file=sys.stderr, flush=True)
+
+
+def log_error(e: BaseException, refused: bool = False) -> None:
+    """An error logged without its text, which can name a story's headline (the edit service's log; the hosted engine's
+    leaves the Desk home). A refusal: one line, its message code (a Msg's) or else its type. Any other error: its
+    traceback's frames and its type, and those of the exceptions chained to it, never a message."""
+    if refused:
+        wire = getattr(e.args[0] if e.args else None, "wire", None)
+        log("refused:", wire["code"] if isinstance(wire, dict) and "code" in wire else type(e).__name__)
+        return
+    lines: list[str] = []
+    seen: set[int] = set()
+    while e is not None and id(e) not in seen:            # the cause first, as Python prints a chain
+        seen.add(id(e))
+        lines[:0] = ["Traceback (most recent call last):\n", *traceback.format_list(traceback.extract_tb(e.__traceback__)),
+                     f"{type(e).__qualname__} (its text is not logged)\n"]
+        e = e.__cause__ or (None if e.__suppress_context__ else e.__context__)
+    log("".join(lines).rstrip("\n"))
 
 
 # letters of a paper's script (paper.json "script"): Devanagari, or Latin with its accented letters

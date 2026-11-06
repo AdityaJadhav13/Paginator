@@ -138,5 +138,6 @@ Word file"; the desk readies stories; Engine profile → upload the paper's data
 repository); Editions → create; Ads → advertisers, bookings, artwork; the edition's Plan, Layout, Pages and the page
 editor (save); Release → issue number, approve pages, press test, approve release, download, mark sent, the press's
 confirmation; Sources → Collect now (the AI part is off without `PGN_ANTHROPIC_API_KEY`). The restore drill
-(`restore.md`) runs against it as `backup-local`. pilot-local gives its engine 4 GB, its file store 1 GB and its Caddy
-256 MB (a developer's machine has more cores than the pilot's host, and Caddy carries the file store's traffic there).
+(`restore.md`) runs against it as `backup-local`. pilot-local gives its engine the pilot's 2 GB and 2 CPUs (its layout
+pool follows the container, so it lays pages out as the pilot does), its file store 1 GB and its Caddy 256 MB (Caddy
+carries the file store's traffic there).

@@ -7,6 +7,9 @@
 export interface FieldProblemDto {
   readonly field: string;
   readonly message: string;
+  /** a stable reason the catalogue words (`detail.<reason>`), with the values its sentence names */
+  readonly reason?: string;
+  readonly params?: Readonly<Record<string, string | number>>;
 }
 
 export type ApiProblem =

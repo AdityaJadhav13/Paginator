@@ -16,7 +16,7 @@ import { randomUuid } from "../../api/client.ts";
 import { formatDate } from "../../i18n/dates.ts";
 import { useI18n, type PlainKey } from "../../i18n/index.ts";
 import type { ApiProblem, DocxImportDto } from "../../services/index.ts";
-import { ProblemMessage } from "../auth/ProblemMessage.tsx";
+import { DetailWords, ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useLiveEvents } from "../live/live-context.tsx";
 import { fileName } from "../media/upload.tsx";
 import { useStories } from "./stories-context.tsx";
@@ -312,11 +312,11 @@ function FailureMessage({ failure }: { readonly failure: Failure }) {
   if ("problem" in failure) {
     const { problem } = failure;
     if (problem.kind !== "answer" || problem.code !== "docx_refused") return <ProblemMessage problem={problem} />;
-    // the API's reason (English); without one, the web's own words for "not a Word file"
-    const why = problem.details?.[0]?.message;
+    // the API's reason in the reader's language; without one, the web's own words for "not a Word file"
+    const why = problem.details?.[0];
     return (
       <InlineMessage variant="error" heading={t("wordImport.failed")} live iconLabel={t("message.error")}>
-        {why ? <span lang="en">{why}</span> : t("wordImport.wrongType")}
+        {why ? <DetailWords detail={why} /> : t("wordImport.wrongType")}
       </InlineMessage>
     );
   }

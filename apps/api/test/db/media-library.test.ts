@@ -46,7 +46,14 @@ const base = (pub = a.pubId, org = a.orgId) => `/api/v1/orgs/${org}/pubs/${pub}`
 const media = (query = "", pub = a.pubId) => `${base(pub)}/media${query}`;
 const assetUrl = (id: string, pub = a.pubId) => `${base(pub)}/assets/${id}`;
 
-type Facts = { caption?: string; credit?: string; photographer?: string; status?: string; problem?: string };
+type Facts = {
+  caption?: string;
+  credit?: string;
+  photographer?: string;
+  status?: string;
+  problem?: string;
+  widthPx?: number;
+};
 let seed = 0;
 /** A picture row of publication `pub`, uploaded by `by`, as the upload would leave it. */
 async function picture(by: string, facts: Facts = {}, pub = a.pubId, org = a.orgId): Promise<string> {
@@ -55,7 +62,7 @@ async function picture(by: string, facts: Facts = {}, pub = a.pubId, org = a.org
     `insert into app.asset (org_id, publication_id, desk_key, sha256, bytes, mime, width_px, height_px, uploaded_by,
        caption, credit, photographer, status, problem)
      values ($1, $2::uuid, 'p-' || lpad(to_hex($3::int), 10, '0'), encode(sha256(($3::text || $2::text)::bytea), 'hex'), 1000,
-       'image/jpeg', 1200, 800, $4, $5, $6, $7, $8, $9)
+       'image/jpeg', $10, 800, $4, $5, $6, $7, $8, $9)
      returning id`,
     [
       org,
@@ -67,9 +74,36 @@ async function picture(by: string, facts: Facts = {}, pub = a.pubId, org = a.org
       facts.photographer ?? "",
       facts.status ?? "received",
       facts.problem ?? null,
+      facts.widthPx ?? 1200,
     ],
   );
   return rows[0]?.id ?? "";
+}
+
+/** The publication's engine profile, ready, with a fictional column grid (8 columns of 32 mm, 4 mm gutters). */
+async function readyProfile(pub: string, org: Org = a) {
+  const user = await n.userId(org.owner);
+  const upload = await su.query<{ id: string }>(
+    `insert into app.upload (org_id, publication_id, user_id, purpose, declared_type, declared_bytes, expires_at)
+     values ($1, $2, $3, 'engine_dataset', 'application/zip', 10, now()) returning id`,
+    [org.orgId, pub, user],
+  );
+  await su.query(
+    `insert into app.engine_profile (org_id, publication_id, version, state, upload_id, dataset_version_id,
+       dataset_sha256, dataset_bytes, config_version_id, config_sha256, engine_version, templates, grid, plans,
+       created_by)
+     values ($1, $2, 1, 'ready', $3, 'v-dataset', $4, 10, 'v-config', $5, 'fictional-engine 1', '{"front": "page1"}',
+       $6, '[]', $7)`,
+    [
+      org.orgId,
+      pub,
+      upload.rows[0]?.id,
+      "d".repeat(64),
+      "e".repeat(64),
+      JSON.stringify({ columns: 8, column_width_mm: 32, gutter_mm: 4 }),
+      user,
+    ],
+  );
 }
 
 async function story(cookie: string) {
@@ -159,6 +193,28 @@ describe("pages and filters", () => {
     // no grid is stored, so no picture is known too small
     expect(await q("?tooSmallForCols=2")).toEqual([]);
     expect((await call("GET", media("?missing=place"), photo.cookie)).statusCode).toBe(400);
+  });
+
+  it("judges each picture by the grid of the publication's engine profile once one is ready", async () => {
+    const pub = pages;
+    await readyProfile(pub);
+    // at 150 ppi: 1200 px is 203.2 mm (5 columns: 176 mm; 6: 212 mm), 300 px is 50.8 mm (1: 32 mm), 150 px is 25.4 mm
+    const wide = await picture(photo.id, {}, pub);
+    const narrow = await picture(photo.id, { widthPx: 300 }, pub);
+    const tiny = await picture(photo.id, { widthPx: 150 }, pub);
+    const listed = await call("GET", media("", pub), photo.cookie);
+    expect(listed.statusCode, listed.body).toBe(200);
+    const sharp = new Map(
+      (listed.json().items as { id: string; sharpUpToCols: number | null }[]).map((i) => [i.id, i.sharpUpToCols]),
+    );
+    expect([sharp.get(wide), sharp.get(narrow), sharp.get(tiny)]).toEqual([5, 1, 0]);
+    const q = (query: string) => call("GET", media(query, pub), photo.cookie).then(ids);
+    expect(await q("?tooSmallForCols=1")).toEqual([tiny]);
+    expect(await q("?tooSmallForCols=2")).toEqual([tiny, narrow]);
+    // 6 columns (212 mm) is wider than every picture here prints sharp: the newest page of them, the wide one among
+    expect(await q("?tooSmallForCols=6")).toContain(wide);
+    // the grid is the publication's own: the other publication still has none
+    expect((await call("GET", media(), photo.cookie)).json().items[0].sharpUpToCols).toBeNull();
   });
 });
 

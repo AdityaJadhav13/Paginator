@@ -22,6 +22,7 @@ import { createHash } from "node:crypto";
 import {
   Asset,
   CompletedUpload,
+  type FieldProblem,
   MAX_DATASET_BYTES,
   MAX_DOCX_BYTES,
   MAX_ONBOARD_PDF_BYTES,
@@ -100,10 +101,10 @@ async function readAll(store: ObjectStore, key: string, versionId: string) {
 }
 
 /** A Word file refused: the reason, when there is one, is the answer's message too (not the general "not a Word
- * file"). */
-export function docxRefused(field: string, message?: string): ApiError {
-  const error = new ApiError("docx_refused", message ? [{ field, message }] : undefined);
-  if (message) error.message = message;
+ * file"), with its code and values for the web to word it in the reader's language. */
+export function docxRefused(field: string, why?: Omit<FieldProblem, "field">): ApiError {
+  const error = new ApiError("docx_refused", why ? [{ field, ...why }] : undefined);
+  if (why) error.message = why.message;
   return error;
 }
 
@@ -132,7 +133,10 @@ export const uploadRoutes: FastifyPluginAsyncZod<MediaOptions> = async (app, { d
         // a Word file is for stories (POST …/imports/docx): story.create, at most 10 MiB
         if (reach("story.create", access.orgRole, access.publications.get(pub) ?? { roles: [], grants: [] }) === null)
           throw refused("a Word file is imported as stories: story.create");
-        if (input.bytes > MAX_DOCX_BYTES) throw docxRefused("body.bytes", "This Word file is larger than 10 MB.");
+        if (input.bytes > MAX_DOCX_BYTES) {
+          const why = { message: "This Word file is larger than 10 MB.", reason: "docx.over_size", params: { mb: 10 } };
+          throw docxRefused("body.bytes", why);
+        }
       } else if (input.purpose === "engine_dataset") {
         // an engine profile's dataset bundle (POST …/engine-profiles): settings.edit, at most 4 GiB
         if (reach("settings.edit", access.orgRole, access.publications.get(pub) ?? { roles: [], grants: [] }) === null)

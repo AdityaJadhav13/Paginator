@@ -14,6 +14,11 @@ export const RESTARTED = desk(
 );
 export const CANCELLED = desk("m.run.cancelled", "Cancelled.");
 export const CANCELLED_BEFORE = desk("m.run.cancelledBefore", "Cancelled before it started.");
+/** A done run set aside when its edition's date, pages or back-page ads were corrected (PATCH …/editions/:e). */
+export const EDITION_CHANGED = desk(
+  "m.run.editionChanged",
+  "Set aside: the edition's date or pages changed after this layout. Lay it out again.",
+);
 
 /** A run that failed for a reason the Desk has no words for: the engine's code, in plain words. */
 export function runFailed(code: string): DeskTextValue {

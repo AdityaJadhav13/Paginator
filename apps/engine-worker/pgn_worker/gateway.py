@@ -458,7 +458,7 @@ class Gateway:
         key = lambda name: guard.run_file(run_id, name, page)  # noqa: E731
         pdf = run_dir / f"page-{page:02d}.pdf"
         png, thumb = pdf.with_suffix(".png"), pdf.with_name(f"{pdf.stem}.thumb.png")
-        failed = lambda e: M.msg("m.save.filesNotFinished", error=M.data(type(e).__name__))  # noqa: E731
+        failed = lambda e: M.msg("m.save.filesNotFinished")  # noqa: E731
         error = None
         stored = {"pdf": None, "png": None, "thumb": None, "edition_pdf": None, "press_zip": None}
         try:

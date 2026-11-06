@@ -5,6 +5,8 @@
  * (reload and Back keep them; unknown ones left out and said so); older events a page at a time; loading, empty and
  * error states; axe. On the test double, fictional data only.
  */
+import { readdirSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useNavigate } from "react-router";
@@ -12,9 +14,12 @@ import { AUDIT_ACTION_NAMES } from "@pageinator/contracts";
 import { fireEvent, render, screen, waitFor, within } from "../../src/test/render.tsx";
 import { AppRoutes } from "../../src/root/AppRoot.tsx";
 import { createMockApplicationEnvironment } from "../../src/mocks/index.ts";
-import { actionName, isDay } from "../../src/features/people/AuditScreen.tsx";
+import { TARGET_KEYS, actionName, isDay, targetText } from "../../src/features/people/AuditScreen.tsx";
 import { CATALOGUES, LANGUAGE_STORAGE_KEY, translator } from "../../src/i18n/index.ts";
 import { currentLocation, renderAuth, resetBrowserState, seriousViolations } from "../auth/helpers.tsx";
+
+// the whole app and axe, as the other screens' tests: 5 s is not enough on a busy machine
+vi.setConfig({ testTimeout: 30_000 });
 
 const ORG = "org-demo-sahyadri";
 const AUDIT = `/org/${ORG}/audit`;
@@ -55,6 +60,63 @@ describe("Plain action names", () => {
   it("show an action this screen does not know by its code", () => {
     expect(actionName("edition.release", translator("en"))).toBe("An action this screen does not name yet (edition.release)");
     expect(actionName("edition.release", translator("mr"))).toBe("या पानाला अजून नाव माहीत नसलेली कृती (edition.release)");
+  });
+});
+
+/** Every target type the API writes: `targetType: "…"` (or its default, `targetType = "…"`), and the Desk import's
+ * `audit(c, action, "<type>", …)` (apps/api/src/db/desk-import.ts). */
+function apiTargetTypes(): string[] {
+  const root = resolve(__dirname, "../../../api/src");
+  const found = new Set<string>();
+  for (const file of readdirSync(root, { recursive: true, encoding: "utf8" })) {
+    if (!file.endsWith(".ts")) continue;
+    const source = readFileSync(resolve(root, file), "utf8");
+    for (const m of source.matchAll(/targetType\s*[:=]\s*"([a-z_]+)"/g)) found.add(m[1]!);
+    for (const m of source.matchAll(/\baudit\(\s*c,\s*"[a-z_.]+",\s*"([a-z_]+)"/g)) found.add(m[1]!);
+  }
+  return [...found].sort();
+}
+
+describe("What an event is about (doc 11 L2-568)", () => {
+  it("names each target type the API writes, and only those, in English and in Marathi", () => {
+    const types = apiTargetTypes();
+    expect(types).toEqual(expect.arrayContaining(["ad_slot_artwork", "paper_onboarding", "publication", "story"]));
+    expect(Object.keys(TARGET_KEYS).sort()).toEqual(types);
+    for (const type of types) {
+      expect(targetText({ type, id: null }, translator("en")), type).not.toBe(type);
+      expect(targetText({ type, id: null }, translator("mr")), type).toMatch(DEVANAGARI);
+    }
+  });
+
+  it("shows a publication and a paper's design learnt from past editions in Marathi on the screen", async () => {
+    const environment = createMockApplicationEnvironment();
+    const about = (n: number, action: string, target: { type: string; id: string | null }) => ({
+      id: `audit-fictional-${n}`,
+      at: "2026-10-22T05:47:00.000Z",
+      actor: null,
+      action,
+      target,
+      publicationId: "pub-demo-pune-daily",
+      requestId: null,
+      data: {},
+      ip: null,
+      userAgent: null,
+    });
+    vi.spyOn(environment.audit, "list").mockResolvedValue({
+      ok: true,
+      value: {
+        items: [
+          about(1, "publication.settings_edit", { type: "publication", id: "pub-demo-pune-daily" }),
+          about(2, "onboarding.ready", { type: "paper_onboarding", id: "onboarding-fictional-1" }),
+        ],
+        nextCursor: null,
+      },
+    });
+    renderAuth(AUDIT, { preset: "sahyadri-editor", language: "mr", environment });
+    const items = bodyRows(await screen.findByRole("table", { name: "नोंदी" }));
+    expect(items[0]).toHaveTextContent("प्रकाशन (ओळख pub-demo-pune-daily)");
+    expect(items[1]).toHaveTextContent("जुन्या अंकांवरून रचना (ओळख onboarding-fictional-1)");
+    expect(items[0]).not.toHaveTextContent("publication");
   });
 });
 

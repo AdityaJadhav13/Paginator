@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { ArtworkRow, LayoutEdition, LayoutStory, Plan } from "../../src/db/layout.ts";
 import { isLayoutEvent, layoutTarget } from "../../src/modules/layout/inbox.ts";
 import { blockerOf, frozenRequest, planFor, readiness, slotsOf } from "../../src/modules/layout/request.ts";
-import { CANCELLED, CANCELLED_BEFORE, RESTARTED } from "../../src/modules/layout/views.ts";
+import { CANCELLED, CANCELLED_BEFORE, EDITION_CHANGED, RESTARTED } from "../../src/modules/layout/views.ts";
 import { STARTING } from "../../src/db/layout.ts";
 import { messageFor } from "../../src/modules/notifications/events.ts";
 
@@ -88,7 +88,7 @@ const photo = (status: LayoutStory["photo_status"], cmyk: LayoutStory["cmyk"] = 
 
 describe("the Desk's words", () => {
   it("are the Desk's own", () => {
-    for (const words of [RESTARTED, CANCELLED, CANCELLED_BEFORE, STARTING]) {
+    for (const words of [RESTARTED, CANCELLED, CANCELLED_BEFORE, EDITION_CHANGED, STARTING]) {
       expect(MESSAGES[words.code ?? ""]).toBe(words.text);
     }
   });

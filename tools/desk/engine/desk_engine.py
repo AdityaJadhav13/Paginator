@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import multiprocessing as mp
 import os
 import pickle
@@ -38,7 +39,7 @@ import deskprofile as DPR  # noqa: E402
 import desksamples as DS  # noqa: E402
 import deskworker as DW  # noqa: E402
 from deskcommon import (ARTICLE_ID, EDITION_ID, ENGINE_VERSION, PHOTO_ID, RUN_ID, SLOT_ID, check_id, desk_home,  # noqa: E402
-                        error_text, log, now_iso, paper, read_json, write_json)
+                        error_text, log, log_error, now_iso, paper, read_json, write_json)
 
 G = DG.G
 ROLES = ("front", "inside_imprint", "inside", "back")
@@ -547,10 +548,50 @@ def instances_dir(home: Path) -> Path:
     return home / "cache" / "instances"
 
 
+CGROUP = Path("/sys/fs/cgroup")  # a container's own cgroup (its namespace, Docker's default on cgroup v2)
+# Measured (2026-11-05, the worker image, linux/amd64 emulated, one real 8-page edition at 2 CPUs and 2 GiB): the
+# engine's own process peaked at 256 MiB and its one layout process at 368 MiB (the cgroup at 754 MiB, no OOM). A layout
+# process is budgeted at twice that, near the rehearsal's 3.4 GB for 4 processes. Beside the pool the container holds
+# the engine's own process, the queue's Node process (115 MiB idle) and the one other job it runs at once (a photo's
+# conversion: 1 GiB budget). So 2 GiB holds one layout process, 4 GiB three.
+POOL_PER_WORKER = 768 << 20
+POOL_RESERVE = (256 + 128 + 1024) << 20
+
+
+def container_limits(root: Path) -> tuple[float | None, int | None]:
+    """(CPUs, bytes of memory) the cgroup at root allows: cgroup v2 (cpu.max, memory.max) or v1 (cpu.cfs_quota_us over
+    cpu.cfs_period_us, memory.limit_in_bytes). None where it sets no limit, or there is no cgroup (a Mac)."""
+    def ints(name: str) -> list[int] | None:
+        try:
+            return [int(v) for v in (root / name).read_text().split()]
+        except (OSError, ValueError):                     # absent, unreadable, or "max": no limit
+            return None
+    q = ints("cpu.max")                                   # "<quota> <period>", or "max <period>"
+    if q is None and (v1 := ints("cpu/cpu.cfs_quota_us")):
+        q = v1 + (ints("cpu/cpu.cfs_period_us") or [])   # v1's quota is -1 when there is none
+    m = ints("memory.max") or ints("memory/memory.limit_in_bytes")
+    return (q[0] / q[1] if q and len(q) == 2 and q[0] > 0 and q[1] > 0 else None,
+            m[0] if m and len(m) == 1 and 0 < m[0] < 1 << 60 else None)   # v1 says "none" with a huge number
+
+
+def pool_workers(n_tasks: int, cgroup: Path = CGROUP) -> int:
+    """Layout processes: one per CPU but one, and no more than the container's memory holds beside POOL_RESERVE; at
+    least one. The CPUs are the process's (its affinity), capped by the container's quota; with no cgroup (the owner's
+    Mac) only the cores count, as before."""
+    cpus = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 2
+    quota, mem = container_limits(cgroup)
+    if quota is not None:
+        cpus = min(cpus, math.ceil(quota))
+    n = min(cpus - 1, n_tasks)
+    if mem is not None:
+        n = min(n, (mem - POOL_RESERVE) // POOL_PER_WORKER)
+    return max(1, n)
+
+
 def make_pool(home: Path, ds: Path, cal, n_tasks: int, on_stop=None):
     """The worker pool (each worker reads font instances from the home's cache). SIGTERM / SIGINT / SIGHUP (the server
     cancelling, or the Terminal closing) stop the workers too; on_stop() then records the stop before the process ends."""
-    workers = max(1, min((os.cpu_count() or 2) - 1, n_tasks))
+    workers = pool_workers(n_tasks)
     ex = ProcessPoolExecutor(max_workers=workers, mp_context=mp.get_context("spawn"), initializer=deskfonts.worker_init,
                              initargs=(str(instances_dir(home)), str(ds), cal))
 
@@ -953,16 +994,15 @@ def cmd_edit_service(home: Path, args) -> dict:
                 raise ValueError(DM.msg("m.edit.unknownCommand", cmd=cmd))
             answer({"id": rid, "ok": True, "result": res})
         except (ValueError, KeyError) as e:                             # the request cannot be done: said plainly
-            log(traceback.format_exc())
+            log_error(e, refused=True)                                  # its code only: its text can name a headline
             said = str(e).strip("'")                                    # (a KeyError's quotes)
             first = e.args[0] if e.args else None
             if isinstance(first, DM.Msg) and said == first:             # a refusal of messages.json, as it is
                 said = first
             answer({"id": rid, "ok": False, "error": said or DM.msg("m.edit.invalid")})
         except Exception as e:  # noqa: BLE001 — one bad request never ends the service
-            log(traceback.format_exc())
-            answer({"id": rid, "ok": False,
-                    "error": DM.msg("m.edit.engineFailed", kind=type(e).__name__, error=DM.data(str(e)))})
+            log_error(e)                                                # its frames and type, never its text
+            answer({"id": rid, "ok": False, "error": DM.msg("m.edit.engineFailed")})
     return {"stopped": True}
 
 
@@ -998,8 +1038,8 @@ def main(argv=None) -> int:
             return 1
         raise
     except Exception as e:  # noqa: BLE001
-        log(traceback.format_exc())
-        print(json.dumps({"error": error_text(e)}, ensure_ascii=False))
+        log_error(e)                                      # frames and type: the text (it can name a headline) goes
+        print(json.dumps({"error": error_text(e)}, ensure_ascii=False))   # to the caller only
         return 1
 
 

@@ -43,6 +43,8 @@ export default defineConfig({
             {
               test: {
                 name: "api-db",
+                // a file's teardown drops its cloned database, which waits for the API's connections to close
+                hookTimeout: 60_000,
                 environment: "node",
                 include: ["apps/api/test/db/**/*.test.ts"],
                 globalSetup: ["apps/api/test/db/global-setup.ts"],
@@ -51,6 +53,7 @@ export default defineConfig({
             {
               test: {
                 name: "tenancy",
+                hookTimeout: 60_000,
                 environment: "node",
                 include: ["apps/api/test/tenancy/**/*.test.ts"],
                 globalSetup: ["apps/api/test/db/global-setup.ts"],

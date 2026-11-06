@@ -4,10 +4,12 @@
 """
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import gzip
 import hashlib
 import inspect
+import io
 import itertools
 import json
 import math
@@ -20,6 +22,7 @@ import types
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 
@@ -1820,6 +1823,49 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class EditServiceLogTest(unittest.TestCase):
+    """The edit service's log (edit-service.log; the hosted engine's leaves the Desk home) never holds a story's
+    headline (DESK-8): a refusal logs its code, any other error its frames and type, never an exception's text."""
+
+    H = "“काल्पनिक मथळा”"           # fictional
+
+    def serve(self, error: BaseException) -> tuple[dict, str]:
+        """One "open" request whose first step raises error → (the service's answer, what it logged)."""
+        requests = io.StringIO(json.dumps({"id": 1, "cmd": "open", "edition": "e", "run": "r", "page": 1}) + "\n")
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(DE, "config", return_value={}), mock.patch.object(DE, "EditEngine") as engine, \
+                mock.patch.object(DEd, "request_ok", side_effect=error), mock.patch.object(sys, "stdin", requests), \
+                mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
+            engine.return_value.sessions = {}
+            DE.cmd_edit_service(Path("unused"), None)
+        return json.loads(out.getvalue().splitlines()[-1]), err.getvalue()
+
+    def test_a_refusal_logs_its_code_only(self):
+        said, logged = self.serve(ValueError(DE.DM.msg("m.edit.lockedMove", name=DE.DM.data(self.H))))
+        self.assertIn(self.H, said["error"])                             # the screen still names the story
+        self.assertEqual(said["msgs"][said["error"]]["code"], "m.edit.lockedMove")
+        self.assertEqual(logged, "refused: m.edit.lockedMove\n")
+        said, logged = self.serve(KeyError(self.H))                      # not a message: its type
+        self.assertEqual((said["error"], logged), (self.H, "refused: KeyError\n"))
+
+    def test_an_unexpected_error_logs_its_frames_and_type_never_its_text(self):
+        try:
+            raise OSError(f"cannot read the photo of {self.H}")
+        except OSError as cause:
+            error = RuntimeError(f"failed on {self.H}")
+            error.__cause__ = cause
+        said, logged = self.serve(error)
+        self.assertEqual(said["error"], "something went wrong in the engine")
+        self.assertEqual(said["msgs"][said["error"]], {"code": "m.edit.engineFailed", "params": {}})
+        self.assertNotIn("काल्पनिक", logged)                            # (a frame's source line shows "{self.H}")
+        self.assertIn("OSError (its text is not logged)", logged)       # the cause, then the error, as Python orders
+        self.assertLess(logged.index("OSError"), logged.index("RuntimeError (its text is not logged)"))
+        self.assertIn("desk_engine.py", logged)                          # the frames: file, line, function, source
+        self.assertIn("in cmd_edit_service", logged)
+        self.assertIn('DE.request_ok(req, ("edition", "run", "page"))', logged)
+        self.assertIn("in test_an_unexpected_error_logs_its_frames_and_type_never_its_text", logged)
+
+
 class WorkerTextTest(unittest.TestCase):
     """The layout worker's own words (deskgen, deskworker: never changed) are recognised as messages of messages.json,
     with the same English to the character; any other text is shown as it is."""
@@ -1864,3 +1910,166 @@ class WorkerTextTest(unittest.TestCase):
             DEd.request_ok({"id": 1}, ("session", "page"))
         self.assertEqual(str(e.exception), "missing session, page")
         self.assertEqual(e.exception.args[0].wire, {"code": "m.edit.missing", "params": {"fields": {"data": "session, page"}}})
+
+
+class PoolSizeTest(unittest.TestCase):
+    """The layout pool follows the container (L2-523): its CPU quota and memory, read from a fake cgroup folder; with no
+    cgroup, the cores as before."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
+    def workers(self, n_tasks: int, cpus: int = 16, files: dict | None = None) -> int:
+        for name, text in (files or {}).items():
+            (self.root / name).write_text(text)
+        with mock.patch.object(DE.os, "sched_getaffinity", lambda pid: set(range(cpus)), create=True):
+            return DE.pool_workers(n_tasks, self.root)
+
+    def test_no_cgroup_one_per_core_but_one(self):
+        self.assertEqual(DE.container_limits(self.root), (None, None))
+        self.assertEqual([self.workers(100), self.workers(4), self.workers(100, cpus=1)], [15, 4, 1])
+
+    def test_cgroup_v2_cpu_quota(self):
+        self.assertEqual(self.workers(100, files={"cpu.max": "200000 100000\n"}), 1)        # compose cpus: 2
+        self.assertEqual(self.workers(100, files={"cpu.max": "400000 100000\n"}), 3)
+        self.assertEqual(self.workers(100, files={"cpu.max": "150000 100000\n"}), 1)        # 1.5 CPUs: 2, so one
+        self.assertEqual(self.workers(100, cpus=2, files={"cpu.max": "800000 100000\n"}), 1)   # the affinity is lower
+        self.assertEqual(self.workers(100, files={"cpu.max": "max 100000\n"}), 15)
+
+    def test_cgroup_v2_memory(self):
+        R, W = DE.POOL_RESERVE, DE.POOL_PER_WORKER
+        self.assertEqual(self.workers(100, files={"memory.max": f"{R + 3 * W + 1}\n"}), 3)
+        self.assertEqual(self.workers(2, files={"memory.max": f"{R + 3 * W}\n"}), 2)       # the tasks still cap it
+        self.assertEqual(self.workers(100, files={"memory.max": f"{R + W - 1}\n"}), 1)     # always one
+        self.assertEqual(self.workers(100, files={"memory.max": f"{R // 2}\n"}), 1)
+        self.assertEqual(self.workers(100, files={"memory.max": "max\n"}), 15)
+        self.assertEqual(DE.container_limits(self.root), (None, None))
+        self.assertEqual([self.workers(100, files={"memory.max": str(g << 30)}) for g in (2, 4)], [1, 3])   # pilot, 4 GiB
+
+    def test_the_lower_of_cpus_and_memory_wins(self):
+        R, W = DE.POOL_RESERVE, DE.POOL_PER_WORKER
+        self.assertEqual(self.workers(100, files={"cpu.max": "800000 100000", "memory.max": str(R + 2 * W)}), 2)
+        self.assertEqual(DE.container_limits(self.root), (8.0, R + 2 * W))
+        self.assertEqual(self.workers(100, files={"cpu.max": "200000 100000", "memory.max": str(R + 5 * W)}), 1)
+
+    def test_cgroup_v1(self):
+        R, W = DE.POOL_RESERVE, DE.POOL_PER_WORKER
+        (self.root / "cpu").mkdir()
+        (self.root / "memory").mkdir()
+        files = {"cpu/cpu.cfs_period_us": "100000\n", "cpu/cpu.cfs_quota_us": "-1\n",
+                 "memory/memory.limit_in_bytes": "9223372036854771712\n"}                 # v1's "no limit"s
+        self.assertEqual(self.workers(100, files=files), 15)
+        self.assertEqual(DE.container_limits(self.root), (None, None))
+        files = {"cpu/cpu.cfs_quota_us": "300000\n", "memory/memory.limit_in_bytes": f"{R + 5 * W}\n"}
+        self.assertEqual(self.workers(100, files=files), 2)
+        self.assertEqual(DE.container_limits(self.root), (3.0, R + 5 * W))
+
+    def test_a_file_that_cannot_be_read_is_no_limit(self):
+        self.assertEqual(self.workers(100, files={"cpu.max": "garbage", "memory.max": ""}), 15)
+
+
+class RasterCacheTest(unittest.TestCase):
+    """The editor's raster cache stays bounded (CROP-1): entries unused for a day go, over the cap the least recently
+    used go first, an entry used within the hour never goes, and a pruned raster is written again. Explicit times."""
+
+    NOW = 1_800_000_000.0
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.d = Path(tmp.name)
+
+    def entry(self, letter: str, ago_s: float, size: int = 100, exts=("json", "cmyk", "jpg")) -> str:
+        key, t = letter * 24, self.NOW - ago_s
+        for ext in exts:
+            p = self.d / f"{key}.{ext}"
+            p.write_bytes(b"x" * (size if ext == "cmyk" else 1))
+            os.utime(p, (t, t))
+        return key
+
+    def left(self) -> set:
+        return {p.name for p in self.d.iterdir()}
+
+    def keys_left(self) -> set:
+        return {n.split(".")[0] for n in self.left()}
+
+    def test_entries_unused_for_a_day_go_and_recent_ones_stay(self):
+        old, day, recent = self.entry("a", 25 * 3600), self.entry("b", 23 * 3600), self.entry("c", 10)
+        DEd.prune_rasters(self.d, self.NOW)
+        self.assertEqual(self.keys_left(), {day, recent})
+        self.assertEqual(len(self.left()), 6)
+        self.assertNotIn(old, self.keys_left())
+
+    def test_over_the_cap_the_least_recently_used_go_first(self):
+        keys = [self.entry(c, h * 3600) for c, h in (("d", 2), ("a", 5), ("c", 3), ("b", 4))]   # 102 bytes each
+        with mock.patch.object(DEd, "RASTER_CAP", 250):
+            DEd.prune_rasters(self.d, self.NOW)
+        self.assertEqual(self.keys_left(), {keys[0], keys[2]})           # 5 h and 4 h old went, then it fitted
+
+    def test_an_entry_used_within_the_hour_never_goes(self):
+        old, half, now = self.entry("a", 2 * 3600), self.entry("b", 1800), self.entry("c", 60)
+        with mock.patch.object(DEd, "RASTER_CAP", 50):
+            DEd.prune_rasters(self.d, self.NOW)
+        self.assertEqual(self.keys_left(), {half, now})                  # still over the cap: they stay
+        self.assertNotIn(old, self.keys_left())
+
+    def test_an_entry_with_files_missing_and_a_writers_fresh_raster(self):
+        self.entry("a", 2 * 86400, exts=("json",))
+        self.entry("b", 2 * 86400, exts=("cmyk", "jpg"))
+        writing = self.entry("c", 5, exts=("cmyk",))                     # its .json is about to be written
+        DEd.prune_rasters(self.d, self.NOW)
+        self.assertEqual(self.left(), {f"{writing}.cmyk"})
+
+    def test_files_another_process_deletes_meanwhile_are_fine(self):
+        a, b = self.entry("a", 2 * 86400), self.entry("b", 2 * 86400)
+        real = os.scandir
+
+        def racing(path):
+            listed = list(real(path))
+            for name in (f"{a}.json", f"{a}.cmyk", f"{a}.jpg", f"{b}.jpg"):  # another process's prune, after the listing
+                (self.d / name).unlink()
+            return contextlib.nullcontext(listed)
+        with mock.patch.object(DEd.os, "scandir", racing):
+            DEd.prune_rasters(self.d, self.NOW)
+        self.assertEqual(self.left(), set())
+
+    def test_only_the_caches_own_files_and_never_through_a_link(self):
+        with tempfile.TemporaryDirectory() as outside:
+            target = Path(outside) / "keep.cmyk"
+            target.write_bytes(b"k")
+            link = self.d / f"{'e' * 24}.cmyk"
+            link.symlink_to(target)
+            foreign = ["notes.txt", f".{'f' * 24}.cmyk.123.tmp", f"{'f' * 24}.cmyk.gz", f"{'F' * 24}.json"]
+            for name in foreign:
+                (self.d / name).write_bytes(b"x")
+            old = self.NOW - 9 * 86400
+            for p in [*(self.d / n for n in foreign), target]:
+                os.utime(p, (old, old))
+            os.utime(link, (old, old), follow_symlinks=False)
+            DEd.prune_rasters(self.d, self.NOW)
+            self.assertEqual(self.left(), {*foreign, link.name})
+            self.assertTrue(target.exists())
+
+    def test_the_memo_marks_its_raster_used_and_writes_it_again_once_pruned(self):
+        W0, H0, pid = 6, 4, "p-000000000a"
+        raw = bytes(range(W0 * H0 * 4))
+        (self.d / "photos").mkdir()
+        (self.d / "photos" / f"{pid}.cmyk.gz").write_bytes(gzip.compress(raw, mtime=0))
+        cache = self.d / "cache"
+        s = DEd.PageSession.__new__(DEd.PageSession)
+        s.engine = types.SimpleNamespace(cache_dir=lambda name: (cache / name).mkdir(parents=True, exist_ok=True) or cache / name)
+        s._fulls, s.photo_dir = {}, self.d / "photos"
+        key = s._full_raster(pid, W0, H0)
+        rasters = cache / "rasters"
+        self.assertEqual(((rasters / f"{key}.cmyk").read_bytes(), json.loads((rasters / f"{key}.json").read_text())),
+                         (raw, {"width_px": W0, "height_px": H0}))
+        os.utime(rasters / f"{key}.json", (1_000_000_000, 1_000_000_000))                # last used long ago
+        self.assertEqual(s._full_raster(pid, W0, H0), key)
+        self.assertGreater((rasters / f"{key}.json").stat().st_mtime, 1_000_000_000 + 86400)   # used again: marked
+        for ext in ("json", "cmyk"):
+            (rasters / f"{key}.{ext}").unlink()                                          # pruned meanwhile
+        self.assertEqual(s._full_raster(pid, W0, H0), key)
+        self.assertEqual((rasters / f"{key}.cmyk").read_bytes(), raw)
+        self.assertTrue((rasters / f"{key}.json").is_file())

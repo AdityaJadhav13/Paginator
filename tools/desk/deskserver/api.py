@@ -248,7 +248,7 @@ class Api:
         try:
             got = docx.articles_from_docx(req.body)
         except docx.DocxError as e:
-            raise DeskError(400, str(e)) from None
+            raise DeskError(400, e.args[0]) from None      # the message itself, with its code (str(e) drops it)
         return {**self.store.create_many(req.args[0], got["articles"], "word"), "notes": got["notes"]}
 
     def import_bundle(self, req: Request) -> dict:
@@ -633,7 +633,7 @@ class Handler(BaseHTTPRequestHandler):
         if kind == "image" and n > images.MAX_UPLOAD_BYTES:
             raise DeskError(413, "This picture file is larger than 40 MB. Save it smaller and try again.")
         if kind == "docx" and n > docx.MAX_BYTES:
-            raise DeskError(413, "This Word file is larger than 20 MB.")
+            raise DeskError(413, docx.OVER_SIZE)
         if kind == "bundle" and n > bundle.MAX_BYTES:
             raise DeskError(413, M.msg("m.bundle.tooLarge"))
         if kind == "json" and n > JSON_LIMIT:
