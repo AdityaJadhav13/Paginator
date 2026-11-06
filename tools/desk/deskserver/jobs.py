@@ -444,10 +444,10 @@ class JobManager:
         try:
             merge_pdfs(pdfs, job.dir / "edition.pdf")
             zip_pdfs(pdfs, job.dir / "press-files.zip")
-        except Exception as e:
-            traceback.print_exc(file=sys.stderr)
+        except Exception:
+            traceback.print_exc(file=sys.stderr)                # the file error's own words: here, not on the screen
             with self.lock:
-                self._finish_job(job, "failed", error=M.msg("m.run.notMerged", error=M.data(str(e))))
+                self._finish_job(job, "failed", error=M.msg("m.run.notMerged"))
             return
         self._write_status(job, "finishing", message=M.msg("m.run.checking"))
         with ThreadPoolExecutor(max_workers=4) as pool:

@@ -17,6 +17,7 @@ from collections.abc import Iterator
 from io import BytesIO
 from xml.etree import ElementTree as ET
 
+from . import messages as M
 from .ziplimits import directory
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -31,9 +32,11 @@ MAX_XML = 16 * 1024 * 1024                  # the most of document.xml unpacked 
 MAX_STORIES = 200
 MAX_ENTRIES = 5000                          # files a .docx lists (Word's own: a few dozen, plus pictures)
 MAX_DIRECTORY = 4 * 1024 * 1024             # its central directory, read whole by zipfile before anything else
-DAMAGED = "This Word file is damaged. Save it again and try again."
-NOT_WORD = "This is not a Word (.docx) file. Save it as .docx and try again."
-TOO_LARGE = "This Word file is too large to read."
+# refusals and notes are the Desk's messages (messages.json): the English as before, with codes for the Marathi screen
+DAMAGED = M.msg("m.docx.damaged")
+NOT_WORD = M.msg("m.docx.notWord")
+TOO_LARGE = M.msg("m.docx.tooLarge")
+OVER_SIZE = M.msg("m.docx.overSize")
 BYLINE = re.compile(r"\s*(?:byline|by|वार्ताहर)\s*[:：]\s*[-–—]?\s*(.*)", re.IGNORECASE | re.DOTALL)  # "Byline: …"
 BY_NAME = re.compile(r"\s*(?i:by)\s+(\S+(?:\s+\S+){0,4})(?<![.?!।])\s*")   # "By A. Writer": 1–5 words, not a sentence
 PLACE = r"\S+(?:\s+\S+){0,4}(?<![.?!।])"                             # 1–5 words, not a sentence
@@ -57,10 +60,9 @@ class DocxError(ValueError):
 def _document(data: bytes) -> ET.Element:
     """The parsed word/document.xml (DocxError when the file is not a .docx that can be read)."""
     if len(data) > MAX_BYTES:
-        raise DocxError("This Word file is larger than 20 MB.")
+        raise DocxError(OVER_SIZE)
     if data.startswith(OLE):
-        raise DocxError("This Word file is protected with a password, or is an old .doc file: save it as .docx "
-                        "without a password and try again.")
+        raise DocxError(M.msg("m.docx.protected"))
     listed = directory(data)                          # before zipfile reads a central directory of any size
     if listed is not None and (listed.entries > MAX_ENTRIES or listed.size > MAX_DIRECTORY):
         raise DocxError(TOO_LARGE)
@@ -211,14 +213,11 @@ def _byline(text: str) -> tuple[str, int] | None:
 def _left_out(seen: Counter) -> list[str]:
     """What the file holds that was not imported, in plain words (nothing when there is none)."""
     said = []
-    if n := seen["tables"]:
-        said.append(f"{n} tables were not imported: copy their text into the article if it is needed." if n > 1 else
-                    "1 table was not imported: copy its text into the article if it is needed.")
-    if n := seen["text boxes"]:
-        said.append(f"{n} text boxes were not imported." if n > 1 else "1 text box was not imported.")
-    if n := seen["pictures"]:
-        said.append(f"{n} pictures were not imported: add photos in the Desk." if n > 1 else
-                    "1 picture was not imported: add photos in the Desk.")
+    for what, one, many in (("tables", "m.docx.table1", "m.docx.tablesN"),
+                            ("text boxes", "m.docx.textBox1", "m.docx.textBoxesN"),
+                            ("pictures", "m.docx.picture1", "m.docx.picturesN")):
+        if n := seen[what]:
+            said.append(M.msg(many, n=n) if n > 1 else M.msg(one))
     return said
 
 
@@ -246,18 +245,16 @@ def articles_from_docx(data: bytes) -> dict:
     full = [s for s in stories if s["headline"] and any(not p.startswith("## ") for p in s["paras"])]
     left_out = _left_out(seen)
     if not full:                                     # say why when the text is all in tables or text boxes
-        raise DocxError(" ".join(["No story was found in this Word file: it needs a headline and some text.",
-                                  *left_out]))
+        raise DocxError(M.join(M.msg("m.docx.noStory"), *left_out))
     taken = full[:MAX_STORIES]
     notes = []
     if len(full) > MAX_STORIES:
-        notes.append(f"This file holds more than {MAX_STORIES} stories; only the first {MAX_STORIES} were imported.")
+        notes.append(M.msg("m.docx.tooManyStories", max=MAX_STORIES))
     if empty := sum(1 for s in stories if s["headline"]) - len(full):
-        notes.append("1 heading had no text under it and was not imported." if empty == 1 else
-                     f"{empty} headings had no text under them and were not imported.")
+        notes.append(M.msg("m.docx.emptyHeading1") if empty == 1 else M.msg("m.docx.emptyHeadingsN", n=empty))
     notes += left_out
     if any(s["strong"] for s in taken):              # only what is imported (not a skipped heading, not a label)
-        notes.append("Formatting (bold, italic, sizes) is not kept: the Desk sets the type.")
+        notes.append(M.msg("m.docx.formatting"))
     arts = [{"headline": s["headline"][:2000], "byline": (s["byline"] or "")[:2000], "body": "\n\n".join(s["paras"])}
             for s in taken]
     return {"articles": arts, "notes": notes}

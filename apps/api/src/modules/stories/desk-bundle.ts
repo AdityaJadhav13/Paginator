@@ -104,22 +104,27 @@ export function isDeskText(body: string): boolean {
   });
 }
 
-/** Why a story cannot go into the bundle as it is, in plain words; null when it can. */
-type Refusal = { story: string; message: string };
+/** Why a story cannot go into the bundle as it is, in plain words with its code and values (the web words it in the
+ * reader's language); null when it can. */
+type Refusal = { story: string; message: string; reason: string; params: Record<string, string> };
 
-const named = (headline: string) => {
+const shortened = (headline: string) => {
   const flat = headline.replace(/\s+/g, " ").trim() || "(no headline)";
-  return `“${flat.length > 120 ? `${flat.slice(0, 119)}…` : flat}”`;
+  return flat.length > 120 ? `${flat.slice(0, 119)}…` : flat;
 };
 
 function storyOf(row: BundleStory): { story: BundleDoc["stories"][number] } | { refused: Refusal } {
   const { text: body, hashed } = deskText(row.body);
+  const headline = shortened(row.headline);
   if (hashed.length > 0) {
     const head = hashed[0] ?? "";
+    const subheading = head.length > 80 ? `${head.slice(0, 79)}…` : head;
     return {
       refused: {
         story: row.id,
-        message: `The subheading “## ${head.length > 80 ? `${head.slice(0, 79)}…` : head}” in ${named(row.headline)} starts with #, which the Desk cannot print as a subheading: change it in the story.`,
+        message: `The subheading “## ${subheading}” in “${headline}” starts with #, which the Desk cannot print as a subheading: change it in the story.`,
+        reason: "bundle.subheading_hash",
+        params: { subheading, headline },
       },
     };
   }
@@ -130,7 +135,9 @@ function storyOf(row: BundleStory): { story: BundleDoc["stories"][number] } | { 
     return {
       refused: {
         story: row.id,
-        message: `${named(row.headline)} has a photo that was rejected or deleted: take it off the story, or give it another, then send again.`,
+        message: `“${headline}” has a photo that was rejected or deleted: take it off the story, or give it another, then send again.`,
+        reason: "bundle.photo_unusable",
+        params: { headline },
       },
     };
   }
@@ -253,7 +260,7 @@ export const deskBundleRoutes: FastifyPluginAsyncZod<DeskBundleOptions> = async 
           request.log.warn({ stories: refusals.map((r) => r.story) }, "a story bundle was refused for its stories");
           throw new ApiError(
             "bundle_refused",
-            refusals.slice(0, 20).map((r) => ({ field: `stories.${r.story}`, message: r.message })),
+            refusals.slice(0, 20).map(({ story, ...why }) => ({ field: `stories.${story}`, ...why })),
           );
         }
         const stories = decided.flatMap((one) => ("story" in one ? [one.story] : []));

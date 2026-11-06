@@ -4,7 +4,7 @@
  * 02 §3.9's own words, every API error code has its text, and the Marathi review list accounts for every string.
  */
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ERROR_CODES, PERMISSION_NAMES } from "@pageinator/contracts";
 import {
@@ -114,11 +114,28 @@ describe("Keys the code uses", () => {
   it("are every key but the glossary seeds, the error codes and the Desk's message codes (no dead strings)", () => {
     const used = new Set(keyLiterals().keys());
     // the Desk's messages (m.…) are said by the code a DeskText carries (features/layout/desk-text.tsx), as error.… by
-    // the API's code
+    // the API's code and detail.… by an answer's detail reason (the next test)
     const unused = CATALOGUE_KEYS.filter(
-      (key) => !used.has(key) && !key.startsWith("glossary.") && !key.startsWith("error.") && !key.startsWith("m."),
+      (key) =>
+        !used.has(key) &&
+        !key.startsWith("glossary.") &&
+        !key.startsWith("error.") &&
+        !key.startsWith("m.") &&
+        !key.startsWith("detail."),
     );
     expect(unused).toEqual([]);
+  });
+
+  it("has the words for each detail reason the API gives (detail.<reason>), and only those", () => {
+    const root = resolve(__dirname, "../../../api/src");
+    const reasons = new Set<string>();
+    for (const file of readdirSync(root, { recursive: true, encoding: "utf8" })) {
+      if (!file.endsWith(".ts")) continue;
+      for (const m of readFileSync(resolve(root, file), "utf8").matchAll(/\breason: "([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)"/g))
+        reasons.add(`detail.${m[1]!}`);
+    }
+    expect([...reasons]).toEqual(expect.arrayContaining(["detail.docx.protected", "detail.bundle.photo_unusable"]));
+    expect(CATALOGUE_KEYS.filter((key) => key.startsWith("detail.")).sort()).toEqual([...reasons].sort());
   });
 
   it("has the text for every error code the API answers with, and those the plan names", () => {

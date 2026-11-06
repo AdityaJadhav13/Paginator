@@ -377,6 +377,11 @@ describe("the bundle's limits and checks", () => {
       "“Rejected photo (fictional)” has a photo that was rejected or deleted: take it off the story, or give it another, then send again.",
       "“Deleted photo (fictional)” has a photo that was rejected or deleted: take it off the story, or give it another, then send again.",
     ]);
+    // the reason and the headline, for the web to word in the reader's language (L2-354)
+    expect(res.json().error.details.map((d: { reason: string; params: unknown }) => [d.reason, d.params])).toEqual([
+      ["bundle.photo_unusable", { headline: "Rejected photo (fictional)" }],
+      ["bundle.photo_unusable", { headline: "Deleted photo (fictional)" }],
+    ]);
     expect((await su.query("select count(*)::int as n from app.desk_bundle")).rows).toEqual(before.rows);
   });
 
@@ -394,6 +399,10 @@ describe("the bundle's limits and checks", () => {
       "bundle_refused",
       "The subheading “## #MeToo rally” in “Rally (fictional)” starts with #, which the Desk cannot print as a subheading: change it in the story.",
     ]);
+    expect(res.json().error.details[0]).toMatchObject({
+      reason: "bundle.subheading_hash",
+      params: { subheading: "#MeToo rally", headline: "Rally (fictional)" },
+    });
   });
 
   it("cuts the ZIP off when a photo's bytes are not the ones its asset names (the route)", async () => {

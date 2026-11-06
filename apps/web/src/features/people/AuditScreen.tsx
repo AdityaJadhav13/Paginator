@@ -155,7 +155,8 @@ const allNamed: [Exclude<`auditLog.action.${AuditAction}`, (typeof AUDIT_ACTION_
   : never = true;
 void allNamed;
 
-const TARGET_KEYS: Readonly<Record<string, PlainKey>> = {
+/** Every target type the API writes (tests/people/audit.test.tsx reads them from apps/api/src). */
+export const TARGET_KEYS: Readonly<Record<string, PlainKey>> = {
   story: "auditLog.target.story",
   comment: "auditLog.target.comment",
   asset: "auditLog.target.asset",
@@ -168,7 +169,18 @@ const TARGET_KEYS: Readonly<Record<string, PlainKey>> = {
   route: "auditLog.target.route",
   import: "auditLog.target.import",
   section: "auditLog.target.section",
-  onboarding: "auditLog.target.onboarding",
+  paper_onboarding: "auditLog.target.onboarding",
+  publication: "auditLog.target.publication",
+  release: "auditLog.target.release",
+  layout_run: "auditLog.target.layout_run",
+  ad_booking: "auditLog.target.ad_booking",
+  ad_slot_artwork: "auditLog.target.ad_slot_artwork",
+  advertiser: "auditLog.target.advertiser",
+  engine_profile: "auditLog.target.engine_profile",
+  print_profile: "auditLog.target.print_profile",
+  news_source: "auditLog.target.news_source",
+  news_run: "auditLog.target.news_run",
+  news_draft: "auditLog.target.news_draft",
 };
 
 /** An action's plain name; one of a newer API than this screen is shown by its code. An upload is named by its
@@ -188,7 +200,7 @@ function actorName(actor: AuditEventDto["actor"], t: Translate): string {
   return actor.kind === "import" ? t("auditLog.actor.import") : t("auditLog.actor.unknown");
 }
 
-function targetText(target: AuditEventDto["target"], t: Translate): string {
+export function targetText(target: AuditEventDto["target"], t: Translate): string {
   const type = Object.hasOwn(TARGET_KEYS, target.type) ? t(TARGET_KEYS[target.type]!) : target.type;
   return target.id ? t("auditLog.targetWithId", { target: type, id: target.id }) : type;
 }

@@ -1,7 +1,8 @@
 // Editions (src/modules/stories/editions.ts, src/db/editions.ts) on a migrated clone: making one (who may, the defaults,
 // the Desk key, one a date, idempotency, the audit row), listing them with their stories counted, putting a story in an
-// edition and taking it out (the story's PATCH), the live hint (migration 2026_11_28_0001), and another tenant's ids.
-// Every organisation, person and story is fictional.
+// edition and taking it out (the story's PATCH), the live hint (migration 2026_11_28_0001), another tenant's ids, and
+// correcting an edition's date and pages (its runs set aside, its ads and plan following). Every organisation, person,
+// advertiser and story is fictional.
 import { randomUUID } from "node:crypto";
 import type { Client, Notification } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -272,5 +273,353 @@ describe("tenancy", () => {
     expect(placed.statusCode).toBe(400);
     // the same date in another organisation is its own edition
     expect((await change("POST", editions(), a.ownerCookie, { date: "2027-05-01", pages: 8 })).statusCode).toBe(201);
+  });
+});
+
+describe("correcting an edition's date and pages (PATCH /:e)", () => {
+  const BACK = [
+    { slot: "back-1", w_mm: 120, h_mm: 80.5 },
+    { slot: "back-3", w_mm: 60, h_mm: 40 },
+  ];
+  const PLAN = (pages: number, ads: boolean) => ({
+    pages,
+    back_page_ads: ads,
+    page_plan: Array.from({ length: pages }, (_, i) => ({
+      page: i + 1,
+      role: i === 0 ? "front" : i === pages - 1 ? "back" : "inside",
+      template_role: i === 0 ? "front" : "inside",
+      news_mm2: 60000,
+      ad_slots: ads && i === pages - 1 ? BACK : [],
+    })),
+    needs: { stories: 20, briefs: 4, photos: 6, words: 9000, per_role: {}, spare_share: 0.1 },
+  });
+  let ownerId: string;
+
+  beforeAll(async () => {
+    ownerId = await n.userId(a.owner);
+    const upload = await su.query<{ id: string }>(
+      `insert into app.upload (org_id, publication_id, user_id, purpose, declared_type, declared_bytes, expires_at)
+       values ($1, $2, $3, 'engine_dataset', 'application/zip', 10, now()) returning id`,
+      [a.orgId, a.pubId, ownerId],
+    );
+    await su.query(
+      `insert into app.engine_profile (org_id, publication_id, version, state, upload_id, dataset_version_id,
+         dataset_sha256, dataset_bytes, config_version_id, config_sha256, engine_version, templates, grid, plans,
+         created_by)
+       values ($1, $2, 1, 'ready', $3, 'v-dataset', $4, 10, 'v-config', $5, 'fictional-engine 1', '{"front": "page1"}',
+         $6, $7, $8)`,
+      [
+        a.orgId,
+        a.pubId,
+        upload.rows[0]?.id,
+        "d".repeat(64),
+        "e".repeat(64),
+        JSON.stringify({ columns: 8, column_width_mm: 32, gutter_mm: 4 }),
+        JSON.stringify([4, 8, 16].flatMap((p) => [PLAN(p, true), PLAN(p, false)])),
+        ownerId,
+      ],
+    );
+  }, 60_000);
+
+  let fixed = 0;
+  /** A date of its own for each edition here. */
+  const fixDay = () => `2027-07-${String(++fixed).padStart(2, "0")}`;
+  const make = async (date: string, pages = 8) => {
+    const made = await change("POST", editions(), people.editor!.cookie, { date, pages });
+    expect(made.statusCode, made.body).toBe(201);
+    return made.json() as { id: string; date: string; pages: number };
+  };
+  const correct = (id: string, body: unknown, cookie = people.editor!.cookie) =>
+    call("PATCH", `${editions()}/${id}`, cookie, body);
+  let runs = 0;
+  /** A run of the edition, made as the superuser: done (finished), or another state. */
+  const run = async (editionId: string, state = "done") => {
+    const key = `r-20270701-${String(++runs).padStart(6, "0")}`;
+    const ended = state === "done" || state === "failed" || state === "cancelled";
+    const { rows } = await su.query<{ id: string }>(
+      `insert into app.layout_run (org_id, publication_id, edition_id, desk_key, state, finished_at, created_by)
+       values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+      [a.orgId, a.pubId, editionId, key, state, ended ? new Date("2027-01-02T03:04:05Z") : null, ownerId],
+    );
+    return rows[0]?.id ?? "";
+  };
+  const edits = async (id: string) =>
+    (
+      await su.query("select actor_id, data from app.audit_event where action = 'edition.edit' and target_id = $1", [
+        id,
+      ])
+    ).rows;
+  const placements = async (e: string) =>
+    (
+      await su.query<{ slot: string; booking_id: string }>(
+        "select slot, booking_id from app.ad_placement where edition_id = $1 order by slot",
+        [e],
+      )
+    ).rows.map((r) => [r.slot, r.booking_id]);
+
+  it("moves the date and pages, sets the done runs aside, empties the plan past the new count, audited with was", async () => {
+    const [from, to] = [fixDay(), fixDay()];
+    const edition = await make(from);
+    const [done1, done2, failed] = [await run(edition.id), await run(edition.id), await run(edition.id, "failed")];
+    const section = await su.query<{ id: string }>(
+      "insert into app.section (org_id, publication_id, name) values ($1, $2, 'Fictional city') returning id",
+      [a.orgId, a.pubId],
+    );
+    for (const [page, sectionId, note] of [
+      [3, section.rows[0]?.id, "keep me"],
+      [7, section.rows[0]?.id, "from the old plan"],
+    ] as const) {
+      await su.query(
+        `insert into app.flatplan_page (org_id, publication_id, edition_id, page_no, section_id, note, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7)`,
+        [a.orgId, a.pubId, edition.id, page, sectionId, note, ownerId],
+      );
+    }
+
+    const res = await correct(edition.id, { date: to, pages: 4 });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toEqual({ ...edition, date: to, pages: 4 });
+    const row = await su.query("select desk_key, pages, back_page_ads from app.edition where id = $1", [edition.id]);
+    expect(row.rows[0]).toEqual({ desk_key: to, pages: 4, back_page_ads: true });
+    const states = await su.query<{ id: string; state: string; message: unknown; finished_at: Date }>(
+      "select id, state, message, finished_at from app.layout_run where edition_id = $1 order by desk_key",
+      [edition.id],
+    );
+    const SET_ASIDE = {
+      code: "m.run.editionChanged",
+      text: "Set aside: the edition's date or pages changed after this layout. Lay it out again.",
+      params: null,
+    };
+    expect(states.rows).toEqual([
+      { id: done1, state: "cancelled", message: SET_ASIDE, finished_at: new Date("2027-01-02T03:04:05Z") },
+      { id: done2, state: "cancelled", message: SET_ASIDE, finished_at: new Date("2027-01-02T03:04:05Z") },
+      { id: failed, state: "failed", message: null, finished_at: new Date("2027-01-02T03:04:05Z") },
+    ]);
+    // the Pages board (the newest done run) has none now; the run that ended last says why
+    const layout = await call("GET", `${editions()}/${edition.id}/layout`, people.editor!.cookie);
+    expect(layout.statusCode, layout.body).toBe(200);
+    expect(layout.json()).toMatchObject({ board: null, active: null });
+    const plan = await su.query(
+      "select page_no, section_id, note from app.flatplan_page where edition_id = $1 order by page_no",
+      [edition.id],
+    );
+    expect(plan.rows).toEqual([
+      { page_no: 3, section_id: section.rows[0]?.id, note: "keep me" },
+      { page_no: 7, section_id: null, note: "" },
+    ]);
+    expect(await edits(edition.id)).toEqual([
+      {
+        actor_id: people.editor!.id,
+        data: {
+          date: to,
+          pages: 4,
+          was: { date: from, pages: 8 },
+          setAside: 2,
+          // what it emptied, as it was
+          planCleared: [{ page: 7, section: section.rows[0]?.id, note: "from the old plan" }],
+        },
+      },
+    ]);
+  });
+
+  it("keeps what followed the date in the Desk key, and turns back-page ads off alone", async () => {
+    const [from, to] = [fixDay(), fixDay()];
+    const { rows } = await su.query<{ id: string }>(
+      `insert into app.edition (org_id, publication_id, edition_date, desk_key, pages)
+       values ($1, $2, $3::date, $3 || '-2', 8) returning id`,
+      [a.orgId, a.pubId, from],
+    );
+    const id = rows[0]?.id ?? "";
+    const res = await correct(id, { date: to, backPageAds: false, pages: 8 });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toMatchObject({ id, date: to, pages: 8, backPageAds: false });
+    const row = await su.query("select desk_key from app.edition where id = $1", [id]);
+    expect(row.rows[0]).toEqual({ desk_key: `${to}-2` });
+    expect(await edits(id)).toEqual([
+      {
+        actor_id: people.editor!.id,
+        data: { date: to, backPageAds: false, was: { date: from, backPageAds: true }, setAside: 0 },
+      },
+    ]);
+  });
+
+  it("refuses while a layout run is active (409 run_active, the run), and changes nothing", async () => {
+    const edition = await make(fixDay());
+    const done = await run(edition.id);
+    const active = await run(edition.id, "queued");
+    const res = await correct(edition.id, { pages: 16, issue: "77" });
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json().error).toMatchObject({ code: "run_active", current: { id: active, state: "queued" } });
+    const row = await su.query("select pages, issue from app.edition where id = $1", [edition.id]);
+    expect(row.rows[0]).toEqual({ pages: 8, issue: "" });
+    const state = await su.query("select state from app.layout_run where id = $1", [done]);
+    expect(state.rows[0]).toEqual({ state: "done" });
+    expect(await edits(edition.id)).toEqual([]);
+  });
+
+  it("refuses once released or archived (409 edition_released); its folio still changes as before", async () => {
+    for (const status of ["released", "archived"]) {
+      const edition = await make(fixDay());
+      await su.query("update app.edition set status = $2 where id = $1", [edition.id, status]);
+      const res = await correct(edition.id, { date: fixDay() });
+      expect(res.statusCode, res.body).toBe(409);
+      expect(res.json().error).toMatchObject({
+        code: "edition_released",
+        message: "This edition has been released: its date and pages can no longer change.",
+      });
+      expect((await correct(edition.id, { pages: edition.pages, price: "₹ 6" })).statusCode).toBe(200);
+      expect(await edits(edition.id)).toEqual([{ actor_id: people.editor!.id, data: { price: "₹ 6" } }]);
+    }
+  });
+
+  it("refuses a date another edition has (409 edition_exists, that edition)", async () => {
+    const [mine, theirs] = [await make(fixDay()), await make(fixDay())];
+    const res = await correct(mine.id, { date: theirs.date });
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json().error).toMatchObject({ code: "edition_exists", current: { id: theirs.id, date: theirs.date } });
+    expect((await su.query("select desk_key from app.edition where id = $1", [mine.id])).rows[0]).toEqual({
+      desk_key: mine.date,
+    });
+  });
+
+  it("makes the ads follow: the old date's booking taken out, the new date's placed, artwork without a slot cleared", async () => {
+    const [from, to] = [fixDay(), fixDay()];
+    const advertiser = await call(
+      "POST",
+      `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}/advertisers`,
+      people.advertising!.cookie,
+      {
+        name: "Example Fictional Jewellers",
+      },
+    );
+    expect(advertiser.statusCode, advertiser.body).toBe(201);
+    const book = async (date: string) => {
+      const res = await change("POST", `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}/bookings`, people.advertising!.cookie, {
+        advertiserId: advertiser.json().id,
+        wMm: 120,
+        hMm: 80.5,
+        colour: "colour",
+        slot: null,
+        dates: [date],
+      });
+      expect(res.statusCode, res.body).toBe(201);
+      return res.json().id as string;
+    };
+    const [old, fresh] = [await book(from), await book(to)];
+    const edition = await make(from);
+    expect(await placements(edition.id)).toEqual([["back-1", old]]);
+
+    const moved = await correct(edition.id, { date: to });
+    expect(moved.statusCode, moved.body).toBe(200);
+    expect(await placements(edition.id)).toEqual([["back-1", fresh]]);
+    const audit = await su.query(
+      `select action, data->>'booking' as booking from app.audit_event
+       where target_id = $1 and action like 'ad_placement.%' order by at, id`,
+      [edition.id],
+    );
+    expect(audit.rows).toEqual([
+      { action: "ad_placement.set", booking: old },
+      { action: "ad_placement.clear", booking: old },
+      { action: "ad_placement.set", booking: fresh },
+    ]);
+
+    // a picture set in a slot by hand (the L2.3 path): cleared once the plan has no back-page ads
+    const asset = await su.query<{ id: string }>(
+      `insert into app.asset (org_id, publication_id, desk_key, sha256, bytes, mime, width_px, height_px, status,
+         uploaded_by, version_id)
+       values ($1, $2, 'p-00000a1201', $3, 1000, 'image/jpeg', 500, 334, 'ready', $4, 'v-original') returning id`,
+      [a.orgId, a.pubId, "a12".padStart(64, "0"), ownerId],
+    );
+    await su.query(
+      `insert into app.ad_slot_artwork (org_id, publication_id, edition_id, slot, asset_id, w_mm, h_mm, set_by)
+       values ($1, $2, $3, 'back-3', $4, 60, 40, $5)`,
+      [a.orgId, a.pubId, edition.id, asset.rows[0]?.id, ownerId],
+    );
+    const off = await correct(edition.id, { backPageAds: false });
+    expect(off.statusCode, off.body).toBe(200);
+    expect(await placements(edition.id)).toEqual([]);
+    const art = await su.query("select slot from app.ad_slot_artwork where edition_id = $1", [edition.id]);
+    expect(art.rows).toEqual([]);
+    expect((await edits(edition.id)).at(-1)?.data).toMatchObject({ backPageAds: false, artworkCleared: ["back-3"] });
+  });
+
+  it("locks the new date's bookings before the edition: a booking changed meanwhile is waited for, never deadlocked", async () => {
+    const [from, to] = [fixDay(), fixDay()];
+    const advertiser = await call(
+      "POST",
+      `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}/advertisers`,
+      people.advertising!.cookie,
+      {
+        name: "Example Fictional Opticians",
+      },
+    );
+    expect(advertiser.statusCode, advertiser.body).toBe(201);
+    const booked = await change(
+      "POST",
+      `/api/v1/orgs/${a.orgId}/pubs/${a.pubId}/bookings`,
+      people.advertising!.cookie,
+      {
+        advertiserId: advertiser.json().id,
+        wMm: 120,
+        hMm: 80.5,
+        colour: "colour",
+        slot: null,
+        dates: [to],
+      },
+    );
+    expect(booked.statusCode, booked.body).toBe(201);
+    const booking = booked.json().id as string;
+    const edition = await make(from);
+    // a change of that booking in progress (place.ts's order: the booking, then the editions it runs in)
+    const other = await db.connect("postgres");
+    try {
+      await other.query("begin");
+      await other.query("select id from app.ad_booking where id = $1 for update", [booking]);
+      const pending = correct(edition.id, { date: to });
+      // the correction waits for the booking, holding no lock on the edition yet
+      for (let i = 0; i < 600; i += 1) {
+        const waiting = await su.query(
+          "select 1 from pg_locks where locktype in ('transactionid', 'tuple') and not granted",
+        );
+        if (waiting.rowCount) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      await other.query("select id from app.edition where id = $1 for update nowait", [edition.id]);
+      await other.query("update app.ad_booking set status = 'cancelled' where id = $1", [booking]);
+      await other.query("commit");
+      const res = await pending;
+      expect(res.statusCode, res.body).toBe(200);
+      // the booking was cancelled before the correction read it: it is not placed
+      expect(await placements(edition.id)).toEqual([]);
+    } finally {
+      await other.end();
+    }
+  });
+
+  it.each([
+    ["Advertising (◐: ad positions only)", "advertising"],
+    ["Prepress (◐: colour map only)", "prepress"],
+    ["Sub-editor", "sub_editor"],
+    ["Reporter", "reporter"],
+  ])("refuses %s (403), and changes nothing", async (_who, role) => {
+    const edition = await make(fixDay());
+    const res = await correct(edition.id, { pages: 4 }, people[role]!.cookie);
+    expect(res.statusCode, res.body).toBe(403);
+    expect((await su.query("select pages from app.edition where id = $1", [edition.id])).rows[0]).toEqual({ pages: 8 });
+  });
+
+  it("a PATCH that changes nothing writes nothing", async () => {
+    const edition = await make(fixDay());
+    const done = await run(edition.id);
+    const before = await su.query("select updated_at from app.edition where id = $1", [edition.id]);
+    const res = await correct(edition.id, { date: edition.date, pages: 8, backPageAds: true, issue: "" });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toEqual(edition);
+    const after = await su.query("select updated_at from app.edition where id = $1", [edition.id]);
+    expect(after.rows).toEqual(before.rows);
+    expect((await su.query("select state from app.layout_run where id = $1", [done])).rows[0]).toEqual({
+      state: "done",
+    });
+    expect(await edits(edition.id)).toEqual([]);
   });
 });

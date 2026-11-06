@@ -46,14 +46,16 @@ import hashlib
 import json
 import math
 import os
-import traceback
+import re
+import stat
+import time
 import zlib
 from datetime import date
 from pathlib import Path
 
 import deskgen as DG
 import deskprinted
-from deskcommon import PHOTO_ID, log, read_json, write_json
+from deskcommon import PHOTO_ID, log_error, read_json, write_json
 from deskmsg import MESSAGES, data, msg
 
 G, CP, X, MM = DG.G, DG.CP, DG.X, DG.MM
@@ -444,8 +446,8 @@ class PageSession:
             if missing:
                 try:
                     self._measure(key, *missing[0])
-                except Exception:  # noqa: BLE001 — idle work never stops the editor; the setting is measured on use
-                    log(traceback.format_exc())
+                except Exception as e:  # noqa: BLE001 — idle work never stops the editor; the setting is measured on use
+                    log_error(e)
                     self.partial.discard(key)
                 return True
             self.partial.discard(key)
@@ -453,8 +455,8 @@ class PageSession:
                 self._measurers.pop((key, cls), None)
             try:
                 self.engine.store_options(self.built, key, self.options[key])
-            except OSError:                              # the cache is a convenience: measured again next time
-                log(traceback.format_exc())
+            except OSError as e:                         # the cache is a convenience: measured again next time
+                log_error(e)
             return True
         return False
 
@@ -1192,19 +1194,21 @@ class PageSession:
 
     def _raster_key(self, data: bytes, width_px: int, height_px: int) -> str:
         """A raster in the cache the server makes the screen's pictures from (rasters/<key>.cmyk and its size), keyed by
-        its content."""
+        its content. Each use marks it used (prune_rasters keeps it); one the cache pruned is written again."""
         h = hashlib.sha1(data).hexdigest()[:24]
-        meta = self.engine.cache_dir("rasters") / f"{h}.json"
-        if not meta.exists():
-            _atomic(self.engine.cache_dir("rasters") / f"{h}.cmyk", data)
-            write_json(meta, {"width_px": width_px, "height_px": height_px})
+        d = self.engine.cache_dir("rasters")
+        if not raster_used(d, h):
+            _atomic(d / f"{h}.cmyk", data)
+            write_json(d / f"{h}.json", {"width_px": width_px, "height_px": height_px})
+            _maybe_prune(d)
         return h
 
     def _full_raster(self, pid: str, W0: int, H0: int) -> str | None:
         """The cache key of a photo's whole raster, the run's own as it prints (the page's photo folder), for the
-        editor's photo mode and cropped photos; kept for the session (a photo id's pixels never change). None when it
-        cannot be read: the page is drawn without it."""
-        if pid not in self._fulls:
+        editor's photo mode and cropped photos; kept for the session (a photo id's pixels never change), marked used on
+        each draw and written again if the cache pruned it. None when it cannot be read: the page is drawn without it."""
+        key = self._fulls.get(pid)
+        if pid not in self._fulls or (key is not None and not raster_used(self.engine.cache_dir("rasters"), key)):
             try:
                 raw = DG.gz_raw(self.photo_dir / f"{pid}.cmyk.gz")
             except (OSError, EOFError, zlib.error):      # missing, cut short or damaged
@@ -1263,6 +1267,71 @@ def _atomic(path: Path, data: bytes) -> None:
     tmp.write_bytes(data)
     tmp.chmod(0o600)
     tmp.replace(path)
+
+
+# ------------------------------------------------------------------------------------------- the raster cache
+RASTER_NAME = re.compile(r"([0-9a-f]{24})\.(json|cmyk|jpg)")   # rasters/<key>.<ext>: nothing else there is touched
+RASTER_UNUSED_S = 24 * 3600      # an entry not used for a day goes
+RASTER_OPEN_S = 3600             # never one used within the hour: a page open in the editor keeps its pictures
+# a whole raster is at most 16 MB (2000 px square, CMYK) and the pilot's largest 8.6 MB (1800 x 1200): 2 GiB holds
+# every photo of its biggest edition (109) at that size, twice over
+RASTER_CAP = 2 << 30
+RASTER_PRUNE_EVERY_S = 300       # in each process, when it writes a raster
+_pruned_at = 0.0
+
+
+def raster_used(d: Path, key: str) -> bool:
+    """Marks a cached raster used now (its .json's time is its last use) → whether it is whole (else it is written
+    again)."""
+    try:
+        os.utime(d / f"{key}.json")
+    except FileNotFoundError:
+        return False
+    return (d / f"{key}.cmyk").is_file()
+
+
+def prune_rasters(d: Path, now: float) -> None:
+    """Deletes the cached rasters (each key's .json, .cmyk and .jpg) not used for RASTER_UNUSED_S, and while the folder
+    is still over RASTER_CAP the least recently used first, but never one used within RASTER_OPEN_S. The .json goes
+    first, so a writer writes the whole entry again; a file already gone is fine (several processes prune one home).
+    Only regular files named as the cache names them; a link is never followed."""
+    used: dict[str, float] = {}
+    size: dict[str, int] = {}
+    with os.scandir(d) as files:
+        for f in files:
+            m = RASTER_NAME.fullmatch(f.name)
+            try:
+                st = f.stat(follow_symlinks=False) if m else None
+            except FileNotFoundError:
+                continue
+            if st is not None and stat.S_ISREG(st.st_mode):
+                used[m[1]] = max(used.get(m[1], 0.0), st.st_mtime)   # its newest file: a writer's .cmyk before its .json
+                size[m[1]] = size.get(m[1], 0) + st.st_size
+    total = sum(size.values())
+    for key in sorted(used, key=used.__getitem__):                   # least recently used first
+        age = now - used[key]
+        if age <= RASTER_OPEN_S or (age <= RASTER_UNUSED_S and total <= RASTER_CAP):
+            continue
+        try:
+            if now - os.stat(d / f"{key}.json", follow_symlinks=False).st_mtime <= RASTER_OPEN_S:
+                continue                                             # used since the folder was read
+        except FileNotFoundError:
+            pass
+        for ext in ("json", "cmyk", "jpg"):
+            (d / f"{key}.{ext}").unlink(missing_ok=True)
+        total -= size[key]
+
+
+def _maybe_prune(d: Path) -> None:
+    """prune_rasters, at most every RASTER_PRUNE_EVERY_S in this process."""
+    global _pruned_at
+    now = time.time()
+    if now - _pruned_at >= RASTER_PRUNE_EVERY_S:
+        _pruned_at = now
+        try:
+            prune_rasters(d, now)
+        except OSError as e:                     # the cache is a convenience: pruned again on a later write
+            log_error(e)
 
 
 def request_ok(req: dict, keys: tuple) -> None:

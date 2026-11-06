@@ -193,23 +193,28 @@ describe("sign-in", () => {
     },
   );
 
-  it(`limits one address to ${SIGN_INS_PER_ADDRESS} sign-ins in 5 minutes (a newsroom behind one NAT); forged forwarding headers do not help`, async () => {
-    const address = "192.0.2.50";
-    for (let i = 0; i < SIGN_INS_PER_ADDRESS; i += 1) {
-      expect((await signIn(someone(), PASSWORD, {}, address)).statusCode).not.toBe(429);
-    }
-    const sixth = await it_.app.inject({
-      method: "POST",
-      url: "/api/auth/sign-in/email",
-      headers: { ...FROM_APP, "x-forwarded-for": "203.0.113.200", "x-pgn-client-ip": "203.0.113.201" },
-      payload: { email: someone(), password: PASSWORD },
-      remoteAddress: address,
-    });
-    expect(sixth.statusCode).toBe(429);
-    const retry = Number(sixth.headers["x-retry-after"]);
-    expect(retry).toBeGreaterThan(0);
-    expect(retry).toBeLessThanOrEqual(300);
-  });
+  // over a hundred sign-ins, each hashing a password: seconds alone, a minute on a busy machine
+  it(
+    `limits one address to ${SIGN_INS_PER_ADDRESS} sign-ins in 5 minutes (a newsroom behind one NAT); forged forwarding headers do not help`,
+    { timeout: 60_000 },
+    async () => {
+      const address = "192.0.2.50";
+      for (let i = 0; i < SIGN_INS_PER_ADDRESS; i += 1) {
+        expect((await signIn(someone(), PASSWORD, {}, address)).statusCode).not.toBe(429);
+      }
+      const sixth = await it_.app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/email",
+        headers: { ...FROM_APP, "x-forwarded-for": "203.0.113.200", "x-pgn-client-ip": "203.0.113.201" },
+        payload: { email: someone(), password: PASSWORD },
+        remoteAddress: address,
+      });
+      expect(sixth.statusCode).toBe(429);
+      const retry = Number(sixth.headers["x-retry-after"]);
+      expect(retry).toBeGreaterThan(0);
+      expect(retry).toBeLessThanOrEqual(300);
+    },
+  );
 });
 
 describe("password reset and change", () => {

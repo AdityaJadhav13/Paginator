@@ -1680,10 +1680,7 @@ const TABLE = {
   "m.edit.unknownCommand": ["unknown command {cmd}", "अज्ञात आदेश {cmd}"],
   "m.edit.missing": ["missing {fields}", "{fields} नाही"],
   "m.edit.invalid": ["the request is not valid", "ही विनंती योग्य नाही"],
-  "m.edit.engineFailed": [
-    "something went wrong in the engine ({kind}: {error})",
-    "इंजिनमध्ये काहीतरी चुकले ({kind}: {error})",
-  ],
+  "m.edit.engineFailed": ["something went wrong in the engine", "इंजिनमध्ये काहीतरी चुकले"],
   "m.move.whichStory": ["Say which story to move.", "कोणती बातमी हलवायची ते सांगा."],
   "m.move.whichPage": [
     "Say which page to move the story to, as a page number.",
@@ -1732,8 +1729,8 @@ const TABLE = {
     "या पानावरून एक बातमी पान {page} वर हलवली: हे पान उघडा, जागा भरा आणि जतन करा.",
   ],
   "m.save.filesNotFinished": [
-    "The page was saved, but its files could not be finished: {error}",
-    "पान जतन झाले, पण त्याच्या फायली पूर्ण होऊ शकल्या नाहीत: {error}",
+    "The page was saved, but its files could not be finished.",
+    "पान जतन झाले, पण त्याच्या फायली पूर्ण होऊ शकल्या नाहीत.",
   ],
   "m.save.heldUnreadable": [
     "This page cannot be saved yet: the engine's list of its stories locked on other pages cannot be read.",
@@ -1887,6 +1884,10 @@ const TABLE = {
   "m.run.starting": ["Starting…", "सुरू होत आहे…"],
   "m.run.cancelledBefore": ["Cancelled before it started.", "सुरू होण्यापूर्वीच रद्द केली."],
   "m.run.cancelled": ["Cancelled.", "रद्द केली."],
+  "m.run.editionChanged": [
+    "Set aside: the edition's date or pages changed after this layout. Lay it out again.",
+    "बाजूला ठेवली: या मांडणीनंतर अंकाची तारीख किंवा पाने बदलली. पुन्हा मांडणी करा.",
+  ],
   "m.run.engineStarted": ["The layout engine has started.", "मांडणी इंजिन सुरू झाले."],
   "m.run.engineNotStarted": [
     "The layout engine could not be started: {error}.",
@@ -1901,8 +1902,8 @@ const TABLE = {
     "मांडणी इंजिनचे काम संपले, पण एकही पान तयार झाले नाही.",
   ],
   "m.run.notMerged": [
-    "The pages were made, but they could not be put into one file: {error}",
-    "पाने तयार झाली, पण ती एका फाइलमध्ये एकत्र करता आली नाहीत: {error}",
+    "The pages were made, but they could not be put into one file.",
+    "पाने तयार झाली, पण ती एका फाइलमध्ये एकत्र करता आली नाहीत.",
   ],
   "m.run.checking": [
     "Checking every page with the independent PDF/X-1a checker…",
@@ -2111,6 +2112,59 @@ const TABLE = {
   "m.bundle.deletedInDesk": [
     "Deleted in the Desk after it was imported: not added again.",
     "आयात केल्यानंतर Desk मधून हटवली: पुन्हा जोडली नाही.",
+  ],
+  // ---- a Word file's refusals and notes (deskserver/docx.py)
+  "m.docx.overSize": ["This Word file is larger than 20 MB.", "ही Word फाइल 20 MB पेक्षा मोठी आहे."],
+  "m.docx.protected": [
+    "This Word file is protected with a password, or is an old .doc file: save it as .docx without a password and try again.",
+    "ही Word फाइल पासवर्डने सुरक्षित आहे, किंवा ही जुनी .doc फाइल आहे: ती पासवर्डशिवाय .docx म्हणून जतन करा आणि पुन्हा प्रयत्न करा.",
+  ],
+  "m.docx.tooLarge": ["This Word file is too large to read.", "ही Word फाइल वाचण्यासाठी खूप मोठी आहे."],
+  "m.docx.damaged": [
+    "This Word file is damaged. Save it again and try again.",
+    "ही Word फाइल खराब झाली आहे. ती पुन्हा जतन करून पुन्हा प्रयत्न करा.",
+  ],
+  "m.docx.notWord": [
+    "This is not a Word (.docx) file. Save it as .docx and try again.",
+    "ही Word (.docx) फाइल नाही. ती .docx म्हणून जतन करून पुन्हा प्रयत्न करा.",
+  ],
+  "m.docx.noStory": [
+    "No story was found in this Word file: it needs a headline and some text.",
+    "या Word फाइलमध्ये एकही बातमी सापडली नाही: बातमीला मथळा आणि थोडा मजकूर हवा.",
+  ],
+  "m.docx.tooManyStories": [
+    "This file holds more than {max} stories; only the first {max} were imported.",
+    "या फाइलमध्ये {max} पेक्षा जास्त बातम्या आहेत; फक्त पहिल्या {max} आयात केल्या.",
+  ],
+  "m.docx.emptyHeading1": [
+    "1 heading had no text under it and was not imported.",
+    "1 मथळ्याखाली मजकूर नव्हता, म्हणून तो आयात केला नाही.",
+  ],
+  "m.docx.emptyHeadingsN": [
+    "{n} headings had no text under them and were not imported.",
+    "{n} मथळ्यांखाली मजकूर नव्हता, म्हणून ते आयात केले नाहीत.",
+  ],
+  "m.docx.table1": [
+    "1 table was not imported: copy its text into the article if it is needed.",
+    "1 तक्ता आयात केला नाही: त्यातील मजकूर हवा असेल तर तो बातमीत कॉपी करा.",
+  ],
+  "m.docx.tablesN": [
+    "{n} tables were not imported: copy their text into the article if it is needed.",
+    "{n} तक्ते आयात केले नाहीत: त्यांतील मजकूर हवा असेल तर तो बातमीत कॉपी करा.",
+  ],
+  "m.docx.textBox1": ["1 text box was not imported.", "1 मजकूर चौकट आयात केली नाही."],
+  "m.docx.textBoxesN": ["{n} text boxes were not imported.", "{n} मजकूर चौकटी आयात केल्या नाहीत."],
+  "m.docx.picture1": [
+    "1 picture was not imported: add photos in the Desk.",
+    "1 चित्र आयात केले नाही: छायाचित्रे Desk मध्ये जोडा.",
+  ],
+  "m.docx.picturesN": [
+    "{n} pictures were not imported: add photos in the Desk.",
+    "{n} चित्रे आयात केली नाहीत: छायाचित्रे Desk मध्ये जोडा.",
+  ],
+  "m.docx.formatting": [
+    "Formatting (bold, italic, sizes) is not kept: the Desk sets the type.",
+    "स्वरूपण (ठळक, तिरके, आकार) ठेवले नाही: अक्षरांची मांडणी Desk स्वतः करतो.",
   ],
 
   // ---- shared words

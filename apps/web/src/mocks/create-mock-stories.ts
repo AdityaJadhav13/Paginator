@@ -30,7 +30,9 @@
  * acting, and only members who would see the story (and read its comments). Each change is a live update (`emit`).
  * Editions (plan §1 L2.1) as the API's src/modules/editions: listed for edition.view, newest first, with their stories
  * counted; made by a full edition.create (one a date: 409 edition_exists with it as `current`; an Idempotency-Key
- * replaying its first answer); a story put in or taken out by its PATCH (`editionId`, the desk's); and "Send to the
+ * replaying its first answer); its folio, date, pages and back-page ads changed by a full edition.edit (409
+ * edition_released for a correction once released, 409 edition_exists for a date taken; no layout runs here, so never
+ * run_active); a story put in or taken out by its PATCH (`editionId`, the desk's); and "Send to the
  * Desk" (a full desk.export) answering a fictional ZIP of the edition's Ready stories, never a spiked one.
  * Word imports (L2.2) as the API's: a Word file uploaded (purpose docx, up to 10 MiB, by whoever may create a story),
  * then POST …/imports/docx (202, an Idempotency-Key replaying its first answer; a file whose first bytes are not a ZIP's
@@ -1473,6 +1475,25 @@ export function createMockStories(deps: MockStoryDeps): {
         (edition) => edition.id === editionId && edition.orgId === orgId && edition.publicationId === pubId,
       );
       if (!found) return failure(NOT_FOUND);
+      // a correction of the date, pages or back-page ads: never once released, nor to a date another edition has
+      const corrects = (["date", "pages", "backPageAds"] as const).some(
+        (k) => patch[k] !== undefined && patch[k] !== found[k],
+      );
+      if (corrects && (found.status === "released" || found.status === "archived")) {
+        return failure(
+          answer(409, "edition_released", "This edition has been released: its date and pages can no longer change."),
+        );
+      }
+      const taken = editionRows.find(
+        (edition) =>
+          edition !== found && edition.orgId === orgId && edition.publicationId === pubId && edition.date === patch.date,
+      );
+      if (taken) {
+        return failure({
+          ...answer(409, "edition_exists", "There is already an edition for that date."),
+          current: editionView(taken),
+        });
+      }
       const changed: EditionRow = { ...found, ...patch };
       editionRows = editionRows.map((edition) => (edition === found ? changed : edition));
       deps.emit?.(orgId, { type: "edition", publicationId: pubId, editionId });
@@ -1571,7 +1592,14 @@ export function createMockStories(deps: MockStoryDeps): {
       if (docx && bytes > MAX_DOCX_BYTES) {
         return failure({
           ...answer(422, "docx_refused", NOT_WORD),
-          details: [{ field: "body.bytes", message: "This Word file is larger than 10 MB." }],
+          details: [
+            {
+              field: "body.bytes",
+              message: "This Word file is larger than 10 MB.",
+              reason: "docx.over_size",
+              params: { mb: 10 },
+            },
+          ],
         });
       }
       if (!dataset && !pdf && bytes > MAX_BYTES)

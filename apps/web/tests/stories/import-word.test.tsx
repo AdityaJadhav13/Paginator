@@ -212,4 +212,40 @@ describe("Import a Word file", () => {
     expect(sheet.getByLabelText("Word फाइल (.docx)")).toBeInTheDocument();
     expect(sheet.getByRole("button", { name: "आयात करा" })).toBeInTheDocument();
   });
+
+  it("says the API's refusal in Marathi, from its reason and values (L2-401)", async () => {
+    const environment = createMockApplicationEnvironment();
+    const refusal = (field: string, message: string, reason: string, params?: Record<string, number>) => ({
+      kind: "answer" as const,
+      status: 422,
+      code: "docx_refused" as const,
+      message,
+      requestId: "req-fictional",
+      details: [{ field, message, reason, ...(params ? { params } : {}) }],
+    });
+    environment.sessionController.setProblem(
+      refusal("file", "This Word file is protected with a password, or is an old .doc file.", "docx.protected"),
+      ["imports.create"],
+    );
+    renderAuth(STORIES, { preset: "sahyadri-editor", language: "mr", environment });
+    const user = userEvent.setup({ applyAccept: false });
+    await screen.findByRole("table");
+    await user.click(screen.getByRole("button", { name: "Word फाइल आयात करा" }));
+    const sheet = within(await screen.findByRole("dialog", { name: "Word फाइल आयात करा" }));
+    await user.upload(sheet.getByLabelText("Word फाइल (.docx)"), docx());
+    await user.click(sheet.getByRole("button", { name: "आयात करा" }));
+    expect(await sheet.findByText("ही Word फाइल आयात झाली नाही")).toBeInTheDocument();
+    const locked = sheet.getByText(/^ही Word फाइल पासवर्डने सुरक्षित आहे, किंवा ही जुनी \.doc फाइल आहे/);
+    expect(locked).not.toHaveAttribute("lang");
+
+    environment.sessionController.setProblem(null, ["imports.create"]);
+    environment.sessionController.setProblem(
+      refusal("body.bytes", "This Word file is larger than 10 MB.", "docx.over_size", { mb: 10 }),
+      ["media.presign"],
+    );
+    await user.upload(sheet.getByLabelText("Word फाइल (.docx)"), docx("fictional-second.docx"));
+    await user.click(sheet.getByRole("button", { name: "आयात करा" }));
+    expect(await sheet.findByText("ही Word फाइल 10 MB पेक्षा मोठी आहे.")).toBeInTheDocument();
+    expect(sheet.queryByText("This Word file is larger than 10 MB.")).not.toBeInTheDocument();
+  });
 });

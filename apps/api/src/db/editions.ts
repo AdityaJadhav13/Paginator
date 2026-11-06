@@ -2,6 +2,7 @@
 // function runs inside withTenant: the organisation and publication walls apply. One edition a publication and date;
 // its Desk key is the date itself (the Desk's first edition of a day), so the Desk's id and the edition's date agree.
 import { sql } from "kysely";
+import type { DeskTextValue } from "./layout.ts";
 import type { Tenant, Tx } from "./tenant.ts";
 
 export type EditionRow = {
@@ -91,4 +92,43 @@ export async function setFolio(
   await sql`update app.edition set volume = ${folio.volume}, issue = ${folio.issue}, price = ${folio.price},
       folio_changed_at = clock_timestamp(), updated_at = now()
     where publication_id = ${publicationId} and id = ${editionId}`.execute(tx);
+}
+
+/** The edition's date, Desk key (it starts with the date), pages and back-page ads set (the caller holds the edition's
+ * lock and found no other edition on the date). Then every done run of it is set aside: cancelled, `setAside` its
+ * message, finished_at kept (the board, the editor and the release use the newest done run). And the plan's pages past
+ * the new count are emptied (the API may not delete them), so shrinking and growing again brings no old plan back.
+ * Returns how many runs were set aside, and the plan pages emptied as they were (for the audit). */
+export async function correctEdition(
+  tx: Tx,
+  who: Tenant,
+  publicationId: string,
+  editionId: string,
+  edition: Pick<NewEdition, "date" | "pages" | "backPageAds"> & { deskKey: string },
+  setAside: DeskTextValue,
+): Promise<{ setAside: number; planCleared: { page: number; section_id: string | null; note: string }[] }> {
+  await sql`update app.edition set edition_date = ${edition.date}::date, desk_key = ${edition.deskKey},
+      pages = ${edition.pages}, back_page_ads = ${edition.backPageAds}, updated_at = now()
+    where publication_id = ${publicationId} and id = ${editionId}`.execute(tx);
+  const { rows } = await sql<{ id: string }>`update app.layout_run set state = 'cancelled',
+      message = ${JSON.stringify(setAside)}::jsonb, updated_at = now()
+    where publication_id = ${publicationId} and edition_id = ${editionId} and state = 'done'
+    returning id`.execute(tx);
+  const cleared = await sql<{ page: number; section_id: string | null; note: string }>`
+    with old as (select page_no, section_id, note from app.flatplan_page
+      where publication_id = ${publicationId} and edition_id = ${editionId} and page_no > ${edition.pages}
+        and (section_id is not null or note <> '') for update)
+    update app.flatplan_page f set section_id = null, note = '', updated_by = ${who.userId}, updated_at = now()
+    from old where f.publication_id = ${publicationId} and f.edition_id = ${editionId} and f.page_no = old.page_no
+    returning old.page_no as page, old.section_id, old.note`.execute(tx);
+  return { setAside: rows.length, planCleared: cleared.rows.sort((a, b) => a.page - b.page) };
+}
+
+/** The bookings that run on the date (any state), locked for share in id order: a correction to that date may place
+ * them, and place.ts's lock order is bookings before editions (a placement's foreign key takes a key-share lock on its
+ * booking), so they are locked before the edition; a booking's own change waits for the correction, then finds the
+ * edition on its new date. */
+export async function lockBookingsOfDate(tx: Tx, publicationId: string, date: string): Promise<void> {
+  await sql`select id from app.ad_booking where publication_id = ${publicationId} and ${date}::date = any (dates)
+    order by id for share`.execute(tx);
 }

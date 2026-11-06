@@ -7,6 +7,7 @@ Run from the repository root:
 """
 from __future__ import annotations
 
+import contextlib
 import gzip
 import http.client
 import io
@@ -20,6 +21,7 @@ import threading
 import time
 import unicodedata
 import unittest
+import unittest.mock
 import zipfile
 from pathlib import Path
 from urllib.parse import quote
@@ -631,6 +633,25 @@ class ImagePipeline(unittest.TestCase):
             self.assertEqual((img.format, img.size), ("JPEG", (30, 20)))
         with self.assertRaises(DeskError):
             images.preview_from_cmyk_gz(gzip.compress(raw, mtime=0), 31, 20)
+
+    def test_a_raster_pruned_while_it_is_read_is_not_found(self):
+        with tempfile.TemporaryDirectory() as home:
+            d = Path(home) / "cache" / "rasters"
+            d.mkdir(parents=True)
+            key = "0123456789abcdef01234567"
+            write_json(d / f"{key}.json", {"width_px": 3, "height_px": 2})
+            (d / f"{key}.cmyk").write_bytes(bytes(24))
+            service = editing.EditService(None, Path(home))
+            self.assertEqual(service.raster(key).name, f"{key}.jpg")      # whole: its picture is made
+            (d / f"{key}.jpg").unlink()
+            real = Path.read_bytes
+            def gone(path):                                            # deskedit.prune_rasters, after the check
+                if path.suffix == ".cmyk":
+                    raise FileNotFoundError(path)
+                return real(path)
+            with unittest.mock.patch.object(Path, "read_bytes", gone), self.assertRaises(DeskError) as e:
+                service.raster(key)
+            self.assertEqual(e.exception.status, 404)
 
     def test_missing_profile_is_a_clear_error(self):
         images.rgb_to_cmyk = REAL_RGB_TO_CMYK
@@ -1414,13 +1435,19 @@ class WordImportTests(DeskCase):
         self.assertEqual([a["byline"] for a in res["articles"]], ["प्रतिनिधी, नवनगर", ""])
         self.assertEqual({a["source"] for a in res["articles"]}, {"word"})
         self.assertEqual(len(res["notes"]), 1)                                  # the heading with no text under it
+        self.assertEqual(res["msgs"][res["notes"][0]], {"code": "m.docx.emptyHeading1", "params": {}})   # (Marathi)
         self.assertEqual(len(self.call("GET", f"/api/editions/{eid}").json()["articles"]), 2)
 
     def test_files_that_are_not_word_files_are_refused(self):
         eid = self.edition("2026-07-21")
         url = f"/api/editions/{eid}/articles/import-docx"
-        self.assertIn("not a Word", self.call("POST", url, raw=b"plain text", expect=400).json()["error"])
-        self.call("POST", url, raw=b"\0" * (20 * 1024 * 1024 + 1), expect=413)
+        said = self.call("POST", url, raw=b"plain text", expect=400).json()
+        self.assertIn("not a Word", said["error"])
+        self.assertEqual(said["msgs"][said["error"]], {"code": "m.docx.notWord", "params": {}})   # the screen's code
+        said = self.call("POST", url, raw=b"\0" * (20 * 1024 * 1024 + 1), expect=413).json()
+        self.assertEqual(said["msgs"][said["error"]], {"code": "m.docx.overSize", "params": {}})
+        said = self.call("POST", url, raw=word_file([("Title", "मजकूर नसलेला मथळा")]), expect=400).json()
+        self.assertEqual(said["msgs"][said["error"]], {"parts": [{"code": "m.docx.noStory", "params": {}}]})
         self.call("POST", url, raw=b"PK", headers={"X-Desk": ""}, expect=403)
         self.call("POST", "/api/editions/2099-01-01/articles/import-docx", raw=b"PK", expect=404)
 
@@ -2047,10 +2074,13 @@ class EditTests(DeskCase):
             raise OSError("a fictional disk problem")
         jobs.render_page = broken
         try:
-            saved = self.call("POST", f"{url}/save", {}).json()
+            with contextlib.redirect_stderr(io.StringIO()) as logged:
+                saved = self.call("POST", f"{url}/save", {}).json()
         finally:
             jobs.render_page = real
-        self.assertIn("a fictional disk problem", saved["error"])
+        self.assertEqual(saved["error"], "The page was saved, but its files could not be finished.")   # no English
+        self.assertIn("OSError: a fictional disk problem", logged.getvalue())    # the error's own words: the log
+        self.assertEqual(saved["msgs"][saved["error"]], {"code": "m.save.filesNotFinished", "params": {}})
         self.assertEqual((saved["press_ready"], saved["pages_to_save"]), (False, [1]))
         p1 = self.page_of(self.status(eid, rid), 1)
         self.assertTrue(p1["needs_save"])

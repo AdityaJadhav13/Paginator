@@ -5,6 +5,8 @@
  * publication's edition defaults, the Brand screen) for a full edition.create, with one
  * Idempotency-Key per edition asked for, the same on a retry after no answer. "Send to the Desk" for a full
  * desk.export: the edition's Ready stories as a story bundle, saved as a file; spiked stories are never sent.
+ * "Correct date and pages" for a full edition.edit, before release (a side sheet: date, pages, back-page ads; only the
+ * fields changed are sent): the API sets the edition's layouts aside and places the new date's ads.
  *
  * Master and detail (02 §3.5): a table of the editions on the start side, the chosen one's detail beside it (under it on
  * a phone), "Send to the Desk" its primary action; "Create edition" is the page's, and opens a side sheet. A live change
@@ -37,9 +39,9 @@ import { paths, ROUTE_HEADING_ID } from "../../app/routes.ts";
 import { randomUuid } from "../../api/client.ts";
 import { formatDate } from "../../i18n/dates.ts";
 import { useI18n, type Translate } from "../../i18n/index.ts";
-import type { ApiProblem, EditionInputDto, PubEditionDto } from "../../services/index.ts";
+import type { ApiProblem, EditionInputDto, EditionPatchDto, PubEditionDto } from "../../services/index.ts";
 import { OfflineNotice } from "../auth/connection.tsx";
-import { ProblemMessage } from "../auth/ProblemMessage.tsx";
+import { DetailWords, ProblemMessage } from "../auth/ProblemMessage.tsx";
 import { useSession } from "../auth/SessionProvider.tsx";
 import { useLiveEvents } from "../live/live-context.tsx";
 import { mayCreateEdition, mayExport } from "../stories/access.ts";
@@ -86,6 +88,7 @@ export function EditionsScreen() {
   const publication = org?.publications.find((candidate) => candidate.id === pubId);
   const open = !!org && !(org.twoStep.required && !org.twoStep.satisfied);
   const create = open && mayCreateEdition(org, pubId);
+  const access = layoutAccess(org, pubId);
   return (
     <Stack gap="5">
       <PageHeader
@@ -111,7 +114,8 @@ export function EditionsScreen() {
           publicationName={publication?.name ?? ""}
           create={create}
           send={mayExport(org, pubId)}
-          layout={layoutAccess(org, pubId).view}
+          layout={access.view}
+          correct={access.editionEdit}
           creating={creating}
           onCreating={setCreating}
         />
@@ -143,6 +147,7 @@ function EditionsContent({
   create,
   send,
   layout,
+  correct,
   creating,
   onCreating,
 }: {
@@ -152,6 +157,7 @@ function EditionsContent({
   readonly create: boolean;
   readonly send: boolean;
   readonly layout: boolean;
+  readonly correct: boolean;
   readonly creating: boolean;
   readonly onCreating: (open: boolean) => void;
 }) {
@@ -160,6 +166,7 @@ function EditionsContent({
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [chosen, setChosen] = useState<string | null>(null);
   const [made, setMade] = useState<string | null>(null);
+  const [corrected, setCorrected] = useState<PubEditionDto | null>(null);
   const sent: Sent = useRef(null);
 
   const fetchList = useCallback(
@@ -198,6 +205,7 @@ function EditionsContent({
             sent={sent}
             onMade={(edition) => {
               setMade(formatDate(edition.date, language));
+              setCorrected(null);
               setChosen(edition.id);
               onCreating(false);
               void fetchList(true);
@@ -207,6 +215,14 @@ function EditionsContent({
       )}
       <div aria-live="polite">
         {made && <p className="pg-editions__made">{t("editions.create.done", { date: made })}</p>}
+        {corrected && (
+          <p className="pg-editions__made">
+            {t("editionEdit.done", {
+              date: formatDate(corrected.date, language),
+              pages: t("editions.pages", { count: corrected.pages }),
+            })}
+          </p>
+        )}
       </div>
       {load.status === "loading" && <ProgressIndicator role="status" label={t("editions.loading")} />}
       {load.status === "failed" && (
@@ -273,7 +289,22 @@ function EditionsContent({
               </tbody>
             </Table>
           </Panel>
-          <EditionDetail key={selected.id} orgId={orgId} pubId={pubId} edition={selected} send={send} layout={layout} />
+          <EditionDetail
+            key={selected.id}
+            orgId={orgId}
+            pubId={pubId}
+            edition={selected}
+            send={send}
+            layout={layout}
+            correct={correct}
+            onCorrected={(edition) => {
+              setMade(null);
+              setCorrected(edition);
+              // its date may have moved it in the list: it stays the one chosen
+              setChosen(edition.id);
+              void fetchList(true);
+            }}
+          />
         </div>
       )}
     </Stack>
@@ -293,16 +324,22 @@ function EditionDetail({
   edition,
   send,
   layout,
+  correct,
+  onCorrected,
 }: {
   readonly orgId: string;
   readonly pubId: string;
   readonly edition: PubEditionDto;
   readonly send: boolean;
   readonly layout: boolean;
+  readonly correct: boolean;
+  readonly onCorrected: (edition: PubEditionDto) => void;
 }) {
   const editions = useEditions();
   const { t, language } = useI18n();
   const [sending, setSending] = useState<Sending>({ state: "idle" });
+  const [correcting, setCorrecting] = useState(false);
+  const released = edition.status === "released" || edition.status === "archived";
   const date = formatDate(edition.date, language);
   const { counts } = edition;
   const countsNow = counts ? `${counts.stories}/${counts.ready}/${counts.spiked}` : "";
@@ -342,6 +379,32 @@ function EditionDetail({
           <ReadyBadge counts={counts} t={t} />
           <p className="pg-editions__meta">{details.join(" · ")}</p>
         </div>
+        {correct &&
+          (released ? (
+            <p>{t("editionEdit.released")}</p>
+          ) : (
+            <div>
+              <Button variant="secondary" onClick={() => setCorrecting(true)}>
+                {t("editionEdit.open")}
+              </Button>
+              <Drawer
+                open={correcting}
+                onClose={() => setCorrecting(false)}
+                title={t("editionEdit.open")}
+                closeLabel={t("shell.closeDialog")}
+              >
+                <CorrectEdition
+                  orgId={orgId}
+                  pubId={pubId}
+                  edition={edition}
+                  onCorrected={(now) => {
+                    setCorrecting(false);
+                    onCorrected(now);
+                  }}
+                />
+              </Drawer>
+            </div>
+          ))}
         {counts && (
           <p className="pg-editions__counts">
             {t("editions.counts", { stories: counts.stories, ready: counts.ready, spiked: counts.spiked })}
@@ -367,9 +430,11 @@ function EditionDetail({
                 {sending.problem.kind === "answer" &&
                   sending.problem.code === "bundle_refused" &&
                   sending.problem.details && (
-                    <ul lang="en">
+                    <ul>
                       {sending.problem.details.map((detail) => (
-                        <li key={detail.field}>{detail.message}</li>
+                        <li key={detail.field}>
+                          <DetailWords detail={detail} />
+                        </li>
                       ))}
                     </ul>
                   )}
@@ -396,6 +461,85 @@ function EditionDetail({
         )}
       </Stack>
     </Panel>
+  );
+}
+
+/** The edition's date, pages and back-page ads corrected (PATCH …/editions/:e): only the fields changed are sent. */
+function CorrectEdition({
+  orgId,
+  pubId,
+  edition,
+  onCorrected,
+}: {
+  readonly orgId: string;
+  readonly pubId: string;
+  readonly edition: PubEditionDto;
+  readonly onCorrected: (edition: PubEditionDto) => void;
+}) {
+  const editions = useEditions();
+  const { t } = useI18n();
+  const [date, setDate] = useState(edition.date);
+  const [pages, setPages] = useState(edition.pages);
+  const [backPageAds, setBackPageAds] = useState(edition.backPageAds);
+  const [pending, setPending] = useState(false);
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
+  const [dateError, setDateError] = useState(false);
+  const [unchanged, setUnchanged] = useState(false);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (pending) return;
+    setProblem(null);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return setDateError(true);
+    setDateError(false);
+    const patch: EditionPatchDto = {
+      ...(date !== edition.date ? { date } : {}),
+      ...(pages !== edition.pages ? { pages: pages as EditionInputDto["pages"] } : {}),
+      ...(backPageAds !== edition.backPageAds ? { backPageAds } : {}),
+    };
+    const nothing = Object.keys(patch).length === 0;
+    setUnchanged(nothing);
+    if (nothing) return;
+    setPending(true);
+    const result = await editions.update({ orgId, pubId, editionId: edition.id, patch });
+    setPending(false);
+    if (!result.ok) return setProblem(result.error);
+    onCorrected(result.value);
+  };
+
+  return (
+    <Stack gap="4">
+      <p>{t("editionEdit.explain")}</p>
+      <form className="pg-editions__form" onSubmit={(event) => void submit(event)} noValidate>
+        <Field
+          label={t("editions.create.date")}
+          required
+          requiredLabel={t("form.required")}
+          {...(dateError ? { errors: [t("editions.create.dateRequired")] } : {})}
+        >
+          <TextInput type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        </Field>
+        <Field label={t("glossary.pages")}>
+          <Select value={String(pages)} onChange={(event) => setPages(Number(event.target.value))}>
+            {EDITION_PAGES.map((count) => (
+              <option key={count} value={count}>
+                {count}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Checkbox
+          label={t("editions.backPageAds")}
+          checked={backPageAds}
+          onChange={(event) => setBackPageAds(event.target.checked)}
+        />
+        <Button type="submit" variant="primary" disabled={pending} aria-busy={pending}>
+          {pending ? t("editionEdit.saving") : t("editionEdit.save")}
+        </Button>
+      </form>
+      <div aria-live="polite">{unchanged && <p>{t("editionEdit.nothing")}</p>}</div>
+      {problem && <ProblemMessage problem={problem} />}
+    </Stack>
   );
 }
 

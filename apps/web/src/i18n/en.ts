@@ -21,6 +21,9 @@ import { SITE_EN } from "./screens/site.en.ts";
 
 import { ONBOARDING_EN } from "./screens/onboarding.en.ts";
 import { PAPER_SIGNUP_EN } from "./screens/paperSignup.en.ts";
+import { EDITION_EDIT_EN } from "./screens/editionEdit.en.ts";
+import { DAILY_PATH_EN } from "./screens/dailyPath.en.ts";
+import { ENGINE_WORDS_EN } from "./screens/engineWords.en.ts";
 
 export const EN = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -805,7 +808,7 @@ export const EN = {
   "auditLog.action.comment.resolve": "Resolved a comment thread",
   "auditLog.action.desk.export": "Sent stories to the Desk",
   "auditLog.action.edition.create": "Created an edition",
-  "auditLog.action.edition.edit": "Changed an edition's volume, issue number or price",
+  "auditLog.action.edition.edit": "Changed an edition's date, pages, back-page ads, volume, issue number or price",
   "auditLog.action.import.create": "Started importing a Word file",
   "auditLog.action.import.done": "A Word file was imported",
   "auditLog.action.import.fail": "A Word file could not be imported",
@@ -1342,7 +1345,7 @@ export const EN = {
   "m.run.engineNotStarted": "The layout engine could not be started: {error}.",
   "m.run.putting": "Putting the edition PDF and the press files together…",
   "m.run.noPages": "The layout engine finished but made no pages.",
-  "m.run.notMerged": "The pages were made, but they could not be put into one file: {error}",
+  "m.run.notMerged": "The pages were made, but they could not be put into one file.",
   "m.run.checking": "Checking every page with the independent PDF/X-1a checker…",
   "m.run.made1": "1 page made.",
   "m.run.madeN": "{n} pages made.",
@@ -1827,6 +1830,9 @@ export const EN = {
 
   ...ONBOARDING_EN,
   ...PAPER_SIGNUP_EN,
+  ...EDITION_EDIT_EN,
+  ...DAILY_PATH_EN,
+  ...ENGINE_WORDS_EN,
 } as const;
 
 export type CatalogueKey = keyof typeof EN;

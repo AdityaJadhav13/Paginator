@@ -103,11 +103,22 @@ function retryAfterSeconds(headers: Headers): number | undefined {
 
 function fieldProblems(value: unknown): FieldProblemDto[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const problems = value.flatMap((item) =>
-    isObject(item) && typeof item["field"] === "string" && typeof item["message"] === "string"
-      ? [{ field: item["field"], message: item["message"] }]
-      : [],
-  );
+  const problems = value.flatMap((item): FieldProblemDto[] => {
+    if (!isObject(item) || typeof item["field"] !== "string" || typeof item["message"] !== "string") return [];
+    const { reason, params } = item;
+    const values =
+      isObject(params) && Object.values(params).every((v) => typeof v === "string" || typeof v === "number")
+        ? (params as Record<string, string | number>)
+        : undefined;
+    return [
+      {
+        field: item["field"],
+        message: item["message"],
+        ...(typeof reason === "string" ? { reason } : {}),
+        ...(values ? { params: values } : {}),
+      },
+    ];
+  });
   return problems.length > 0 ? problems : undefined;
 }
 

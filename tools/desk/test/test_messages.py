@@ -60,7 +60,8 @@ OLD = {
     "m.edit.unknownCommand": ({"cmd": "fly"}, "unknown command 'fly'"),
     "m.edit.missing": ({"fields": "session, page"}, "missing session, page"),
     "m.edit.invalid": ({}, "the request is not valid"),
-    "m.edit.engineFailed": ({"kind": "OSError", "error": "disk full"}, "something went wrong in the engine (OSError: disk full)"),
+    # MSG-21: no error's English inside the sentence any more (it is logged where it is caught)
+    "m.edit.engineFailed": ({}, "something went wrong in the engine"),
     "m.move.whichStory": ({}, "Say which story to move."),
     "m.move.whichPage": ({}, "Say which page to move the story to, as a page number."),
     "m.move.samePage": ({}, "The story is on this page already: choose another page."),
@@ -102,7 +103,7 @@ OLD = {
     "m.save.taking": ({"page": 3}, "Page 3 is taking a story from this page: when page 3 has been saved, open this page, "
                                    "fill the space and save it."),
     "m.save.movedFrom": ({"page": 1}, "A story moved from this page to page 1: open it, fill the space and save it."),
-    "m.save.filesNotFinished": ({"error": "disk full"}, "The page was saved, but its files could not be finished: disk full"),
+    "m.save.filesNotFinished": ({}, "The page was saved, but its files could not be finished."),       # MSG-21
     "m.save.heldUnreadable": ({}, "This page cannot be saved yet: the engine's list of its stories locked on other pages "
                                   "cannot be read."),
     "m.save.held": ({"name": H, "page": 2}, f"This page cannot be saved yet: {H} is also on page 2, locked there. Unlock "
@@ -166,12 +167,13 @@ OLD = {
     "m.run.starting": ({}, "Starting…"),
     "m.run.cancelledBefore": ({}, "Cancelled before it started."),
     "m.run.cancelled": ({}, "Cancelled."),
+    "m.run.editionChanged": ({}, "Set aside: the edition's date or pages changed after this layout. Lay it out again."),
     "m.run.engineStarted": ({}, "The layout engine has started."),
     "m.run.engineNotStarted": ({"error": "No such file or directory"},
                                "The layout engine could not be started: No such file or directory."),
     "m.run.putting": ({}, "Putting the edition PDF and the press files together…"),
     "m.run.noPages": ({}, "The layout engine finished but made no pages."),
-    "m.run.notMerged": ({"error": "disk full"}, "The pages were made, but they could not be put into one file: disk full"),
+    "m.run.notMerged": ({}, "The pages were made, but they could not be put into one file."),           # MSG-21
     "m.run.checking": ({}, "Checking every page with the independent PDF/X-1a checker…"),
     "m.run.made1": ({}, "1 page made."),
     "m.run.madeN": ({"n": 4}, "4 pages made."),
@@ -226,6 +228,24 @@ OLD = {
     "m.bundle.zip64": ({}, "This Pageinator stories file is in the ZIP64 form, which the Desk does not take: make the "
                            "file again."),
     "m.bundle.deletedInDesk": ({}, "Deleted in the Desk after it was imported: not added again."),
+    # a Word file's refusals and notes (deskserver/docx.py, MSG-5): the English as docx.py wrote it
+    "m.docx.overSize": ({}, "This Word file is larger than 20 MB."),
+    "m.docx.protected": ({}, "This Word file is protected with a password, or is an old .doc file: save it as .docx "
+                             "without a password and try again."),
+    "m.docx.tooLarge": ({}, "This Word file is too large to read."),
+    "m.docx.damaged": ({}, "This Word file is damaged. Save it again and try again."),
+    "m.docx.notWord": ({}, "This is not a Word (.docx) file. Save it as .docx and try again."),
+    "m.docx.noStory": ({}, "No story was found in this Word file: it needs a headline and some text."),
+    "m.docx.tooManyStories": ({"max": 200}, "This file holds more than 200 stories; only the first 200 were imported."),
+    "m.docx.emptyHeading1": ({}, "1 heading had no text under it and was not imported."),
+    "m.docx.emptyHeadingsN": ({"n": 3}, "3 headings had no text under them and were not imported."),
+    "m.docx.table1": ({}, "1 table was not imported: copy its text into the article if it is needed."),
+    "m.docx.tablesN": ({"n": 2}, "2 tables were not imported: copy their text into the article if it is needed."),
+    "m.docx.textBox1": ({}, "1 text box was not imported."),
+    "m.docx.textBoxesN": ({"n": 4}, "4 text boxes were not imported."),
+    "m.docx.picture1": ({}, "1 picture was not imported: add photos in the Desk."),
+    "m.docx.picturesN": ({"n": 5}, "5 pictures were not imported: add photos in the Desk."),
+    "m.docx.formatting": ({}, "Formatting (bold, italic, sizes) is not kept: the Desk sets the type."),
 }
 
 

@@ -15,6 +15,7 @@ export const ERROR_CODES = [
   "asset_in_use",
   "invalid_transition",
   "edition_exists",
+  "edition_released",
   "request_in_progress",
   "idempotency_key_reused",
   "file_too_large",
@@ -62,8 +63,19 @@ export const ERROR_CODES = [
 export const ErrorCode = z.enum(ERROR_CODES);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 
-/** One problem with one part of a request, e.g. {field: "body.headline", message: "…"}. */
-export const FieldProblem = z.strictObject({ field: z.string().min(1), message: z.string().min(1) });
+/** One problem with one part of a request, e.g. {field: "body.headline", message: "…"}. `reason` (with `params`, the
+ * values its sentence names) is a stable code the web words in the reader's language (catalogue key
+ * `detail.<reason>`); `message` stays the English, for a reason the web does not know. */
+export const FieldProblem = z.strictObject({
+  field: z.string().min(1),
+  message: z.string().min(1),
+  reason: z
+    .string()
+    .max(80)
+    .regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/)
+    .optional(),
+  params: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+});
 export type FieldProblem = z.infer<typeof FieldProblem>;
 
 export const ErrorEnvelope = z.strictObject({

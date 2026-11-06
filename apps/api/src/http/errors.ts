@@ -30,6 +30,10 @@ const ERRORS: Record<ErrorCode, { status: number; message: string }> = {
   asset_in_use: { status: 409, message: "This picture is the photo of a story. Take it off the story first." },
   invalid_transition: { status: 409, message: "This story cannot be moved to that state now." },
   edition_exists: { status: 409, message: "There is already an edition for this date. Open it instead." },
+  edition_released: {
+    status: 409,
+    message: "This edition has been released: its date and pages can no longer change.",
+  },
   request_in_progress: { status: 409, message: "This request is still being handled. Wait a moment, then check." },
   idempotency_key_reused: { status: 422, message: "This request was already sent with different content." },
   file_too_large: { status: 413, message: "This picture is larger than 40 MB. Save it smaller and try again." },

@@ -28,8 +28,10 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
@@ -337,8 +339,9 @@ class Layout:
         try:
             runs.merge_pdfs(pdfs, self.run_dir / "edition.pdf")
             runs.zip_pdfs(pdfs, self.run_dir / "press-files.zip")
-        except Exception as e:  # noqa: BLE001 — the Desk's words for it
-            return self.finished("failed", error=M.msg("m.run.notMerged", error=M.data(str(e))))
+        except Exception:  # noqa: BLE001 — the Desk's words for it
+            traceback.print_exc(file=sys.stderr)                # the file error's own words: the worker's log
+            return self.finished("failed", error=M.msg("m.run.notMerged"))
         if self.cancel.is_set():
             return self.finished("cancelled", message=M.msg("m.run.cancelled"))
         self._say("finishing", M.msg("m.run.checking"))

@@ -948,7 +948,7 @@ Also:
   - A request still running answers 409 `request_in_progress`.
   - This lets a phone retry "Send to desk" safely.
 
-**Error envelope:** `{"error": {"code", "message", "details"?, "requestId"}}`. The web shows the catalogue text for `code` in English or Marathi, falling back to `message`.
+**Error envelope:** `{"error": {"code", "message", "details"?, "requestId"}}`. The web shows the catalogue text for `code` in English or Marathi, falling back to `message`. As built (2026-11-05, A14): a detail `{field, message}` may also carry `reason` (a stable dotted code) and `params` (its values); the web words it from the catalogue's `detail.<reason>` and shows the English `message` only for a reason it does not know (`DetailWords`). Today: the Word import's own refusals (`docx.over_size`, `docx.size_mismatch`, `docx.protected`) and the story bundle's (`bundle.subheading_hash`, `bundle.photo_unusable`); a web test keeps the catalogue's `detail.*` keys equal to the API's reasons.
 
 | HTTP | code | message (English fallback, plain) |
 |---|---|---|
@@ -988,7 +988,7 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 | GET / POST `/orgs/{o}/pubs/{p}/sections`, PATCH `…/sections/{id}` | publication.view / settings.edit | SectionList; POST {name}; PATCH {name?, position?, archived?}: a section is archived, never deleted (`packages/contracts/src/sections.ts`) |
 | GET `/orgs/{o}/pubs/{p}/editions?from&to` | edition.view | → {items: [{id, date, pages, status, counts {stories, ready}}]} |
 | POST `/orgs/{o}/pubs/{p}/editions` | edition.create | {date, pages: 4\|8\|16, backPageAds, volume?, issue?, price?} → 201 Edition; 409 `edition_exists` |
-| GET / PATCH `/orgs/{o}/pubs/{p}/editions/{e}` | view / edition.edit | Edition (the date is fixed, as in the Desk) |
+| GET / PATCH `/orgs/{o}/pubs/{p}/editions/{e}` | view / edition.edit | Edition (as built: PATCH corrects the folio, and before release the date, pages and back-page ads; see "As built" below) |
 | GET `/orgs/{o}/pubs/{p}/stories?edition=&status=&assignee=me&reporter=&q=` | story.view (Reporter: own stories only) | → {items: StoryListItem[], nextCursor} |
 | POST `/orgs/{o}/pubs/{p}/stories` | story.create | StoryInput → 201 Story (Draft) |
 | POST `/orgs/{o}/pubs/{p}/stories/paste` | story.create | {editionId?, text} → {created: Story[], skipped: [{headline, reason}]} (the Desk's `---` format) |
@@ -1041,7 +1041,7 @@ Sign-in, sign-out, verification, password reset, two-step and the device list ar
 - **API** (`src/modules/stories/editions.ts`, `src/db/editions.ts`):
   - `GET /orgs/{o}/pubs/{p}/editions?from&to` (`edition.view`, both dates inclusive) → {items: [{id, date, pages, backPageAds, volume, issue, price, status, counts {stories, ready, spiked}}]}, newest first, at most 400, no cursor. Deleted stories are not counted; `spiked` is there so the screen can say what is never sent.
   - `POST /orgs/{o}/pubs/{p}/editions` (`edition.create`, the whole cell only: Owner, Admin, Chief Editor, Editor; Advertising's and Prepress's ◐ cells are ad positions and the colour map, 07 §12, so they are refused, audited) {date, pages: 4|8|16, backPageAds? (on by default), volume?, issue?, price? (cleaned as the Desk cleans a line, at most 200 characters)} → 201 Edition, with an `Idempotency-Key`. Its Desk key is its date. A date that has one already: 409 `edition_exists`, whose `current` is that edition (the plan's `existingId`). Audited `edition.create` ({date, pages}) in the same transaction.
-  - Not built: `GET`/`PATCH …/editions/{e}` (`edition.edit`) and deleting a draft edition (L2-350).
+  - `PATCH …/editions/{e}` (`edition.edit`, the whole cell only) {volume?, issue?, price?, date?, pages?, backPageAds?} → Edition (as built 2026-11-05, A12). The folio as before (L2.5). A date, page count or back-page ads change is refused once the edition is released or archived (409 `edition_released`), while a layout run is active (409 `run_active`, its run) and for a date another edition has (409 `edition_exists`, that edition). In one transaction with the edition locked: the Desk key follows the date (its `-N` kept), every `done` run is set aside (`cancelled`, its message `m.run.editionChanged`: lay it out again), the ad placements that no longer fit the new date or plan are taken out and that date's bookings placed, slot artwork without a slot cleared, plan pages past the new count emptied; audited `edition.edit` with the new values, `was` and `setAside`. Stories pinned past the new count stay pinned (the layout's readiness names them). The Editions screen's "Correct date and pages" side sheet sends it. Not built: deleting a draft edition (L2-350).
   - A story goes into an edition, or out of one, by its own `PATCH` `editionId` (the desk's field, as before; `story.edition_change`). A spiked story is not edited, so it cannot be moved.
   - Live: `app.edition`'s trigger (migration `2026_11_28_0001`) sends a hint `edition` {org, pub, edition}; the stream passes it, as `edition` {publicationId, editionId}, to whoever has `edition.view` on that publication.
   - Tested: `test/db/editions.test.ts` (role matrix, defaults, cleaning, one a date, idempotency, audit rows, counts, placing and removing a story, the hint, another tenant's ids), `test/unit/live-events.test.ts`.
@@ -1271,7 +1271,12 @@ engine's queue, and the page editor's edit gateway. The gateway is the worker im
 shares the engine's homes volume with the queue, has the engine's S3 key and no database password, and publishes no
 port: the API reaches it as `http://gateway:8790` on the host's own Docker network (plain http is allowed for that name
 only), every call signed with `PGN_GATEWAY_SECRET`. Their memory ceilings add up to 4 GB, so the host is a t3.large
-(8 GB). `deploy.sh` migrates, then `up --wait` fails unless every service with a health check is healthy (Caddy, the
+(8 GB). The engine's layout pool follows its container (2026-11-06, A15): one process per CPU but one, no more than
+its cgroup's memory holds at 768 MiB each beside 1.4 GiB for the engine's own process, the queue and its other job
+(`desk_engine.py` `pool_workers`): one on the pilot's 2 GB, as on pilot-local (2 GB, 2 CPUs). Measured under amd64
+emulation: an 8-page edition peaks at 754 MiB of 2 GiB; the pilot's largest photo converts in 99 MB of its job's 1 GB
+(a 100 MP PNG with transparency does not: doc 11 L2-325). The page editor's raster cache (`cache/rasters`) is pruned:
+entries unused for a day, then the least recently used while over 2 GiB, never one used in the last hour. `deploy.sh` migrates, then `up --wait` fails unless every service with a health check is healthy (Caddy, the
 API, the queue, the gateway), then checks `/readyz` and that the API reaches the gateway. The archive bucket carries
 Object Lock in governance mode, ten years by default (`s3-archive-object-lock.json`, D-20), as each released file's own
 retention. Settings added for L2.3–L2.7: `PGN_GATEWAY_SECRET`, `PGN_CONTACT_TO`, and the optional

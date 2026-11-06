@@ -19,6 +19,9 @@ import { SITE_MR } from "./screens/site.mr.ts";
 
 import { ONBOARDING_MR } from "./screens/onboarding.mr.ts";
 import { PAPER_SIGNUP_MR } from "./screens/paperSignup.mr.ts";
+import { EDITION_EDIT_MR } from "./screens/editionEdit.mr.ts";
+import { DAILY_PATH_MR } from "./screens/dailyPath.mr.ts";
+import { ENGINE_WORDS_MR } from "./screens/engineWords.mr.ts";
 
 export const MR: Readonly<Record<CatalogueKey, string>> = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -809,7 +812,7 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   "auditLog.action.comment.resolve": "चर्चा निकाली काढली",
   "auditLog.action.desk.export": "बातम्या Desk कडे पाठवल्या",
   "auditLog.action.edition.create": "अंक तयार केला",
-  "auditLog.action.edition.edit": "अंकाचा खंड, अंक क्रमांक किंवा किंमत बदलली",
+  "auditLog.action.edition.edit": "अंकाची तारीख, पाने, शेवटच्या पानावरच्या जाहिराती, खंड, अंक क्रमांक किंवा किंमत बदलली",
   "auditLog.action.import.create": "Word फाइलची आयात सुरू केली",
   "auditLog.action.import.done": "Word फाइल आयात झाली",
   "auditLog.action.import.fail": "Word फाइल आयात होऊ शकली नाही",
@@ -1347,7 +1350,7 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
   "m.run.engineNotStarted": "मांडणी इंजिन सुरू करता आले नाही: {error}.",
   "m.run.putting": "अंकाची PDF आणि छापखान्यासाठीच्या फायली एकत्र करत आहे…",
   "m.run.noPages": "मांडणी इंजिनचे काम संपले, पण एकही पान तयार झाले नाही.",
-  "m.run.notMerged": "पाने तयार झाली, पण ती एका फाइलमध्ये एकत्र करता आली नाहीत: {error}",
+  "m.run.notMerged": "पाने तयार झाली, पण ती एका फाइलमध्ये एकत्र करता आली नाहीत.",
   "m.run.checking": "प्रत्येक पान स्वतंत्र PDF/X-1a तपासणी-साधनाने तपासत आहे…",
   "m.run.made1": "1 पान तयार झाले.",
   "m.run.madeN": "{n} पाने तयार झाली.",
@@ -1833,4 +1836,7 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
 
   ...ONBOARDING_MR,
   ...PAPER_SIGNUP_MR,
+  ...EDITION_EDIT_MR,
+  ...DAILY_PATH_MR,
+  ...ENGINE_WORDS_MR,
 };
