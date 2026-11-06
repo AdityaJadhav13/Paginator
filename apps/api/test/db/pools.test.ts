@@ -105,18 +105,25 @@ describe("the API's pools", () => {
   it("withLock: callers of one key take turns, other keys do not wait, and the lock goes with its connection", async () => {
     const database = open();
     const order: string[] = [];
-    const step = (name: string, ms: number) => async () => {
+    // the first holds its key until the other key's caller is through (a fixed 300 ms was shorter than a connection on
+    // a busy machine), or 10 s if that caller wrongly waits for it
+    let otherOut: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      otherOut = resolve;
+      setTimeout(resolve, 10_000).unref();
+    });
+    const step = (name: string, hold?: Promise<void>) => async () => {
       order.push(`${name} in`);
-      await new Promise((resolve) => setTimeout(resolve, ms));
+      await hold;
       order.push(`${name} out`);
       return name;
     };
-    const first = database.withLock("editor:run-1", step("first", 300));
+    const first = database.withLock("editor:run-1", step("first", held));
     await until(() => order.length > 0, "the first holder");
     const [, second, other] = await Promise.all([
       first,
-      database.withLock("editor:run-1", step("second", 0)),
-      database.withLock("editor:run-2", step("other", 0)),
+      database.withLock("editor:run-1", step("second")),
+      database.withLock("editor:run-2", step("other")).finally(otherOut),
     ]);
     expect([second, other]).toEqual(["second", "other"]);
     expect(order.indexOf("other out")).toBeLessThan(order.indexOf("first out"));

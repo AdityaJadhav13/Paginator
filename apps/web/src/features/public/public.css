@@ -887,6 +887,17 @@
   max-inline-size: var(--pg-reading-measure);
 }
 
+/* ── The owner's legal texts (LegalPage) ────────────────────────────── */
+
+.pg-public .pg-public__legal > * + * {
+  margin-block-start: var(--pg-space-5);
+}
+
+/* a paragraph keeps the line breaks of the owner's file (an address, a list of items) */
+.pg-public__legal .pg-public__body {
+  white-space: pre-line;
+}
+
 /* ── Marathi: Devanagari is never smaller than 13 CSS pixels ────────── */
 /*
  * The small type steps (--pg-font-size-100 is 12 px) move up one step on a
@@ -916,7 +927,8 @@
   line-height: var(--pg-line-height-500);
 }
 
-.pg-public:lang(mr) .pg-public__body {
+.pg-public:lang(mr) .pg-public__body,
+.pg-public .pg-public__legal:lang(mr) .pg-public__body {
   line-height: var(--pg-line-height-400);
 }
 

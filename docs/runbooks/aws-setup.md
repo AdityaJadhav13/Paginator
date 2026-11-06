@@ -58,6 +58,8 @@ export ACCOUNT=<12-digit account id>  # never committed
 
   ```sh
   aws ec2 create-security-group --group-name pgn-app --description "Pageinator app host" --vpc-id <vpc>
+  aws ec2 create-security-group --group-name pgn-db --description "Pageinator database" --vpc-id <vpc>
+  aws ec2 create-security-group --group-name pgn-monitor --description "Pageinator monitor" --vpc-id <vpc>
   aws ec2 authorize-security-group-ingress --group-id <pgn-app> --protocol tcp --port 443 --cidr 0.0.0.0/0
   aws ec2 authorize-security-group-ingress --group-id <pgn-app> --protocol tcp --port 80 --cidr 0.0.0.0/0
   aws ec2 authorize-security-group-ingress --group-id <pgn-app> --protocol tcp --port 8781 --source-group <pgn-monitor>
@@ -105,7 +107,7 @@ put PGN_APP_PASSWORD SecureString "$(openssl rand -hex 32)"
 | `PGN_ICC_FILE` | String | `/etc/pageinator/newsprint.icc` |
 | `PGN_SMTP_USER`, `PGN_SMTP_PASSWORD` | SecureString | the SES SMTP credentials (step 7) |
 | `PGN_GATEWAY_SECRET` | SecureString | random hex, 64 characters: the API signs every call to the page editor's edit gateway with it |
-| `PGN_CONTACT_TO` | String | **[D-2]** the one address the public website's contact form sends to |
+| `PGN_CONTACT_TO` | String | optional, **[D-2]**: the one address the public website's contact form sends to. Leave it out until the privacy notice is published (**[D-6]**, 11-fix-before-launch L2-230): without it the website shows no contact form, and compose passes no value |
 | `PGN_ANTHROPIC_API_KEY` | SecureString | optional (D-26): the news finder's Claude key, the engine's alone. Not set, its AI part is off and collection still works |
 
 Why static keys for S3: the API's settings require a key pair (`PGN_S3_ACCESS_KEY_ID`, `apps/api/src/config.ts`), so it
@@ -148,6 +150,16 @@ aws iam add-role-to-instance-profile --instance-profile-name pgn-app-host --role
 - [ ] Check the minor versions on offer: `aws rds describe-db-engine-versions --engine postgres --query "DBEngineVersions[?starts_with(EngineVersion,'18')].EngineVersion"`.
   Use the newest 18.x (the images' pg_dump is 18.6; it dumps any 18.x).
 - [ ] A DB subnet group of the two private subnets; a parameter group from `postgres18` with `rds.force_ssl = 1`.
+
+  ```sh
+  aws rds create-db-subnet-group --db-subnet-group-name pgn-pilot --db-subnet-group-description "Pageinator pilot" \
+    --subnet-ids <private subnet 1a> <private subnet 1b>
+  aws rds create-db-parameter-group --db-parameter-group-name pgn-pilot-pg18 --db-parameter-group-family postgres18 \
+    --description "Pageinator pilot"
+  aws rds modify-db-parameter-group --db-parameter-group-name pgn-pilot-pg18 \
+    --parameters "ParameterName=rds.force_ssl,ParameterValue=1,ApplyMethod=pending-reboot"
+  ```
+
 - [ ] The instance: `db.t4g.small` (or what the budget allows), 20 GB gp3, storage encrypted, not publicly accessible,
   in `pgn-db`, automated backups with **[PITR]** 14 days (`--backup-retention-period 14`; 1–35 allowed), deletion
   protection on, Performance Insights off (cost), **[STANDBY]** `--no-multi-az` unless the owner wants a standby now.
@@ -207,7 +219,8 @@ aws iam add-role-to-instance-profile --instance-profile-name pgn-app-host --role
 - [ ] An Elastic IP, associated with it.
 - [ ] Docker Engine and the compose plugin from Docker's own repository, the AWS CLI v2; automatic security updates on.
 - [ ] Docker log rotation does not apply to awslogs; CloudWatch keeps the logs (step 9).
-- [ ] `/etc/pageinator/` (root, 0700) for `pilot.env` and `rds-ca.pem`; the repository's `infra/` folder checked out
+- [ ] `/etc/pageinator/` (root, 0700) for `pilot.env` and `rds-ca.pem`, and in it `legal/` (0755) for the legal
+  pages' texts (`deploy.md`); the repository's `infra/` folder checked out
   at the deployed commit (deploy.sh and the compose file), for example in `/opt/pageinator`.
 - [ ] Disk alarm: the CloudWatch agent's `disk_used_percent` above 80 % (step 10).
 
@@ -269,7 +282,7 @@ aws s3api put-bucket-cors --bucket pgn-pilot-work --cors-configuration file:///t
 ## 8. ECR (x86_64 images)
 
 ```sh
-for r in pageinator-api pageinator-web pageinator-backup; do
+for r in pageinator-api pageinator-web pageinator-backup pageinator-engine-worker; do
   aws ecr create-repository --repository-name $r --image-tag-mutability IMMUTABLE --image-scanning-configuration scanOnPush=true
   aws ecr put-lifecycle-policy --repository-name $r --lifecycle-policy-text \
     '{"rules":[{"rulePriority":1,"selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":20},"action":{"type":"expire"}}]}'
@@ -277,8 +290,9 @@ done
 ```
 
 Images are built for `linux/amd64` (`docker buildx build --platform linux/amd64`), tagged with the commit id, from
-`infra/docker/api.Dockerfile` (the API, and `--target backup`) and `infra/docker/web.Dockerfile`. Tags are immutable,
-so a rollback always finds the image it ran before.
+`infra/docker/api.Dockerfile` (the API, and `--target backup`), `infra/docker/web.Dockerfile` and
+`infra/docker/engine-worker.Dockerfile` (the engine's queue and the edit gateway): the four images `deploy.md` builds and
+`deploy.sh` pulls. Tags are immutable, so a rollback always finds the image it ran before.
 
 ## 9. CloudWatch logs (30 days)
 
@@ -329,6 +343,7 @@ aws cloudwatch put-metric-alarm --alarm-name pgn-backup-failed --namespace Pagei
 - [ ] **[D-2]** `app.example.test A <Elastic IP>`, TTL 300, and **no AAAA record**: an IPv6 client would reach the
   API as Docker's bridge address, so every IPv6 client would share one rate-limit budget (11-fix-before-launch
   L2-287). A CAA record `example.test CAA 0 issue "letsencrypt.org"`.
-- [ ] **[D-6]** The privacy notice and grievance contact are published before the first staff account is made.
+- [ ] **[D-6]** The privacy notice and grievance contact are published before the first staff account is made: the
+  owner's text files in `/etc/pageinator/legal/` (`deploy.md`, "The legal pages' texts").
 - [ ] Deploy: `docs/runbooks/deploy.md`. Then `node tools/ts/check-headers.ts https://app.example.test` from any machine,
   and the restore drill (`docs/runbooks/restore.md`) within the first week.

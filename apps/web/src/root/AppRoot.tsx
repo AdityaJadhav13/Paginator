@@ -50,7 +50,7 @@ import { I18nProvider } from "../i18n/index.ts";
 import type { ServiceEnvironment } from "../services/index.ts";
 import { PlaceholderScreen } from "../demo/ui002/PlaceholderScreen.tsx";
 import { Container } from "../ui/index.ts";
-import { HomePage, FeaturesPage, PricingPage, SecurityPage, ContactPage } from "../features/public/index.ts";
+import { HomePage, FeaturesPage, PricingPage, SecurityPage, ContactPage, LegalPage } from "../features/public/index.ts";
 import { ContactProvider } from "../features/contact/contact-context.tsx";
 import { EditorRouteContent } from "../demo/ui002/EditorRouteContent.tsx";
 import "../app/shell.css";
@@ -144,6 +144,9 @@ export function AppRoutes({ environment }: { readonly environment?: ServiceEnvir
                 <Route path={PATTERNS.pricing} element={<PricingPage />} />
                 <Route path={PATTERNS.security} element={<SecurityPage />} />
                 <Route path={PATTERNS.contact} element={<ContactPage />} />
+                <Route path={PATTERNS.legalPrivacy} element={<LegalPage doc="privacy" />} />
+                <Route path={PATTERNS.legalTerms} element={<LegalPage doc="terms" />} />
+                <Route path={PATTERNS.legalGrievance} element={<LegalPage doc="grievance" />} />
                 <Route path={PATTERNS.login} element={<SignInScreen />} />
                 <Route path={PATTERNS.signup} element={<SignUpScreen service={activeEnvironment.paperSignup} />} />
                 <Route path={PATTERNS.forgotPassword} element={<ForgotPasswordScreen />} />

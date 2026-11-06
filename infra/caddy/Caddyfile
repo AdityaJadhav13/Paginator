@@ -82,6 +82,19 @@ app.{$PGN_DOMAIN} {
 		file_server
 	}
 
+	# The owner's legal texts (the privacy notice, the terms of use, the grievance officer: D-6), <doc>.<lang>.txt in a
+	# host folder that compose mounts read only at /srv/legal-text (PGN_LEGAL_DIR), so a new text needs no new image.
+	# Checked each time. Only those six names; any other path here, or a file not there, is a 404, never index.html.
+	# (The names are checked inside: Caddy sorts a handle with only a named matcher after every path's handle.)
+	handle /legal-text/* {
+		@other not path_regexp ^/legal-text/(privacy|terms|grievance)\.(en|mr)\.txt$
+		error @other 404
+		import spa_headers
+		header Cache-Control "no-cache"
+		root * /srv
+		file_server
+	}
+
 	# Any other path is one of the app's own routes, so it gets index.html, checked each time (a new release is seen
 	# at once).
 	handle {

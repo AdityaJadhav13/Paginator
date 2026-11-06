@@ -4,9 +4,9 @@
  * The public site is in English and Marathi: the language switch in the header chooses, the browser remembers the
  * choice (src/i18n), and the shell's element carries the page's `lang`. Its header: the wordmark, the page links
  * (collapsed under ☰ on a phone), the language switch, Sign in and Book a demo when signed out (Book a demo only once
- * the API says the contact form is connected), or the signed-in person's controls. Its footer: the page links, the notice, the hosting line (planned) and the copyright line. The
- * legal pages (privacy notice, terms, grievance officer) do not exist yet, so the footer does not link to them
- * (docs/product/11-fix-before-launch.md).
+ * the API says the contact form is connected), or the signed-in person's controls. Its footer: the page links, the
+ * Legal group (the privacy notice, the terms of use and the grievance officer: the owner's text, or a line saying it is
+ * still to be supplied), the notice, the hosting line (planned) and the copyright line.
  *
  * `/onboarding` renders through the same shell without the sign-in affordance. The sign-in screens (03 §5.1) render
  * in the shell's sign-in variant: the logo and the language switch on top, the card, and the notice.
@@ -30,6 +30,13 @@ const PAGES: readonly { to: string; label: PlainKey }[] = [
   { to: paths.security(), label: "public.nav.security" },
   { to: paths.contact(), label: "public.nav.contact" },
 ];
+
+const LEGAL: readonly { to: string; label: PlainKey }[] = [
+  { to: paths.legalPrivacy(), label: "public.legal.privacy" },
+  { to: paths.legalTerms(), label: "public.legal.terms" },
+  { to: paths.legalGrievance(), label: "public.legal.grievance" },
+];
+const LEGAL_GROUP_ID = "pg-site-footer-legal";
 
 /** UI001's quiet action treatment plus its small body type step, on a router `Link` (no padding of its own). */
 const SECONDARY_NAV_LINK_CLASS = "pg-button pg-button--quiet pg-type-body-small";
@@ -137,6 +144,16 @@ function PublicChrome() {
               <Link to={paths.login()} className={SECONDARY_NAV_LINK_CLASS}>
                 {t("public.signIn")}
               </Link>
+            </Cluster>
+            <Cluster role="group" aria-labelledby={LEGAL_GROUP_ID} gap="5">
+              <span id={LEGAL_GROUP_ID} className="pg-type-body-small">
+                {t("public.legal.group")}
+              </span>
+              {LEGAL.map(({ to, label }) => (
+                <Link key={to} to={to} className={SECONDARY_NAV_LINK_CLASS}>
+                  {t(label)}
+                </Link>
+              ))}
             </Cluster>
             <p className="pg-type-body-small">{t("shell.notice")}</p>
             <p className="pg-type-body-small">{t("public.footer.hosting")}</p>

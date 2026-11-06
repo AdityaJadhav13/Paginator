@@ -575,6 +575,14 @@ const TABLE = {
     { one: "{n} not added", other: "{n} not added" },
     { one: "{n} जोडली नाही", other: "{n} जोडल्या नाहीत" },
   ],
+  "bundle.adsAdded": [
+    { one: "{n} ad added", other: "{n} ads added" },
+    { one: "{n} जाहिरात जोडली", other: "{n} जाहिराती जोडल्या" },
+  ],
+  "bundle.settingsSet": [
+    { one: "{n} edition setting filled in", other: "{n} edition settings filled in" },
+    { one: "अंकाची {n} सेटिंग भरली", other: "अंकाच्या {n} सेटिंग्ज भरल्या" },
+  ],
   // a story kept or not added, and why (the reason is the server's, by its code)
   "bundle.line": ["“{headline}”: {reason}", "“{headline}”: {reason}", SAME],
 
@@ -2111,6 +2119,43 @@ const TABLE = {
   "m.bundle.deletedInDesk": [
     "Deleted in the Desk after it was imported: not added again.",
     "आयात केल्यानंतर Desk मधून हटवली: पुन्हा जोडली नाही.",
+  ],
+  "m.bundle.adMissing": [
+    "An ad the file names is not in this Pageinator stories file ({name}).",
+    "फाइल ज्या जाहिरातीचे नाव देते ती या Pageinator बातम्यांच्या फाइलमध्ये नाही ({name}).",
+  ],
+  "m.bundle.adNoSlot": [
+    "The pages of this edition have no ad space called {slot}.",
+    "या अंकाच्या पानांवर {slot} नावाची जाहिरातीची जागा नाही.",
+  ],
+  "m.bundle.adKept": [
+    "The ad space {slot} has other artwork in the Desk: kept as it is. Remove it in the Desk and import the file again to take the file's.",
+    "{slot} या जाहिरातीच्या जागेत Desk मध्ये दुसरी जाहिरात आहे: आहे तशी ठेवली. फाइलमधली घ्यायची असेल तर ती Desk मधून काढा आणि फाइल पुन्हा आयात करा.",
+  ],
+  "m.bundle.adRefused": ["The ad for {slot} was not added. {reason}", "{slot} साठीची जाहिरात जोडली नाही. {reason}"],
+  "m.bundle.keptVolume": [
+    "The file's volume is “{sent}”; this edition's is “{desk}”: the Desk's is kept. If the file's is right, change it in this edition's settings.",
+    "फाइलमधील वर्ष “{sent}” आहे; या अंकाचे “{desk}” आहे: Desk मधले ठेवले. फाइलमधले बरोबर असेल तर या अंकाच्या सेटिंग्जमध्ये बदला.",
+  ],
+  "m.bundle.keptIssue": [
+    "The file's issue number is “{sent}”; this edition's is “{desk}”: the Desk's is kept. If the file's is right, change it in this edition's settings.",
+    "फाइलमधील अंक क्रमांक “{sent}” आहे; या अंकाचा “{desk}” आहे: Desk मधला ठेवला. फाइलमधला बरोबर असेल तर या अंकाच्या सेटिंग्जमध्ये बदला.",
+  ],
+  "m.bundle.keptPrice": [
+    "The file's price is “{sent}”; this edition's is “{desk}”: the Desk's is kept. If the file's is right, change it in this edition's settings.",
+    "फाइलमधील किंमत “{sent}” आहे; या अंकाची “{desk}” आहे: Desk मधली ठेवली. फाइलमधली बरोबर असेल तर या अंकाच्या सेटिंग्जमध्ये बदला.",
+  ],
+  "m.bundle.backAdsOn": [
+    "The stories were sent for an edition with back-page ads; this one has none: to take the file's ads, tick “Back page has ads” in this edition's settings and import the file again.",
+    "बातम्या शेवटच्या पानावर जाहिराती असलेल्या अंकासाठी पाठवल्या होत्या; या अंकात त्या नाहीत: फाइलमधील जाहिराती घ्यायच्या असतील तर या अंकाच्या सेटिंग्जमध्ये “शेवटच्या पानावर जाहिराती आहेत” वर खूण करा आणि फाइल पुन्हा आयात करा.",
+  ],
+  "m.bundle.backAdsOff": [
+    "The stories were sent for an edition without back-page ads; this one has them: untick “Back page has ads” in this edition's settings if its last page is all news.",
+    "बातम्या शेवटच्या पानावर जाहिराती नसलेल्या अंकासाठी पाठवल्या होत्या; या अंकात त्या आहेत: शेवटच्या पानावर फक्त बातम्या असतील तर या अंकाच्या सेटिंग्जमध्ये “शेवटच्या पानावर जाहिराती आहेत” वरची खूण काढा.",
+  ],
+  "m.bundle.adNotInFile": [
+    "The ad in {slot} is in the Desk but not in this file (the hosted edition no longer has it): remove it in the Desk if it should not print.",
+    "{slot} मधली जाहिरात Desk मध्ये आहे पण या फाइलमध्ये नाही (Pageinator मधील अंकात ती आता नाही): ती छापायची नसेल तर Desk मधून काढा.",
   ],
 
   // ---- shared words

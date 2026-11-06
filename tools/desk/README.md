@@ -48,7 +48,8 @@ never in this repository.
 6. **Word files:** "Word files…" adds the stories of one or more `.docx` files. A file can hold one story or several
    (each starting with a Title or Heading 1 paragraph). Only the text is taken, not its formatting.
    **Pageinator stories:** "Pageinator stories…" imports the `.zip` the hosted newsroom's "Send to the Desk" makes
-   (`pageinator.story-bundle/1`, CONTRACT.md §6): the edition's stories, with their photos. The file must be for this
+   (`pageinator.story-bundle/2`, CONTRACT.md §6; `/1` files are still read): the edition's stories, with their photos,
+   and its back-page ads and settings (volume, issue, price), which fill only what the Desk has empty. The file must be for this
    edition's date, and a file that is damaged or not in that format is refused whole, with nothing added. Importing a
    newer file again replaces only the stories nobody changed in the Desk since their last import; the others are
    kept as they are, and the summary says which, and why a story was not added. A story deleted in the Desk is never

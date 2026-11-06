@@ -135,6 +135,22 @@ export function auditStory(
   return recordAudit(tx, tenant, { action, targetType: "story", targetId: storyId, publicationId, data });
 }
 
+/** The point-in-time check's view of the log (src/db/restore-drill.ts pointInTimeCheck): how many events up to
+ * `upTo`, the newest of them (its id and the md5 of its whole row), and the newest event's time at all. Outside
+ * withTenant, as pgn_backup, which reads every row and writes none. */
+export async function auditUpTo(
+  client: Pick<Client, "query">,
+  upTo: Date,
+): Promise<{ n: number; newest: string | null; last: Date | null }> {
+  const { rows } = await client.query<{ n: number; newest: string | null; last: Date | null }>(
+    `select count(*) filter (where at <= $1)::int as n, max(at) as last,
+       (select id || ' ' || md5(a::text) from app.audit_event a where at <= $1 order by at desc, id desc limit 1) as newest
+     from app.audit_event`,
+    [upTo],
+  );
+  return rows[0] ?? { n: 0, newest: null, last: null };
+}
+
 /** The restore drill's marker (src/db/restore-drill.ts): one event's id and the md5 of its whole row, the newest or the
  * one named. It runs outside withTenant, as pgn_backup, which reads every row (BYPASSRLS) and writes none. */
 export async function auditMarker(

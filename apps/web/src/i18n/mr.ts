@@ -18,6 +18,7 @@ import { SITE_MR } from "./screens/site.mr.ts";
 
 import { ONBOARDING_MR } from "./screens/onboarding.mr.ts";
 import { PAPER_SIGNUP_MR } from "./screens/paperSignup.mr.ts";
+import { DEPLOY_MR } from "./screens/deploy.mr.ts";
 
 export const MR: Readonly<Record<CatalogueKey, string>> = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -1831,4 +1832,5 @@ export const MR: Readonly<Record<CatalogueKey, string>> = {
 
   ...ONBOARDING_MR,
   ...PAPER_SIGNUP_MR,
+  ...DEPLOY_MR,
 };

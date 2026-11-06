@@ -20,6 +20,7 @@ import { SITE_EN } from "./screens/site.en.ts";
 
 import { ONBOARDING_EN } from "./screens/onboarding.en.ts";
 import { PAPER_SIGNUP_EN } from "./screens/paperSignup.en.ts";
+import { DEPLOY_EN } from "./screens/deploy.en.ts";
 
 export const EN = {
   // ── Glossary seeds (02 §3.9) ─────────────────────────────────────────
@@ -1825,6 +1826,7 @@ export const EN = {
 
   ...ONBOARDING_EN,
   ...PAPER_SIGNUP_EN,
+  ...DEPLOY_EN,
 } as const;
 
 export type CatalogueKey = keyof typeof EN;

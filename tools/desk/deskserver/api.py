@@ -252,8 +252,8 @@ class Api:
         return {**self.store.create_many(req.args[0], got["articles"], "word"), "notes": got["notes"]}
 
     def import_bundle(self, req: Request) -> dict:
-        """A Pageinator stories file (pageinator.story-bundle/1, the raw .zip is the request body): CONTRACT.md §6."""
-        return bundle.import_bundle(self.store, req.args[0], req.body)
+        """A Pageinator stories file (pageinator.story-bundle/1 or /2, the raw .zip is the request body): CONTRACT.md §6."""
+        return bundle.import_bundle(self.store, req.args[0], req.body, self.engine.plan)
 
     def update_article(self, req: Request) -> dict:
         return self.store.update_article(req.args[0], path_id(ARTICLE_ID, req.args[1], "article"), req.json())

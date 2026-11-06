@@ -78,6 +78,27 @@ sudo docker compose -p pageinator-pilot --profile pilot --env-file /etc/pageinat
 
 If a check fails: `rollback.md`.
 
+## The legal pages' texts [D-6]
+
+`/legal/privacy`, `/legal/terms` and `/legal/grievance` show the owner's own texts, which never go in the repository or
+an image: plain UTF-8 text files on the app host, in `/etc/pageinator/legal/` (or the folder `PGN_LEGAL_DIR` names),
+each named `<doc>.<lang>.txt`, with `<doc>` one of `privacy`, `terms`, `grievance` and `<lang>` `en` or `mr`
+(`privacy.en.txt`, `grievance.mr.txt`). Caddy serves those six names only, read only, at `/legal-text/<name>`. A page
+shows its language's file; else the other language's, with a one-line note; else a line saying the text is to be
+supplied by the owner. In a file, a blank line separates paragraphs, a line break inside a paragraph is kept, and a
+paragraph that starts with `## ` is a subheading; nothing else is formatted (no HTML, no Markdown).
+
+```sh
+sudo install -d -m 0755 /etc/pageinator/legal     # once (compose would otherwise make it, empty, at the next deploy)
+sudo install -m 0644 privacy.en.txt /etc/pageinator/legal/
+curl -sI https://app.example.test/legal-text/privacy.en.txt   # [D-2] the real origin: 200, text/plain
+```
+
+A new or changed file is shown at once: no deploy and no new image. Caddy's user (10001) must be able to read it (the
+folder 0755, the files 0644; otherwise the page says the text could not be loaded). Copy files into the folder; do not
+delete and remake the folder while Caddy runs, which would keep showing the old one until the next `up`.
+pilot-local mounts `PGN_LEGAL_DIR` when it is set, and otherwise an empty volume (every page says its text is to come).
+
 ## On one machine: pilot-local
 
 The same compose file, profile `pilot-local`: the same images, with a scratch Postgres (`db-local`) and SeaweedFS
@@ -98,7 +119,7 @@ docker build --platform linux/amd64 -f infra/docker/engine-worker.Dockerfile -t 
 # PGN_S3_PUBLIC_ORIGIN=https://<work bucket>.s3.localhost:59443, PGN_S3_{WORK,ARCHIVE,BACKUPS}_BUCKET=<names>,
 # PGN_SMTP_HOST=mail.invalid, PGN_SMTP_USER=x, PGN_SMTP_PASSWORD=x (api-local sends every email to mail-local's
 # Mailpit instead: read them at http://127.0.0.1:<PGN_MAIL_UI_PORT>, 59025 by default), PGN_MAIL_FROM=no-reply@example.test,
-# PGN_CONTACT_TO=contact@example.test; random hex for PGN_POSTGRES_PASSWORD,
+# PGN_CONTACT_TO=contact@example.test (optional: without it the site shows no contact form); random hex for PGN_POSTGRES_PASSWORD,
 # PGN_{MIGRATOR,APP,AUTH,ENGINE,LISTEN,BACKUP}_PASSWORD, and PGN_AUTH_SECRET and PGN_GATEWAY_SECRET (64 hex
 # characters each: `openssl rand -hex 32`), and
 # for PGN_S3_ACCESS_KEY_ID and PGN_S3_SECRET_ACCESS_KEY (SeaweedFS's one key pair). SeaweedFS knows no other

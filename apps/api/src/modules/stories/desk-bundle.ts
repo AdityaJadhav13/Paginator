@@ -1,28 +1,36 @@
-// "Send to the Desk" (docs/product/10-l2-newsroom-plan.md §5.2, §10 PR 24): POST
-// /api/v1/orgs/:o/pubs/:p/editions/:e/desk-bundle (desk.export) answers the edition's stories as a Pageinator stories
-// file, pageinator.story-bundle/1, exactly as tools/desk/CONTRACT.md §6 defines it (the Desk refuses anything else):
-//   - a ZIP of bundle.json and one photos/<sha256>.<ext> per distinct photo original, every file stored (photos are
-//     packed already, and a deflated bundle.json of a repetitive story could pack more than the Desk's 100:1 limit),
+// "Send to the Desk" (docs/product/10-l2-newsroom-plan.md §5.2, §2.5 "Fallback", §10 PR 24): POST
+// /api/v1/orgs/:o/pubs/:p/editions/:e/desk-bundle (desk.export) answers the edition's stories, its settings (pages,
+// back-page ads, volume, issue, price) and its back-page ad artwork as a Pageinator stories file,
+// pageinator.story-bundle/2, exactly as tools/desk/CONTRACT.md §6 defines it (the Desk refuses anything else), so the
+// Desk can finish the edition when the hosted engine is down (docs/runbooks/engine-down-near-deadline.md):
+//   - a ZIP of bundle.json, one photos/<sha256>.<ext> per distinct photo original and one ads/<sha256>.<ext> per
+//     distinct ad original, every file stored (pictures are packed already, and a deflated bundle.json of a repetitive
+//     story could pack more than the Desk's 100:1 limit),
 //     made with fflate as it is sent (reply.send(stream)), so neither the API nor the stop handling holds it whole.
 //     fflate writes no ZIP64; the limits below keep every bundle far from needing it;
 //   - every key present, none other; `revision` is the story's version, which every change of the story makes the
 //     next, its photo and the photo's caption and credit included; the body is desk-text/1, the engine's own blocks
 //     (@pageinator/desk-text blocks) joined by exactly "\n\n", a subheading as "## " and its text;
-//   - at most 200 stories (so at most 201 files), bundle.json at most 32 MiB, and the ZIP at most 200 MB, checked
-//     before anything is sent (413 file_too_large, 400 invalid_request for too many stories). Spiked stories are never
-//     sent (400): a story killed at the desk is not one request from the Desk;
+//   - the ads: each slot of the plan of the profile in use that has artwork set, whatever the artwork's state (with the
+//     engine down an ad set meanwhile stays "preparing"), with the ORIGINAL picture (received or ready; the Desk fits
+//     it to its own slot, as an upload, and refuses that ad alone if it is not a picture). Their pictures are JPEG, PNG
+//     or WebP (app.asset's mime), every one a type the Desk takes;
+//   - at most 200 stories and 16 ads (so at most 217 files), bundle.json at most 32 MiB, and the ZIP at most 200 MB,
+//     checked before anything is sent (413 file_too_large, 400 invalid_request for too many stories). Spiked stories
+//     are never sent (400): a story killed at the desk is not one request from the Desk;
 //   - a story the Desk could not take as it is refuses the bundle (409 bundle_refused, naming each story): a photo that
 //     was rejected or deleted (sending the story without it, at the same revision, would leave the Desk printing the
-//     old one), or a subheading that starts with "#" (desk-text/1 has no way to write it). Nothing is dropped silently.
+//     old one), or a subheading that starts with "#" (desk-text/1 has no way to write it); likewise an ad whose
+//     picture was rejected, failed or deleted, or more ads than the Desk takes. Nothing is dropped silently.
 //     ANY FUTURE PATH THAT REJECTS OR DELETES AN ASSET MUST BUMP story.version ON EVERY STORY WHOSE story_photo NAMES IT
 //     (11-fix-before-launch), so the stories' next bundle carries a higher revision;
-//   - each photo is read from the version the asset is pinned to, and its SHA-256 checked as it streams: a mismatch
-//     cuts the ZIP off, which the Desk then refuses as damaged.
+//   - each photo and ad is read from the version the asset is pinned to, and its SHA-256 checked as it streams: a
+//     mismatch cuts the ZIP off, which the Desk then refuses as damaged.
 // The bundle is recorded with each story's text revision and the revision it was sent at (desk_bundle,
 // desk_bundle_revision), and audited, before its first byte is sent.
-// A photo's `filename` is its Desk id and type (`p-….jpg`), not the name it was uploaded with, which the API does not
-// keep. A retry makes another bundle of the same stories (a new id): the Desk replaces an article only for a higher
-// revision, so importing either changes nothing more.
+// A photo's or ad's `filename` is its Desk id and type (`p-….jpg`), not the name it was uploaded with, which the API
+// does not keep. A retry makes another bundle of the same stories (a new id): the Desk replaces an article only for a
+// higher revision, and an ad only in an empty slot, so importing either changes nothing more.
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { PassThrough } from "node:stream";
@@ -32,20 +40,24 @@ import { Zip, ZipPassThrough } from "fflate";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { recordAudit } from "../../db/audit.ts";
-import { type BundleStory, bundleStories, editionOf, recordBundle } from "../../db/desk-bundles.ts";
+import { type BundleStory, bundleStories, recordBundle } from "../../db/desk-bundles.ts";
+import { editionArtwork, layoutEdition, profileInUse } from "../../db/layout.ts";
+import { findAsset } from "../../db/media.ts";
 import type { Database } from "../../db/pools.ts";
 import { ApiError } from "../../http/errors.ts";
 import type { ObjectStore } from "../../storage/object-store.ts";
 import { accessOf } from "../access/access.ts";
+import { planFor, slotsOf } from "../layout/request.ts";
 import { EXTENSION, type Mime } from "../media/picture.ts";
 
 const OneEdition = z.strictObject({ o: z.string(), p: z.string(), e: z.string() });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const MAX_STORIES = 200;
+export const MAX_ADS = 16;
 export const MAX_JSON_BYTES = 32 * 1024 * 1024;
 export const MAX_PACKED_BYTES = 200 * 1024 * 1024;
-/** What the ZIP adds to its files: headers, data descriptors and the central directory, for 201 files, generously. */
+/** What the ZIP adds to its files: headers, data descriptors and the central directory, for 217 files, generously. */
 const ZIP_OVERHEAD = 256 * 1024;
 const HIGH_WATER = 1024 * 1024;
 
@@ -57,11 +69,13 @@ export type BundlePhoto = {
   credit: string;
 };
 
+export type BundleAd = { slot: string; page: number; file: string; sha256: string; filename: string };
+
 export type BundleDoc = {
   format: typeof BUNDLE_FORMAT;
   bundle: { id: string; created: string };
   source: { organisation_id: string; publication_id: string };
-  edition: { date: string; pages: number };
+  edition: { date: string; pages: number; back_page_ads: boolean; volume: string; issue: string; price: string };
   stories: {
     id: string;
     revision: number;
@@ -77,6 +91,7 @@ export type BundleDoc = {
     language: string;
     photo: BundlePhoto | null;
   }[];
+  ads: BundleAd[];
 };
 
 /** A body as desk-text/1: the engine's own blocks, one a line, joined by exactly one empty line. A subheading whose
@@ -104,8 +119,8 @@ export function isDeskText(body: string): boolean {
   });
 }
 
-/** Why a story cannot go into the bundle as it is, in plain words; null when it can. */
-type Refusal = { story: string; message: string };
+/** Why a story or an ad cannot go into the bundle as it is, in plain words (field: stories.<id> or ads.<slot>). */
+type Refusal = { field: string; message: string };
 
 const named = (headline: string) => {
   const flat = headline.replace(/\s+/g, " ").trim() || "(no headline)";
@@ -118,7 +133,7 @@ function storyOf(row: BundleStory): { story: BundleDoc["stories"][number] } | { 
     const head = hashed[0] ?? "";
     return {
       refused: {
-        story: row.id,
+        field: `stories.${row.id}`,
         message: `The subheading “## ${head.length > 80 ? `${head.slice(0, 79)}…` : head}” in ${named(row.headline)} starts with #, which the Desk cannot print as a subheading: change it in the story.`,
       },
     };
@@ -129,7 +144,7 @@ function storyOf(row: BundleStory): { story: BundleDoc["stories"][number] } | { 
   if (row.photo_attached && !usable) {
     return {
       refused: {
-        story: row.id,
+        field: `stories.${row.id}`,
         message: `${named(row.headline)} has a photo that was rejected or deleted: take it off the story, or give it another, then send again.`,
       },
     };
@@ -239,7 +254,7 @@ export const deskBundleRoutes: FastifyPluginAsyncZod<DeskBundleOptions> = async 
         ]);
       }
       const made = await database.withTenant(access.tenant, async (tx) => {
-        const edition = UUID.test(e) ? await editionOf(tx, p, e) : undefined;
+        const edition = UUID.test(e) ? await layoutEdition(tx, p, e) : undefined;
         if (!edition) throw new ApiError("not_found");
         const rows = await bundleStories(tx, p, e, statuses, MAX_STORIES + 1);
         if (rows.length > MAX_STORIES) {
@@ -249,15 +264,50 @@ export const deskBundleRoutes: FastifyPluginAsyncZod<DeskBundleOptions> = async 
         }
         const decided = rows.map(storyOf);
         const refusals = decided.flatMap((one) => ("refused" in one ? [one.refused] : []));
-        if (refusals.length > 0) {
-          request.log.warn({ stories: refusals.map((r) => r.story) }, "a story bundle was refused for its stories");
-          throw new ApiError(
-            "bundle_refused",
-            refusals.slice(0, 20).map((r) => ({ field: `stories.${r.story}`, message: r.message })),
-          );
-        }
         const stories = decided.flatMap((one) => ("story" in one ? [one.story] : []));
         const originals = new Map<string, Original>();
+        // every slot of the plan of the profile in use that has artwork set, whatever the artwork's state: with the
+        // engine down (the fallback's own case) a new ad stays "preparing", and the Desk fits the original itself
+        const plan = planFor((await profileInUse(tx, p))?.plans ?? null, edition);
+        const set = slotsOf(plan, await editionArtwork(tx, p, e)).filter((s) => s.assetId);
+        if (set.length > MAX_ADS) {
+          refusals.push({
+            field: "ads",
+            message: `This edition has more than ${MAX_ADS} ads: the Desk takes at most ${MAX_ADS}.`,
+          });
+        }
+        const ads: BundleAd[] = [];
+        for (const slot of set.slice(0, MAX_ADS)) {
+          const asset = await findAsset(tx, p, slot.assetId as string);
+          // usable as an original: stored ("received", also before the media job makes it "ready"), not refused
+          if (!asset || (asset.status !== "received" && asset.status !== "ready") || !asset.version_id) {
+            refusals.push({
+              field: `ads.${slot.slot}`,
+              message: `The picture of the ad in ${slot.slot} (page ${slot.page}) was rejected, could not be read or was deleted: set the slot again, or clear it, then send again.`,
+            });
+            continue;
+          }
+          const file = `ads/${asset.sha256}.${EXTENSION[asset.mime]}`;
+          const filename = `${asset.desk_key}.${EXTENSION[asset.mime]}`;
+          ads.push({ slot: slot.slot, page: slot.page, file, sha256: asset.sha256, filename });
+          originals.set(file, {
+            name: file,
+            sha256: asset.sha256,
+            bytes: asset.bytes,
+            key: asset.original_key,
+            version: asset.version_id,
+          });
+        }
+        if (refusals.length > 0) {
+          request.log.warn(
+            { fields: refusals.map((r) => r.field) },
+            "a story bundle was refused for its stories or ads",
+          );
+          throw new ApiError(
+            "bundle_refused",
+            refusals.slice(0, 20).map((r) => ({ field: r.field, message: r.message })),
+          );
+        }
         for (const [k, row] of rows.entries()) {
           const photo = stories[k]?.photo;
           if (photo && row.photo_key && row.photo_version && row.photo_bytes) {
@@ -274,19 +324,27 @@ export const deskBundleRoutes: FastifyPluginAsyncZod<DeskBundleOptions> = async 
           format: BUNDLE_FORMAT,
           bundle,
           source: { organisation_id: access.tenant.orgId, publication_id: p },
-          edition: { date: edition.date, pages: edition.pages },
+          edition: {
+            date: edition.date,
+            pages: edition.pages,
+            back_page_ads: edition.back_page_ads,
+            volume: edition.volume,
+            issue: edition.issue,
+            price: edition.price,
+          },
           stories,
+          ads,
         });
         // the sizes, before anything is recorded or sent (an id and a time of the same lengths as the real ones)
         const trial = Buffer.byteLength(
           JSON.stringify(doc({ id: "0".repeat(36), created: "0000-00-00T00:00:00+05:30" })),
         );
-        const photoBytes = [...originals.values()].reduce((sum, original) => sum + original.bytes, 0);
-        if (trial > MAX_JSON_BYTES || trial + photoBytes + ZIP_OVERHEAD > MAX_PACKED_BYTES) {
+        const pictureBytes = [...originals.values()].reduce((sum, original) => sum + original.bytes, 0);
+        if (trial > MAX_JSON_BYTES || trial + pictureBytes + ZIP_OVERHEAD > MAX_PACKED_BYTES) {
           throw new ApiError("file_too_large", [
             {
               field: "body.statuses",
-              message: "These stories and their photos are over 200 MB: send fewer at a time.",
+              message: "These stories, their photos and the ads are over 200 MB: send fewer stories at a time.",
             },
           ]);
         }
@@ -302,7 +360,12 @@ export const deskBundleRoutes: FastifyPluginAsyncZod<DeskBundleOptions> = async 
           targetType: "edition",
           targetId: e,
           publicationId: p,
-          data: { bundle: bundle.id, stories: rows.length, photos: originals.size },
+          data: {
+            bundle: bundle.id,
+            stories: rows.length,
+            photos: [...originals.keys()].filter((name) => name.startsWith("photos/")).length,
+            ads: ads.length,
+          },
         });
         const json = new TextEncoder().encode(JSON.stringify(doc(bundle)));
         return { bundle, edition, json, originals: [...originals.values()], count: rows.length };

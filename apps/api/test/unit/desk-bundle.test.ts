@@ -75,7 +75,7 @@ async function run(out: PassThrough, chunks: Uint8Array[], sha256: string, readS
     }
   });
   const original = { name: `photos/${sha256}.png`, sha256, bytes: 0, key: "k", version: "v" };
-  const json = new TextEncoder().encode('{"format":"pageinator.story-bundle/1"}');
+  const json = new TextEncoder().encode('{"format":"pageinator.story-bundle/2"}');
   let error: unknown = null;
   await writeZip(out, json, [original], storeOf(chunks), new Date("2026-11-30T06:00:00+05:30")).catch((e) => {
     error = e;

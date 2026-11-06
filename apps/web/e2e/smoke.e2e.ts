@@ -293,9 +293,9 @@ test("L2.1: two-step sign-in, a story with a photo, live updates, send back, rea
     expect(listed.status, listed.stderr).toBe(0);
     const { names, doc } = JSON.parse(listed.stdout) as { names: string[]; doc: BundleDoc };
     expect(names.sort()).toEqual(["bundle.json", `photos/${sha256}.jpg`]);
-    expect(doc.format).toBe("pageinator.story-bundle/1");
+    expect(doc.format).toBe("pageinator.story-bundle/2");
     expect(doc.source).toEqual({ organisation_id: orgId, publication_id: pubId });
-    expect(doc.edition).toEqual({ date: EDITION_DATE, pages: 8 });
+    expect(doc.edition).toMatchObject({ date: EDITION_DATE, pages: 8 });
     expect(doc.stories).toHaveLength(1);
     const [sent] = doc.stories;
     expect(Object.keys(sent ?? {}).sort()).toEqual(

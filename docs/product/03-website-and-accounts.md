@@ -33,10 +33,10 @@ light theme, serif editorial identity and claims governance (built 2026-10-24, `
 | Sign in | Sign in | `/login` | When signed out |
 | Primary CTA | Book a demo | `/contact?intent=demo` | Only once the contact form is connected (see below). When signed in: the person's name, "Open workspace" and Sign out |
 
-**Footer** (as built): the page links and Sign in; the notice; "Hosting in India is planned; no paper's data is hosted
-yet."; the copyright line. **Not yet:** Legal (Privacy, Terms, Grievance officer, as required by DPDP), Status, and
-"Made in India · Data stored in India" (once hosting is decided): no link to a page that does not exist (doc 11,
-L2-230, L2-237).
+**Footer** (as built): the page links and Sign in; Legal (Privacy, Terms, Grievance officer, as required by DPDP): the
+three `/legal/*` pages, each showing the owner's text or that it is still to be supplied (D-6); the notice; "Hosting in
+India is planned; no paper's data is hosted yet."; the copyright line. **Not yet:** Status, and
+"Made in India · Data stored in India" (once hosting is decided): no link to a page that does not exist (doc 11, L2-237).
 
 ### 4.2 Pages
 
@@ -50,7 +50,7 @@ L2-230, L2-237).
 | `/security` | What is true today (tenancy walls, the audit log, two-step sign-in, hashed passwords, cookies, the Origin guard, the contact form keeps nothing); planned (hosting in India, backups and monitoring, an unalterable archive, the legal pages); not true today (denials); another paper's records stay invisible; how to report a problem (only while the contact form is connected) | Book a demo |
 | `/contact` | The page asks `GET /api/v1/contact` first. Connected: "Messages sent here go by email to the people who build Pageinator", and the form: what you want (a demo, a pilot, a press partner, something else; preset by `?intent=`), name, newspaper, city, phone/WhatsApp, email, message, and the privacy line (emailed to the team and kept in their mailbox; the website keeps no copy; the server's log notes the connection's address). Not connected: "The contact form is not connected yet", and no form and no "Tell us about your paper" heading. `/security` says the form sends only when it is connected | Send |
 | `/about` ★ | Who builds it, the mission | — |
-| `/legal/*` ★ | Privacy notice (DPDP), Terms, Grievance officer contact | — |
+| `/legal/privacy`, `/legal/terms`, `/legal/grievance` | The owner's text, `<doc>.<lang>.txt` from the host (`docs/runbooks/deploy.md`, "The legal pages' texts"); the other language's with a note when only it exists; until D-6, that the text is to be supplied by the owner. Never text we write | — |
 
 **No call to action to a form that cannot send.** The site asks `GET /api/v1/contact` once per page load (the first
 page that needs it asks; an unanswered question is asked again by the next one). Every "Book a demo" and "Talk to us

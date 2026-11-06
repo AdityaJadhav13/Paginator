@@ -4,15 +4,6 @@
 import { sql } from "kysely";
 import type { Tx } from "./tenant.ts";
 
-export type BundleEdition = { id: string; date: string; pages: number };
-
-export async function editionOf(tx: Tx, publicationId: string, editionId: string): Promise<BundleEdition | undefined> {
-  const { rows } = await sql<BundleEdition>`
-    select id, to_char(edition_date, 'YYYY-MM-DD') as date, pages from app.edition
-    where publication_id = ${publicationId} and id = ${editionId}`.execute(tx);
-  return rows[0];
-}
-
 export type BundleStory = {
   id: string;
   version: number;

@@ -165,5 +165,15 @@
   "m.bundle.keptNewer": "The Desk has a newer revision of it (revision {revision}): kept as it is.",
   "m.bundle.retry": "It changed in the Desk while the file was being read: import the file again.",
   "m.bundle.zip64": "This Pageinator stories file is in the ZIP64 form, which the Desk does not take: make the file again.",
-  "m.bundle.deletedInDesk": "Deleted in the Desk after it was imported: not added again."
+  "m.bundle.deletedInDesk": "Deleted in the Desk after it was imported: not added again.",
+  "m.bundle.adMissing": "An ad the file names is not in this Pageinator stories file ({name}).",
+  "m.bundle.adNoSlot": "The pages of this edition have no ad space called {slot}.",
+  "m.bundle.adKept": "The ad space {slot} has other artwork in the Desk: kept as it is. Remove it in the Desk and import the file again to take the file's.",
+  "m.bundle.adRefused": "The ad for {slot} was not added. {reason}",
+  "m.bundle.keptVolume": "The file's volume is “{sent}”; this edition's is “{desk}”: the Desk's is kept. If the file's is right, change it in this edition's settings.",
+  "m.bundle.keptIssue": "The file's issue number is “{sent}”; this edition's is “{desk}”: the Desk's is kept. If the file's is right, change it in this edition's settings.",
+  "m.bundle.keptPrice": "The file's price is “{sent}”; this edition's is “{desk}”: the Desk's is kept. If the file's is right, change it in this edition's settings.",
+  "m.bundle.backAdsOn": "The stories were sent for an edition with back-page ads; this one has none: to take the file's ads, tick “Back page has ads” in this edition's settings and import the file again.",
+  "m.bundle.backAdsOff": "The stories were sent for an edition without back-page ads; this one has them: untick “Back page has ads” in this edition's settings if its last page is all news.",
+  "m.bundle.adNotInFile": "The ad in {slot} is in the Desk but not in this file (the hosted edition no longer has it): remove it in the Desk if it should not print."
 }

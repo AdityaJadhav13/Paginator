@@ -1,6 +1,7 @@
 // "Send to the Desk" (src/modules/stories/desk-bundle.ts; tools/desk/CONTRACT.md §6) on a migrated clone and the run's
 // bucket: the ZIP the API streams (its files, bundle.json's every key, desk-text/1 bodies, revisions, photo SHA-256s, no
-// ZIP64), its limits, who may ask, what is recorded and what it refuses, and the Desk's own code on what it sends
+// ZIP64; the edition's settings and its ready back-page ads), its limits, who may ask, what is recorded and what it
+// refuses, and the Desk's own code on what it sends
 // (test/support/desk_roundtrip.py): the round trip into a throwaway Desk home, every story and photo arriving and a
 // re-export after an edit replacing what changed; desk_text on the same bodies as the API's port; a cut-off ZIP refused
 // as damaged; a repetitive bundle taken. Every person, story and picture is fictional.
@@ -51,15 +52,15 @@ async function newEdition(pub = a.pubId): Promise<{ id: string; day: string }> {
   return { id: made.rows[0]?.id as string, day };
 }
 
-/** The Desk's own code (test/support/desk_roundtrip.py): one command, its JSON answer. */
-function desk(...args: string[]): unknown {
+/** The Desk's own code (test/support/desk_roundtrip.py): one command, its JSON answer (env: DESK_BACK_SLOTS). */
+function desk(args: string[], env: Record<string, string> = {}): unknown {
   expect(existsSync(DESK_PY), `the Desk's Python (set PAGEINATOR_DESK_PY): ${DESK_PY}`).toBe(true);
   const run = spawnSync(
     DESK_PY,
     ["-B", join(REPO, "apps/api/test/support/desk_roundtrip.py"), args[0] as string, REPO, ...args.slice(1)],
     {
       encoding: "utf8",
-      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1", ...env },
       maxBuffer: 64 * 1024 * 1024,
     },
   );
@@ -209,14 +210,15 @@ describe("the story bundle", () => {
     ).toBe(photo.sha256);
     expect(Buffer.from(files[photoName] as Uint8Array).equals(Buffer.from(photo.bytes))).toBe(true);
     const doc = JSON.parse(new TextDecoder().decode(files["bundle.json"]));
-    expect(Object.keys(doc)).toEqual(["format", "bundle", "source", "edition", "stories"]);
-    expect(doc.format).toBe("pageinator.story-bundle/1");
+    expect(Object.keys(doc)).toEqual(["format", "bundle", "source", "edition", "stories", "ads"]);
+    expect(doc.format).toBe("pageinator.story-bundle/2");
     expect(doc.bundle).toEqual({
       id: res.headers["x-pageinator-bundle"],
       created: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+05:30$/),
     });
     expect(doc.source).toEqual({ organisation_id: a.orgId, publication_id: a.pubId });
-    expect(doc.edition).toEqual({ date: DAY, pages: 8 });
+    expect(doc.edition).toEqual({ date: DAY, pages: 8, back_page_ads: true, volume: "", issue: "", price: "" });
+    expect(doc.ads).toEqual([]); // no engine profile yet: no plan, no ads
     expect(doc.stories.map((s: { id: string }) => s.id)).toEqual([s1.id, s2.id, s3.id]); // Ready only, oldest first
     const [one, two, three] = doc.stories;
     expect(Object.keys(one)).toEqual([
@@ -267,7 +269,7 @@ describe("the story bundle", () => {
     const audit = await su.query("select data from app.audit_event where action = 'desk.export' and target_id = $1", [
       edition,
     ]);
-    expect(audit.rows).toEqual([{ data: { bundle: doc.bundle.id, stories: 3, photos: 1 } }]);
+    expect(audit.rows).toEqual([{ data: { bundle: doc.bundle.id, stories: 3, photos: 1, ads: 0 } }]);
   });
 
   it("takes the states asked for, and only the edition's stories", async () => {
@@ -438,7 +440,7 @@ describe("the bundle's limits and checks", () => {
     ).rejects.toThrow("not the bytes its asset names");
     const partial = Buffer.concat(got);
     expect(partial.length).toBeGreaterThan(0);
-    expect(inFolder({ "cut.zip": partial }, (dir) => desk("open", join(dir, "cut.zip")))).toEqual({
+    expect(inFolder({ "cut.zip": partial }, (dir) => desk(["open", join(dir, "cut.zip")]))).toEqual({
       refused: "m.bundle.damaged",
     });
   });
@@ -451,7 +453,7 @@ describe("the bundle's limits and checks", () => {
     const res = await exportBundle({}, e);
     expect(res.statusCode).toBe(200);
     expect(res.rawPayload.length).toBeGreaterThan(1_400_000); // stored, not packed
-    expect(inFolder({ "big.zip": res.rawPayload }, (dir) => desk("open", join(dir, "big.zip")))).toEqual({
+    expect(inFolder({ "big.zip": res.rawPayload }, (dir) => desk(["open", join(dir, "big.zip")]))).toEqual({
       ok: true,
       stories: 8,
     });
@@ -487,7 +489,7 @@ describe("the bundle's limits and checks", () => {
       "One.\r",
     ];
     const python = inFolder({ "bodies.json": JSON.stringify(cases) }, (dir) =>
-      desk("desk_text", join(dir, "bodies.json")),
+      desk(["desk_text", join(dir, "bodies.json")]),
     ) as boolean[];
     expect(cases.map(isDeskText)).toEqual(python);
     expect(python.slice(0, raw.length)).toEqual(raw.map(() => true)); // what the API writes, the Desk takes
@@ -524,7 +526,7 @@ describe("the round trip into the Desk (deskserver/bundle.py)", () => {
     expect(recaptioned.statusCode, recaptioned.body).toBe(200);
     const zip2 = (await exportBundle({}, e)).rawPayload;
     const out = inFolder({ "1.zip": zip1, "2.zip": zip2 }, (dir) =>
-      desk("import", join(dir, "home"), day, "8", join(dir, "1.zip"), join(dir, "2.zip")),
+      desk(["import", join(dir, "home"), day, "8", join(dir, "1.zip"), join(dir, "2.zip")]),
     ) as {
       imports: Record<string, { story: string; reason?: string }[]>[];
       articles: {
@@ -548,5 +550,164 @@ describe("the round trip into the Desk (deskserver/bundle.py)", () => {
     expect(byStory[s1.id]?.body).toBe(
       "First line of the first paragraph and its second line.\n\n## A subheading\n\nSecond paragraph.",
     );
+  }, 60_000);
+});
+
+describe("the edition's settings and back-page ad artwork (pageinator.story-bundle/2)", () => {
+  const BACK = [
+    { slot: "back-1", w_mm: 120, h_mm: 80.5 },
+    { slot: "back-2", w_mm: 60, h_mm: 40 },
+  ];
+
+  /** A ready engine profile whose 8-page plan with back-page ads has BACK on page 8 (made as the superuser). */
+  async function readyProfile() {
+    const user = await n.userId(a.owner);
+    const upload = await su.query<{ id: string }>(
+      `insert into app.upload (org_id, publication_id, user_id, purpose, declared_type, declared_bytes, expires_at)
+       values ($1, $2, $3, 'engine_dataset', 'application/zip', 10, now()) returning id`,
+      [a.orgId, a.pubId, user],
+    );
+    const plan = {
+      pages: 8,
+      back_page_ads: true,
+      page_plan: Array.from({ length: 8 }, (_, i) => ({
+        page: i + 1,
+        role: i === 0 ? "front" : i === 7 ? "back" : "inside",
+        template_role: i === 0 ? "front" : "inside",
+        news_mm2: 60000,
+        ad_slots: i === 7 ? BACK : [],
+      })),
+      needs: { stories: 20, briefs: 4, photos: 6, words: 9000, per_role: {}, spare_share: 0.1 },
+    };
+    await su.query(
+      `insert into app.engine_profile (org_id, publication_id, version, state, upload_id, dataset_version_id,
+         dataset_sha256, dataset_bytes, config_version_id, config_sha256, engine_version, templates, grid, plans,
+         created_by)
+       values ($1, $2, 1, 'ready', $3, 'v-dataset', $4, 10, 'v-config', $5, 'fictional-engine 1', '{"front": "page1"}',
+         $6, $7, $8)`,
+      [
+        a.orgId,
+        a.pubId,
+        upload.rows[0]?.id,
+        "d".repeat(64),
+        "e".repeat(64),
+        JSON.stringify({ columns: 8, column_width_mm: 32, gutter_mm: 4 }),
+        JSON.stringify([plan]),
+        user,
+      ],
+    );
+  }
+
+  /** The slot's artwork, as the media worker leaves it: ready (with a raster) or still being prepared. */
+  async function artwork(e: string, slot: string, assetId: string, state: "ready" | "preparing") {
+    const raster = { key: "k", version_id: "v", sha256: "f".repeat(64), bytes: 1, width_px: 10, height_px: 5 };
+    await su.query(
+      `insert into app.ad_slot_artwork (org_id, publication_id, edition_id, slot, asset_id, w_mm, h_mm, state, raster,
+         set_by)
+       values ($1, $2, $3, $4, $5, 120, 80.5, $6, $7::jsonb, $8)`,
+      [
+        a.orgId,
+        a.pubId,
+        e,
+        slot,
+        assetId,
+        state,
+        state === "ready" ? JSON.stringify(raster) : null,
+        await n.userId(a.owner),
+      ],
+    );
+  }
+
+  it("carries the settings and each ad set in the plan as its original, ready or not; the Desk takes them", async () => {
+    await readyProfile();
+    const { id: e, day } = await newEdition();
+    await su.query("update app.edition set volume = 'वर्ष ५', issue = '301', price = '₹ 5' where id = $1", [e]);
+    const art = await picture(120);
+    const other = await picture(121);
+    await su.query("update app.asset set status = 'ready' where id = $1", [art.id]);
+    // set while the engine is down: the picture not yet made ready by its media job, the artwork still being prepared
+    await su.query("update app.asset set status = 'received' where id = $1", [other.id]);
+    await artwork(e, "back-1", art.id, "ready");
+    await artwork(e, "back-2", other.id, "preparing");
+    await artwork(e, "inside-9", other.id, "ready"); // not a slot of the plan in use: left out
+    await story({ editionId: e, pagePin: null });
+    const res = await exportBundle({}, e);
+    expect(res.statusCode, res.body).toBe(200);
+    const files = unzipSync(res.rawPayload);
+    const adName = `ads/${art.sha256}.png`;
+    const otherName = `ads/${other.sha256}.png`;
+    expect(Object.keys(files).sort()).toEqual([adName, otherName, "bundle.json"].sort());
+    expect(Buffer.from(files[otherName] as Uint8Array).equals(Buffer.from(other.bytes))).toBe(true);
+    expect(Buffer.from(files[adName] as Uint8Array).equals(Buffer.from(art.bytes))).toBe(true);
+    const doc = JSON.parse(new TextDecoder().decode(files["bundle.json"]));
+    expect(doc.edition).toEqual({
+      date: day,
+      pages: 8,
+      back_page_ads: true,
+      volume: "वर्ष ५",
+      issue: "301",
+      price: "₹ 5",
+    });
+    expect(doc.ads).toEqual([
+      {
+        slot: "back-1",
+        page: 8,
+        file: adName,
+        sha256: art.sha256,
+        filename: expect.stringMatching(/^p-[0-9a-f]{10}\.png$/),
+      },
+      {
+        slot: "back-2",
+        page: 8,
+        file: otherName,
+        sha256: other.sha256,
+        filename: expect.stringMatching(/^p-[0-9a-f]{10}\.png$/),
+      },
+    ]);
+    const audit = await su.query("select data from app.audit_event where action = 'desk.export' and target_id = $1", [
+      e,
+    ]);
+    expect(audit.rows).toEqual([{ data: { bundle: doc.bundle.id, stories: 1, photos: 0, ads: 2 } }]);
+    // the Desk's own code: each ad into its empty slot of the same name, the settings it has empty
+    const out = inFolder({ "1.zip": res.rawPayload }, (dir) =>
+      desk(["import", join(dir, "home"), day, "8", join(dir, "1.zip")], { DESK_BACK_SLOTS: JSON.stringify(BACK) }),
+    ) as {
+      imports: { added: unknown[]; ads: Record<string, unknown[]>; settings: unknown }[];
+      edition: unknown;
+      ads: Record<string, string>;
+    };
+    expect(out.imports[0]?.added).toHaveLength(1);
+    expect(out.imports[0]?.ads).toEqual({
+      added: [{ slot: "back-1" }, { slot: "back-2" }],
+      unchanged: [],
+      kept: [],
+      refused: [],
+    });
+    expect(out.imports[0]?.settings).toEqual({ set: { volume: "वर्ष ५", issue: "301", price: "₹ 5" }, kept: {} });
+    expect([out.edition, out.ads]).toEqual([
+      { volume: "वर्ष ५", issue: "301", price: "₹ 5" },
+      { "back-1.orig.png": art.sha256, "back-2.orig.png": other.sha256 },
+    ]);
+    // the ad's bytes count toward the 200 MB, checked before anything is recorded: four photos and the ad, each as if
+    // a 40 MiB original (the check reads the assets' sizes), are over it; the same photos without so large an ad are not
+    const MiB40 = 41_943_040;
+    for (let i = 0; i < 4; i += 1) {
+      const photo = await picture(130 + i);
+      await attach(await story({ headline: `Heavy ${i} (fictional)`, editionId: e, pagePin: null }), photo.id);
+      await su.query("update app.asset set bytes = $2 where id = $1", [photo.id, MiB40]);
+    }
+    await su.query("update app.asset set bytes = $2 where id = $1", [art.id, MiB40]);
+    const before = await su.query("select count(*)::int as n from app.desk_bundle");
+    const big = await change("POST", bundleUrl(e), editor.cookie, {});
+    expect([big.statusCode, big.json().error.code]).toEqual([413, "file_too_large"]);
+    expect((await su.query("select count(*)::int as n from app.desk_bundle")).rows).toEqual(before.rows);
+    await su.query("update app.asset set bytes = $2 where id = $1", [art.id, art.bytes.length]);
+    expect((await exportBundle({}, e)).statusCode).toBe(200);
+    // a picture rejected or failed after it was set: the bundle is refused, naming each slot, never sent without it
+    await su.query("update app.asset set status = 'rejected' where id = $1", [art.id]);
+    await su.query("update app.asset set status = 'failed' where id = $1", [other.id]);
+    const refused = await change("POST", bundleUrl(e), editor.cookie, {});
+    expect([refused.statusCode, refused.json().error.code]).toEqual([409, "bundle_refused"]);
+    expect(refused.json().error.details.map((d: { field: string }) => d.field)).toEqual(["ads.back-1", "ads.back-2"]);
   }, 60_000);
 });

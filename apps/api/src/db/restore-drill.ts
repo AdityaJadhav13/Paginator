@@ -2,7 +2,7 @@
 // database's facts, takes a dump exactly as the nightly backup does (scripts/db-backup.ts), reads the facts again,
 // fetches the dump back and checks its SHA-256 against the store's, restores it with `pg_restore --exit-on-error` into a
 // NEW database, and compares. Every fact is read as pgn_backup (BYPASSRLS, read-only), on the live and the restored
-// database alike.
+// database alike. pointInTimeCheck checks a point-in-time restore RDS made (path A) against the live database.
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -10,11 +10,11 @@ import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import pg from "pg";
 import { loadBackupConfig } from "../config.ts";
 import { s3Client } from "../storage/s3.ts";
-import { auditMarker } from "./audit.ts";
+import { auditMarker, auditUpTo } from "./audit.ts";
 import { MIGRATIONS, MIGRATION_NAME } from "./migrate.ts";
 
 type Facts = {
@@ -115,8 +115,9 @@ export async function withRestoreDatabase<T>(
 
 type Client = Pick<pg.Client, "query" | "end">;
 export type DrillDeps = {
-  /** A session as pgn_backup (read-only) on a database, or as the admin on `postgres`. */
-  connect(database: string, as: "backup" | "admin"): Promise<Client>;
+  /** A session as pgn_backup (read-only) on a database (on the restored instance for "target"), or as the admin on
+   * `postgres`. */
+  connect(database: string, as: "backup" | "target" | "admin"): Promise<Client>;
   /** scripts/db-backup.ts; its output. */
   backup(): Promise<string>;
 };
@@ -129,13 +130,19 @@ function liveDeps(env: NodeJS.ProcessEnv): DrillDeps {
   return {
     async connect(database, as) {
       const client = new pg.Client({
-        host: config.database.host,
-        port: config.database.port,
+        // a point-in-time restore is an instance of its own; its roles and passwords came with it
+        host: as === "target" ? env["PGN_RESTORE_TARGET_HOST"] : config.database.host,
+        port: as === "target" ? Number(env["PGN_RESTORE_TARGET_PORT"] || config.database.port) : config.database.port,
         database,
         application_name: "pageinator-verify-restore",
-        ...(as === "backup"
-          ? { user: "pgn_backup", password: config.database.password, options: "-c default_transaction_read_only=on" }
-          : { user: env["PGN_RESTORE_ADMIN_USER"] || "postgres", password: adminPassword }),
+        ...(as === "admin"
+          ? { user: env["PGN_RESTORE_ADMIN_USER"] || "postgres", password: adminPassword }
+          : {
+              user: "pgn_backup",
+              password: config.database.password,
+              // one zone for every session: rows are compared as text across instances
+              options: "-c default_transaction_read_only=on -c TimeZone=UTC",
+            }),
       });
       try {
         await client.connect();
@@ -147,6 +154,141 @@ function liveDeps(env: NodeJS.ProcessEnv): DrillDeps {
     },
     backup: () => run("node", ["scripts/db-backup.ts"], backupEnv),
   };
+}
+
+/** The restored database's newest photos' originals are in the work bucket (PGN_S3_WORK_BUCKET; SKIP when unset). */
+async function photosInStore(restored: Pick<pg.Client, "query">, client: S3Client): Promise<Line> {
+  const check = "photos in the store";
+  const work = process.env["PGN_S3_WORK_BUCKET"];
+  if (!work) return { status: "SKIP", check, detail: "PGN_S3_WORK_BUCKET is not set" };
+  const photos = await restored.query<{ original_key: string; version_id: string | null }>(
+    "select original_key, version_id from app.asset where deleted_at is null order by created_at desc limit 5",
+  );
+  if (photos.rows.length === 0) return { status: "SKIP", check, detail: "none in the restored database" };
+  const missing: string[] = [];
+  for (const photo of photos.rows) {
+    await client
+      .send(
+        new HeadObjectCommand({
+          Bucket: work,
+          Key: photo.original_key,
+          ...(photo.version_id ? { VersionId: photo.version_id } : {}),
+        }),
+      )
+      .catch(() => missing.push(photo.original_key));
+  }
+  return missing.length === 0
+    ? { status: "PASS", check, detail: `${photos.rows.length} newest originals found` }
+    : { status: "FAIL", check, detail: `missing: ${missing.join(", ")}` };
+}
+
+/** A minute either side of the restore time: an event's `at` is its transaction's start, which may commit later. */
+const SKEW_MS = 60_000;
+
+/** The restore time of a point-in-time restore (PGN_RESTORE_TIME, as given to RDS's --restore-time): ISO 8601 with
+ * its zone (Z or ±hh:mm, never the machine's own), and not later than now. */
+export function restoreTime(text: string | undefined, now = new Date()): Date {
+  const at = new Date(text ?? "");
+  if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:\d\d)$/.test(text ?? "") || Number.isNaN(at.getTime()))
+    throw new Error("PGN_RESTORE_TIME must be the restore time, ISO 8601 with its zone, e.g. 2026-11-05T16:30:00Z");
+  if (at.getTime() > now.getTime()) throw new Error("PGN_RESTORE_TIME is later than now");
+  return at;
+}
+
+/** Path A (docs/runbooks/restore.md): checks an instance already restored to a point in time (RDS's own restore, a new
+ * instance at PGN_RESTORE_TARGET_HOST) against the live database, both read as pgn_backup in read-only sessions. The
+ * live database has moved on since, so it compares what cannot change after the restore time: the audit log
+ * (append-only) and the closed story revisions (never changed once closed) up to a minute before it, which must be the
+ * same in both; nothing in the target may come after it. Its migrations must be live's or fewer (the deploy that
+ * points the pilot at it applies the rest), and its RLS policies live's when they are the same. Nothing is written. */
+export async function pointInTimeCheck(env: NodeJS.ProcessEnv = process.env, deps?: DrillDeps): Promise<boolean> {
+  const started = Date.now();
+  const config = loadBackupConfig(env);
+  const at = restoreTime(env["PGN_RESTORE_TIME"]);
+  const upTo = new Date(at.getTime() - SKEW_MS);
+  const { connect } = deps ?? liveDeps(env);
+  const lines: Line[] = [];
+  const say = (ok: boolean, check: string, detail: string) =>
+    lines.push({ status: ok ? "PASS" : "FAIL", check, detail });
+  const skip = (check: string, detail: string) => lines.push({ status: "SKIP", check, detail });
+  const revisions = `select count(*)::int as n, md5(string_agg(md5(concat_ws(e'\\n', story_id, rev, headline, kicker,
+    deck, byline, body, extract(epoch from closed_at))), ',' order by org_id, publication_id, story_id, rev)) as hash
+    from app.story_revision where closed_at <= $1`;
+  type Upto = { n: number; hash?: string | null };
+  try {
+    const live = await connect(config.database.name, "backup");
+    let now: Facts, liveAudit: Awaited<ReturnType<typeof auditUpTo>>, liveRevisions: Upto;
+    try {
+      now = await facts(live);
+      liveAudit = await auditUpTo(live, upTo);
+      liveRevisions = (await live.query<Upto>(revisions, [upTo])).rows[0] ?? { n: 0 };
+    } finally {
+      await live.end();
+    }
+    // another name only to rehearse on one server (a copy made with CREATE DATABASE … TEMPLATE)
+    const target = await connect(env["PGN_RESTORE_TARGET_DB"] || config.database.name, "target");
+    try {
+      const got = await facts(target);
+      const carried = (await readdir(MIGRATIONS))
+        .filter((file) => MIGRATION_NAME.test(file))
+        .map((file) => file.replace(/\.ts$/, ""))
+        .sort();
+      const behind = now.migrations.length - got.migrations.length;
+      say(
+        got.migrations.every((name, i) => name === now.migrations[i] && carried.includes(name)),
+        "migrations",
+        `${got.migrations.length} applied, as live's first ones${behind > 0 ? `; ${behind} to apply (the deploy migrates them)` : ""}`,
+      );
+      if (behind !== 0)
+        skip("row-level security policies", "the migrations differ from live's: check again after them");
+      else
+        say(
+          got.policies === now.policies,
+          "row-level security policies",
+          `${JSON.parse(got.policies).length} policies`,
+        );
+      const app = (
+        JSON.parse(got.rls) as { nspname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }[]
+      ).filter((row) => row.nspname === "app");
+      say(
+        app.every((row) => row.relrowsecurity && row.relforcerowsecurity) && (behind !== 0 || got.rls === now.rls),
+        "RLS on and FORCE RLS",
+        `${app.length} app tables all forced`,
+      );
+      const before = `up to ${upTo.toISOString()}`;
+      const theirs = await auditUpTo(target, upTo);
+      if (liveAudit.n === 0) skip("audit events to the restore time", `none in the live database ${before}`);
+      else
+        say(
+          theirs.n === liveAudit.n && theirs.newest === liveAudit.newest,
+          "audit events to the restore time",
+          `${theirs.n} in the target, ${liveAudit.n} live, ${before}`,
+        );
+      const last = theirs.last;
+      if (!last) skip("nothing after the restore time", "no audit event in the target");
+      else
+        say(
+          last.getTime() <= at.getTime() + SKEW_MS,
+          "nothing after the restore time",
+          `its newest audit event ${last.toISOString()}, ${Math.round(Math.abs(at.getTime() - last.getTime()) / 1000)} s ${last > at ? "after" : "before"} ${at.toISOString()}`,
+        );
+      const texts = (await target.query<Upto>(revisions, [upTo])).rows[0] ?? { n: 0 };
+      if (liveRevisions.n === 0) skip("closed story revisions to the restore time", `none live ${before}`);
+      else
+        say(
+          texts.n === liveRevisions.n && texts.hash === liveRevisions.hash,
+          "closed story revisions to the restore time",
+          `${texts.n} in the target, ${liveRevisions.n} live, ${before}`,
+        );
+      lines.push(await photosInStore(target, s3Client(config.storage)));
+    } finally {
+      await target.end();
+    }
+  } finally {
+    for (const line of lines) console.log(`${line.status} ${line.check}: ${line.detail}`);
+    console.log(`point in time ${at.toISOString()}; check took ${((Date.now() - started) / 1000).toFixed(1)} s`);
+  }
+  return lines.every((line) => line.status !== "FAIL");
 }
 
 /** Runs the drill; prints one line per check (also when it stops part way) and returns false when any check failed.
@@ -281,32 +423,7 @@ export async function restoreDrill(env: NodeJS.ProcessEnv = process.env, deps?: 
             say(rows[0]?.hash === story.hash, "marker: newest story text", `md5 ${story.hash}`);
           }
 
-          const work = process.env["PGN_S3_WORK_BUCKET"];
-          if (!work) skip("photos in the store", "PGN_S3_WORK_BUCKET is not set");
-          else {
-            const photos = await restored.query<{ original_key: string; version_id: string | null }>(
-              "select original_key, version_id from app.asset where deleted_at is null order by created_at desc limit 5",
-            );
-            const missing: string[] = [];
-            for (const photo of photos.rows) {
-              await client
-                .send(
-                  new HeadObjectCommand({
-                    Bucket: work,
-                    Key: photo.original_key,
-                    ...(photo.version_id ? { VersionId: photo.version_id } : {}),
-                  }),
-                )
-                .catch(() => missing.push(photo.original_key));
-            }
-            if (photos.rows.length === 0) skip("photos in the store");
-            else
-              say(
-                missing.length === 0,
-                "photos in the store",
-                missing.length ? `missing: ${missing.join(", ")}` : `${photos.rows.length} newest originals found`,
-              );
-          }
+          lines.push(await photosInStore(restored, client));
         } finally {
           await restored.end();
         }

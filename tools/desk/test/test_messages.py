@@ -226,6 +226,27 @@ OLD = {
     "m.bundle.zip64": ({}, "This Pageinator stories file is in the ZIP64 form, which the Desk does not take: make the "
                            "file again."),
     "m.bundle.deletedInDesk": ({}, "Deleted in the Desk after it was imported: not added again."),
+    "m.bundle.adMissing": ({"name": "ads/x.png"}, "An ad the file names is not in this Pageinator stories file "
+                                                  "(ads/x.png)."),
+    "m.bundle.adNoSlot": ({"slot": "back-9"}, "The pages of this edition have no ad space called back-9."),
+    "m.bundle.adKept": ({"slot": "back-1"}, "The ad space back-1 has other artwork in the Desk: kept as it is. Remove it "
+                                            "in the Desk and import the file again to take the file's."),
+    "m.bundle.adRefused": ({"slot": "back-1", "reason": "Not a picture."}, "The ad for back-1 was not added. Not a "
+                                                                            "picture."),
+    "m.bundle.keptVolume": ({"sent": "12", "desk": "11"}, "The file's volume is “12”; this edition's is “11”: the "
+                            "Desk's is kept. If the file's is right, change it in this edition's settings."),
+    "m.bundle.keptIssue": ({"sent": "302", "desk": "301"}, "The file's issue number is “302”; this edition's is “301”: "
+                           "the Desk's is kept. If the file's is right, change it in this edition's settings."),
+    "m.bundle.keptPrice": ({"sent": "₹ 5", "desk": "₹ 4"}, "The file's price is “₹ 5”; this edition's is “₹ 4”: the "
+                           "Desk's is kept. If the file's is right, change it in this edition's settings."),
+    "m.bundle.backAdsOn": ({}, "The stories were sent for an edition with back-page ads; this one has none: to take the "
+                               "file's ads, tick “Back page has ads” in this edition's settings and import the file "
+                               "again."),
+    "m.bundle.backAdsOff": ({}, "The stories were sent for an edition without back-page ads; this one has them: untick "
+                                "“Back page has ads” in this edition's settings if its last page is all news."),
+    "m.bundle.adNotInFile": ({"slot": "back-1"}, "The ad in back-1 is in the Desk but not in this file (the hosted "
+                                                 "edition no longer has it): remove it in the Desk if it should not "
+                                                 "print."),
 }
 
 
