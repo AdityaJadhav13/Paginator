@@ -1,0 +1,202 @@
+/* The media library (plan §L2.2): the grid of pictures, a picture's detail, the uploads. Tokens and logical properties only. */
+
+.pg-media__filter-bar {
+  padding: 0;
+}
+
+/* the search and its Apply wrap as one; each filter keeps its label above its control */
+.pg-media__search-group {
+  display: flex;
+  flex: 1 1 16rem;
+  gap: var(--pg-space-2);
+  align-items: end;
+  min-inline-size: 0;
+}
+
+.pg-media__search-group .pg-stories__search {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.pg-media__filter-bar .pg-field {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+
+.pg-media__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--pg-app-gutter);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-media__grid--compact {
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--pg-space-3);
+}
+
+/* a phone: one picture a row */
+@media (max-width: 767px) {
+  .pg-media__grid,
+  .pg-media__grid--compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pg-media__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-2);
+  padding: var(--pg-space-2);
+  border: 1px solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  background-color: var(--pg-app-surface);
+}
+
+.pg-media__pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pg-app-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.pg-media__pick:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.pg-media__pick:hover:not(:disabled) .pg-media__name {
+  text-decoration: underline;
+}
+
+.pg-media__thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--pg-app-radius-md);
+  background-color: var(--pg-app-canvas);
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-media__thumb img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.pg-media__name {
+  overflow-wrap: anywhere;
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-media__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pg-space-1);
+  min-inline-size: 0;
+}
+
+/* a narrow card: a chip shrinks and ends in "…" rather than pushing the card wider (its full words stay its name) */
+.pg-media__flags .pg-badge-chip {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.pg-media__flags .pg-badge-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pg-media__reason,
+.pg-media__note {
+  margin: 0;
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-100);
+}
+
+/* Devanagari never under 13 px */
+:lang(mr) .pg-media__reason,
+:lang(mr) .pg-media__note {
+  font-size: 0.8125rem;
+}
+
+.pg-media__preview {
+  display: grid;
+  place-items: center;
+  min-block-size: 12rem;
+  padding: var(--pg-space-3);
+  border-radius: var(--pg-app-radius-md);
+  background-color: var(--pg-app-canvas);
+  color: var(--pg-app-text-secondary);
+  text-align: center;
+}
+
+.pg-media__preview img {
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+.pg-media__preview p,
+.pg-media__sharp {
+  margin: 0;
+}
+
+.pg-media__sharp {
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-media__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: var(--pg-space-2) var(--pg-space-4);
+  margin: 0;
+}
+
+.pg-media__facts dt {
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-100);
+}
+
+:lang(mr) .pg-media__facts dt {
+  font-size: 0.8125rem;
+}
+
+.pg-media__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.pg-media__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-4);
+  margin: 0;
+}
+
+.pg-media__uploads,
+.pg-media__used {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-media__uploads p {
+  margin: 0;
+}
+
+.pg-media__upload-name {
+  overflow-wrap: anywhere;
+  font-weight: var(--pg-font-weight-semibold);
+}

@@ -1,0 +1,702 @@
+:root {
+  --bg: #f4f3f0;
+  --surface: #ffffff;
+  --text: #17202a;
+  --muted: #5b6573;
+  --border: #d4d9df;
+  --accent: #1d4ed8;
+  --ok: #15803d;
+  --warn: #b45309;
+  --error: #b91c1c;
+  --paste: #3a3f47;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  color: var(--text);
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+}
+body {
+  display: flex;
+  flex-direction: column;
+}
+button,
+input {
+  font: inherit;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 12.5px;
+}
+[lang="mr"],
+.story-list li,
+#p-headline {
+  font-family: "Kohinoor Devanagari", "Nirmala UI", "Noto Sans Devanagari", system-ui, sans-serif;
+}
+
+.ed-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.ed-back {
+  flex: none;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ed-title {
+  flex: 0 1 auto;
+  display: flex;
+  gap: 0.3em;
+  min-width: 0;
+  white-space: nowrap;
+}
+.ed-title strong {
+  flex: none; /* the page number always shows; the edition and layout give way */
+}
+#subtitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ed-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.ed-tools button,
+.buttons button,
+.seg button {
+  min-width: 34px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.ed-tools button,
+.ed-save button {
+  flex: none;
+  white-space: nowrap; /* the page's title gives way when the header is narrow, not the buttons */
+}
+.ed-tools button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ed-tools button[aria-pressed="true"] {
+  background: #eef2ff;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ed-tools button.icon {
+  width: 34px;
+  padding: 0;
+}
+.ed-tools button.icon svg {
+  display: block;
+  margin: auto;
+}
+.ed-tools .sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 6px;
+}
+.zoom {
+  min-width: 48px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ed-save {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.save-state {
+  /* a slot of its own, at most two lines: the header's height never follows the status (else the page view would
+     be fitted again at every change). 16em holds every status the editor shows in two lines; the tooltip has it too */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  width: 16em;
+  max-height: 2.5em;
+  line-height: 1.25;
+  text-align: right;
+  color: var(--muted);
+  font-size: 13px;
+}
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.primary:disabled {
+  opacity: 0.5;
+}
+button.danger {
+  color: var(--error);
+}
+button:focus-visible,
+canvas:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ed-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 14px;
+  background: #fffbeb;
+  border-bottom: 1px solid #f3d9a4;
+  color: #78350f;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.ed-notice.error {
+  background: #fef2f2;
+  border-bottom-color: #f5c2c2;
+  color: #7f1d1d;
+}
+.ed-notice p {
+  flex: 1;
+  margin: 0;
+}
+.ed-notice button {
+  min-width: 28px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ed-notice button:hover {
+  border-color: currentColor;
+}
+.ed-notice[hidden] {
+  display: none;
+}
+.ed-notice button.action {
+  border-color: currentColor;
+  padding: 0 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.ed-notice button.action[hidden] {
+  display: none;
+}
+.move-to {
+  display: flex;
+  gap: 6px;
+}
+.move-to select,
+.move-to button {
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.move-to select {
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+}
+.move-to button {
+  padding: 0 12px;
+  cursor: pointer;
+}
+.move-to select:disabled,
+.move-to button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.ed-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 260px 1fr 300px;
+  min-height: 0;
+}
+.ed-left,
+.ed-right {
+  background: var(--surface);
+  overflow: auto;
+  padding: 12px 14px;
+}
+.ed-left {
+  border-right: 1px solid var(--border);
+}
+.ed-right {
+  border-left: 1px solid var(--border);
+}
+h2 {
+  font-size: 14px;
+  margin: 14px 0 8px;
+}
+.story-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.story-list li {
+  line-height: 1.45;
+  font-size: 14px;
+}
+button.row {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.story-list button.row:hover {
+  background: #eef2ff;
+}
+.story-list li.selected button.row {
+  border-color: var(--accent);
+  background: #eef2ff;
+}
+.story-list li .meta {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+}
+.story-list li.warn .meta {
+  color: var(--warn);
+}
+#pool-search {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.ed-center {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.ed-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--paste);
+}
+.ed-story {
+  flex: 0 0 auto;
+  height: 40vh;
+  min-height: 200px;
+  max-height: 75vh;
+  resize: vertical;
+  overflow: auto;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 8px 14px 14px;
+}
+.ed-story[hidden] {
+  display: none;
+}
+.ed-story-head {
+  position: sticky;
+  top: -8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.ed-story-head h2 {
+  margin: 0;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+.ed-story-head .fit {
+  margin: 0;
+}
+.ed-story-head button {
+  margin-left: auto;
+  min-width: 30px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ed-article {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+}
+.ed-article legend {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.ed-article .wide {
+  grid-column: 1 / -1;
+}
+.ed-article label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.ed-article input,
+.ed-article textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: "Kohinoor Devanagari", "Nirmala UI", "Noto Sans Devanagari", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+#canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: default;
+}
+.ed-busy {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(23, 32, 42, 0.85);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+.ed-canvas-wrap.rulers .ed-busy {
+  top: 32px; /* below the top ruler */
+}
+
+#p-headline {
+  font-size: 17px;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+.fit {
+  margin: 4px 0 10px;
+  font-size: 13px;
+}
+.fit.ok {
+  color: var(--ok);
+}
+.fit.warn {
+  color: var(--warn);
+}
+.fit.bad {
+  color: var(--error);
+}
+.field {
+  margin: 10px 0;
+}
+.field .label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.field.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.field.two input {
+  width: 100%;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+}
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.seg button {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 6px;
+}
+.seg button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.buttons button {
+  text-align: left;
+}
+.buttons button:disabled,
+.seg button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.field.two input:disabled {
+  background: #f3f4f6;
+  color: var(--muted);
+}
+button.lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+button.lock[aria-pressed="true"] {
+  background: #eef2ff;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.lock-note {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #eef2ff;
+  color: #1e3a8a;
+  line-height: 1.45;
+}
+.lock-note[hidden] {
+  display: none;
+}
+.story-list li.locked button.row {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.story-list li.locked button.row:hover {
+  background: none;
+}
+
+.ed-menu {
+  position: absolute;
+  z-index: 3;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.22);
+}
+.ed-menu[hidden] {
+  display: none;
+}
+.ed-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.ed-menu button:hover,
+.ed-menu button:focus {
+  background: #eef2ff;
+}
+.ed-menu button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ed-menu button.danger {
+  color: var(--error);
+}
+.ed-menu button[aria-disabled="true"] {
+  color: #9aa3ae;
+  cursor: default;
+}
+.ed-menu .key {
+  color: var(--muted);
+  font-size: 12px;
+}
+.problems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+.problems li {
+  padding: 6px 8px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  background: #fef3c7;
+  color: #78350f;
+}
+.problems li:has(> button.row) {
+  padding: 0;
+}
+.problems button.row {
+  padding: 6px 8px;
+}
+.problems li.bad {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+.problems li.ok {
+  background: #dcfce7;
+  color: #14532d;
+  cursor: default;
+}
+.help {
+  margin-top: 18px;
+  line-height: 1.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
+
+/* the selected story's photo: its resolution, the zoom, crop and focal point */
+.photo-tools .ppi {
+  margin: 0.25rem 0;
+}
+.photo-tools .ppi.ok {
+  color: #166534;
+}
+.photo-tools .ppi.warn {
+  color: #b45309;
+}
+.photo-tools .zoom-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.photo-tools .zoom-field input {
+  flex: 1;
+  min-width: 0;
+}
+.photo-tools output {
+  min-width: 3.5em;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.photo-tools button[aria-pressed="true"] {
+  background: #fef3c7;
+  border-color: #d97706;
+}
+
+/* ------------------------------------------------------------------ the Marathi editor (02-design-system §3.3)
+   Devanagari interface text in the system's Devanagari face (Kohinoor Devanagari on macOS, Nirmala UI on Windows; no
+   web fonts), never below 13 px, with room for its ascenders and descenders. Keys and digits stay in system-ui. */
+:root[lang="mr"] {
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Nirmala UI",
+    "Kohinoor Devanagari",
+    "Noto Sans Devanagari",
+    Mangal,
+    sans-serif;
+}
+:root[lang="mr"] :is(.small, .story-list li .meta, .ed-article label, .ed-menu .key) {
+  font-size: 13px;
+}
+:root[lang="mr"] :is(.help, .lock-note, .problems li, .fit, .ed-notice, .field .label, .field.two) {
+  line-height: 1.6;
+}
+:root[lang="mr"] :is(.story-list li, #p-headline) {
+  line-height: 1.55;
+}
+/* the save state keeps one height whatever it says (two lines at most, the rest in its tooltip), so the header's
+   height never changes with it */
+:root[lang="mr"] .save-state {
+  line-height: 1.4;
+  height: 2.8em;
+  max-height: 2.8em;
+}
+:root[lang="mr"] .ed-notice button.action {
+  line-height: 1.4;
+}

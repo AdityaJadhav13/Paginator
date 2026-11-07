@@ -1,0 +1,19 @@
+{
+ "counts": {
+  "category_ranges": 3968,
+  "code_points": 1114112,
+  "hb_script_ranges": 1470,
+  "lower_entries": 1433
+ },
+ "environment": {
+  "fonttools": "4.63.0",
+  "harfbuzz": "14.3.0",
+  "machine": "arm64",
+  "oracle_manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05",
+  "platform": "macOS-27.0.1",
+  "python": "3.11.14",
+  "uharfbuzz": "0.56.0"
+ },
+ "schema": "pageinator.golden.unicode-info/1",
+ "unicode_version": "14.0.0"
+}

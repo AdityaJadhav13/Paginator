@@ -1,0 +1,35 @@
+[
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "41",
+    "kind": "docx.import",
+    "outcome": "done",
+    "event": {
+      "kind": "import.parsed",
+      "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+      "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+      "import_id": "01890a5d-ac96-774b-bcce-b302099a8061",
+      "sha256": "1ac2cf823fbe475ea59b5d2d55bedca3617b498ee52f549df29ed039028740ff",
+      "result_key": "orgs/01890a5d-ac96-774b-bcce-b302099a8057/pubs/01890a5d-ac96-774b-bcce-b302099a8058/imports/01890a5d-ac96-774b-bcce-b302099a8061/result-1ac2cf823fbe475ea59b5d2d55bedca3617b498ee52f549df29ed039028740ff.json",
+      "result_version_id": "154b4f2c6e7f3d7d24c3d366639e387e05842e8a84b3f0aa04e95469f5cb81a0",
+      "result_sha256": "154b4f2c6e7f3d7d24c3d366639e387e05842e8a84b3f0aa04e95469f5cb81a0",
+      "articles": 1
+    }
+  },
+  {
+    "format": "pageinator.worker-result/1",
+    "job": "41",
+    "kind": "docx.import",
+    "outcome": "done",
+    "event": {
+      "kind": "import.rejected",
+      "org_id": "01890a5d-ac96-774b-bcce-b302099a8057",
+      "pub_id": "01890a5d-ac96-774b-bcce-b302099a8058",
+      "import_id": "01890a5d-ac96-774b-bcce-b302099a8061",
+      "sha256": "b3c18b76d2e64ffd77f6818f0703baaebe714681e76f208ac6ae1a3770531bc4",
+      "code": "docx.not_word",
+      "message": "This is not a Word (.docx) file. Save it as .docx and try again.",
+      "status": 400
+    }
+  }
+]

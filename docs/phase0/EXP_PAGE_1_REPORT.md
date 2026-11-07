@@ -218,6 +218,31 @@ Result: **page 3 of the 11 November edition**, a full news page. An earlier run,
    - Lines of free text blocks that print justified to the block's width (not a block's last line) are justified again; the editorial no longer reads ragged.
    - Results are unchanged: 29 of 60 Marathi pages pass every gate. A first version filled headlines to the whole measure and pushed some into the next column (25/60); it was corrected before commit.
    - The press page's bytes changed with this, so it is to be re-verified.
+12. **Page model 0.3.0 (2026-10-19):** four rules in story grouping:
+   - **Order is not enough:** a headline found only from the order of text in the file must lie above the text it heads.
+   - **The text under a headline wins:** when several flows compete for one headline, the flow under it beats one that is only next to it in that order.
+   - **Headline boxes do not cut:** a box holding no body text (a boxed headline) does not separate a headline from its text.
+   - **A sentence that runs on is one story:**
+     - A flow that ends mid-sentence takes the column that carries it on, just to its right.
+     - The column is cut where a new paragraph or dateline opens it.
+     - Two headlines become one story (the smaller as its deck) only when the smaller lies under the larger, within its width.
+     - A column that opens under another story's own headline stays with that story (unless the two headlines are nested this way).
+
+   Grouping changed on 5 of 68 pages; the independent verifier confirmed each against the printed text. One English page (27 Aug p6) was mis-grouped before and still is: two side-by-side stories exchange their lead columns. Its first version also regrouped an English page wrongly; the last guard above was added for that. Body lines in stories stay at 100%.
+   - A code review found a possible endless loop and loose headline parts in the new rule; both were fixed, and the models came out identical.
+13. **English pages hyphenated like print (EXP-ENG-1, `page1-compose/2.8.0`):** see `EXP_ENG_1_REPORT.md`.
+14. **Small table-like boxes (weather, rates) set as printed:** a box of 2–6 printed lines, each of at most 4 words, one with a figure, that overflows when flowed is set line by line where print set it. Prose is never set as printed. A line wider than its printed extent is set smaller, never below 85%. This applies only when the story stands where print had it. The verifier found the front-page weather box losing its last row (its temperatures).
+   - The verifier showed that a first version (any story of up to 6 lines) also caught 10 short prose pieces, orphans from grouping or measure. It copied print's lines for them, which inflated the pages passing. The rule is now limited to table-like boxes.
+   - `summary.json` counts the stories set this way (`stories_set_as_printed`).
+15. **The paper's masthead artwork (`brand.py`):** the owner supplied the masthead as an image (private, never committed). It is converted to newsprint CMYK like the photos and drawn in place of the masthead's stand-in lettering and panels, which `masthead_box` finds from page-head lettering of 60 pt or more. Elements that start below the rule under the masthead (the date line, the registration folio) stay. The verifier found a first version dropping them on two fronts.
+   - Other lines in the masthead area (the editor's name on the combined-edition fronts) stay, and the artwork is fitted above them.
+   - **What does not match print:** the artwork carries the daily's tagline. On the combined-edition fronts, print's own edition tagline ("bi-weekly edition") is replaced by it. Each page lists such lines (`masthead.text_replaced`). The masthead is chosen to include the map, as the owner asked; the November pages print it without the map. At its printed width the 1,200-pixel image gives about 198 ppi.
+
+**Results after items 12–15 (68 pages, `page1-compose/2.8.0`):**
+- **Marathi pages passing every gate:** 33 of 60 (was 29); on the test editions, 15 of 28 (was 12). The 7 weather boxes are set as printed (item 14).
+- **Marathi:** story depth 97.8% overall and 99.6% on the test editions; characters in order 100%; 30 lines that do not fit (was 38).
+- **The press page** still passes every gate.
+- **English:** see `EXP_ENG_1_REPORT.md`.
 
 ## 8. G1 and G2
 - **G1: NOT MET.** The automated evidence is strong: depth within G1 A7 for 92–95% of stories on held-out editions, against a 90% bar, and no lost text. G1 still needs the editors' blind reviews (body round 1, the headline round) and fresh copy.

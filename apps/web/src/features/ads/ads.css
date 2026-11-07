@@ -1,0 +1,164 @@
+/* The Ads desk and the edition's Plan tab (L2.6). Tokens and logical properties only; desktop first. */
+
+.pg-ads__note {
+  display: block;
+  margin: 0;
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-200);
+}
+
+.pg-ads__name {
+  display: block;
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-ads__toolbar {
+  align-items: end;
+}
+
+.pg-ads__plain,
+.pg-ads__checks,
+.pg-ads__date-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--pg-space-1);
+}
+
+.pg-ads__date-list {
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+}
+
+.pg-ads__date-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pg-space-2);
+  padding-inline-start: var(--pg-space-2);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+}
+
+.pg-ads__date-add {
+  align-items: end;
+}
+
+.pg-ads__dates {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pg-ads__dates > legend {
+  font-weight: var(--pg-font-weight-semibold);
+  margin-block-end: var(--pg-space-2);
+}
+
+.pg-ads__error {
+  margin: 0;
+  color: var(--pg-app-tone-danger-text);
+}
+
+.pg-ads__subhead {
+  margin: 0 0 var(--pg-space-2);
+  font-size: var(--pg-font-size-300);
+}
+
+.pg-ads__artwork {
+  padding-block-start: var(--pg-space-4);
+  border-block-start: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-ads__artwork h3 {
+  margin: 0;
+}
+
+.pg-ads__thumb {
+  max-inline-size: 20rem;
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  background: var(--pg-app-canvas);
+}
+
+.pg-ads__thumb img {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+/* the flatplan: a page per tile, in a page's portrait proportion */
+.pg-plan__tiles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--pg-space-4);
+}
+
+.pg-plan__tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-1);
+  aspect-ratio: 5 / 7;
+  padding: var(--pg-space-3);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  background: var(--pg-app-canvas);
+}
+
+.pg-plan__tile p {
+  margin: 0;
+}
+
+.pg-plan__page {
+  margin: 0;
+  font-size: var(--pg-font-size-300);
+}
+
+.pg-plan__note {
+  font-style: italic;
+}
+
+.pg-plan__slots {
+  margin: auto 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pg-space-1);
+}
+
+.pg-plan__slot {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--pg-space-1);
+  padding: var(--pg-space-1);
+  font-size: var(--pg-font-size-100);
+  border: var(--pg-border-width) dashed var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  overflow: hidden;
+}
+
+.pg-plan__slot--filled {
+  border-style: solid;
+  background: var(--pg-app-tone-success-bg);
+}
+
+.pg-plan__slot--missing {
+  border-style: solid;
+  background: var(--pg-app-tone-warning-bg);
+  border-color: var(--pg-app-tone-warning-text);
+}
+
+.pg-plan__slot--late {
+  border-style: solid;
+  background: var(--pg-app-tone-danger-bg);
+  border-color: var(--pg-app-tone-danger-text);
+}
+
+.pg-plan__slot-size {
+  color: var(--pg-app-text-secondary);
+}

@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pageinator Desk</title>
+    <link rel="stylesheet" href="/static/editor.css" />
+    <script type="module" src="/static/editor.js"></script>
+  </head>
+  <body>
+    <header class="ed-top">
+      <a class="ed-back" id="back" href="/" data-t="pe.toDesk"></a>
+      <div class="ed-title"><strong id="title"></strong> <span class="muted" id="subtitle"></span></div>
+      <div class="ed-tools" role="toolbar" data-t-aria-label="pe.tools">
+        <button type="button" id="prev" data-t-title="pe.prevTitle" data-keys="Page Up" data-t-aria-label="pe.prev">
+          ‹
+        </button>
+        <button type="button" id="next" data-t-title="pe.nextTitle" data-keys="Page Down" data-t-aria-label="pe.next">
+          ›
+        </button>
+        <span class="sep" aria-hidden="true"></span>
+        <button
+          type="button"
+          id="undo"
+          data-t-title="pe.undoTitle"
+          data-keys="Ctrl+Z"
+          data-t-aria-label="pe.undo"
+          disabled
+        >
+          ↶
+        </button>
+        <button
+          type="button"
+          id="redo"
+          data-t-title="pe.redoTitle"
+          data-keys="Ctrl+Shift+Z"
+          data-t-aria-label="pe.redo"
+          disabled
+        >
+          ↷
+        </button>
+        <span class="sep" aria-hidden="true"></span>
+        <button type="button" id="alt" data-t-title="pe.altTitle" data-t="pe.alt"></button>
+        <button type="button" id="refresh" data-t-title="pe.refreshTitle" data-t="pe.refresh"></button>
+        <span class="sep" aria-hidden="true"></span>
+        <button type="button" id="zoom-out" data-t-title="pe.zoomOutTitle" data-keys="−" data-t-aria-label="pe.zoomOut">
+          −
+        </button>
+        <button type="button" id="zoom-fit" data-t-title="pe.fitTitle" data-keys="Shift+1 | 0" data-t="pe.fit"></button>
+        <button type="button" id="zoom-in" data-t-title="pe.zoomInTitle" data-keys="+" data-t-aria-label="pe.zoomIn">
+          +
+        </button>
+        <span class="zoom" id="zoom-label" aria-live="polite">100%</span>
+        <button
+          type="button"
+          id="zoom-width"
+          class="icon"
+          data-t-title="pe.widthTitle"
+          data-keys="Shift+3"
+          data-t-aria-label="pe.width"
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <path
+              d="M2 3v10M14 3v10M5 8h6M7 6 5 8l2 2M9 6l2 2-2 2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          id="zoom-sel"
+          class="icon"
+          data-t-title="pe.zoomSelTitle"
+          data-keys="Shift+2"
+          data-t-aria-label="pe.zoomSel"
+          disabled
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <path
+              d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <rect x="5.5" y="5.5" width="5" height="5" rx="0.5" fill="currentColor" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          id="rulers"
+          class="icon"
+          data-t-title="pe.rulersTitle"
+          data-keys="Shift+R"
+          data-t-aria-label="pe.rulers"
+          aria-pressed="true"
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <path
+              d="M1.5 1.5h13v4h-9v9h-4zM8 5.5v-2M11 5.5v-2M5.5 8h-2M5.5 11h-2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.25"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
+      <div class="ed-save">
+        <span class="save-state" id="save-state"></span>
+        <button
+          type="button"
+          class="primary"
+          id="save"
+          data-t-title="pe.saveTitle"
+          data-keys="Ctrl+S"
+          data-t="pe.save"
+        ></button>
+      </div>
+    </header>
+    <div class="ed-notice" id="notice" hidden>
+      <p id="notice-text"></p>
+      <button type="button" id="notice-action" class="action" hidden></button>
+      <button type="button" id="notice-close" data-t-aria-label="pe.closeNotice">×</button>
+    </div>
+    <div class="sr-only" id="announce" aria-live="polite"></div>
+    <div class="sr-only" id="alert" role="alert"></div>
+    <main class="ed-main">
+      <aside class="ed-left" data-t-aria-label="pe.stories">
+        <h2 data-t="pe.onPage"></h2>
+        <ul id="on-page" class="story-list"></ul>
+        <h2><span data-t="pe.others"></span> <span class="muted small" data-t="pe.othersHint"></span></h2>
+        <input
+          type="search"
+          id="pool-search"
+          data-t-placeholder="pe.searchPlaceholder"
+          data-t-aria-label="pe.searchLabel"
+        />
+        <ul id="pool" class="story-list pool"></ul>
+      </aside>
+      <div class="ed-center">
+        <section class="ed-canvas-wrap" id="wrap" data-t-aria-label="pe.menuPage">
+          <canvas id="canvas" tabindex="0"></canvas>
+          <div class="ed-busy" id="busy" hidden></div>
+          <div class="ed-menu" id="menu" role="menu" hidden></div>
+        </section>
+        <section class="ed-story" id="story" aria-labelledby="story-head" hidden>
+          <div class="ed-story-head">
+            <h2 id="story-head"><span id="story-title"></span></h2>
+            <span id="story-fit" class="fit"></span>
+            <span id="story-state" class="muted small"></span>
+            <button type="button" id="story-close" data-t-aria-label="pe.closeStory">×</button>
+          </div>
+          <div id="story-articles" class="ed-story-body"></div>
+        </section>
+      </div>
+      <aside class="ed-right" data-t-aria-label="pe.selected">
+        <div id="props-empty" class="muted" data-t="pe.selectToChange"></div>
+        <div id="props" hidden>
+          <h2 id="p-headline"></h2>
+          <p id="p-fit" class="fit"></p>
+          <button
+            type="button"
+            id="p-lock"
+            class="lock"
+            aria-pressed="false"
+            aria-keyshortcuts="Shift+L"
+            data-t-title="pe.lockTitle"
+            data-keys="Shift+L"
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+              <path d="M5 7.5V5.5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.6" />
+              <rect x="3.5" y="7.5" width="9" height="6.5" rx="1.2" fill="currentColor" />
+            </svg>
+            <span data-t="pe.lock"></span>
+          </button>
+          <p id="p-lock-note" class="lock-note small" hidden></p>
+          <div class="field">
+            <span class="label" data-t="pe.widthLabel"></span>
+            <div class="seg" id="p-width" role="group" data-t-aria-label="pe.widthCols"></div>
+          </div>
+          <div class="field two">
+            <label
+              ><span data-t="pe.height"></span> <input type="number" id="p-height" min="10" step="0.5" />
+              <span data-t="pe.mm"></span
+            ></label>
+            <label
+              ><span data-t="pe.fromTop"></span> <input type="number" id="p-y" step="0.5" /> <span data-t="pe.mm"></span
+            ></label>
+          </div>
+          <div class="field">
+            <span class="label" data-t="pe.column"></span>
+            <div class="seg" id="p-col" role="group" data-t-aria-label="pe.firstColumn"></div>
+          </div>
+          <div class="field photo-tools" id="p-photo" role="group" aria-labelledby="p-photo-label" hidden>
+            <span class="label" id="p-photo-label" data-t="art.photo"></span>
+            <p id="p-ppi" class="ppi small"></p>
+            <label class="zoom-field"
+              ><span data-t="pe.enlarge"></span>
+              <input type="range" id="p-zoom" min="100" max="400" step="1" value="100" aria-describedby="p-ppi" />
+              <output id="p-zoom-out" for="p-zoom">100 %</output></label
+            >
+            <p id="p-zoom-note" class="small muted" hidden></p>
+            <div class="buttons">
+              <button
+                type="button"
+                id="p-crop"
+                aria-pressed="false"
+                aria-keyshortcuts="A"
+                data-t-title="pe.cropTitle"
+                data-keys="A"
+                data-t="pe.crop"
+              ></button>
+              <button
+                type="button"
+                id="p-focal"
+                aria-pressed="false"
+                data-t-title="pe.focalTitle"
+                data-t="pe.focal"
+              ></button>
+              <button type="button" id="p-reset" data-t-title="pe.resetTitle" data-t="pe.reset"></button>
+            </div>
+          </div>
+          <div class="buttons">
+            <button
+              type="button"
+              id="p-text"
+              data-t-title="pe.textTitle"
+              data-keys="Enter"
+              data-t="pe.editText"
+            ></button>
+            <button type="button" id="p-fit-height" data-t-title="pe.fitHeightTitle" data-t="pe.fitHeight"></button>
+            <button type="button" id="p-swap" data-t-title="pe.swapTitle" data-t="pe.swap"></button>
+            <button
+              type="button"
+              id="p-remove"
+              class="danger"
+              data-t-title="pe.removeTitle"
+              data-keys="Delete"
+              data-t="pe.remove"
+            ></button>
+          </div>
+          <div class="field">
+            <label class="label" for="p-move-to" data-t="pe.moveTo"></label>
+            <div class="move-to">
+              <select id="p-move-to"></select>
+              <button type="button" id="p-move" data-t="pe.move"></button>
+            </div>
+          </div>
+        </div>
+        <h2 class="problems-title" data-t="pe.checks"></h2>
+        <ul id="problems" class="problems"></ul>
+        <p class="muted small help" data-help="pe.help1"></p>
+        <p class="muted small help" data-help="pe.help2"></p>
+        <p class="muted small help" data-help="pe.help3"></p>
+        <p class="muted small help" data-help="pe.help4"></p>
+        <p class="muted small help" data-help="pe.help5"></p>
+      </aside>
+    </main>
+  </body>
+</html>

@@ -1,6 +1,6 @@
 {
  "schema": "pageinator.page1.page_model_coverage/1",
- "tool": "page1-model/0.2.0",
+ "tool": "page1-model/0.3.0",
  "env": {
   "python": "3.11.14",
   "platform": "macOS-27.0.1",
@@ -12,7 +12,7 @@
  "dataset_class": "PILOT_EVIDENCE (private; aggregates only)",
  "samples": 15,
  "skipped_excluded_samples": 1,
- "models_sha256": "00cc60f25e7944badc68af4f7dfddf63101bf74d6d7dc8e4e2cbca0caccc1a35",
+ "models_sha256": "13b3ca2dbb4e254a900ae7f44438b2acac854acedc0d362c4a64ef99801ace7c",
  "totals": {
   "pages": 68,
   "coverage": {
@@ -33,7 +33,7 @@
    "pct_glyphs_in_text_elements": 100.0
   },
   "stories": {
-   "total": 494,
+   "total": 492,
    "per_page": {
     "n": 68,
     "min": 1,
@@ -47,9 +47,9 @@
     "2": 1,
     "3": 7,
     "4": 4,
-    "5": 6,
+    "5": 7,
     "6": 11,
-    "7": 11,
+    "7": 10,
     "8": 7,
     "9": 6,
     "10": 4,
@@ -59,20 +59,20 @@
     "18": 1
    },
    "with_headline": 425,
-   "headless": 69,
-   "headless_with_parent": 49,
-   "complete": 292,
-   "incomplete": 202,
+   "headless": 67,
+   "headless_with_parent": 47,
+   "complete": 293,
+   "incomplete": 199,
    "jump_in": 17,
    "jump_out": 40,
    "confidence": {
-    "high": 314,
-    "medium": 114,
-    "low": 66
+    "high": 315,
+    "medium": 113,
+    "low": 64
    },
-   "pct_complete": 59.11,
+   "pct_complete": 59.55,
    "columns_per_story": {
-    "n": 494,
+    "n": 492,
     "min": 1,
     "p10": 1.0,
     "median": 3.0,
@@ -80,7 +80,7 @@
     "max": 13
    },
    "paragraphs_per_story": {
-    "n": 494,
+    "n": 492,
     "min": 1,
     "p10": 1.0,
     "median": 3.0,
@@ -89,15 +89,14 @@
    },
    "checks_true": {
     "ends_paragraph": 414,
-    "headline_content": 2,
-    "headline_geo": 39,
-    "headline_geo+content": 384,
-    "headline_none": 69,
-    "reading_order_geometric": 494,
-    "single_thread": 453,
-    "starts_paragraph": 472,
-    "transitions_consistent": 464,
-    "words_match": 429
+    "headline_geo": 38,
+    "headline_geo+content": 387,
+    "headline_none": 67,
+    "reading_order_geometric": 492,
+    "single_thread": 449,
+    "starts_paragraph": 469,
+    "transitions_consistent": 463,
+    "words_match": 427
    }
   },
   "elements_by_kind": {
@@ -107,11 +106,11 @@
    "byline": 63,
    "caption": 9,
    "crosshead": 169,
-   "deck": 57,
+   "deck": 58,
    "folio": 191,
    "furniture": 304,
    "graphic": 327,
-   "headline": 468,
+   "headline": 467,
    "image": 627,
    "jump_line": 19,
    "kicker": 44,
@@ -136,9 +135,9 @@
    "lines_outside_column": 0,
    "stories_columns_out_of_order": 0,
    "column_order_violations": 0,
-   "stories_columns_reordered": 15,
+   "stories_columns_reordered": 14,
    "columns_wider_than_lines": 3,
-   "paragraphs": 1873,
+   "paragraphs": 1872,
    "indents_gt_2em": 5
   }
  },
@@ -190,16 +189,16 @@
     "with_headline": 241,
     "headless": 26,
     "headless_with_parent": 21,
-    "complete": 167,
-    "incomplete": 100,
+    "complete": 169,
+    "incomplete": 98,
     "jump_in": 7,
     "jump_out": 15,
     "confidence": {
-     "high": 171,
-     "medium": 52,
-     "low": 44
+     "high": 172,
+     "medium": 53,
+     "low": 42
     },
-    "pct_complete": 62.55,
+    "pct_complete": 63.3,
     "columns_per_story": {
      "n": 267,
      "min": 1,
@@ -217,15 +216,14 @@
      "max": 34
     },
     "checks_true": {
-     "ends_paragraph": 229,
-     "headline_content": 1,
-     "headline_geo": 19,
-     "headline_geo+content": 221,
+     "ends_paragraph": 230,
+     "headline_geo": 18,
+     "headline_geo+content": 223,
      "headline_none": 26,
      "reading_order_geometric": 267,
-     "single_thread": 235,
-     "starts_paragraph": 259,
-     "transitions_consistent": 252,
+     "single_thread": 234,
+     "starts_paragraph": 258,
+     "transitions_consistent": 253,
      "words_match": 226
     }
    },
@@ -265,7 +263,7 @@
     "lines_outside_column": 0,
     "stories_columns_out_of_order": 0,
     "column_order_violations": 0,
-    "stories_columns_reordered": 9,
+    "stories_columns_reordered": 8,
     "columns_wider_than_lines": 3,
     "paragraphs": 1121,
     "indents_gt_2em": 4
@@ -291,7 +289,7 @@
     "pct_glyphs_in_text_elements": 100.0
    },
    "stories": {
-    "total": 227,
+    "total": 225,
     "per_page": {
      "n": 28,
      "min": 2,
@@ -303,9 +301,9 @@
     "per_page_histogram": {
      "2": 1,
      "4": 1,
-     "5": 2,
+     "5": 3,
      "6": 5,
-     "7": 4,
+     "7": 3,
      "8": 3,
      "9": 5,
      "10": 2,
@@ -314,20 +312,20 @@
      "14": 1
     },
     "with_headline": 184,
-    "headless": 43,
-    "headless_with_parent": 28,
-    "complete": 125,
-    "incomplete": 102,
+    "headless": 41,
+    "headless_with_parent": 26,
+    "complete": 124,
+    "incomplete": 101,
     "jump_in": 10,
     "jump_out": 25,
     "confidence": {
      "high": 143,
-     "medium": 62,
+     "medium": 60,
      "low": 22
     },
-    "pct_complete": 55.07,
+    "pct_complete": 55.11,
     "columns_per_story": {
-     "n": 227,
+     "n": 225,
      "min": 1,
      "p10": 1.0,
      "median": 2.0,
@@ -335,7 +333,7 @@
      "max": 9
     },
     "paragraphs_per_story": {
-     "n": 227,
+     "n": 225,
      "min": 1,
      "p10": 1.0,
      "median": 3.0,
@@ -343,16 +341,15 @@
      "max": 14
     },
     "checks_true": {
-     "ends_paragraph": 185,
-     "headline_content": 1,
+     "ends_paragraph": 184,
      "headline_geo": 20,
-     "headline_geo+content": 163,
-     "headline_none": 43,
-     "reading_order_geometric": 227,
-     "single_thread": 218,
-     "starts_paragraph": 213,
-     "transitions_consistent": 212,
-     "words_match": 203
+     "headline_geo+content": 164,
+     "headline_none": 41,
+     "reading_order_geometric": 225,
+     "single_thread": 215,
+     "starts_paragraph": 211,
+     "transitions_consistent": 210,
+     "words_match": 201
     }
    },
    "elements_by_kind": {
@@ -362,11 +359,11 @@
     "byline": 26,
     "caption": 8,
     "crosshead": 71,
-    "deck": 28,
+    "deck": 29,
     "folio": 85,
     "furniture": 183,
     "graphic": 131,
-    "headline": 202,
+    "headline": 201,
     "image": 264,
     "jump_line": 13,
     "kicker": 24,
@@ -393,7 +390,7 @@
     "column_order_violations": 0,
     "stories_columns_reordered": 6,
     "columns_wider_than_lines": 0,
-    "paragraphs": 752,
+    "paragraphs": 751,
     "indents_gt_2em": 1
    }
   }

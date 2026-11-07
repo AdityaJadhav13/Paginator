@@ -1,0 +1,11 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PutDumpsOnly",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:PutObjectRetention", "s3:GetObject", "s3:GetObjectRetention"],
+      "Resource": "arn:aws:s3:::${PGN_S3_BACKUPS_BUCKET}/postgres/*"
+    }
+  ]
+}

@@ -1,0 +1,155 @@
+{
+  "version": 3,
+  "cases": [
+    {
+      "article": {
+        "headline": "काल्पनिक बातमी",
+        "body": "पहिला परिच्छेद.\n\nदुसरा परिच्छेद."
+      },
+      "brief": false,
+      "sig": "b372cfbd1a74909d8f05"
+    },
+    {
+      "article": {
+        "headline": "काल्पनिक बातमी",
+        "body": "पहिला परिच्छेद.\n\nदुसरा परिच्छेद."
+      },
+      "brief": true,
+      "sig": "f77a87a1c830d41cf6fe"
+    },
+    {
+      "article": {
+        "headline": "  Fictional\tfair opens ",
+        "kicker": "City",
+        "deck": "A deck",
+        "byline": "A. Reporter",
+        "body": "Line one  with   spaces\r\nline two\r\rline three\n\n\n\nafter empty lines\n## A subheading\nlast",
+        "photo": {
+          "id": "p-0123456789",
+          "caption": "  काल्पनिक   छायाचित्र ",
+          "credit": "Fictional Desk",
+          "width_px": 10
+        }
+      },
+      "brief": false,
+      "sig": "17253be8830a5c0ad240"
+    },
+    {
+      "article": {
+        "headline": "  Fictional\tfair opens ",
+        "kicker": "City",
+        "deck": "A deck",
+        "byline": "A. Reporter",
+        "body": "Line one  with   spaces\r\nline two\r\rline three\n\n\n\nafter empty lines\n## A subheading\nlast",
+        "photo": {
+          "id": "p-0123456789",
+          "caption": "  काल्पनिक   छायाचित्र ",
+          "credit": "Fictional Desk",
+          "width_px": 10
+        }
+      },
+      "brief": true,
+      "sig": "e29ee0bc5e6553adf36d"
+    },
+    {
+      "article": {
+        "headline": "Café decomposed",
+        "body": "é and é　wide nbsp narrow\u001cfile sepnel",
+        "kicker": null,
+        "deck": null,
+        "byline": null,
+        "photo": null
+      },
+      "brief": false,
+      "sig": "1cb98247966b960a4520"
+    },
+    {
+      "article": {
+        "headline": "Café decomposed",
+        "body": "é and é　wide nbsp narrow\u001cfile sepnel",
+        "kicker": null,
+        "deck": null,
+        "byline": null,
+        "photo": null
+      },
+      "brief": true,
+      "sig": "5262255105021e608418"
+    },
+    {
+      "article": {
+        "headline": "",
+        "body": "   \n\n  ## heading only  \n   "
+      },
+      "brief": false,
+      "sig": "b8da89775e2bedfb198d"
+    },
+    {
+      "article": {
+        "headline": "",
+        "body": "   \n\n  ## heading only  \n   "
+      },
+      "brief": true,
+      "sig": "615f557ea13363c45818"
+    },
+    {
+      "article": {
+        "headline": "Quotes \"and\" back\\slash",
+        "body": "tab\tinside line sep para sep\u000bvt\fffdel",
+        "photo": {
+          "id": "",
+          "caption": null,
+          "credit": ""
+        }
+      },
+      "brief": false,
+      "sig": "9ab0b05467e26beab30e"
+    },
+    {
+      "article": {
+        "headline": "Quotes \"and\" back\\slash",
+        "body": "tab\tinside line sep para sep\u000bvt\fffdel",
+        "photo": {
+          "id": "",
+          "caption": null,
+          "credit": ""
+        }
+      },
+      "brief": true,
+      "sig": "405189430901f07d6f7a"
+    },
+    {
+      "article": {
+        "headline": "Short item",
+        "body": "##\n## Sub\ntext\n\n\n"
+      },
+      "brief": false,
+      "sig": "64f91b6cad8d8e55c9e2"
+    },
+    {
+      "article": {
+        "headline": "Short item",
+        "body": "##\n## Sub\ntext\n\n\n"
+      },
+      "brief": true,
+      "sig": "4c99fc0ca6ea2244147b"
+    },
+    {
+      "article": {
+        "headline": "aࢗ́b 𑽁́",
+        "body": "éࢗx\ń𞓬y",
+        "byline": "᫏́"
+      },
+      "brief": false,
+      "sig": "3838072c9a22a6c16cad"
+    },
+    {
+      "article": {
+        "headline": "aࢗ́b 𑽁́",
+        "body": "éࢗx\ń𞓬y",
+        "byline": "᫏́"
+      },
+      "brief": true,
+      "sig": "b8be2848fcdb8237f93b"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+/* Organization and publication settings: panels one under another. Tokens and logical properties only. */
+.pg-settings {
+  display: grid;
+  gap: var(--pg-app-gutter);
+  max-inline-size: 48rem;
+}
+
+.pg-settings__list {
+  margin: 0;
+  padding-inline-start: var(--pg-space-5);
+}
+
+.pg-settings__languages {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.pg-settings__error {
+  color: var(--pg-app-tone-danger-text);
+}

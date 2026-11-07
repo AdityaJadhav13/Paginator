@@ -1,0 +1,22 @@
+{
+ "counts": {
+  "assertions": 35157,
+  "exceptions_en": 14,
+  "exceptions_mr": 0,
+  "patterns_en": 4938,
+  "patterns_mr": 70,
+  "words_en": 10958,
+  "words_mr": 761,
+  "words_with_breaks": 9280
+ },
+ "environment": {
+  "fonttools": "4.63.0",
+  "harfbuzz": "14.3.0",
+  "machine": "arm64",
+  "oracle_manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05",
+  "platform": "macOS-27.0.1",
+  "python": "3.11.14",
+  "uharfbuzz": "0.56.0"
+ },
+ "schema": "pageinator.golden.liang/1"
+}

@@ -1,5 +1,7 @@
 # Pageinator — Implementation roadmap
 
+> **SUPERSEDED (2026-10-20).** This Phase-22 roadmap and its G0–G7 meanings are replaced by `docs/architecture/v2/13_ROADMAP_AND_RISKS.md` (gates G0–G7 with real-world evidence) and the product build plan in `docs/product/`. Kept for history; do not use its gate names.
+
 Phase 22, 2026-09-16. Derived from the [Master Build Specification](MASTER_BUILD_SPEC.md), read from disk. This is a dependency/gate sequence, not a calendar estimate or authorization to implement now. RD/PO statuses remain in their registers. The immediate backlog covers only RM01–02 UI work; production research and services require later explicit work authorization.
 
 ## Gates

@@ -1,0 +1,12 @@
+{
+  "Rules": [
+    {
+      "ID": "dumps-36-days",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "postgres/" },
+      "Expiration": { "Days": 36 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 1 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+    }
+  ]
+}

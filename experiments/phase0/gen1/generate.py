@@ -38,7 +38,9 @@ import gzip
 import hashlib
 import json
 import math
+import subprocess
 import sys
+import tempfile
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
@@ -49,7 +51,7 @@ import compose_page as CP  # noqa: E402
 
 H, K3, X, MP, RH = CP.H, CP.K3, CP.X, CP.MP, CP.RH
 MM = CP.MM
-GEN = "gen1/2.9.6"
+GEN = "gen1/2.10.0"
 UNIT = 0.5                                   # mm per height unit of the search
 OUT = HERE.parent / "results" / "gen1"
 PROFILE = json.loads((HERE.parent / "results" / "page1" / "house_profile.json").read_text())
@@ -228,6 +230,7 @@ class Generator:
         self.stories = [Story(s, self.els, idx, photo_dir, r) for r, s in enumerate(main)]
         self.ban_lead: set = set()                        # widths the lead may not take (alternatives)
         self.ext_styles = False                          # True when the rarer house styles are in use (a fallback)
+        self.banned: set = set()                          # (story, w, m, fit, style) whose body lines touched (ink)
         self.extra_rows: dict = {}                       # (story, w, m, fit, style) → rows added after an overset render
         self._lines: dict = {}
         self._disp: dict = {}
@@ -529,6 +532,8 @@ class Generator:
                     if cw < 30.0 or cw > 120.0:
                         continue
                     for fit in FITS:
+                        if (s.id, w, m, fit, style) in self.banned:
+                            continue
                         extra = self.extra_rows.get((s.id, w, m, fit, style), 0)
                         L = self.body_lines(s, cw, fit, style) + extra * m
                         base = step_cost + 20 * (1 - fit) ** 2 + (0.15 if (m == w and w >= 3) else 0.0) + self.style_cost[style]
@@ -1293,7 +1298,7 @@ def render(g: Generator, model, placed, news_top, news_bottom, photo_dir, kept_s
     fixed = {**model, "elements": keep, "stories": kept_stories, "unassigned": [u for u in model.get("unassigned", []) if u in kid]}
     B, rep = CP.build(g.cx, fixed, photo_dir)
     n_fixed, rep["fixed_problems"] = len(B.items), len(B.problems)
-    rep.update({"stories": [], "display": []})
+    rep.update({"fixed_stories": rep["stories"], "stories": [], "display": []})   # stories kept where print had them
     for i, x, y, w, h, o in placed:
         s = g.stories[i]
         span = span_mm(w)
@@ -1369,6 +1374,34 @@ def render(g: Generator, model, placed, news_top, news_bottom, photo_dir, kept_s
                                "photo_cols": ph["k"] if ph else None, "x": round(x, 2), "y": round(y, 2), "h": round(h, 2), "photo": bool(ph),
                                "not_set": s.not_set, "bullet_columns_skipped": s.bullet_columns})
     return B, rep, n_fixed
+
+
+INK_PY = HERE.parent / "pdfx1" / ".venv" / "bin" / "python"     # inkcheck needs pikepdf + PIL (not in the oracle env)
+
+
+def body_touches(m, B, out_dir) -> set:
+    """Stories two of whose own body lines touch in ink (inkcheck on a draft of the page). Print's line breaks differ
+    from ours, so such a touch is ours alone: the story is set again with another option."""
+    if not INK_PY.exists():
+        return set()
+    with tempfile.NamedTemporaryFile(suffix=".pdf", dir=out_dir) as f:
+        f.write(pdf_bytes(m, B, B.items)); f.flush()
+        r = subprocess.run([str(INK_PY), str(HERE / "inkcheck.py"), f.name], capture_output=True, text=True)
+    if r.returncode != 0:
+        print("inkcheck failed:", r.stderr.strip()[-200:], file=sys.stderr)
+        return set()
+    H = m["page_h_mm"]
+
+    def line_at(bb):
+        hits = [l for l in B.lines if l.get("role") == "body" and l.get("x1_mm") is not None
+                and l["x0_mm"] * MM - 3 <= bb[0] <= l["x1_mm"] * MM and bb[1] - 1 <= (H - l["baseline_mm"]) * MM <= bb[3] + 1]
+        return min(hits, key=lambda l: abs(l["x0_mm"] * MM - bb[0])) if hits else None
+    out = set()
+    for _, a, b in json.loads(r.stdout):
+        la, lb = line_at(a), line_at(b)
+        if la is not None and lb is not None and la.get("story") == lb.get("story"):
+            out.add(la["story"])
+    return out
 
 
 def pdf_bytes(m, B, items):
@@ -1453,10 +1486,10 @@ def main():
         g.ban_lead = {int(x) for x in opt.get("--ban-lead-width", "").split(",") if x}
         if len(g.stories) > MAX_STORIES:
             results.append({"page": name, "status": f"skipped: more than {MAX_STORIES} stories (search limit)"}); print(name, "skipped:", len(g.stories), "stories"); continue
-        retries = []
+        retries, ink_retries, good = [], [], None
         for attempt in range(RETRIES + 1):
             res, info = g.run(regions, span_prior, lead_side)
-            if res is None and not info.get("budget_hit") and len(styles_ext) > len(styles) and not g.ext_styles:
+            if res is None and good is None and not info.get("budget_hit") and len(styles_ext) > len(styles) and not g.ext_styles:
                 # no exact fit with the commonest styles: retry once with the house's rarer body styles too (they cost more)
                 ban = g.ban_lead
                 g = Generator(cx, m, photo_dir, styles_ext, ids, space_em)
@@ -1464,11 +1497,30 @@ def main():
                 res, info = g.run(regions, span_prior, lead_side)
                 info["rare_styles"] = True
             if res is None:
+                if good is not None:                     # no layout without the touch: keep the last complete one
+                    res, info, placed, B, rep, n_fixed = good
+                    info = {**info, "ink_touch_kept": True}
                 break
             placed = [pl for k, tree in res[1] for pl in g.place(tree, ORIGIN + regions[k][0] * PITCH, regions[k][2])]
             B, rep, n_fixed = render(g, m, placed, news_top, news_bottom, photo_dir, kept_stories, keep, panels_of(m, ids, decor))
             over = [(st_, o) for st_, (_, _, _, _, _, o) in zip(rep["stories"], placed) if st_["overset_lines"] or st_.get("overset_crosshead_words")]
-            if not over or attempt == RETRIES:
+            if not over:
+                good = (res, info, placed, B, rep, n_fixed)
+                touch = body_touches(m, B, out_dir)
+                if not touch:
+                    break
+                ink_retries.append(sorted(touch))
+                if attempt == RETRIES:                   # out of retries: ship it, and say so
+                    info = {**info, "ink_touch_kept": True}
+                    break
+                for st_, (_, _, _, _, _, o) in zip(rep["stories"], placed):   # set those stories with another option
+                    if st_["story"] in touch:
+                        g.banned.add((st_["story"], o["w"], o["m"], o["fit"], o["style"]))
+                continue
+            if attempt == RETRIES:
+                if good is not None:                     # never trade a complete layout for an overset one
+                    res, info, placed, B, rep, n_fixed = good
+                    info = {**info, "ink_touch_kept": True}
                 break
             for st_, o in over:                          # the dry run missed a column break: one more row, search again
                 k = (st_["story"], o["w"], o["m"], o["fit"], o["style"])
@@ -1482,7 +1534,7 @@ def main():
         pdf = out_dir / f"{name}.pdf"; pdf.write_bytes(data); pdf.chmod(0o600)
         fpdf = out_dir / f"{name}.fixed.pdf"; fpdf.write_bytes(pdf_bytes(m, B, B.items[:n_fixed])); fpdf.chmod(0o600)
         st_ = rep["stories"]
-        summ = {"page": name, "status": "generated", "stories": len(g.stories), "cost": round(res[0], 3), **info, "retries": len(retries),
+        summ = {"page": name, "status": "generated", "stories": len(g.stories), "cost": round(res[0], 3), **info, "retries": len(retries), "ink_retries": ink_retries,
                 "overset_lines": sum(s["overset_lines"] for s in st_), "copyfit": sum(1 for s in st_ if s["fit"] < 1.0),
                 "spans": [s["w"] for s in st_], "photos": sum(s["photo"] for s in st_), "problems": len(B.problems) - rep["fixed_problems"],
                 "not_set": {k: sum(len(s["not_set"][k]) for s in st_) for k in ("photos", "captions", "jump_lines", "other_elements")}}
@@ -1507,6 +1559,8 @@ def main():
                                       | {p["id"] for s in g.stories for p in ([s.photo] if s.photo else []) + s.photos_extra}),
                # what stays where print had it and generated text must not touch (ads, photos, graphics, filled boxes)
                "fixed_boxes_mm": [[e["kind"], e["bbox_mm"]] for e in keep if e["kind"] in ("ad", "image", "graphic") or (e["kind"] == "box" and e.get("fill"))],
+               "masthead": rep.get("masthead"),
+               "fixed_stories_out": rep.get("fixed_stories", []),            # the paper's artwork in place of the masthead lettering (brand.py)
                "stories_out": st_, "problems": B.problems, "lines": B.lines, "retried": retries}
         (out_dir / f"{name}.manifest.json").write_text(json.dumps(man, ensure_ascii=False) + "\n"); (out_dir / f"{name}.manifest.json").chmod(0o600)
         results.append(summ)

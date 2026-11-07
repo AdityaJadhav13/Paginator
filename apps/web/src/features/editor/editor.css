@@ -1,0 +1,97 @@
+/* The page editor, hosted (L2.4). Tokens and logical properties only. Desktop first: under 900 px the canvas gives way
+ * to a sentence. */
+
+.pg-editor__narrow {
+  display: none;
+  margin: 0;
+}
+
+@media (max-width: 899px) {
+  .pg-editor__narrow {
+    display: block;
+  }
+
+  .pg-editor__wide {
+    display: none;
+  }
+}
+
+.pg-editor__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: var(--pg-space-4);
+  align-items: start;
+}
+
+.pg-editor__stage {
+  /* the height is set from the window (PageCanvas); this is before it is measured */
+  block-size: calc(100vh - 14rem);
+  overflow: auto;
+  border-radius: var(--pg-radius-md);
+  background: #3a3f47;
+}
+
+/* as large as the zoomed page: what the stage scrolls over */
+.pg-editor__spacer {
+  position: relative;
+}
+
+/* the size of the visible area, kept in view as the stage scrolls */
+.pg-editor__canvas {
+  position: sticky;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  display: block;
+  touch-action: none;
+}
+
+.pg-editor__canvas:focus-visible {
+  outline: 3px solid var(--pg-color-focus);
+  outline-offset: -3px;
+}
+
+.pg-editor__side {
+  display: grid;
+  gap: var(--pg-space-4);
+  max-block-size: calc(100vh - 14rem);
+  min-block-size: 32rem;
+  overflow-y: auto;
+}
+
+.pg-editor__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-2) var(--pg-space-3);
+  min-block-size: 1.75rem;
+}
+
+.pg-editor__notice,
+.pg-editor__head {
+  margin: 0;
+}
+
+.pg-editor__head {
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--pg-space-2);
+}
+
+/* the selected story's photo: its resolution, zoom and crop */
+.pg-editor__photo {
+  display: grid;
+  justify-items: start;
+  gap: var(--pg-space-2);
+}
+
+.pg-editor__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pg-space-2);
+}

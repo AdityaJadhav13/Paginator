@@ -1,5 +1,7 @@
 # Initial implementation backlog — Phase 23
 
+> **SUPERSEDED (2026-10-20).** This UI-only backlog (UI006–UI027) is replaced by the product specification and build plan in `docs/product/`: each screen is built when its roadmap gate opens. UI001–UI005 remain done. Kept for history.
+
 Prepared 2026-09-16 from the persisted Master Build Specification, roadmap RM01–02, and Phase 15. Scope: **UI-only**, fictional data, no production engines/services. These are implementation-sized work units to turn into one feature spec/branch/fresh targeted session each, not instructions to implement now. The framework/version adoption review and explicit implementation authorization precede UI001. No directory below exists merely because it is proposed here.
 
 ## Shared acceptance contract

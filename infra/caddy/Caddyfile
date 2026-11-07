@@ -1,0 +1,125 @@
+# Caddy v2.11.7 for the pilot (docs/product/10-l2-newsroom-plan.md §4.7, §8.2; PR 25), baked into the web image
+# (infra/docker/web.Dockerfile). One origin, app.{$PGN_DOMAIN}: the web app's files, and /api/* passed to the API.
+# The browser talks to no other origin but the file store, for photo uploads and originals (infra/aws/s3-cors.json).
+# Settings, from the environment (infra/docker/compose.pilot.yml):
+#   PGN_DOMAIN            the domain (D-2); the app is app.{$PGN_DOMAIN}. pilot-local: localhost
+#   PGN_TLS_ISSUER        the ACME account's email address (D-2), or "internal" for Caddy's own CA (pilot-local)
+#   PGN_S3_PUBLIC_ORIGIN  the work bucket's origin, which the browser uploads to (the CSP's connect-src)
+#   PGN_HTTP_PORT, PGN_HTTPS_PORT, PGN_HEALTH_PORT   80, 443 and 8781 unless set (pilot-local uses its own)
+{
+	# no admin endpoint: the configuration changes only with a new image
+	admin off
+	http_port {$PGN_HTTP_PORT:80}
+	https_port {$PGN_HTTPS_PORT:443}
+	# the local CA (pilot-local) is never installed into the container's trust store
+	skip_install_trust
+	servers {
+		# HTTP/1.1 and HTTP/2 over TCP only (no UDP port to open)
+		protocols h1 h2
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+
+(spa_headers) {
+	header {
+		# The app's own files only; images it makes from downloaded photos (blob:) and the work bucket's presigned
+		# previews (an ad's artwork); requests to the API (self) and to the work bucket; the news finder's photo
+		# thumbnails from Wikimedia Commons and Openverse (sent with no referrer). No inline script or style, no frames, no plugins, no <base>.
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: {$PGN_S3_PUBLIC_ORIGIN} https://upload.wikimedia.org https://api.openverse.org; font-src 'self'; connect-src 'self' {$PGN_S3_PUBLIC_ORIGIN}; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		# reset and invitation links carry secrets in their address (index.html says the same in a meta tag)
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "geolocation=(), microphone=(), payment=(), usb=()"
+	}
+	# alone: a deletion defers its whole header block to the end, and an error answer never reaches the end
+	header -Server
+}
+
+app.{$PGN_DOMAIN} {
+	tls {$PGN_TLS_ISSUER}
+
+	# Caddy's own error answers (a missing asset's 404, a body over 2 MB, the API down): the app's security headers,
+	# and never cached (a missing asset is not kept for a year once it exists)
+	handle_errors {
+		import spa_headers
+		header Cache-Control "no-store"
+		respond {err.status_code}
+	}
+
+	# The API's health answers are for the monitor only (the health listener below), never the public site.
+	@health path /healthz /healthz/* /readyz /readyz/*
+	handle @health {
+		header -Server
+		respond 404
+	}
+
+	# The API: its own headers (Helmet: CSP default-src 'none', no-store, HSTS). The answers are not buffered, so
+	# live updates (text/event-stream) arrive as they are written. Caddy replaces any X-Forwarded-For a client sends
+	# with the client's address, which the API believes from Caddy only (PGN_TRUST_PROXY).
+	handle /api/* {
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy api:8780 {
+			flush_interval -1
+		}
+		header -Server
+	}
+
+	# The web app's hashed files, cached for a year; a missing one is a 404, never index.html.
+	handle /assets/* {
+		import spa_headers
+		header Cache-Control "public, max-age=31536000, immutable"
+		root * /srv/web
+		encode zstd gzip
+		file_server
+	}
+
+	# The owner's legal texts (the privacy notice, the terms of use, the grievance officer: D-6), <doc>.<lang>.txt in a
+	# host folder that compose mounts read only at /srv/legal-text (PGN_LEGAL_DIR), so a new text needs no new image.
+	# Checked each time. Only those six names; any other path here, or a file not there, is a 404, never index.html.
+	# (The names are checked inside: Caddy sorts a handle with only a named matcher after every path's handle.)
+	handle /legal-text/* {
+		@other not path_regexp ^/legal-text/(privacy|terms|grievance)\.(en|mr)\.txt$
+		error @other 404
+		import spa_headers
+		header Cache-Control "no-cache"
+		root * /srv
+		file_server
+	}
+
+	# Any other path is one of the app's own routes, so it gets index.html, checked each time (a new release is seen
+	# at once).
+	handle {
+		import spa_headers
+		header Cache-Control "no-cache"
+		root * /srv/web
+		encode zstd gzip
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# The monitor's view (docs/runbooks/aws-setup.md, Uptime Kuma): /healthz and /readyz only, plain HTTP on the private
+# network. Compose publishes the port on the host's private address, and the security group lets in only the Uptime
+# Kuma host.
+:{$PGN_HEALTH_PORT:8781} {
+	@health path /healthz /readyz
+	handle @health {
+		reverse_proxy api:8780
+	}
+	handle {
+		respond 404
+	}
+	header -Server
+}
+
+# pilot-local only: the local file store's site (infra/caddy/local-s3.caddy), mounted into /etc/caddy/local/
+import /etc/caddy/local/*.caddy

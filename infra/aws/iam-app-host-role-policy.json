@@ -1,0 +1,29 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadPilotSettings",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParametersByPath", "ssm:GetParameters"],
+      "Resource": "arn:aws:ssm:ap-south-1:${AWS_ACCOUNT_ID}:parameter/pageinator/pilot/*"
+    },
+    {
+      "Sid": "PullImages",
+      "Effect": "Allow",
+      "Action": ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:BatchCheckLayerAvailability"],
+      "Resource": "arn:aws:ecr:ap-south-1:${AWS_ACCOUNT_ID}:repository/pageinator-*"
+    },
+    {
+      "Sid": "EcrToken",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "WriteLogs",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:ap-south-1:${AWS_ACCOUNT_ID}:log-group:/pageinator/pilot:*"
+    }
+  ]
+}

@@ -40,7 +40,7 @@ from PIL import Image, ImageChops, ImageOps
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from textfix import fix_bullet  # noqa: E402
+from textfix import dehyphenate, english_vocab, fix_bullet  # noqa: E402
 
 REPO = HERE.parents[2]
 OUT = REPO / "experiments" / "phase0" / "results" / "page1"
@@ -173,8 +173,9 @@ def check_page(model: dict, m: dict) -> dict:
         x0, t, x1, b = e["bbox_mm"]
         return any(a[0] - 0.5 <= x0 and x1 <= a[2] + 0.5 and a[1] - 0.5 <= t and b <= a[3] + 0.5 for a in ads)
     mism = []
+    artwork = set((m.get("masthead") or {}).get("ids", []))      # lettering the paper's masthead artwork replaces
     for e in model["elements"]:
-        if e["kind"] in TEXT_KINDS and not in_ad(e) and not e.get("run_in"):
+        if e["kind"] in TEXT_KINDS and not in_ad(e) and not e.get("run_in") and e["id"] not in artwork:
             want = sum(len(fix_bullet(" ".join(ln["text"].split())).split()) for ln in e["lines"])
             if want and emitted.get(e["id"], 0) != want:
                 mism.append({"element": e["id"], "kind": e["kind"], "want": want, "got": emitted.get(e["id"], 0)})
@@ -191,6 +192,7 @@ def main():
     suffix = "" if variant == "story" else "_paper"
     rb, models = ds / "report" / "page1" / f"rebuilt{suffix}", ds / "report" / "page1" / "pages"
     cmp_dir = ds / "report" / "page1" / f"compare{suffix}"; cmp_dir.mkdir(parents=True, exist_ok=True)
+    vocab = english_vocab(json.loads(f.read_text(encoding="utf-8")) for f in sorted(models.glob("*.json")))
     pages = []
     for man in sorted(rb.glob("*.manifest.json")):
         m = json.loads(man.read_text(encoding="utf-8"))
@@ -218,13 +220,20 @@ def main():
             if ms is not None:
                 paras = [b for b in ms["flow"] if b["type"] == "para" and b["text"].strip()]
                 skip = set(s.get("unset_para_index", []))
-                src_words = " ".join(fix_bullet(b["text"]) for i, b in enumerate(paras) if i not in skip).split()
+                fixt = (lambda t: dehyphenate(fix_bullet(t), vocab)) if s.get("hyphenate") else fix_bullet
+                src_words = " ".join(fixt(b["text"]) for i, b in enumerate(paras) if i not in skip).split()
             else:
                 fr = els.get(s["story"][len("frame-"):], {})
                 src_words = " ".join(fix_bullet(l["text"]) for l in fr.get("lines", []) if not l.get("excluded") and l.get("use", "body") == "body").split()
-            our_words = " ".join(l["text"] for l in m["lines"] if l.get("role") == "body" and l.get("story") == s["story"]).split()
+            # a word our composer broke at a line end ("hy") is one word again, its added hyphen dropped;
+            # a word broken without a space (at a token or emergency point: "eb") joins the next line directly
+            our_words = " ".join(l["text"][:-1] + "\0" if l.get("hy") else l["text"] + "\0" if l.get("eb") else l["text"] for l in m["lines"]
+                                 if l.get("role") == "body" and l.get("story") == s["story"]).replace("\0 ", "").replace("\0", "").split()
             o_chars, s_chars = "".join(our_words), "".join(src_words)
             words_ok = o_chars == s_chars[:len(o_chars)] and len(o_chars) + s.get("overset_chars", 0) == len(s_chars)
+            if s.get("hyphenate"):                        # English: word by word too (a word split without a hyphen fails)
+                o_str, s_str = " ".join(our_words), " ".join(src_words)
+                words_ok = words_ok and s_str.startswith(o_str) and (s.get("overset_chars", 0) > 0 or o_str == s_str)
             stories.append({**s, "complete": bool(ms and ms.get("complete")), "confidence": (ms or {}).get("confidence"),
                             "words_in_order": words_ok, "depth_ok": depth_ok(s["printed_lines"], s["our_lines"]) if s["printed_lines"] else None})
         geo = check_page(model, m)
@@ -266,6 +275,7 @@ def main():
                 "story_depth_ok_pct": pct(sum(bool(s["depth_ok"]) for s in S), len(S)),
                 "story_depth_ok_pct_complete_high": pct(sum(bool(s["depth_ok"]) for s in good), len(good)),
                 "stories_chars_in_order_pct": pct(sum(bool(s["words_in_order"]) for s in S), len(S)),
+                "stories_set_as_printed": sum(bool(s.get("set_as_printed")) for s in S),   # table-like boxes (compose_page.table_like)
                 "paragraphs": sum(s["paragraphs"] for s in S),
                 "paragraphs_same_breaks_pct": pct(sum(s["paragraphs_same_breaks"] for s in S), sum(s["paragraphs"] for s in S)),
                 "display_items": len(D), "display_multiline": len(Dm), "display_failed": sum(bool(d.get("failed")) for d in D),

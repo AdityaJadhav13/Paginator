@@ -1,0 +1,139 @@
+/* Comments, notifications and live updates (plan §10 PR 23): tokens only, logical properties only. */
+
+.pg-notifications,
+.pg-comments,
+.pg-comment__replies {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* the notifications pane: a bar (only unread, mark all), then one row a notification: kind icon, text, time, unread dot */
+.pg-notifications__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pg-space-2) var(--pg-space-3);
+}
+
+.pg-notifications {
+  gap: 0;
+  margin-inline: calc(-1 * var(--pg-app-panel-padding));
+}
+
+.pg-notification {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pg-space-3);
+  padding-block: var(--pg-space-3);
+  padding-inline: var(--pg-app-panel-padding);
+  border-block-end: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-notification:first-child {
+  border-block-start: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-notification:hover {
+  background-color: var(--pg-app-surface-hover);
+}
+
+.pg-notification--unread {
+  background-color: var(--pg-app-selected-bg);
+}
+
+.pg-notification__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--pg-app-control-sm);
+  block-size: var(--pg-app-control-sm);
+  border-radius: var(--pg-radius-pill);
+  background-color: var(--pg-app-tone-neutral-bg);
+  color: var(--pg-app-tone-neutral-text);
+}
+
+.pg-notification--unread .pg-notification__icon {
+  background-color: var(--pg-app-surface);
+  color: var(--pg-app-accent);
+}
+
+.pg-notification__main {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.pg-notification__text {
+  margin: 0;
+}
+
+.pg-notification__text a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.pg-notification__text a:hover {
+  text-decoration: underline;
+}
+
+.pg-notification--unread .pg-notification__text {
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-notification__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-1) var(--pg-space-3);
+  margin-block-start: var(--pg-space-1);
+}
+
+.pg-notification__when {
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-notification__dot {
+  flex: none;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  margin-block-start: 0.5rem;
+  border-radius: var(--pg-radius-pill);
+  background-color: var(--pg-app-accent);
+}
+
+.pg-comment {
+  padding: var(--pg-space-3);
+  border: var(--pg-border-width) solid var(--pg-color-border-subtle);
+  border-radius: var(--pg-radius-md);
+  overflow-wrap: anywhere;
+}
+
+.pg-comment > * + * {
+  margin-block-start: var(--pg-space-2);
+}
+
+.pg-comment--resolved {
+  background-color: var(--pg-color-surface-subtle);
+}
+
+.pg-comment__replies {
+  padding-inline-start: var(--pg-space-4);
+  border-inline-start: var(--pg-border-width) solid var(--pg-color-border);
+}
+
+.pg-comment__meta {
+  color: var(--pg-color-text-muted);
+}
+
+.pg-comment__body {
+  white-space: pre-wrap;
+}
+
+.pg-comments__resolved > summary {
+  cursor: pointer;
+}

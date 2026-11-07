@@ -1,0 +1,46 @@
+{
+  "name": "@pageinator/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "src",
+    "scripts"
+  ],
+  "scripts": {
+    "dev": "node --env-file=../../.env.dev --watch src/main.ts",
+    "start": "node src/main.ts",
+    "db:migrate": "node --env-file-if-exists=../../.env.dev scripts/db-migrate.ts",
+    "db:codegen": "node --env-file-if-exists=../../.env.dev scripts/db-codegen.ts",
+    "db:identity-schema": "node --env-file-if-exists=../../.env.dev scripts/identity-schema.ts",
+    "bootstrap-org": "node --env-file-if-exists=../../.env.dev scripts/bootstrap-org.ts",
+    "review-paper": "node --env-file-if-exists=../../.env.dev scripts/review-paper.ts",
+    "dev-buckets": "node --env-file-if-exists=../../.env.dev scripts/dev-buckets.ts",
+    "import-desk": "node --env-file-if-exists=../../.env.dev scripts/import-desk.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@aws-sdk/s3-presigned-post": "catalog:",
+    "@aws-sdk/s3-request-presigner": "catalog:",
+    "@fastify/helmet": "catalog:",
+    "@fastify/rate-limit": "catalog:",
+    "@pageinator/contracts": "workspace:*",
+    "@pageinator/desk-text": "workspace:*",
+    "@pageinator/engine-queue": "workspace:*",
+    "better-auth": "catalog:",
+    "fastify": "catalog:",
+    "fastify-type-provider-zod": "catalog:",
+    "fflate": "catalog:",
+    "kysely": "catalog:",
+    "nodemailer": "catalog:",
+    "pg": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@fastify/swagger": "catalog:",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "openapi-types": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "pageinator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee",
+  "engines": {
+    "node": "^24.15.0 || >=26.0.0"
+  },
+  "scripts": {
+    "ci": "pnpm run guard && pnpm run check:graph && pnpm run check:licences && pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test && pnpm --filter @pageinator/web build",
+    "guard": "node tools/ts/guard-private.ts && node tools/ts/check-frozen.ts && node tools/ts/check-oracle-manifest.ts",
+    "check:graph": "node tools/ts/check-graph.ts",
+    "check:licences": "node tools/ts/check-licences.ts",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc -b && pnpm --filter @pageinator/web typecheck",
+    "test": "vitest run",
+    "test:private": "PAGEINATOR_PRIVATE_RUN=1 vitest run --project private",
+    "test:db": "PAGEINATOR_DB_RUN=1 vitest run --project api-db --project tenancy",
+    "test:onboard": "experiments/phase0/pdfx1/.venv/bin/python -B -m unittest discover -s tools/onboard/test -t tools/onboard/test",
+    "test:desk": "experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py tools/desk/test/test_messages.py tools/desk/test/test_bundle.py && tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py && node --test tools/desk/test/*.mjs",
+    "check:oracle": "node tools/ts/check-oracle-manifest.ts",
+    "dev:up": "docker compose -p pageinator --env-file .env.dev -f infra/docker/compose.dev.yml up -d --wait",
+    "dev:down": "docker compose -p pageinator --env-file .env.dev -f infra/docker/compose.dev.yml down",
+    "dev:reset": "docker compose -p pageinator --env-file .env.dev -f infra/docker/compose.dev.yml down --volumes && pnpm run dev:up",
+    "prepare": "node tools/ts/install-hooks.ts"
+  },
+  "devDependencies": {
+    "@eslint-community/eslint-plugin-eslint-comments": "catalog:",
+    "@eslint/js": "catalog:",
+    "@typescript/native": "catalog:",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "globals": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
+    "vitest": "catalog:"
+  }
+}

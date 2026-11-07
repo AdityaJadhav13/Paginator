@@ -1,0 +1,28 @@
+{
+ "counts": {
+  "by_kind": {
+   "compose": 2200,
+   "copyfit": 220,
+   "n_lines": 110,
+   "ranked": 55
+  },
+  "corpus": 11,
+  "fictional": 44,
+  "headlines": 55,
+  "not_fitting": 70,
+  "policies": 6,
+  "records": 2585,
+  "relaxed": 28
+ },
+ "environment": {
+  "fonttools": "4.63.0",
+  "harfbuzz": "14.3.0",
+  "machine": "arm64",
+  "oracle_manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05",
+  "platform": "macOS-27.0.1",
+  "python": "3.11.14",
+  "uharfbuzz": "0.56.0"
+ },
+ "headliner": "head1/1.3.1",
+ "schema": "pageinator.golden.headline-info/1"
+}
