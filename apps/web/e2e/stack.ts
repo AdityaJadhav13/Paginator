@@ -12,7 +12,7 @@
 // jobs refuse): PGN_ENGINE_PYTHON (the engine environment's Python), PGN_ENGINE_STALL_S, PGN_LAYOUT_TIMEOUT_S, and
 // PGN_ONBOARD_PYTHON (the onboarding tool's Python: the worker venv's).
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -40,6 +40,19 @@ export const REPORTER = { name: "Smoke Reporter", email: "reporter.smoke@example
 export const EDITION_DATE = "2026-12-01";
 
 const hex = (bytes: number) => randomBytes(bytes).toString("hex");
+
+/** RFC 6238 (SHA-1, 30 s, 6 digits): what an authenticator app shows for the base32 key. */
+export function totp(key: string, at = Date.now()): string {
+  const bits = [...key.replace(/[\s=]/g, "").toUpperCase()]
+    .map((c) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".indexOf(c).toString(2).padStart(5, "0"))
+    .join("");
+  const secret = Buffer.from((bits.match(/.{8}/g) ?? []).map((b) => parseInt(b, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30_000)));
+  const mac = createHmac("sha1", secret).update(counter).digest();
+  const offset = (mac[mac.length - 1] ?? 0) & 0xf;
+  return String((mac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, "0");
+}
 
 /** Waits for ok(), each try cut off after 2 s; stops at once when the process it waits for has exited. */
 async function until(what: string, ok: () => Promise<boolean>, child?: ChildProcess, ms = 60_000): Promise<void> {

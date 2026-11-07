@@ -13,7 +13,8 @@
     "test": "vitest",
     "preview": "vite preview",
     "e2e": "playwright test",
-    "demo": "node e2e/demo.ts"
+    "demo": "node e2e/demo.ts",
+    "seed-demo": "node e2e/seed-demo.ts"
   },
   "dependencies": {
     "@pageinator/contracts": "workspace:*",

@@ -8,12 +8,12 @@
 // imports (apps/api/test/support/desk_roundtrip.py). Every person, story and picture is fictional; the photo is drawn
 // by the browser.
 import { spawnSync } from "node:child_process";
-import { createHash, createHmac } from "node:crypto";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Browser, type Page, expect, test } from "@playwright/test";
-import { EDITION_DATE, FAILED_MARK, MAILPIT, OWNER, REPO, REPORTER, WEB } from "./stack.ts";
+import { EDITION_DATE, FAILED_MARK, MAILPIT, OWNER, REPO, REPORTER, totp, WEB } from "./stack.ts";
 
 // a failed run keeps the stack's logs (the teardown looks for this mark)
 test.afterEach(({}, testInfo) => {
@@ -48,19 +48,6 @@ async function emailLink(to: string, subject: RegExp): Promise<string> {
     expect(link).not.toBe("");
   }).toPass({ timeout: 20_000 });
   return link;
-}
-
-/** RFC 6238 (SHA-1, 30 s, 6 digits): what an authenticator app shows for the base32 key. */
-function totp(key: string, at = Date.now()): string {
-  const bits = [...key.replace(/[\s=]/g, "").toUpperCase()]
-    .map((c) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".indexOf(c).toString(2).padStart(5, "0"))
-    .join("");
-  const secret = Buffer.from((bits.match(/.{8}/g) ?? []).map((b) => parseInt(b, 2)));
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30_000)));
-  const mac = createHmac("sha1", secret).update(counter).digest();
-  const offset = (mac[mac.length - 1] ?? 0) & 0xf;
-  return String((mac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, "0");
 }
 
 /** A code from the next 30-second step, so it was never used before (a code works once). */

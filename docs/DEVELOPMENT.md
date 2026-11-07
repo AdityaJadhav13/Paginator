@@ -65,6 +65,24 @@
 | `pnpm --filter @pageinator/web e2e` | **The phone smoke** (L2.1, `apps/web/e2e/smoke.e2e.ts`; Playwright, Chromium): the Owner at 390 × 844 chooses a password from the welcome email (which confirms the address), turns on two-step sign-in and signs in again with a code; invites a Reporter (360 × 800), who makes an account from the email and files a story with a photo; the engine's queue converts the photo with the real Python runner; the Owner's list hears it live, the Owner comments and sends it back, which the Reporter sees live; it is sent again; the Owner makes the edition on the Editions screen, puts the story in it from the editor, marks it ready, and "Send to the Desk" downloads a ZIP the Desk's own code (`apps/api/test/support/desk_roundtrip.py`) opens and imports. It starts and removes a stack of its own (`apps/web/e2e/stack.ts`: compose project `pgn-e2e-62000` on ports 62025–62780 with random secrets, never `.env.dev` or the `pageinator` project; the API, the queue and Vite as processes). Needs Docker, the Chromium headless shell once (`pnpm --filter @pageinator/web exec playwright install --only-shell chromium`), `PGN_E2E_WORKER_PY` (the engine worker's venv Python, from `apps/engine-worker/requirements.lock`), the Desk's Python (`PAGEINATOR_DESK_PY`, as for `test:db`) and a CMYK profile (`PGN_E2E_ICC`; macOS's Generic CMYK by default, never the newsprint one). It runs on a developer's machine only: CI does not install browsers until the owner decides on the Playwright browser licences |
 | `pnpm run test:desk` | The Desk's tests (fictional data only): server and Word import in `experiments/phase0/pdfx1/.venv`, engine in `tools/oracle/v0/.venv`, the page editor's view arithmetic in Node. CI's `desk` job runs the same three commands |
 
+## The local demo
+`pnpm --filter @pageinator/web demo` starts an empty demo (the table above). To fill it so every screen has something
+to show, run `pnpm --filter @pageinator/web seed-demo` in a second terminal with the same `PGN_E2E_PORT_BASE` and
+`PGN_E2E_WORKER_PY` (`apps/web/e2e/seed-demo.ts`). It works through the same HTTP API the web app uses and makes, all
+fictional: the Owner's password (`Demo-Owner-2026`) and two-step sign-in, a Reporter (`reporter@example.com`,
+`Demo-Reporter-2026`) invited and joined, five sections, the brand's defaults, a print profile, drawn photos, three
+advertisers with two booked back-page ads and their artwork, the news finder's suggested sources, today's edition laid
+out by the engine and released (pages approved, press test recorded, marked as sent) and tomorrow's laid out but not
+released, with stories in every state for the Newsroom board. It prints the logins at the end: the two-step key and
+three backup codes.
+- `--dataset <zip>` uploads that engine dataset bundle as the engine profile (a private one stays outside the repo).
+  Without it, the profile is learnt from the fictional Marathi paper's past editions
+  (`tools/onboard/fixtures/make_paper.py`), for which the demo must have been started with `PGN_ONBOARD_PYTHON` (the
+  worker venv's Python); that paper's page size is not the press test page's, so today's edition then has no photos or
+  ads.
+- Run again after a failure, it reuses what is there. Once two-step sign-in is on, pass `--totp-key <key>` (the first
+  run printed it).
+
 ## Local services
 The database, the S3 store and the mail catcher run in Docker as the compose project `pageinator`
 (`infra/docker/compose.dev.yml`). Before the first start, copy `.env.dev.example` to `.env.dev` (git-ignored) and
