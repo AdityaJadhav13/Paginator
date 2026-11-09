@@ -34,6 +34,7 @@ OLD = {
     "m.edit.cropLost": ({"name": H}, f"the photo of {H} could not be found on the page to crop it: nothing was changed"),
     "m.edit.photoDamaged": ({"name": H}, f"the photo of {H} is damaged (its raster has the wrong size)"),
     "m.edit.lockBool": ({}, "a story's lock must be true or false"),
+    "m.edit.treatmentBad": ({}, "this paper's house style has no such story treatment"),
     "m.edit.lockedMove": ({"name": H}, f"{H} is locked: unlock it (Shift+L) to move it"),
     "m.edit.lockedTake": ({"name": H}, f"{H} is locked: unlock it (Shift+L) to take it off the page"),
     "m.edit.lockedThere": ({"name": H, "page": 3}, f"{H} is locked on page 3: unlock it there to bring it here"),

@@ -4,6 +4,7 @@ Run: experiments/phase0/pdfx1/.venv/bin/python -B -m unittest discover -s tools/
 """
 from __future__ import annotations
 
+import re
 import shutil
 import sys
 import tempfile
@@ -13,6 +14,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE.parent / "fixtures"))
+sys.path.insert(0, str(HERE.parent / "chain"))
 import intake as IN  # noqa: E402
 import make_paper as MP  # noqa: E402
 import onboard as OB  # noqa: E402
@@ -48,6 +50,31 @@ class Intake(unittest.TestCase):
         self.assertIn("onboard.no_unicode", self.codes("mr_no_unicode"))
         self.assertIn("onboard.no_unicode", self.codes("no_unicode"))
         self.assertIn("onboard.not_pdf", self.codes(None, self.tmp / "broken.pdf"))
+
+    def test_legacy_fonts_are_flagged_not_refused(self):
+        for v in ("legacy", "legacy_noname"):              # found by the font name; by the ToUnicode map alone
+            p = MP.tiny_pdf(self.tmp / f"{v} 2026-03-05.pdf", v, key="mr")
+            r = IN.check_file(p, p.name)
+            self.assertEqual(r["codes"], ["onboard.legacy_font"], v)
+            self.assertEqual(IN.file_check({"n": 1, "facts": r})["status"], "warning")
+            bold = {k for k, f in r["legacy_fonts"].items() if f["bold"]}
+            self.assertTrue(bold and not any(re.search("bold|black|heavy", k, re.I) for k in bold))   # weight from StemV
+
+    def test_legacy_dateline_by_geometry(self):
+        import headlines as HL  # noqa: PLC0415
+        import house_profile as HP  # noqa: PLC0415
+        g = lambda x, font: {"x0": x, "x1": x + 2.0, "y": 100.0, "size": 12.0, "font": font, "col": None, "tr": 0, "t": "a"}  # noqa: E731
+        run = {"lines": [{"y": 100.0, "x0": 10.0}]}
+        rows = {100: [g(10, "SHREE-DEV-FICT-160"), g(12, "SHREE-DEV-FICT-160"), g(15, "SHREE-DEV-FICT-100"), g(17, "SHREE-DEV-FICT-100")]}
+        try:
+            HL.LEGACY.update({"SHREE-DEV-FICT-160": {"bold": True}, "SHREE-DEV-FICT-100": {"bold": False}})
+            HL.LEGACY_BOLD.add("SHREE-DEV-FICT-160")
+            dl = HP.dateline_of(run, rows)
+            self.assertEqual((dl["form"], dl["bold"], dl["font"]), ("bold_run", True, "SHREE-DEV-FICT-160"))
+            self.assertIsNone(HP.dateline_of(run, {100: rows[100][2:]}))          # no bold run: no dateline
+        finally:
+            HL.LEGACY.clear()
+            HL.LEGACY_BOLD.clear()
 
     def test_a_file_that_opens_but_cannot_be_read_is_refused_alone(self):
         from unittest import mock

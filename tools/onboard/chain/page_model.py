@@ -269,7 +269,7 @@ def page_refs(text, page, n_pages):
 
 
 def is_bold(font, display_fonts):
-    return bool(HL.BOLD_RE.search(font or "")) or font in display_fonts
+    return HL.bold_font(font) or font in display_fonts
 
 
 def black(cmyk):
@@ -3004,6 +3004,19 @@ def aggregate(pages):
 
 
 # ------------------------------------------------------------------------------------------------- main
+def mark_legacy(model):
+    """onboard: text from a legacy-encoded font is glyph codes, never words. Mark every such text element, body frame
+    and story "legacy_text": true so the Desk keeps its geometry and never re-sets (prints) its text."""
+    if not HL.LEGACY:
+        return
+    for e in model["elements"]:
+        if e.get("font") and HL.base_font(e["font"]) in HL.LEGACY:
+            e["legacy_text"] = True
+    for s in model["stories"]:
+        if s.get("body_font") and HL.base_font(s["body_font"]) in HL.LEGACY:
+            s["legacy_text"] = True
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("dataset", type=Path)
@@ -3013,6 +3026,7 @@ def main():
     a = ap.parse_args()
     globals()["SPLIT_DATE"] = a.split_date
     ds = a.dataset.expanduser().resolve()
+    HL.load_legacy(ds)
     # onboard: no repository guard; every output goes into the dataset folder
     os.umask(0o077)                         # outputs hold article text: never world-readable, even briefly
     out_dir = ds / "report" / "page1"
@@ -3033,6 +3047,8 @@ def main():
             models.append((smp, PageModel(ctx, smp, pg, recs.get((smp["sid"], pg["page"]), []), pdoc).build().json()))
         pdoc.close()
     residual_furniture(models)
+    for _, model in models:
+        mark_legacy(model)
     summary_pages = []
     for smp, model in models:
         path = out_dir / "pages" / f"{smp['sid']}__p{model['page']}.json"

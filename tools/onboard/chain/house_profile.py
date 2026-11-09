@@ -210,7 +210,9 @@ class _ScanDevice(PDFPageAggregator):
                 for k in range(0, len(nums) - 1, 2):
                     pts.append(apply_matrix_pt(self.ctm, (nums[k], nums[k + 1])))
             bbox = (min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts)) if pts else None
+            a, b, c, d = self.ctm[:4]
             self.paths.append({"depth": self.depth, "bbox": bbox, "ops": "".join(s[0] for s in path), "stroke": bool(stroke),
+                               "lw": gstate.linewidth * math.sqrt(abs(a * d - b * c)),   # onboard (layout): any form depth
                                "pts": pts if len(pts) <= 24 else None,
                                "fill": bool(fill), "scol": cmyk_of(gstate.scolor) if stroke else None,
                                "fcol": cmyk_of(gstate.ncolor) if fill else None})
@@ -286,7 +288,8 @@ def scan_page(pdf_path: Path, pdoc, page_no: int) -> dict:
             raise RuntimeError(f"{pdf_path} p{page_no}: PDFium and pdfminer paths disagree at PDFium path {len(paths)}")
         paths.append(dict(mp[j], sw=fp["sw"], fillmode=fp["fillmode"], nseg=fp["nseg"]))
         j += 1
-    return {"glyphs": dev.glyphs, "paths": paths, "images": images, "forms": forms, "size": page.get_size()}
+    strokes = [p for p in dev.paths if p["stroke"] and p["bbox"]]   # onboard (layout): rules inside forms too
+    return {"glyphs": dev.glyphs, "paths": paths, "images": images, "forms": forms, "size": page.get_size(), "strokes": strokes}
 
 
 # ------------------------------------------------------------------------------------------------- dataset
@@ -437,9 +440,13 @@ def build_page(sid: str, pg: dict, scan: dict, heads: list, n_pages: int) -> dic
         q["cls"] = classify_path(q, W, H)
         paths.append(q)
     P["paths"] = paths
+    P["strokes"] = [{"x0": Xm(p["bbox"][0] / MM), "x1": Xm(p["bbox"][2] / MM), "y0": Yp(p["bbox"][3]), "y1": Yp(p["bbox"][1]),
+                     "lw": p["lw"], "col": p["scol"], "ops": p["ops"]} for p in scan["strokes"]]   # onboard (layout)
     # glyph-level facts
     G = scan["glyphs"]
-    letters = [ch for g in G for ch in g[8] if ch.isalpha() or "ऀ" <= ch <= "ॿ"]
+    # onboard: a legacy-encoded font's glyph codes stand for Devanagari letters (the owner confirmed the script)
+    letters = ["ऀ" if base_font(g[4]) in HL.LEGACY else ch for g in G for ch in g[8]
+               if ch.isalpha() or "ऀ" <= ch <= "ॿ" or (ch.strip() and base_font(g[4]) in HL.LEGACY)]
     P["deva_share"] = sum("ऀ" <= ch <= "ॿ" for ch in letters) / len(letters) if letters else 0.0
     gl = [{"x0": Xm(g[0] / MM), "x1": Xm(g[1] / MM), "y": Yp(g[2]), "size": g[3], "font": g[4], "col": g[5],
            "hs": g[6], "up": g[7], "t": g[8], "tr": g[9]} for g in G if g[8].strip()]
@@ -750,6 +757,14 @@ def dateline_of(r: dict, rows: dict):
                  if abs(g["y"] - l0["y"]) <= SAME_LINE_MM and l0["x0"] - 1.0 <= g["x0"] <= l0["x0"] + DATELINE_MM), key=lambda g: g["x0"])
     if not gl or abs(gl[0]["x0"] - l0["x0"]) > 1.0:
         return None
+    if HL.LEGACY:   # onboard: legacy text is glyph codes; a bold run opening the line, then plain text on its baseline
+        k = next((i for i, g in enumerate(gl) if not HL.bold_font(g["font"])), 0)
+        if k == 0:
+            return None
+        lead = gl[:k]
+        return {"font": Counter(x["font"] for x in lead).most_common(1)[0][0], "size": round(lead[0]["size"], 2),
+                "col": Counter(x["col"] for x in lead).most_common(1)[0][0], "bold": True, "faux_bold": False,
+                "form": "bold_run", "width_mm": lead[-1]["x1"] - l0["x0"]}
     for k, g in enumerate(gl[1:], 1):
         form = "colon" if ":" in g["t"] else None
         if not form and g["t"] in DASH_CHARS and k + 1 < len(gl) and g["x0"] - gl[k - 1]["x1"] >= 0.12 * g["size"] / MM \
@@ -759,7 +774,7 @@ def dateline_of(r: dict, rows: dict):
             lead = gl[:k + 1]
             fonts = Counter(x["font"] for x in lead)
             f = fonts.most_common(1)[0][0]
-            bold = bool(HL.BOLD_RE.search(f)) or sum(x["tr"] == 2 for x in lead) >= 0.5 * len(lead)
+            bold = HL.bold_font(f) or sum(x["tr"] == 2 for x in lead) >= 0.5 * len(lead)
             return {"font": f, "size": round(lead[0]["size"], 2), "col": Counter(x["col"] for x in lead).most_common(1)[0][0],
                     "bold": bold, "faux_bold": sum(x["tr"] == 2 for x in lead) >= 0.5 * len(lead), "form": form,
                     "width_mm": g["x1"] - l0["x0"]}
@@ -1262,11 +1277,13 @@ def dateline_spec(pages: list) -> dict:
 def headline_size_table(pages: list, grids: dict) -> dict:
     rows, lines, ratio = defaultdict(lambda: defaultdict(list)), defaultdict(list), defaultdict(list)
     xs, ys = [], []
+    main = f"{grids['8col']['n']}col"   # onboard: the lattice headlines.py calls "8col" has the paper's real column count
     for P in pages:
         for d in P["disp"]:
             if d["kind"] != "headline":
                 continue
-            key = f"{d['grid']}:{d['cols']}" if d["grid"] in ("8col", "6col") and d["cols"] else "off_grid"
+            name = main if d["grid"] == "8col" else d["grid"]
+            key = f"{name}:{d['cols']}" if d["grid"] in ("8col", "6col") and d["cols"] else "off_grid"
             rows[key]["all"].append(d["size"])
             rows[key][P["ptype"]].append(d["size"])
             lines[key].append(len(d["lines"]))
@@ -1274,7 +1291,7 @@ def headline_size_table(pages: list, grids: dict) -> dict:
             if d["grid"] == "8col" and d["cols"]:
                 xs.append(d["cols"])
                 ys.append(d["size"])
-    order = sorted(rows, key=lambda k: (k.split(":")[0] != "8col", k == "off_grid", int(k.split(":")[1]) if ":" in k else 99))
+    order = sorted(rows, key=lambda k: (k.split(":")[0] != main, k == "off_grid", int(k.split(":")[1]) if ":" in k else 99))
     table = {k: {"size_pt": {t: d1(rows[k][t]) for t in ("all",) + PTYPES}, "lines": {"dist": d1(lines[k], 1),
                  "histogram": {str(a): b for a, b in sorted(Counter(lines[k]).items())}}, "size_over_body": d1(ratio[k], 3)} for k in order}
     return {"by_span": table, "size_vs_8col_span_fit": theil_sen(xs, ys),
@@ -1756,7 +1773,8 @@ def shape_section(pages: list, D: dict) -> dict:
     heads = []
     for P in pages:
         for d in P["disp"]:
-            if d["kind"] == "headline" and len(d["lines"]) >= 2 and (HL.deva_share(d["text"]) >= 0.5) == (MAIN == "devanagari"):  # onboard: main script
+            deva = HL.deva_share(d["text"]) >= 0.5 or HL.base_font(d["font"]) in HL.LEGACY   # onboard: legacy = Devanagari
+            if d["kind"] == "headline" and len(d["lines"]) >= 2 and deva == (MAIN == "devanagari"):  # onboard: main script
                 heads.append((P, d))
     cuts = size_bands([d["size"] for _, d in heads])
 
@@ -2333,6 +2351,312 @@ LIMITATIONS = (
 )
 
 
+# ------------------------------------------------------------------------------------------------- layout (onboard)
+LAYOUT_SCHEMA = "pageinator.layout/1"
+NOTO_DEVA = REPO / "tools" / "oracle" / "v0" / "assets" / "fonts" / "devanagari" / "NotoSansDevanagari[wdth,wght].ttf"
+HEADSTROKE_MIN_GLYPHS = 10   # a headstroke height needs this many glyph tops at one value
+WRAP_NEAR_MM = 6.0           # body text this close beside a photo may wrap it ...
+GRID_EDGE_MM = 1.5           # ... unless that photo edge is a column edge (within 1.5 mm of a body frame edge)
+WRAP_ROWS = 3                # a wrapped side needs this many text rows
+
+
+def _cm(c):
+    """A model colour as CMYK 0–1 (gray as K = 1 − g; RGB and anything else: None)."""
+    if c and c[0] != "cmyk":
+        c = cmyk_of(c[1] if len(c) == 2 and isinstance(c[0], str) else c)
+    return [round(x, 3) for x in c[1]] if c and c[0] == "cmyk" else None
+
+
+def _mode(xs):
+    c = Counter(x for x in xs if x is not None)
+    return max(c.items(), key=lambda kv: (kv[1], str(kv[0])))[0] if c else None
+
+
+def _rng(xs, nd=2):
+    return [round(min(xs), nd), round(max(xs), nd)] if xs else None
+
+
+def headstroke_em(tt, names=None):
+    """The headstroke (shirorekha) top of a Devanagari font in em: the commonest glyph top above 0.3 em."""
+    upem, g = tt["head"].unitsPerEm, tt["glyf"]
+    c = Counter(round(g[n].yMax / upem, 2) for n in (names or tt.getGlyphOrder())
+                if getattr(g[n], "numberOfContours", 0) and g[n].yMax > 0.3 * upem)
+    v, n = max(c.items(), key=lambda kv: (kv[1], -kv[0])) if c else (None, 0)
+    return v if n >= HEADSTROKE_MIN_GLYPHS else None
+
+
+def visual_ratio(pages: list, font: str):
+    """Stand-in Noto Sans Devanagari size per house pt: the embedded body font's headstroke over Noto's (GAP §1: the
+    weekly's 12 pt Shree reads as 9.6 pt Noto). Devanagari papers whose body font is embedded as TrueType only."""
+    if MAIN != "devanagari" or not NOTO_DEVA.exists():
+        return None
+    import io  # noqa: PLC0415
+    import pikepdf  # noqa: PLC0415
+    from fontTools.ttLib import TTFont  # noqa: PLC0415
+    noto = TTFont(NOTO_DEVA)
+    cm = noto.getBestCmap()
+    ref = headstroke_em(noto, [cm[c] for c in range(0x915, 0x93A) if c in cm])
+    for P in pages:
+        with pikepdf.open(P["pdf"]) as pdf:
+            for _, f in (pdf.pages[P["page"] - 1].Resources.get("/Font") or {}).items():
+                d = f.DescendantFonts[0] if f.get("/Subtype") == "/Type0" else f
+                fd = d.get("/FontDescriptor")
+                if base_font(str(f.get("/BaseFont", ""))[1:]) == font and fd is not None and "/FontFile2" in fd:
+                    own = headstroke_em(TTFont(io.BytesIO(fd.FontFile2.read_bytes())))
+                    return round(own / ref, 3) if own and ref else None
+    return None
+
+
+def page_photos(pdoc, P: dict) -> list:
+    """Photos (>= PHOTO_MIN_MM, below the top block, not furniture or ads) with their clip shape: ellipse (>= 12 Bezier
+    points and every on-curve point on the inscribed ellipse), cutout (a longer outline) or rect (photo_wrap also calls
+    a rectangle a cutout when body text runs into it)."""
+    tx0, _, _, ty1 = P["trim_mm"]
+    top = P["topblock"]["y1"] if P["topblock"] else 0.0
+    out = []
+    for obj in pdoc[P["page"] - 1].get_objects(max_depth=8):
+        if obj.type != PR.FPDF_PAGEOBJ_IMAGE:
+            continue
+        l, b, r, t = obj.get_pos()
+        shape, cp = "rect", PR.FPDFPageObj_GetClipPath(obj.raw)
+        for k in range(PR.FPDFClipPath_CountPaths(cp) if cp else 0):
+            n, xs, ys, on, run = PR.FPDFClipPath_CountPathSegments(cp, k), [], [], [], 0
+            for j in range(n):
+                seg = PR.FPDFClipPath_GetPathSegment(cp, k, j)
+                x, y = ctypes.c_float(), ctypes.c_float()
+                PR.FPDFPathSegment_GetPoint(seg, x, y)
+                xs.append(x.value)
+                ys.append(y.value)
+                run = run + 1 if PR.FPDFPathSegment_GetType(seg) == PR.FPDF_SEGMENT_BEZIERTO else 0
+                if run % 3 == 0:                      # a move/line point or a curve's end point (not a control point)
+                    on.append((x.value, y.value))
+            if xs:
+                x0_, y0_, x1_, y1_ = min(xs), min(ys), max(xs), max(ys)
+                l, b, r, t = max(l, x0_), max(b, y0_), min(r, x1_), min(t, y1_)
+                cx, cy, ax, by = (x0_ + x1_) / 2, (y0_ + y1_) / 2, max((x1_ - x0_) / 2, 1e-6), max((y1_ - y0_) / 2, 1e-6)
+                curved = n - len(on) >= 8 and all(abs(((px - cx) / ax) ** 2 + ((py - cy) / by) ** 2 - 1) <= 0.1 for px, py in on)
+                shape = "ellipse" if curved else "cutout" if n > 20 else shape
+        im = {"x0": l / MM - tx0, "x1": r / MM - tx0, "y_top": ty1 - t / MM, "y_bot": ty1 - b / MM, "shape": shape}
+        w, h = im["x1"] - im["x0"], im["y_bot"] - im["y_top"]
+        if w >= PHOTO_MIN_MM[0] and h >= PHOTO_MIN_MM[1] and w < 0.9 * P["W"] and im["y_top"] >= top - 0.5 \
+                and not any(HL.overlap(im["x0"], im["x1"], a["x0"], a["x1"]) > 0 and HL.overlap(im["y_top"], im["y_bot"], a["y_top"], a["y_bot"]) > 0
+                            for a in P["ads"] + P["standing"]):
+            out.append(im)
+    return out
+
+
+def photo_wrap(P: dict, im: dict) -> tuple:
+    """(shape, position, gaps mm): text rows beside the photo within WRAP_NEAR_MM, measured to its contour (an ellipse
+    at each row's band); a side wraps with >= WRAP_ROWS rows unless a rectangle's edge there is a column edge. A
+    rectangle that >= WRAP_ROWS body rows run into by > 2 mm is a cut-out on white (its contour is unknown: no gaps)."""
+    edges = [e for r in body_runs(P) for e in (r["x0"], r["x1"])]
+    lo, hi = HL.FRAG_BAND[0] * P["body_size"], HL.FRAG_BAND[1] * P["body_size"]
+    cx, cy = (im["x0"] + im["x1"]) / 2, (im["y_top"] + im["y_bot"]) / 2
+    a, b = (im["x1"] - im["x0"]) / 2, (im["y_bot"] - im["y_top"]) / 2
+    rows = defaultdict(list)
+    for g in P["glyphs"]:
+        if lo <= g["size"] <= hi and im["y_top"] <= g["y"] - 0.3 * g["size"] / MM <= im["y_bot"]:
+            rows[round(g["y"], 1)].append(g)
+    if im["shape"] == "rect" and sum(1 for gs in rows.values()
+                                     if any(g["x0"] < im["x1"] - 2 and g["x1"] > im["x0"] + 2 for g in gs)) >= WRAP_ROWS:
+        im["shape"] = "cutout"
+    side = {"l": [], "r": []}
+    for y, gs in rows.items():
+        em = gs[0]["size"] / MM
+        half = a
+        if im["shape"] == "ellipse":
+            band = [yy for yy in (y - 0.75 * em, y + 0.25 * em) if abs(yy - cy) <= b] + ([cy] if y - 0.75 * em <= cy <= y + 0.25 * em else [])
+            half = max((a * math.sqrt(max(0.0, 1 - ((yy - cy) / b) ** 2)) for yy in band), default=0.0)
+        left = [cx - half - g["x1"] for g in gs if g["x1"] <= cx - half + 0.5]
+        right = [g["x0"] - (cx + half) for g in gs if g["x0"] >= cx + half - 0.5]
+        if left and min(left) <= WRAP_NEAR_MM:
+            side["l"].append(min(left))
+        if right and min(right) <= WRAP_NEAR_MM:
+            side["r"].append(min(right))
+    on_grid = lambda x: im["shape"] == "rect" and any(abs(x - e) <= GRID_EDGE_MM for e in edges)  # noqa: E731
+    wrapped = [k for k, x in (("l", im["x0"]), ("r", im["x1"])) if len(side[k]) >= WRAP_ROWS and not on_grid(x)]
+    if im["shape"] == "cutout":
+        wrapped = [k for k in ("l", "r") if len(side[k]) >= WRAP_ROWS]
+    pos = "centre" if len(wrapped) == 2 else "inset" if wrapped else "head"
+    return im["shape"], pos, [] if im["shape"] == "cutout" else [max(0.0, v) for k in wrapped for v in side[k]]
+
+
+def panel_kind(fill, text: list):
+    """strap (chromatic band, dark text), tint (grey panel, dark text), reverse (dark panel, white text), reverse_red."""
+    if not fill or len(text) < 3:
+        return None
+    c, m, y, k = fill
+    white = sum(1 for g in text if g["col"] and g["col"][0] == "cmyk" and max(g["col"][1]) < 0.05) >= 0.5 * len(text)
+    if white:
+        return "reverse_red" if m >= 0.6 and y >= 0.6 and k < 0.5 else "reverse" if k >= 0.6 or max(c, m, y) >= 0.6 else None
+    if max(c, m, y) < 0.05 and 0.03 <= k <= 0.4:
+        return "tint"
+    if max(c, m, y) >= 0.3 and k < 0.3:
+        return "strap"
+    return None
+
+
+def layout_section(pages: list, grids: dict, prof: dict) -> dict:
+    """onboard: the refined engine's house settings, aggregates only (schema pageinator.layout/1); every value is measured
+    from geometry (runs, Tz, clip paths, fills, strokes) and a key that cannot be measured is left out."""
+    g8 = grids["8col"]
+    cd = prof["composer_defaults"]
+    heads = [(P, d) for P in pages for d in P["disp"] if d["kind"] == "headline"]
+    out = {"schema": LAYOUT_SCHEMA}
+    # headlines
+    if heads:
+        multi = [d for _, d in heads if len(d["lines"]) >= 2 and d["lead"]]
+        aligns = []
+        for _, d in heads:
+            s0, s1 = d["span"]
+            ls = d["lines"]
+            if all(abs(l["x0"] - s0) <= 3.0 and abs(s1 - l["x1"]) <= 3.0 for l in ls):
+                aligns.append("fill")
+            elif all(abs((l["x0"] + l["x1"]) / 2 - (s0 + s1) / 2) <= 2.0 for l in ls):
+                aligns.append("centre")
+            elif all(abs(l["x0"] - s0) <= 2.0 for l in ls):
+                aligns.append("left")
+        by_span = defaultdict(list)
+        for _, d in heads:
+            if d["grid"] == "8col" and d["cols"]:
+                by_span[d["cols"]].append(d["size"])
+        lead, rest = [], []
+        for P in pages:
+            hs_ = sorted((d["size"] / P["body_size"] for d in P["disp"] if d["kind"] == "headline"), reverse=True)
+            lead += hs_[:1]
+            rest += hs_[1:]
+        cut = HL.q(rest, 0.5)
+        hsc = [d["hs"] for _, d in heads if d["hs"]]
+        out["headline"] = {"lines_hist": {str(k): v for k, v in sorted(Counter(len(d["lines"]) for _, d in heads).items())},
+                           "max_lines": max(len(d["lines"]) for _, d in heads), "tz_range": _rng(hsc),
+                           "tz_median": round(HL.q(hsc, 0.5), 3) if hsc else None,
+                           "leading_em": round(HL.q([d["lead"] / d["size"] for d in multi], 0.5), 3) if multi else None,
+                           "align": _mode(aligns), "size_by_span": {str(k): round(HL.q(v, 0.5), 1) for k, v in sorted(by_span.items())},
+                           "lead_ratio": {"lead": _rng(lead), "secondary": _rng([r for r in rest if r >= cut]),
+                                          "small": _rng([r for r in rest if r < cut])},
+                           "n": len(heads)}
+        out["headline"] = {k: v for k, v in out["headline"].items() if v is not None}
+    # body
+    lines_ = [(r, l) for P in pages for r in body_runs(P) for l in r["lines"]]
+    if lines_:
+        leads = Counter(round(r["lead"], 1) for r, _ in lines_ if r["lead"])
+        hsl = [r["hs"] for r, _ in lines_ if r["hs"]]
+        body = {"size_pt": cd["roles"]["body"]["size_pt"]["value"] if cd["roles"]["body"]["size_pt"] else None,
+                "leadings_pt": sorted(v for v, n in leads.items() if n >= 0.05 * sum(leads.values())),
+                "hscale_range": [round(HL.q(hsl, 0.05), 3), round(HL.q(hsl, 0.95), 3)] if hsl else None,
+                "indent_mm": cd["roles"]["body"]["first_line_indent_mm"],
+                "visual_ratio": visual_ratio(pages, (cd["roles"]["body"]["font"] or {}).get("value")), "n": len(lines_)}
+        out["body"] = {k: v for k, v in body.items() if v is not None}
+    # story parts
+    opens = [(h, r) for P in pages for h, r in story_openings(P)]
+    n_heads = sum(1 for P in pages for d in P["disp"] if d["kind"] in MAIN_HEADS)
+    if opens:
+        out["dateline"] = {"run_in_bold_share": share(sum(1 for _, r in opens if r.get("runin") and r["runin"]["bold"]), len(opens))}
+    if n_heads:
+        bl = [d for P in pages for d in P["disp"] if d["kind"] == "byline"]
+        end = sum(1 for d in bl if abs(d["span"][1] - d["x1"]) <= 2.0 and d["x0"] - d["span"][0] >= 0.25 * (d["span"][1] - d["span"][0]))
+        ls_, es_ = share(len(bl) - end, n_heads), share(end, n_heads)
+        out["byline"] = {"mode": "line" if ls_ >= 0.5 else "end" if es_ >= 0.5 else "none", "line_share": ls_, "end_share": es_}
+        out["kicker"] = {"share": share(sum(1 for P in pages for d in P["disp"] if d["kind"] == "kicker"), n_heads)}
+    # rules: separators are plain lines (any form depth) off the top block and the page foot
+    seps, verts = [], False
+    for P in pages:
+        top = P["topblock"]["y1"] if P["topblock"] else 0.0
+        for s in P["strokes"]:
+            if s["ops"] != "ml":
+                continue
+            if s["x1"] - s["x0"] >= RULE_MIN_LEN_MM and s["y1"] - s["y0"] <= 0.5 and top + 1 < s["y0"] < P["content_bottom"] - 1:
+                seps.append((P, s))
+            verts |= s["y1"] - s["y0"] >= 20 and s["x1"] - s["x0"] <= 0.5 and s["y0"] > top + 1
+    rules = {"column_rules": verts}
+    if seps:
+        above = sum(1 for P in pages for d in P["disp"] if d["kind"] in MAIN_HEADS and any(
+            sp is P and 0 < d["y_top"] - 0.75 * d["size"] / MM - s["y0"] <= 20 and HL.overlap(d["x0"], d["x1"], s["x0"], s["x1"]) >= 0.5 * (d["x1"] - d["x0"])
+            for sp, s in seps))
+        rules["separator"] = {"weight_pt": _mode(round(s["lw"], 2) for _, s in seps), "cmyk": _cm(_mode(s["col"] for _, s in seps)),
+                              "mode": "every" if share(above, n_heads) and share(above, n_heads) >= 0.6 else "tiers"}
+    out["rules"] = rules
+    # photos
+    treat, posn, gaps, n_ph = Counter(), Counter(), [], 0
+    for sid in dict.fromkeys(P["sid"] for P in pages):
+        pdoc = pdfium.PdfDocument(str(next(P["pdf"] for P in pages if P["sid"] == sid)))
+        for P in (P for P in pages if P["sid"] == sid):
+            for im in page_photos(pdoc, P):
+                n_ph += 1
+                shape, pos, gp = photo_wrap(P, im)
+                treat[shape] += 1
+                posn[pos] += 1
+                gaps += gp
+        pdoc.close()
+    if n_ph:
+        ph = {"treatments": {k: treat[k] for k in ("rect", "ellipse", "cutout")}, "positions": {k: posn[k] for k in ("head", "inset", "centre")},
+              "wrap_offset_mm": round(HL.q(gaps, 0.5), 2) if gaps else None, "caption_share": prof["images"].get("with_caption_share")}
+        out["photos"] = {k: v for k, v in ph.items() if v is not None}
+    # panels and boxes
+    found = defaultdict(list)
+    for P in pages:
+        top = P["topblock"]["y1"] if P["topblock"] else 0.0
+        inside_ = lambda p, g: p["x0"] <= (g["x0"] + g["x1"]) / 2 <= p["x1"] and p["y0"] <= g["y"] - 0.3 * g["size"] / MM <= p["y1"]  # noqa: E731
+        for p in P["paths"]:
+            if p["cls"] != "box" or p["y0"] < top - 0.5:
+                continue
+            text = [g for g in P["glyphs"] if inside_(p, g)]
+            if p["fill"] and not p["stroke"]:
+                kind = panel_kind(_cm(p["fcol"]), text)
+                if kind:
+                    txt = _mode(tuple(_cm(g["col"]) or ()) for g in text)
+                    found[kind].append({"cmyk": tuple(_cm(p["fcol"])), "h": p["y1"] - p["y0"], "text": txt})
+            elif p["stroke"] and p["x1"] - p["x0"] >= 30 and p["y1"] - p["y0"] >= 20 and len(text) >= 20:
+                inner = [(g["x0"], g["x1"]) for g in text] + [(q["x0"], q["x1"]) for q in P["paths"] if q is not p and q["fill"] and inside_(p, {"x0": q["x0"], "x1": q["x1"], "y": q["y1"], "size": 0})]
+                fill = next((_cm(q["fcol"]) for q in P["paths"] if q is not p and q["fill"] and max(abs(q[k] - p[k]) for k in ("x0", "x1", "y0", "y1")) <= 0.5), None)
+                pad = min(min(a for a, _ in inner) - p["x0"], p["x1"] - max(b for _, b in inner))
+                found["box"].append({"stroke": round(p["sw"], 2), "cmyk": tuple(_cm(p["scol"]) or ()), "pad": max(0.0, pad), "fill": tuple(fill) if fill else None})
+    panels = {}
+    for kind in ("strap", "tint", "reverse", "reverse_red"):
+        if found[kind]:
+            v = found[kind]
+            panels[kind] = {"cmyk": list(_mode(x["cmyk"] for x in v)), "height_mm": round(HL.q([x["h"] for x in v], 0.5), 2), "n": len(v)}
+            if kind.startswith("reverse"):
+                del panels[kind]["height_mm"]
+                panels[kind]["text_cmyk"] = list(_mode(x["text"] for x in v) or ()) or None
+    if found["box"]:
+        v = found["box"]
+        f = _mode(x["fill"] for x in v) if sum(x["fill"] is not None for x in v) * 2 > len(v) else None
+        panels["box"] = {"stroke_pt": _mode(x["stroke"] for x in v), "cmyk": list(_mode(x["cmyk"] for x in v)),
+                         "pad_mm": round(HL.q([x["pad"] for x in v], 0.5), 2), "fill": list(f) if f else None, "n": len(v)}
+    if panels:
+        out["panels"] = panels
+    # density, margins, grid alternates
+    spp = [k for k in (sum(1 for d in P["disp"] if d["kind"] == "headline") for P in pages) if k]   # a full-page ad: not news
+    if spp:
+        out["density"] = {"stories_per_page": [min(spp), round(HL.q(spp, 0.5), 1), max(spp)]}
+    if all(v is not None for v in cd["page"]["margins_mm"].values()):
+        out["margins_mm"] = {k: cd["page"]["margins_mm"][k] for k in ("top", "right", "bottom", "left")}
+    alts = defaultdict(list)
+    for P in pages:
+        w = Counter()
+        for r in body_runs(P):
+            if r["width_conf"] == "DERIVED":
+                w[round(r["width"] * 2) / 2] += len(r["lines"])
+        if w:
+            m = max(w.items(), key=lambda kv: (kv[1], -kv[0]))[0]
+            if abs(m - g8["width"]) > 1.0:
+                alts[m].append(P)
+    area = cd["page"]["type_area_x_mm"][1] - cd["page"]["type_area_x_mm"][0]
+    ga = []
+    for w, ps in sorted(alts.items()):
+        rs = sorted((r for P in ps for r in body_runs(P) if abs(r["width"] - w) <= 0.6), key=lambda r: (r["y_top"], r["x0"]))
+        gut = [b["x0"] - a["x1"] for a in rs for b in rs if a is not b and 2.0 <= b["x0"] - a["x1"] <= 8.0 and HL.overlap(a["y_top"], a["y_bot"], b["y_top"], b["y_bot"]) > 0]
+        gw = round(HL.q(gut, 0.5), 2) if gut else round(g8["pitch"] - g8["width"], 2)
+        n = round((area + gw) / (w + gw))
+        if abs(n * (w + gw) - gw - area) > 3.0:      # not a grid that tiles the type area (an off-grid frame width)
+            continue
+        ga.append({"columns": n, "column_width_mm": w, "gutter_mm": gw, "pages": sorted({P["page"] for P in ps})})
+    if ga:
+        out["grid_alternates"] = ga
+    return out
+
+
 def build_profile(D: dict, pages: list, grids: dict, ginfo: dict) -> dict:
     dev = [P for P in pages if P["script"] == MAIN]  # onboard: the paper's main script (the pilot: Devanagari)
     lat = [P for P in pages if P["script"] != MAIN]
@@ -2364,6 +2688,7 @@ def build_profile(D: dict, pages: list, grids: dict, ginfo: dict) -> dict:
         "latin_section": latin_section(lat, D),
     }
     prof["composer_defaults"] = composer_defaults(prof)
+    prof["layout"] = layout_section(dev, grids, prof)   # onboard: the refined engine's settings (paper.json refined_layout)
     prof["validation"] = validation(prof, pages, D, grids)
     prof["limitations"] = list(LIMITATIONS)
     return prof
@@ -2421,6 +2746,7 @@ def main():
     ds = a.dataset.expanduser().resolve()
     global OUT_JSON, MAIN, DS
     OUT_JSON, MAIN, DS = ds / "house_profile.json", a.script, ds  # onboard: outputs into the dataset; no repo guard
+    HL.load_legacy(ds)
     if MAIN == "latin":
         PRACTICE_ROLE["headline"] = "headline_latin"
     D, pages, grids, ginfo = prepare(ds)
@@ -2434,7 +2760,10 @@ def main():
     os.chmod(priv, 0o700)
     figs = {} if a.no_figures else make_figures(pages, prof, grids, priv / "profile_figs")
     md = priv / "house_profile.md"
-    md.write_text(write_md(prof, figs, D))
+    try:
+        md.write_text(write_md(prof, figs, D))
+    except (KeyError, StopIteration, TypeError, ValueError) as e:  # onboard: the summary's prose assumes the pilot's evidence
+        md.write_text(f"# House profile\n\nNo plain-language summary: this paper lacks evidence it describes ({type(e).__name__}: {e}).\n")
     os.chmod(md, 0o600)
     v = prof["validation"]
     print(f"{prof['scope']['pages']} pages ({prof['scope']['pages_profiled_devanagari']} profiled) -> {OUT_JSON}")  # onboard
@@ -2570,7 +2899,8 @@ def write_md(prof: dict, figs: dict, D: dict) -> str:
     w("|---|---|---|---|---|---|---|")
     for k, v in prof["headline_size"]["by_span"].items():
         sz = v["size_pt"]
-        lab = k.replace("8col:", "").replace("6col:", "6-col grid: ") + (" col" if k.startswith(("8col", "6col")) else "")
+        main = f"{prof['grid']['columns']}col:"   # onboard: the paper's own grid (the pilot's: 8col)
+        lab = (k[len(main):] if k.startswith(main) else k.replace("6col:", "6-col grid: ")) + (" col" if ":" in k else "")
         lab = lab.replace("off_grid", "not on the grid")
         hist = v["lines"]["histogram"]
         top_l = max(hist.items(), key=lambda kv: kv[1])[0] if hist else "-"

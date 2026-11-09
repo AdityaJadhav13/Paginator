@@ -213,3 +213,46 @@ Until then, no page with photos or ads goes to press: the release check already 
 - **A fictional photo and ad.** G2-1 in doc 08 asks for "one real ad"; the photo and the ad here are fictional, drawn to
   exercise the same conversion. If the press or the owner wants a real ad on the test page, that is the owner's choice
   (D-21).
+
+## A6 — The engine's own copy of the page generator, and the weekly profile (ENG, 2026-11-10)
+
+**What changed.** The frozen page generator is copied into `tools/desk/engine/layout/`. The copied files are
+`experiments/phase0/gen1/generate.py`, `page1/compose_page.py` and `textfix.py`; only their paths are changed. The Desk
+and the engine worker use the copy. Every refinement sits behind `layout/settings.py`, and its DEFAULTS take the frozen
+code path. A paper turns the refinements on with `"refined_layout": true` in its paper.json. The values then come from its
+house profile's learned `layout` block, mapped by `deskprofile._map_layout`.
+
+**Parity (pilot daily byte-identical).** `tools/desk/test/test_layout_parity.py` runs the real `desk_engine.py generate`
+twice in fresh homes: once on the copy, and once with `PGN_DESK_FROZEN_GEN1=1` (the frozen gen1). It compares every
+page PDF, manifest, plan and printed record.
+- **Pilot run** (8 pages; private, set `PAGEINATOR_DESK_PARITY_RUN`): **8 of 8 pages byte-identical** on the final tree.
+- **Fictional paper** (2 pages, in CI): identical.
+- **Independent check:** the same run made from the base commit's tree and from the changed tree gave byte-identical
+  PDFs, manifests, plan and printed records.
+
+**The weekly profile.** The owner's weekly (8 pages, 270 × 340 mm, Shree-Lipi fonts) was onboarded geometry-only:
+`--script deva --refined-layout --min-editions 1`, marked provisional. Its text is never read. Learned against the
+measured reference:
+
+| Item | Reference | Learned |
+|---|---|---|
+| Grid | 5 × 47.6 mm, gutter 4.23 mm | 5 × 47.5 mm, gutter 4.34 mm (4.23 mm measured between columns) |
+| Alternate grid | 4 × 60.6 mm on pp 5–6 | 4 × 60.5 mm on pp 5–6 (learned; not used yet) |
+| Headlines | 1–2 lines, Tz 0.51–1.17, set solid | 1 line: 17, 2 lines: 11; Tz 0.51–1.17; leading 0.957 em |
+| Body | 12/13, shirorekha ≈ 9.6 pt Noto | 12 pt, leading 12–13 pt, visual ratio 0.806 |
+| Panels | strap Y100, tint K10, reverse K100 and red, box 0.5 pt | the same |
+
+**A weekly made by the engine.** 52 of the 9 November stories (Marathi and English) went in, with their 20 licensed
+photos. Twenty stories were left out by page capacity, and 5 were skipped as asked. Result:
+- **Layout:** 8 of 8 pages laid out, deterministic on a second run.
+- **PDF/X-1a:** the independent check (`check_pdfx1a_independent.py`) found **0 failures on every page**. Its warnings
+  are of the same kinds as the pilot daily's.
+- **Matches the reference:** format; grid; 1–2 line centred headlines at weight 700; one body size; bold run-in
+  datelines; no bylines; strap, tint, reverse and box treatments; inset photos with contour wrap; tier rules; the boxed
+  running head with its page tab.
+
+**Not proven.**
+- **Not yet printed.**
+- **Only one weekly edition.** The owner is sending more, and the profile is provisional until there are 3 or more.
+- **Not done yet:** the 4-column pages, ellipse crops on a real page (none qualified), cut-outs (no masks exist), the
+  English page's serif, the imprint and masthead-strip text (doc 11, ENG).

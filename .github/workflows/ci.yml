@@ -147,13 +147,15 @@ jobs:
       - name: server, Word import, message and story bundle tests
         run: experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py tools/desk/test/test_messages.py tools/desk/test/test_bundle.py
       - name: engine tests
-        run: tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py
+        run: tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py tools/desk/test/test_weekly_desk.py tools/desk/test/test_panels.py tools/desk/test/test_layout_composer.py tools/desk/test/test_layout_generator.py
       - name: screen equals print, level L1 (a fictional page through the engine's writer; the hosted editor's draw list)
         run: PGN_ENGINE_PYTHON=tools/oracle/v0/.venv/bin/python experiments/phase0/pdfx1/.venv/bin/python -B -m unittest apps/engine-worker/test/test_screenprint.py
       - name: browser module tests (page editor view, words, paste)
         run: node --test tools/desk/test/*.mjs
       - name: onboarding (fictional papers; the copy of the Phase-0 chain equals the frozen one, byte for byte)
         run: PGN_ENGINE_PYTHON=tools/oracle/v0/.venv/bin/python experiments/phase0/pdfx1/.venv/bin/python -B -m unittest discover -s tools/onboard/test -t tools/onboard/test
+      - name: layout parity (a fictional paper's pages from the Desk's copy of the page generator equal the frozen gen1's, byte for byte)
+        run: PGN_ENGINE_PYTHON=tools/oracle/v0/.venv/bin/python experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_layout_parity.py
 
   worker:
     name: engine worker and Python licences

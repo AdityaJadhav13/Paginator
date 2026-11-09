@@ -38,8 +38,8 @@ import deskplan as DP  # noqa: E402
 import deskprofile as DPR  # noqa: E402
 import desksamples as DS  # noqa: E402
 import deskworker as DW  # noqa: E402
-from deskcommon import (ARTICLE_ID, EDITION_ID, ENGINE_VERSION, PHOTO_ID, RUN_ID, SLOT_ID, check_id, desk_home,  # noqa: E402
-                        error_text, log, log_error, now_iso, paper, read_json, write_json)
+from deskcommon import (ARTICLE_ID, EDITION_ID, ENGINE_VERSION, PHOTO_ID, RUN_ID, SLOT_ID, DamagedFile, check_id,  # noqa: E402
+                        desk_home, error_text, log, log_error, now_iso, paper, read_json, write_json)
 
 G = DG.G
 ROLES = ("front", "inside_imprint", "inside", "back")
@@ -52,7 +52,49 @@ def config(home: Path) -> dict:
     if not cfg.get("templates") or not cfg.get("dataset"):
         raise SystemExit("the Desk is not set up yet: run setup")
     DPR.use_dataset(Path(cfg["dataset"]))                 # the paper's own grid, before any template or layout
+    templates_by_page(cfg)                                # checked before any page is planned
     return cfg
+
+
+TEMPLATE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")     # a page model's name: never a path
+PAGE_KEY = re.compile(r"^(front|inside_imprint|inside|back)_p([1-9][0-9]?)$")
+
+
+def templates_by_page(cfg: dict) -> dict:
+    """The config's "templates_by_page" ({"<page>": "<page model name>"}: the paper's own page plan, a weekly's page 4
+    with its editorial band, …), checked: {page: name}; {} when it has none (every page takes its role's template)."""
+    tbp = cfg.get("templates_by_page")
+    if tbp is None:
+        return {}
+    pages = Path(cfg["dataset"]) / "report" / "page1" / "pages"
+    if not (isinstance(tbp, dict) and all(isinstance(k, str) and re.fullmatch(r"[1-9][0-9]?", k) and isinstance(v, str)
+                                          and TEMPLATE_NAME.match(v) and (pages / f"{v}.json").is_file() for k, v in tbp.items())):
+        raise DamagedFile("the file config.json of the Desk names page templates the engine cannot read")
+    return {int(k): v for k, v in tbp.items()}
+
+
+def template_keys(cfg: dict, roles: list[str]) -> list[str]:
+    """Each page's template: its own from templates_by_page ("<role>_p<page>"), else its role's."""
+    by = templates_by_page(cfg)
+    return [f"{r}_p{n}" if n in by else r for n, r in enumerate(roles, 1)]
+
+
+def template_of(cfg: dict, key: str) -> DG.Template:
+    """The template a key of template_keys names (the page's role stays its position's: front, inside, back)."""
+    m = PAGE_KEY.match(key)
+    if m:
+        return DG.Template(Path(cfg["dataset"]), templates_by_page(cfg)[int(m[2])], m[1])
+    return DG.Template(Path(cfg["dataset"]), cfg["templates"][key], key)
+
+
+def stories_target(per: dict, role: str) -> int:
+    """Stories a page of this role usually holds: the house setting's (min, max) midpoint when the paper's layout
+    is refined (layout/settings.py), else the median the Desk measured on the paper's pages (needs_per_role)."""
+    spp = getattr(G, "ST", {}).get("stories_per_page")
+    if spp:
+        return round((spp[0] + spp[1]) / 2)
+    use = {"front": "front", "inside_imprint": "inside", "inside": "inside", "back": "back"}
+    return int((per.get(use[role]) or per.get("inside") or {}).get("stories", 6))
 
 
 def find_dataset(arg: str | None) -> Path:
@@ -115,7 +157,7 @@ def outline(tpl) -> dict:
 PILOT_PAGE_H_MM = 540.0         # the pilot's page height: its limits in mm are this share of another paper's page
 
 
-def find_candidates(ds: Path, by_sample: dict | None = None) -> dict:
+def find_candidates(ds: Path, by_sample: dict | None = None, any_front: bool = False) -> dict:
     """{role: [(sort key, date, name, page, Template)]}: every page of the dataset able to serve each role (setup's
     test), in no order. A dataset with a paper.json (another paper): its script, its imprint's text, and the pilot's
     limits in mm as the same share of its page height."""
@@ -133,11 +175,12 @@ def find_candidates(ds: Path, by_sample: dict | None = None) -> dict:
     cands = {r: [] for r in ROLES}
     for sample, pages in by_sample.items():
         for p, name, m in pages:
-            if DS.deva_share(" ".join(b["text"] for s in m["stories"] for b in s["flow"] if b["type"] == "para"), script) < 0.5:
-                continue
+            if not (pj or {}).get("legacy_text") and \
+                    DS.deva_share(" ".join(b["text"] for s in m["stories"] for b in s["flow"] if b["type"] == "para"), script) < 0.5:
+                continue                                 # (a legacy-font paper's extracted text is not its script: not tested)
             last = p == last_page[sample]
             for role in ROLES:
-                if role == "front" and p != 1 or role == "back" and not last or role in ("inside", "inside_imprint") and (p == 1 or last):
+                if role == "front" and p != 1 and not any_front or role == "back" and not last or role in ("inside", "inside_imprint") and (p == 1 or last):
                     continue
                 try:
                     tpl = DG.Template(ds, name, role)
@@ -180,8 +223,14 @@ def cmd_setup(home: Path, args) -> dict:
     DPR.use_dataset(ds)
     by_sample = DS.sample_pages(ds)
     cands = find_candidates(ds, by_sample)
+    if paper(ds) is not None and not cands["front"]:          # its page 1 is not a news page (a poster cover):
+        cands["front"] = find_candidates(ds, by_sample, any_front=True)["front"]   # a page with its masthead and news
+    if paper(ds) is not None and not cands["inside_imprint"]:    # its imprint is not on page 2 (or cannot be read)
+        cands["inside_imprint"] = list(cands["inside"])
     templates = {}
     for role in ROLES:
+        if not cands[role] and role == "back" and paper(ds) is not None:
+            continue                                     # no back page of ads: its editions are made without one
         if not cands[role]:
             raise SystemExit(f"no page of the dataset can serve as the {role.replace('_', ' ')} template")
         templates[role] = max(cands[role], key=lambda c: c[0])[2]       # the paper's most recent design
@@ -193,6 +242,10 @@ def cmd_setup(home: Path, args) -> dict:
                            "space_em": cal.space_em, "r_cal": cx.r_cal},
            "template_summary": {r: DG.Template(ds, n, r).summary() for r, n in templates.items()},
            "candidates": candidates_record(cands, templates)}
+    old = read_json(home / "config.json", {})
+    if "templates_by_page" in old:                        # the paper's page plan stays across a new setup
+        cfg["templates_by_page"] = old["templates_by_page"]
+        templates_by_page(cfg)
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
     write_json(home / "config.json", cfg)
     return {"config": {k: v for k, v in cfg.items() if k != "dataset"}}
@@ -240,7 +293,7 @@ def needs(cfg: dict, roles: list[str]) -> dict:
     for r in roles:
         rec = per.get(use[r]) or per.get("inside") or {}
         for k in tot:
-            tot[k] += int(rec.get(k, 0))
+            tot[k] += stories_target(per, r) if k == "stories" and getattr(G, "ST", {}).get("stories_per_page") else int(rec.get(k, 0))
     return {**tot, "per_role": {k: {kk: v.get(kk, 0) for kk in ("stories", "briefs", "photos", "words")} for k, v in per.items()},
             "spare_share": 0.2}
 
@@ -248,11 +301,14 @@ def needs(cfg: dict, roles: list[str]) -> dict:
 def cmd_plan(home: Path, args) -> dict:
     cfg = config(home)
     ds = Path(cfg["dataset"])
-    roles = page_roles(int(args.pages), bool(int(args.back_ads)), (paper(ds) or {}).get("edition_sizes") or ())
-    tpls = {r: DG.Template(ds, cfg["templates"][r], r) for r in set(roles)}
+    roles = page_roles(int(args.pages), bool(int(args.back_ads)) and "back" in cfg["templates"],
+                       (paper(ds) or {}).get("edition_sizes") or ())
+    keys = template_keys(cfg, roles)
+    tpls = {k: template_of(cfg, k) for k in set(keys)}
     pages = [{"page": i + 1, "role": "back" if r == "back" else "front" if r == "front" else "inside",
-              "template_role": r, "news_mm2": round(tpls[r].news_mm2(), 1),
-              "ad_slots": [{k: s[k] for k in ("slot", "w_mm", "h_mm")} for s in tpls[r].ad_slots]} for i, r in enumerate(roles)]
+              "template_role": r, "news_mm2": round(tpls[k].news_mm2(), 1),
+              "ad_slots": [{kk: s[kk] for kk in ("slot", "w_mm", "h_mm")} for s in tpls[k].ad_slots]}
+             for i, (r, k) in enumerate(zip(roles, keys, strict=True))]
     return {"pages": pages, "needs": needs(cfg, roles)}
 
 
@@ -339,7 +395,8 @@ def order_key(a: dict, i: int):
 
 # the Desk's own code that shapes a story's options (a change to it makes every cached option stale)
 DESK_CODE = hashlib.sha256(b"".join((Path(__file__).resolve().parent / f).read_bytes()
-                                    for f in ("deskgen.py", "deskarticles.py", "deskworker.py"))).hexdigest()[:16]
+                                    for f in ("deskgen.py", "deskarticles.py", "deskworker.py", "layout/generate.py",
+                                              "layout/settings.py", "layout/panels.py"))).hexdigest()[:16]
 
 
 def options_cache_key(story: dict, elements: list, photo: dict | None, cal, cx) -> str:
@@ -455,6 +512,10 @@ class Built:
                 a["page"] = None
         self.items, self.story_of, self.els_of, self.photo_of, self.article_of = [], {}, {}, {}, {}
         self.headline_of = {a["id"]: a["headline"] for a in arts}
+        if getattr(G, "ST", {}).get("panels") is not None:   # a paper with panel treatments only (never the pilot's)
+            treatment = DA.assign_treatments(arts)       # an article's own "treatment" (the editor's choice) wins
+            for a in arts:                               # before to_story, which reads it (and puts it in the story:
+                a["treatment"] = treatment.get(a["id"], "none")   # its options' cache key changes with it)
         brief_pages = [1] + [p for p in range(2, pages_n)]
         if frozen is not None:
             self._frozen(arts, frozen)
@@ -525,7 +586,7 @@ class Built:
         self.story_of[k], self.els_of[k], self.article_of[k], self.photo_of[k] = story, els, articles, photo
 
 
-def write_printed(run_dir: Path, pages: list, articles: dict, briefs: set, edition: dict, tpls: dict, roles: list,
+def write_printed(run_dir: Path, pages: list, articles: dict, briefs: set, edition: dict, tpls: dict, keys: list,
                   day: date) -> None:
     """runs/<rid>/printed.json: what each laid-out page prints (deskprinted), so the Desk can tell when the edition no
     longer matches a page (an article corrected or deleted, a new issue number, another ad)."""
@@ -534,11 +595,11 @@ def write_printed(run_dir: Path, pages: list, articles: dict, briefs: set, editi
     for p in pages:
         if p.get("state") != "done":
             continue
-        n, tpl = p["page"], tpls[roles[p["page"] - 1]]
+        n, tpl = p["page"], tpls[keys[p["page"] - 1]]
         out[str(n)] = {"v": deskprinted.VERSION,
                        "articles": {a: deskprinted.article_sig(articles[a], a in briefs) for a in p.get("articles") or []
                                     if a in articles},
-                       "folio": deskprinted.folio_sig(edition) if DE.prints_folio(tpl, n, len(roles), day) else None,
+                       "folio": deskprinted.folio_sig(edition) if DE.prints_folio(tpl, n, len(keys), day) else None,
                        "ads": {s["slot"]: ads.get(s["slot"]) for s in tpl.ad_slots}}
     write_json(run_dir / "printed.json", {"schema": "pageinator.desk.printed/1", "pages": out})
 
@@ -700,7 +761,8 @@ def cmd_generate(home: Path, args) -> dict:
     ds = Path(cfg["dataset"])
     edition = req["edition"]
     pages_n = int(edition["pages"])
-    roles = page_roles(pages_n, bool(edition.get("back_page_ads", True)), (paper(ds) or {}).get("edition_sizes") or ())
+    roles = page_roles(pages_n, bool(edition.get("back_page_ads", True)) and "back" in cfg["templates"],
+                       (paper(ds) or {}).get("edition_sizes") or ())
     day = date.fromisoformat(edition["date"])
     status.data["pages"] = [{"page": i + 1, "role": "back" if r == "back" else "front" if r == "front" else "inside", "state": "waiting",
                              "articles": [], "pdf": None, "seconds": None, "message": "", "warnings": []} for i, r in enumerate(roles)]
@@ -739,13 +801,13 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
 
     # 2. plan the pages
     status.set(message=DM.msg("m.run.choosing"))
-    tpls = {r: DG.Template(ds, cfg["templates"][r], r) for r in set(roles)}
+    tkeys = template_keys(cfg, roles)               # each page's template (not the plan's story keys)
+    tpls = {k: template_of(cfg, k) for k in set(tkeys)}
     live = [it for it in items if it["key"] in options]
     per = cfg.get("needs_per_role") or {}
-    use = {"front": "front", "inside_imprint": "inside", "inside": "inside", "back": "back"}
-    pages = [{"page": i + 1, "regions": tpls[r].regions,
-              "target": int((per.get(use[r]) or per.get("inside") or {}).get("stories", 6))
-              + sum(1 for it in live if it["brief"] and it["pin"] == i + 1)} for i, r in enumerate(roles)]
+    pages = [{"page": i + 1, "regions": tpls[tkeys[i]].regions,
+              "target": stories_target(per, r) + sum(1 for it in live if it["brief"] and it["pin"] == i + 1)}
+             for i, r in enumerate(roles)]
     planner = DP.Planner(live, options, pages)
     plan, left, dropped = planner.plan()
     not_placed = list(b.skipped)
@@ -755,7 +817,8 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
     for k, why in failed_measure.items():
         for aid in article_of[k]:
             not_placed.append({"article": aid, "reason": DM.msg("m.plan.notMeasured", why=DM.data(why))})
-    full_page = [(0, G.NCOL, tpls["inside"].news_top, tpls["inside"].news_bottom)]
+    inside = tpls.get("inside") or template_of(cfg, "inside")
+    full_page = [(0, G.NCOL, inside.news_top, inside.news_bottom)]
     for k in left:
         alone = planner.status([k], full_page)[0] if planner.has_options(k, 0) else "lead-less"
         reason = DM.msg("m.plan.headlineTooLong" if not planner.placeable(k) else
@@ -781,7 +844,7 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
             ps["warnings"].append(deskprinted.ISSUE_NOT_SET)
         if pg["shrink_units"] is None:
             ps["warnings"].append(DM.msg("m.warn.notFill"))
-        tpl = tpls[role]
+        tpl = tpls[tkeys[n - 1]]
         regions = tpl.regions
         if pg["shrink_units"]:
             c0, w, top, _ = regions[0]
@@ -821,7 +884,8 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
                 r = {"ok": False, "message": error_text(e)}
             ps["seconds"] = r.get("seconds")
             if r.get("ok"):
-                write_json(run_dir / f"page-{n:02d}.manifest.json", {**r["manifest"], "sha256": r["sha256"], "warnings": r.get("warnings", [])})
+                write_json(run_dir / f"page-{n:02d}.manifest.json", {**r["manifest"], "template_role": tkeys[n - 1],   # the editor's template
+                                                                    "sha256": r["sha256"], "warnings": r.get("warnings", [])})
                 ps.update(state="done", pdf=f"page-{n:02d}.pdf", message="",
                           warnings=ps["warnings"] + [worker_text(w) for w in r.get("warnings", [])])
             else:
@@ -832,7 +896,7 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
         status.save()
     failed = sum(p["state"] != "done" for p in status.data["pages"])
     status.data["timings"]["layout_s"] = round(time.time() - t_planned, 1)
-    write_printed(run_dir, status.data["pages"], b.source, deskprinted.briefs_of(b.plan()), edition, tpls, roles, day)
+    write_printed(run_dir, status.data["pages"], b.source, deskprinted.briefs_of(b.plan()), edition, tpls, tkeys, day)
     status.set(state="done" if failed < len(roles) else "failed", seconds=round(time.time() - t0, 1),
                message=DM.msg("m.run.allLaidOut") if not failed else DM.msg("m.run.someFailed", failed=failed, total=len(roles)))
     return {"pages": len(roles), "failed": failed}
@@ -855,8 +919,9 @@ class EditEngine:
         self.sessions: dict = {}                              # open pages, shared so a move can update another page
 
     def template(self, role: str) -> DG.Template:
+        """role: a page's template key (its manifest's template_role: a role, or "<role>_p<page>")."""
         if role not in self._tpl:
-            self._tpl[role] = DG.Template(self.ds, self.cfg["templates"][role], role)
+            self._tpl[role] = template_of(self.cfg, role)
         return self._tpl[role]
 
     def built(self, edition: dict, articles: list, ed_dir: Path, frozen: dict | None = None) -> Built:

@@ -9,6 +9,7 @@
   "m.edit.cropLost": "the photo of {name} could not be found on the page to crop it: nothing was changed",
   "m.edit.photoDamaged": "the photo of {name} is damaged (its raster has the wrong size)",
   "m.edit.lockBool": "a story's lock must be true or false",
+  "m.edit.treatmentBad": "this paper's house style has no such story treatment",
   "m.edit.lockedMove": "{name} is locked: unlock it (Shift+L) to move it",
   "m.edit.lockedTake": "{name} is locked: unlock it (Shift+L) to take it off the page",
   "m.edit.lockedThere": "{name} is locked on page {page}: unlock it there to bring it here",

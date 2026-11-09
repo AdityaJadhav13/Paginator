@@ -681,7 +681,19 @@ const sameCrop = (a, b) =>
     Math.abs(a.focus[0] - b.focus[0]) < 1e-4 &&
     Math.abs(a.focus[1] - b.focus[1]) < 1e-4 &&
     Math.abs(a.zoom - b.zoom) < 1e-3);
-const sameAttrs = (a, b) => !!a.locked === !!b.locked && sameCrop(a.crop ?? null, b.crop ?? null);
+const sameAttrs = (a, b) =>
+  !!a.locked === !!b.locked &&
+  sameCrop(a.crop ?? null, b.crop ?? null) &&
+  (a.treatment ?? null) === (b.treatment ?? null);
+// A story's treatment (null: the house rule's): offered only when the page's paper has treatments (data.treatments).
+const TREATMENT = {
+  none: "pe.tr.none",
+  strap: "pe.tr.strap",
+  tint: "pe.tr.tint",
+  reverse: "pe.tr.reverse",
+  reverse_red: "pe.tr.reverse_red",
+  box: "pe.tr.box",
+};
 const lockedHere = (story) => S.modules.some((m) => m.story === story && m.locked);
 
 /** Why a lock refuses a change ("" when the story is not locked). what: what unlocking would allow, as a key: "move",
@@ -1059,7 +1071,9 @@ function invalidate() {
 
 function cmyk(c) {
   const [C, M, Y, K] = c.map((v) => Math.max(0, Math.min(1, v)));
-  return `rgb(${Math.round(255 * (1 - C) * (1 - K))},${Math.round(255 * (1 - M) * (1 - K))},${Math.round(255 * (1 - Y) * (1 - K))})`;
+  return `rgb(${Math.round(255 * (1 - C) * (1 - K))},${Math.round(255 * (1 - M) * (1 - K))},${Math.round(
+    255 * (1 - Y) * (1 - K),
+  )})`;
 }
 
 function size() {
@@ -2242,6 +2256,18 @@ function renderPanels() {
     fitEl.textContent = text;
     $("#p-lock").setAttribute("aria-pressed", locked ? "true" : "false");
     $("#p-lock-note").hidden = !locked;
+    const trs = (S.data.treatments || []).filter((v) => TREATMENT[v]); // none: the paper has no treatments
+    $("#p-treat").hidden = !trs.length || m.story.startsWith("dbriefs"); // a column of short items has none
+    if (trs.length) {
+      const pickT = $("#p-treatment");
+      if (pickT.dataset.sig !== `${trs.join(",")}@${lang()}`) {
+        pickT.replaceChildren(
+          ...["", ...trs].map((v) => el("option", { value: v }, t(v ? TREATMENT[v] : "pe.tr.auto"))),
+        );
+        pickT.dataset.sig = `${trs.join(",")}@${lang()}`;
+      }
+      pickT.value = m.treatment || "";
+    }
     $("#p-width").replaceChildren(
       ...Array.from({ length: S.data.grid.columns }, (_, i) =>
         el(
@@ -2902,6 +2928,10 @@ $("#story").addEventListener("keydown", (e) => {
 });
 $("#p-fit-height").addEventListener("click", () => S.selected && fitHeight(S.selected));
 $("#p-lock").addEventListener("click", () => S.selected && toggleLock(S.selected));
+$("#p-treatment").addEventListener("change", (e) => {
+  if (S.selected) setAttrs(S.selected, { treatment: e.target.value || null }); // the engine sets the story again
+  renderPanels(); // a change that could not be made shows the story's treatment again
+});
 $("#p-crop").addEventListener("click", () => S.selected && cropPhoto(S.selected, true));
 $("#p-focal").addEventListener("click", () =>
   S.mode === "focal" ? setMode("photo") : S.selected && focalPoint(S.selected),

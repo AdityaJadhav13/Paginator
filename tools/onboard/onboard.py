@@ -2,6 +2,7 @@
 
   <PY> tools/onboard/onboard.py build --files <files.json> --out <dataset dir> --status <status.json>
         [--icc <icc file>] [--masthead <image>] [--engine-python <oracle python>]
+        [--script deva|latn] [--refined-layout] [--min-editions N]
   <PY> tools/onboard/onboard.py pack --dataset <dir> --zip <out.zip> [--status <status.json>]
 
 <PY> is the pdfx1 venv's Python (experiments/phase0/pdfx1/.venv: pdfminer, pypdfium2, fontTools, pikepdf, Pillow; the
@@ -19,6 +20,13 @@ build, in order (status.json's step, packages/contracts/src/onboard.ts ONBOARD_S
   learning   chain/page_model.py, chain/house_profile.py -> house_profile.json; paper.json; the roles check
              (no page for a role -> onboard.no_template)
   pictures   chain/photos.py (and chain/brand.py with --masthead): the press ICC if given, else a plain conversion
+Legacy-encoded fonts (intake onboard.legacy_font): their text is glyph codes, so the owner confirms the script
+(--script; without it the build is refused with onboard.script_unconfirmed, never a vote on garbage), legacy.json
+tells the chain which fonts they are (and which are bold, by StemV), no imprint text is read, and paper.json says
+"legacy_text": true. --refined-layout writes "refined_layout": true (the Desk's switch for the learned "layout" block).
+--min-editions below MIN_EDITIONS builds a PROVISIONAL bundle (paper.json "provisional": editions, min_editions, and
+missing_roles, the template roles its pages cannot fill, reported instead of onboard.no_template); the default never
+changes.
 The calibration/test split (SPLIT RULE): editions sorted by date; the oldest ceil(2n/3) are calibration; split_date =
 the date of the oldest test edition (pages dated before it are "cal").
 Prints ONE JSON line on stdout (outcome ready | rejected; FileCheck and OnboardReport shapes); exit 0 for both. A crash
@@ -237,7 +245,7 @@ def imprint_texts(ds: Path, page_h_mm: float) -> list:
     return sorted(t for t, s in seen.items() if len(s) >= RECUR_EDITIONS)
 
 
-def roles_check(ds: Path, imprint: list) -> dict:
+def roles_check(ds: Path, imprint: list, legacy: bool = False) -> dict:
     """Pages per template role, an equivalent of the Desk setup's test (setup itself chooses the templates): front =
     page 1 without ads; inside_imprint = page 2 without ads holding the imprint; inside = pages 3 … last-1 without ads;
     back = the last page with ads."""
@@ -252,7 +260,7 @@ def roles_check(ds: Path, imprint: list) -> dict:
         texts = " ".join(" ".join((e.get("text") or "").split()) for e in m["elements"])
         if p == 1 and not ads:
             roles["front"] += 1
-        elif p == 2 and not ads and imprint and any(t in texts for t in imprint):
+        elif p == 2 and not ads and (legacy or imprint and any(t in texts for t in imprint)):  # legacy: no readable imprint
             roles["inside_imprint"] += 1
         elif p == lp and ads:
             roles["back"] += 1
@@ -273,9 +281,16 @@ def build(a) -> dict:
     checks = FILES
     checks.update({r["n"]: r["check"] for r in rows})
     usable = [r for r in rows if r["check"]["status"] != "refused"]
-    if len(usable) < MIN_EDITIONS:
-        raise Rejected("onboard.too_few_editions", f"{len(usable)} usable editions; at least {MIN_EDITIONS} are needed.",
-                       {"usable": len(usable), "needed": MIN_EDITIONS})
+    need = MIN_EDITIONS if a.min_editions is None else a.min_editions
+    if need < 1:
+        raise SystemExit("--min-editions must be at least 1")
+    if len(usable) < need:
+        raise Rejected("onboard.too_few_editions", f"{len(usable)} usable editions; at least {need} are needed.",
+                       {"usable": len(usable), "needed": need})
+    legacy = {k: v for r in usable for k, v in sorted(r["facts"]["legacy_fonts"].items())}
+    if legacy and not a.script:
+        raise Rejected("onboard.script_unconfirmed", "Legacy-encoded fonts were found: their text cannot be read, so the "
+                       "paper's script must be confirmed (--script).", {"fonts": len(legacy)})
     engine_py = engine_python(a.engine_python)
     t = {"start": time.monotonic()}
     out.mkdir(parents=True, exist_ok=True)
@@ -287,6 +302,8 @@ def build(a) -> dict:
         sd.mkdir(parents=True)
         shutil.copyfile(r["path"], sd / "source.pdf")
         (sd / "manifest.json").write_text(json.dumps(manifest(sid, r, r["facts"]), ensure_ascii=False, indent=1) + "\n")
+    if legacy:
+        (out / "legacy.json").write_text(json.dumps({"fonts": legacy}, indent=1, sort_keys=True) + "\n")
     (out / "DATASET.json").write_text(json.dumps({"dataset_id": "onboard", "dataset_class": "PILOT_EVIDENCE",
                                                   "description": "made by tools/onboard from the paper's uploads"}) + "\n")
     rd = read_samples(out, status)
@@ -300,22 +317,28 @@ def build(a) -> dict:
         raise Rejected("onboard.too_many_excluded", f"{ex['share']:.1%} of the body frames could not be read "
                        f"(limit {AC.MAX_EXCLUDED_SHARE:.0%}).", {"share": ex["share"], "limit": AC.MAX_EXCLUDED_SHARE})
     grids_seen = grid_check(rd["docs"])
-    script = body_script(rd["docs"])
+    script = a.script or body_script(rd["docs"])
     dates = [r["facts"]["date"] for r in usable]
     split = split_date(dates)
     learn(out, status, split, "devanagari" if script == "deva" else "latin", engine_py)
     t["learning"] = time.monotonic()
     pg0 = rd["docs"][rd["sids"][0]]["pages"][0]
     w_mm, h_mm = round(pg0["page_w_mm"], 1), round(pg0["page_h_mm"], 1)
-    imprint = imprint_texts(out, h_mm)
+    imprint = [] if legacy else imprint_texts(out, h_mm)
     sizes = sorted({r["facts"]["pages"] for r in usable})
     paper = {"format": "pageinator.paper/1", "script": script, "imprint_text": imprint, "split_date": split,
              "page_w_mm": w_mm, "page_h_mm": h_mm, "edition_sizes": sizes}
-    (out / "paper.json").write_text(json.dumps(paper, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    roles = roles_check(out, imprint)
+    if legacy:
+        paper["legacy_text"] = True          # extracted text is glyph codes: the Desk never re-sets it
+    if a.refined_layout:
+        paper["refined_layout"] = True
+    roles = roles_check(out, imprint, bool(legacy))
     missing = [r for r in ROLES if not roles[r]]
-    if missing:
+    if len(usable) < MIN_EDITIONS:      # provisional: a role one edition cannot show is reported, not refused
+        paper["provisional"] = {"editions": len(usable), "min_editions": MIN_EDITIONS, "missing_roles": missing}
+    elif missing:
         raise Rejected("onboard.no_template", f"No page was found for the {missing[0].replace('_', ' ')} role.", {"role": missing[0]})
+    (out / "paper.json").write_text(json.dumps(paper, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     pictures(out, status, a.icc, a.masthead)
     t["pictures"] = time.monotonic()
     g = json.loads((out / "house_profile.json").read_text())["grid"]
@@ -324,7 +347,8 @@ def build(a) -> dict:
               "grid": {"columns": int(g["columns"]), "column_width_mm": g["column_width_mm"], "gutter_mm": g["gutter_mm"]},
               "grids_seen": grids_seen, "script": script, "excluded_share": ex["share"], "roles": roles}
     log = {"timings_s": {"reading": round(t["reading"] - t["start"], 1), "learning": round(t["learning"] - t["reading"], 1),
-                         "pictures": round(t["pictures"] - t["learning"], 1)}, "excluded": ex, "report": report}
+                         "pictures": round(t["pictures"] - t["learning"], 1)}, "excluded": ex, "report": report,
+           "provisional": paper.get("provisional"), "legacy_fonts": sorted(legacy)}
     (out / "onboard_log.json").write_text(json.dumps(log, ensure_ascii=False, indent=1) + "\n")
     return {"outcome": "ready", "files": [checks[n] for n in sorted(checks)], "report": report}
 
@@ -366,6 +390,9 @@ def main():
     b.add_argument("--icc")
     b.add_argument("--masthead")
     b.add_argument("--engine-python")
+    b.add_argument("--script", choices=("deva", "latn"), help="the paper's script, confirmed by the owner")
+    b.add_argument("--refined-layout", action="store_true", help='paper.json "refined_layout": true')
+    b.add_argument("--min-editions", type=int, help=f"below {MIN_EDITIONS}: a provisional bundle")
     p = sub.add_parser("pack")
     p.add_argument("--dataset", type=Path, required=True)
     p.add_argument("--zip", type=Path, required=True)

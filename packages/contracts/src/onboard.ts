@@ -67,6 +67,7 @@ export const FILE_CHECK_CODES = [
   "onboard.duplicate", // the same edition as another file (same bytes or same date) (refused)
   "onboard.no_date", // no edition date in the file name (YYYY-MM-DD or YYYYMMDD) or the PDF's creation date (refused)
   "onboard.frames_excluded", // some text frames could not be read and were left out (warning, count = frames)
+  "onboard.legacy_font", // an older non-Unicode font (e.g. Shree-Lipi): its design is learned, its text never used (warning)
 ] as const;
 export const FileCheckCode = z.enum(FILE_CHECK_CODES);
 export type FileCheckCode = z.infer<typeof FileCheckCode>;
@@ -89,6 +90,7 @@ export const ONBOARD_REJECT_CODES = [
   "onboard.no_template", // no page found for a role (params.role: front, inside_imprint, inside, back)
   "onboard.too_many_excluded", // more of the text than the limit could not be read: a person must look (O6)
   "onboard.failed", // the chain stopped on these files (a person must look; the message says the step)
+  "onboard.script_unconfirmed", // older non-Unicode fonts: the paper's script must be confirmed by a person first
 ] as const;
 export const OnboardRejectCode = z.enum(ONBOARD_REJECT_CODES);
 

@@ -1,4 +1,4 @@
-"""The Desk's bridge to the Phase-0 page generator (experiments/phase0/gen1, imported read-only).
+"""The Desk's bridge to the page generator (layout/: the Desk's copy of the frozen experiments/phase0/gen1).
 
 - Calibration: the house's body styles, span frequencies, lead side and word space, counted on the CALIBRATION
   editions exactly as gen1 counts them.
@@ -23,7 +23,9 @@ from pathlib import Path
 
 from deskcommon import ENGINE_VERSION, EXPERIMENTS
 
-sys.path.insert(0, str(EXPERIMENTS / "gen1"))
+# the Desk's copy of the page generator (layout/); the frozen gen1 only for the parity test (PGN_DESK_FROZEN_GEN1=1)
+LAYOUT = EXPERIMENTS / "gen1" if os.environ.get("PGN_DESK_FROZEN_GEN1") == "1" else Path(__file__).resolve().parent / "layout"
+sys.path.insert(0, str(LAYOUT))
 import generate as G  # noqa: E402
 
 import deskfolio as DF  # noqa: E402

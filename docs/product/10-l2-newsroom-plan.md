@@ -1439,6 +1439,30 @@ Rules for every PR:
 
 ---
 
+## 11. Engine refinement for the weekly and the daily (ENG, 2026-11-10)
+
+**As built.** The engine makes both of the owner's formats: the daily (347 × 540 mm) and the weekly (270 × 340 mm).
+Each is learned from its own PDFs.
+- **The page generator is the Desk's own copy** (`tools/desk/engine/layout/`); gen1 stays frozen. The pilot's daily is
+  byte-identical, proven by `tools/desk/test/test_layout_parity.py` (doc 14 A6).
+- **House settings** (`layout/settings.py`). The defaults are today's daily. `"refined_layout": true` in a paper's
+  paper.json switches on what its house profile learned:
+  - headlines of 1–2 lines, centred, squeezed within the learned range, at weight 700;
+  - one body size, fitted by leading and the width axis;
+  - a bold run-in dateline, no byline, and the kicker only in the lead's strap band;
+  - small captions;
+  - rules between tiers only;
+  - inset or centred photos with contour wrap (an ellipse raster for near-round insets; cut-outs are not offered until
+    masks exist);
+  - panel treatments (strap, grey tint, reverse, box), assigned by a deterministic rule and changeable per story in the
+    Desk page editor;
+  - a stories-per-page target, and page templates by page number (`templates_by_page`, following the owner's page plan).
+- **Onboarding legacy-font papers** (`tools/onboard`). Shree-Lipi and similar fonts are detected (`onboard.legacy_font`)
+  and read for geometry only. The script must be confirmed (`--script`, else `onboard.script_unconfirmed`). Legacy text
+  is never set again; the running head is drawn fresh. The headline-size key now uses the real column count.
+- **Fonts.** OFL stand-ins (Noto Sans Devanagari) until the owner's Unicode Shree fonts arrive.
+- **Open items** are in doc 11, ENG.
+
 ## Appendix A. Versions and licences checked on 2026-10-20
 
 | Part | Version | Licence | Source / note |

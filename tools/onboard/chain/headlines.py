@@ -41,12 +41,15 @@ PIPELINE (per page; PDF points, y up; mm = pt x 25.4/72)
    p99.9 = 0.077 em. Both match rates are reported.
 
 CLASSIFICATION (rule-based, applied in this order, first match wins). r = size / page body size (page mode);
-bold = font name matches Bold/Black/Heavy/Semibold/Demi, or a display family (dataset median r >= 1.5);
+bold = font name matches Bold/Black/Heavy/Semibold/Demi, or a display family (dataset median r >= 1.5), or (onboard) a
+legacy-encoded font whose FontDescriptor says bold (<dataset>/legacy.json from onboard.py: StemV/ForceBold);
 body style = the page body font inside the body size band; "body-like" = a body line, a dropped fragment or a
 body-style frame. Each record's role_reason starts with the rule id.
   other    O1 running text: >= RUNNING_TEXT_LINES lines and r < 1.5 (bold editorial columns, fact boxes)
   byline   B1 dateline: one line of <= 4 words ending ':' whose text continues on its baseline or is followed directly
-              by body text; or ':' within the first 3 words of a <= 5-word line (r <= 1.6) followed by body text
+              by body text; or ':' within the first 3 words of a <= 5-word line (r <= 1.6) followed by body text;
+              legacy papers (text is glyph codes, no ':' test): a bold line of <= 4 tokens, r <= 1.6, whose body text
+              continues on its baseline (B1g)
   other    O2 number (<= 3 words, digits >= letters); O3 date/issue line (one line, a 4-digit year, r <= 1.6, top 25 %
               of the page); O6 parenthesised one-line jump line that continues a body flow; O7 top 5 % of the page, r < 2
   kicker   K1 one line, <= 4 words, bold or r >= 1.5, not continuing a body flow, directly above (descender to
@@ -115,8 +118,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import actualtext as AT  # noqa: E402
 import pypdfium2 as pdfium  # noqa: E402
 import pypdfium2.raw as PR  # noqa: E402
-from pdfminer.pdfinterp import PDFPageInterpreter, PDFResourceManager  # noqa: E402
+from pdfminer.pdfinterp import PDFGraphicState, PDFPageInterpreter, PDFResourceManager  # noqa: E402
 from pdfminer.pdfpage import PDFPage  # noqa: E402
+
+
+def _copy_keeps_colour_spaces(self, _copy=PDFGraphicState.copy):
+    """onboard: pdfminer's q/Q state copy drops the colour spaces, so after Q an 'scn' in an ICCBased/DeviceN space
+    is read as one gray value (the weekly's 100 % yellow read as black). Papers that set colour with k/K/g/rg (the pilot,
+    the fictional fixtures) are unaffected: those operators set the space themselves."""
+    obj = _copy(self)
+    obj.scs, obj.ncs = self.scs, self.ncs
+    return obj
+
+
+PDFGraphicState.copy = _copy_keeps_colour_spaces
 
 MM = 72 / 25.4
 BASELINE_EM = 0.15          # same-line tolerance (measure.py / actualtext.py)
@@ -148,6 +163,8 @@ RECORD_KEYS = ("id", "sample", "edition_date", "page", "role", "role_reason", "f
                "frame_x0_mm", "frame_x1_mm", "top_baseline_pt", "span_cols", "grid", "span_x0_mm", "span_width_mm",
                "alignment", "text", "lines", "checks")
 BOLD_RE = re.compile(r"bold|black|heavy|semibold|demi", re.I)
+LEGACY: dict = {}           # onboard: legacy-encoded fonts {base name: {stem_v, bold}} (load_legacy); {} = the frozen rules
+LEGACY_BOLD: set = set()
 YEAR_RE = re.compile(r"(?<![0-9०-९])[12१२][0-9०-९]{3}(?![0-9०-९])")
 DIGITS = set("0123456789०१२३४५६७८९")
 DASHES = ("-", "–", "—", "‐", "‑")
@@ -156,6 +173,21 @@ DASHES = ("-", "–", "—", "‐", "‑")
 # ------------------------------------------------------------------------------------------------- small helpers
 def base_font(name):
     return name.split("+", 1)[1] if name and len(name) > 7 and name[6] == "+" else (name or "")
+
+
+def load_legacy(ds: Path) -> dict:
+    """<ds>/legacy.json (onboard.py writes it only when intake found legacy-encoded fonts) -> LEGACY, LEGACY_BOLD."""
+    p = ds / "legacy.json"
+    LEGACY.clear()
+    LEGACY.update(json.loads(p.read_text())["fonts"] if p.exists() else {})
+    LEGACY_BOLD.clear()
+    LEGACY_BOLD.update(k for k, v in LEGACY.items() if v["bold"])
+    return LEGACY
+
+
+def bold_font(name) -> bool:
+    """Bold by name, or a legacy font bold by its FontDescriptor (legacy names say nothing about weight)."""
+    return bool(BOLD_RE.search(name or "")) or base_font(name) in LEGACY_BOLD
 
 
 def q(xs, p):
@@ -417,7 +449,7 @@ def build_page(G, pg):
                 continue
             ink = [G[i] for i in a["idx"] if G[i]["text"].strip()]
             maj, cnt = Counter(base_font(g["font"]) for g in ink).most_common(1)[0]
-            if maj != body_font and BOLD_RE.search(maj) and cnt >= RECLAIM_SHARE * len(ink):
+            if maj != body_font and bold_font(maj) and cnt >= RECLAIM_SHARE * len(ink):
                 a["reclaimed"] = True
                 nb.append(a)
                 n_reclaimed += 1
@@ -487,14 +519,16 @@ def build_page(G, pg):
         fr["next_glyph"] = (G[j]["by"], G[j]["x0"]) if j < len(G) else None
         fr["reclaimed"] = any(a.get("reclaimed") for l in fr["lines"] for a in l["atoms"])
         # does the following paragraph open with a run-in dateline (bold glyphs ending in ':' on its first baseline)?
-        run, k = [], j
+        run, k, plain = [], j, False
         while k < len(G) and len(run) < 40 and abs(G[k]["by"] - G[j]["by"]) <= BASELINE_EM * G[j]["size"]:
             if G[k]["text"].strip():
-                if not BOLD_RE.search(base_font(G[k]["font"])):
+                if not bold_font(base_font(G[k]["font"])):
+                    plain = True
                     break
                 run.append(G[k]["text"])
             k += 1
-        fr["next_runin"] = ":" in "".join(run)
+        # legacy text is glyph codes: a bold run followed by plain text on the same baseline (geometry only)
+        fr["next_runin"] = bool(run) and plain if LEGACY else ":" in "".join(run)
     return frames, anchors, len(frag), len(dup), n_reclaimed, n_off
 
 
@@ -627,7 +661,7 @@ def single_line_position(l, s0, s1):
 
 # ------------------------------------------------------------------------------------------------- classification
 def is_bold(font, display_fonts):
-    return bool(BOLD_RE.search(font)) or font in display_fonts
+    return bold_font(font) or font in display_fonts
 
 
 def overlap(a0, a1, b0, b1):
@@ -710,6 +744,9 @@ def classify_page(P, ctx):
             nb_ = bodylike(fr["next_owner"])
             if runon or (nb_ and 0 < fr["bot"] - nb_[0] <= 1.6 * max(fr["size"], B)):
                 setr(fr, "byline", "B1 run-in dateline (':' in its first words, body text continues)")
+        if LEGACY and n == 1 and fr["bold"] and fr["r"] <= 1.6 and runon and bodylike(fr["next_owner"]) \
+                and len(fr["lines"][0]["tokens"]) <= 4:
+            setr(fr, "byline", "B1g run-in dateline (a bold run followed by body text on its baseline; legacy: no text test)")
 
         if fr["words"] <= 3 and numeric(t):
             setr(fr, "other", "O2 number (folio, phone, date box)")
@@ -894,7 +931,7 @@ def record(sid, man, P, fr, grids):
     extra = {"r": fr["size"] / P["body_size"], "line_hs": [l["hs"] for l in fr["lines"]], "tracking": tracking_1000em(fr),
              "measure_tokens_match": all(len(l["at"]["text"].split()) == l["ntok_measure"] for l in fr["lines"]),
              "single_pos": single_line_position(fr["lines"][0], s0, s1) if len(fr["lines"]) == 1 else None,
-             "deva": deva_share(fr["text"]), "invalid": invalid_deva(fr["text"]), "union": union is not None,
+             "deva": 1.0 if base_font(fr["font"]) in LEGACY else deva_share(fr["text"]), "invalid": invalid_deva(fr["text"]), "union": union is not None,
              "src_frames": len({a["fid"] for l in fr["lines"] for a in l["atoms"]}),
              "atoms_per_line": [len(l["atoms"]) for l in fr["lines"]],
              "colours": Counter(g["cmyk"] for l in fr["lines"] for g in l["glyphs"] if g["text"].strip())}
@@ -1065,6 +1102,7 @@ def main():
     ap.add_argument("dataset", type=Path)
     a = ap.parse_args()
     ds = a.dataset.expanduser().resolve()
+    load_legacy(ds)
     os.umask(0o077)                         # outputs hold article text: never world-readable, even briefly
     sids, docs, mans, skipped = [], {}, {}, []
     for sid in sorted(p.name for p in (ds / "samples").iterdir() if p.is_dir()):

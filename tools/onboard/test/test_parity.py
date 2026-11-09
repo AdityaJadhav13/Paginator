@@ -8,7 +8,10 @@ with hand-style corrections.json, go through
     one),
 and every output the bundle and the profile are made of must be identical: work/*/corrected.json, paragraphs.jsonl,
 headlines.jsonl, headline_practice.json, the page models, page_model_coverage.json, head1 rows and summary,
-house_profile.json.
+house_profile.json. Two documented fork changes are normalised in the fork's house_profile.json, nothing else: the
+"layout" block (new, onboard only) is dropped, and the headline-size keys "<N>col:<span>" (the paper's real column
+count; the frozen chain always writes "8col:") are read as "8col:<span>". The pilot is 8-column, so for it the second
+is the identity.
 
 Private (skips without the data): PAGEINATOR_ONBOARD_PRIVATE_DS = a dataset folder the frozen chain already ran on (the
 pilot's: samples/ with manifests and the hand corrections, plus its work/ and report/ outputs). The fork runs on a copy
@@ -90,12 +93,26 @@ def outputs(ds: Path) -> list:
     return rel + ["report/paragraphs.jsonl", "report/headlines.jsonl", "report/headline_practice.json"]
 
 
-def read(p: Path) -> bytes:
+def frozen_profile(prof: dict) -> dict:
+    """The fork's house profile as the frozen chain writes it (module docstring: exactly two documented changes)."""
+    prof.pop("layout", None)
+    main = f"{prof['grid']['columns']}col:"
+    for tab in (prof["headline_size"]["by_span"], prof["composer_defaults"]["headline_size_pt_by_span"]):
+        renamed = {("8col:" + k[len(main):] if k.startswith(main) else k): v for k, v in tab.items()}
+        tab.clear()
+        tab.update(renamed)
+    return prof
+
+
+def read(p: Path, fork: bool = False) -> bytes:
+    if p.name == "house_profile.json":
+        prof = json.loads(p.read_bytes())
+        return (json.dumps(frozen_profile(prof) if fork else prof, ensure_ascii=False, indent=1) + "\n").encode()
     return gzip.decompress(p.read_bytes()) if p.suffix == ".gz" else p.read_bytes()   # gzip headers carry a time
 
 
 def compare(test: unittest.TestCase, pairs: list) -> int:
-    diff = [str(b) for a, b in pairs if read(a) != read(b)]
+    diff = [str(b) for a, b in pairs if read(a) != read(b, fork=True)]
     test.assertEqual(diff, [], f"{len(diff)} of {len(pairs)} outputs differ")
     return len(pairs)
 

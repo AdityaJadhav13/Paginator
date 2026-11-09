@@ -6,6 +6,11 @@ Deterministic: pikepdf structure and content-stream operators only (no rendering
   - fonts_missing    a font without an embedded program (FontFile/2/3), or a Type 3 font            (refused)
   - no_unicode       a font without /ToUnicode while the file carries no /ActualText at all          (refused)
   - untested_program neither Creator "InDesign" nor Producer "Adobe PDF Library"                    (warning)
+  - legacy_font      a legacy-encoded (pre-Unicode) font: its name matches LEGACY_NAME, or its ToUnicode maps
+                     >= LEGACY_MIN_CODES codes, none to Devanagari, and >= LEGACY_JUNK_SHARE of them to ASCII symbols or
+                     Latin-1 non-letters (Devanagari glyphs packed into 8-bit slots; real Latin fonts measured <= 0.06,
+                     Shree-Lipi >= 0.19). Its text is glyph codes, never words: geometry only, the owner confirms the
+                     script (onboard.py --script)                                                   (warning)
   - page_size_mix    its first page differs from the set's most common size by > PAGE_TOL_MM        (refused)
   - no_date          no date in the file name (YYYY-MM-DD or YYYYMMDD) and no /CreationDate        (refused)
   - duplicate        the same bytes as another file (the lower n is kept), or the same edition date
@@ -15,17 +20,25 @@ frames_excluded (a warning) is added later by the O6 step, which reads the frame
 from __future__ import annotations
 
 import hashlib
+import io
 import re
 from collections import Counter
 from datetime import date
 from pathlib import Path
 
 import pikepdf
+from pdfminer.cmapdb import CMapParser, FileUnicodeMap
 
 PAGE_TOL_MM = 2.0
 MM = 25.4 / 72
 NAME_DATE = (re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)"), re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)"))
 TEXT_OPS = {"Tj", "TJ", "'", '"'}
+LEGACY_NAME = re.compile(r"SHREE|DV-?B?-?TT|KRUTI|AKRUTI|CHANAKYA|SUSHA|WALKMAN|ISFOC", re.I)
+LEGACY_MIN_CODES = 10
+LEGACY_JUNK_SHARE = 0.15
+LEGACY_JUNK = set("{}|~^`\\[]<>@#$%&*_=+") | {chr(c) for c in range(0x80, 0xC0)} | {"\u00d7", "\u00f7"}
+STEMV_BOLD = 120               # FontDescriptor StemV at or above this (or the ForceBold flag) is a bold face
+FORCE_BOLD = 1 << 18
 
 
 def name_date(name: str) -> str | None:
@@ -71,6 +84,36 @@ def _has_program(font) -> bool:
     return fd is not None and any(k in fd for k in ("/FontFile", "/FontFile2", "/FontFile3"))
 
 
+def base_name(font) -> str:
+    b = str(font.get("/BaseFont", ""))[1:]
+    return b.split("+", 1)[1] if len(b) > 7 and b[6] == "+" else b
+
+
+def legacy_font(font) -> bool:
+    """A legacy-encoded font (module docstring): by name, else by what its ToUnicode maps to."""
+    if LEGACY_NAME.search(base_name(font)):
+        return True
+    if "/ToUnicode" not in font:
+        return False
+    try:
+        m = FileUnicodeMap()
+        CMapParser(m, io.BytesIO(font.ToUnicode.read_bytes())).run()
+    except Exception:  # noqa: BLE001  (an unreadable map decides nothing)
+        return False
+    vals = [v for v in m.cid2unichr.values() if v.strip()]
+    if len(vals) < LEGACY_MIN_CODES or any("\u0900" <= c <= "\u097f" for v in vals for c in v):
+        return False
+    return sum(any(c in LEGACY_JUNK for c in v) for v in vals) >= LEGACY_JUNK_SHARE * len(vals)
+
+
+def font_facts(font) -> dict:
+    """StemV and the bold decision from the FontDescriptor (legacy names say nothing about weight)."""
+    d = font.DescendantFonts[0] if font.get("/Subtype") == "/Type0" else font
+    fd = d.get("/FontDescriptor") or {}
+    stemv, flags = float(fd.get("/StemV", 0) or 0), int(fd.get("/Flags", 0) or 0)
+    return {"stem_v": stemv, "bold": stemv >= STEMV_BOLD or bool(flags & FORCE_BOLD)}
+
+
 def _text_and_actualtext(page) -> tuple[int, bool]:
     n, at = 0, False
     for operands, op in pikepdf.parse_content_stream(page):
@@ -93,6 +136,7 @@ def _read(pdf, out: dict):
     box = pdf.pages[0].trimbox
     out["size_mm"] = [round(float(box[2] - box[0]) * MM, 1), round(float(box[3] - box[1]) * MM, 1)]
     text_ops, actualtext, missing, no_uni, seen = 0, False, False, False, set()
+    out["legacy_fonts"] = {}
     for page in pdf.pages:
         n, at = _text_and_actualtext(page)
         text_ops += n
@@ -102,6 +146,8 @@ def _read(pdf, out: dict):
                 missing = True
             if "/ToUnicode" not in f:
                 no_uni = True
+            if f.get("/Subtype") != "/Type3" and legacy_font(f):
+                out["legacy_fonts"][base_name(f)] = font_facts(f)
     creator, producer = str(info.get("/Creator", "")), str(info.get("/Producer", ""))
     return text_ops, actualtext, missing, no_uni, creator, producer
 
@@ -110,7 +156,7 @@ def check_file(path: Path, name: str) -> dict:
     """The facts of one file (no set-level decision yet)."""
     data = path.read_bytes()
     out = {"sha256": hashlib.sha256(data).hexdigest(), "pages": 0, "date": name_date(name), "created": None, "size_mm": None,
-           "codes": []}
+           "codes": [], "legacy_fonts": {}}
     try:
         pdf = pikepdf.open(path)
     except Exception:  # noqa: BLE001  (damaged, encrypted without the password, not a PDF)
@@ -132,6 +178,8 @@ def check_file(path: Path, name: str) -> dict:
         out["codes"].append("onboard.fonts_missing")
     elif no_uni and not actualtext:
         out["codes"].append("onboard.no_unicode")
+    if out["legacy_fonts"]:
+        out["codes"].append("onboard.legacy_font")
     if "InDesign" not in creator and "Adobe PDF Library" not in producer:
         out["codes"].append("onboard.untested_program")
     if out["date"] is None:

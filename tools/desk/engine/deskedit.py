@@ -1,8 +1,8 @@
 """Editing a laid-out page by hand: move, resize, swap, remove and add stories. The proven engine sets every change.
 
-A page is its template (the fixed parts) and its modules: [{story, x, y, w, h, locked, crop}], with x and y the module's
-top-left corner in mm, w its width in grid columns and h its height in mm. locked and crop are the module's attributes,
-kept apart from its place.
+A page is its template (the fixed parts) and its modules: [{story, x, y, w, h, locked, crop, treatment}], with x and y
+the module's top-left corner in mm, w its width in grid columns and h its height in mm. locked, crop and treatment are
+the module's attributes, kept apart from its place.
 - **Options.** Each module is set by gen1's typesetter with the module option that fills its box best, by gen1's own
   leaf cost (span preference + option cost + white space), at the story's rank on the page (the planner's order, the
   same lead promotion included).
@@ -34,6 +34,12 @@ kept apart from its place.
   allow, so the point stays in the frame at every size. A crop belongs to its story's photo: it moves with its story
   (another layout, a swap) and never applies to another picture (a replaced photo has another id; its crop is dropped). It is
   page geometry, kept for this layout only and covered by the page's revision; what prints is recorded ("crops").
+- **Story treatments.** On a paper whose house style has them (layout/panels.py: strap band, tint panel, reverse head,
+  box), a story's treatment is the house rule's unless the editor chooses one (the module's "treatment"; missing or null:
+  the rule's; "none": none). The choice is set on the story's article for the engine (Built: the rule lets it win), so
+  the story is measured and set again with it, like new text; it moves with its story, is undone like any change and is
+  covered by the page's revision. A paper without treatments (the default) refuses every choice; a column of short items
+  never has one (its choice is dropped).
 
 Drawing returns a display list: text as glyph ids at positions in mm, with y down from the page's top-left corner, plus
 rectangles, rules and pictures. The browser draws it with the same glyph outlines the PDF embeds, so screen and print
@@ -53,6 +59,7 @@ import zlib
 from datetime import date
 from pathlib import Path
 
+import deskarticles as DA
 import deskgen as DG
 import deskprinted
 from deskcommon import PHOTO_ID, log_error, read_json, write_json
@@ -75,6 +82,7 @@ NO_FILL_AROUND = msg("m.edit.noFillAround")
 ZOOM_MAX = 4.0                                           # a crop enlarges its photo in the frame at most this much
 CROP_BAD = msg("m.edit.cropBad")
 CROP_LOST = MESSAGES["m.edit.cropLost"]
+TREATMENT_BAD = MESSAGES["m.edit.treatmentBad"]
 MOVE_NOT_HERE = MESSAGES["m.edit.moveNotHere"]
 MOVE_NO_PAGE = MESSAGES["m.edit.moveNoPage"]
 MOVE_SAME_PAGE = MESSAGES["m.edit.moveSamePage"]
@@ -132,6 +140,17 @@ def crop_value(c) -> dict | None:
         raise ValueError(CROP_BAD)
     return {"photo": photo, "focus": [round(min(1.0, max(0.0, v)), 4) for v in xy],
             "zoom": round(min(ZOOM_MAX, max(1.0, zoom)), 3)}
+
+
+def treatment_value(t) -> str | None:
+    """A story treatment as the editor sends it, checked: None (the house rule's), or one of the treatments this paper
+    has (DA.panels.available(): "none" and those with a spec). Anything else is refused; a paper without treatments
+    refuses every one."""
+    if t is None:
+        return None
+    if not isinstance(t, str) or t not in DA.panels.available():
+        raise ValueError(msg("m.edit.treatmentBad"))
+    return t
 
 
 def crop_window(W0: int, H0: int, fw: float, fh: float, crop: dict | None = None, floor: float = G.MIN_PPI):
@@ -227,6 +246,13 @@ class PageSession:
         self.role = man["template_role"]
         self.tpl = engine.template(self.role)
         self.text_path = run_dir / "edit-articles.json"
+        self.edit_path = run_dir / f"page-{page:02d}.edit.json"
+        saved = read_json(self.edit_path, {})
+        self.origin = {m["story"]: m for m in self._manifest_modules(man)}   # the layout's own places (undo returns there)
+        if saved.get("modules") is not None and saved.get("page") == page:
+            self.modules = saved["modules"]
+        else:
+            self.modules = self._manifest_modules(man)
         self.req_articles = req.get("articles") or []
         # the run's own pictures and plan (desk_engine.run_pictures, plan.json); a run made before they existed reads
         # the edition's photos and works its plan out again
@@ -235,20 +261,13 @@ class PageSession:
         self.frozen = plan.get("stories") or engine.built(self.edition, self.req_articles, self.assets).plan()
         self._text_sig, overrides = self._text_file()
         self.articles = self._articles(overrides)
-        self.built = engine.built(self.edition, self.articles, self.assets, frozen=self.frozen)
+        self.built = engine.built(self.edition, self._treated(self.articles), self.assets, frozen=self.frozen)
         self.photo_dir = run_dir / "work" / f"page-{page:02d}" / "photos"
         self._link_photos()
         self.prints_folio = prints_folio(self.tpl, page, self.pages, self.day)
         self.folio_fields = self._live_fields()             # the edition's volume, issue and price as they are now
         self.keep, self.redo = DG.folio_plan(self.tpl, page, self.pages, self.day, self.folio_fields)
         self.fixed_boxes = [e["bbox_mm"] for e in self.keep if e["kind"] in FIXED_KINDS or (e["kind"] == "box" and e.get("fill"))]
-        self.edit_path = run_dir / f"page-{page:02d}.edit.json"
-        saved = read_json(self.edit_path, {})
-        self.origin = {m["story"]: m for m in self._manifest_modules(man)}   # the layout's own places (undo returns there)
-        if saved.get("modules") is not None and saved.get("page") == page:
-            self.modules = saved["modules"]
-        else:
-            self.modules = self._manifest_modules(man)
         self.rev = int(saved.get("rev") or 0) if saved.get("page") == page else 0
         kept = [m for m in self.modules if m.get("story") in self.built.story_of]
         if len(kept) != len(self.modules):                  # a story whose articles are all gone: the page changed
@@ -337,7 +356,7 @@ class PageSession:
         """New article text for the page's stories (the run's plan kept). → keys of the stories whose text changed."""
         old = self.built
         self.articles = articles
-        self.built = self.engine.built(self.edition, articles, self.assets, frozen=self.frozen)
+        self.built = self.engine.built(self.edition, self._treated(articles), self.assets, frozen=self.frozen)
         self._link_photos()
         changed = [k for k in self.built.story_of
                    if k not in old.story_of or (old.story_of[k], old.els_of[k]) != (self.built.story_of[k], self.built.els_of[k])]
@@ -348,6 +367,24 @@ class PageSession:
                 self._ensure_options(m["story"])
         self._g = None
         return changed
+
+    def _treatments(self) -> dict:
+        """story → the treatment the editor chose for it on this page (stories left to the house rule are not in it)."""
+        return {m["story"]: m["treatment"] for m in self.modules if m.get("treatment") is not None}
+
+    def _treated(self, articles: list[dict]) -> list[dict]:
+        """The articles as the engine sets them: each with the treatment its story's module chose ("treatment"), which
+        wins over the house rule (Built, DA.assign_treatments). Remembers what it set (_retreat)."""
+        t = self._treatments()
+        self._built_treatments = t
+        by = {a: t[k] for k, f in self.frozen.items() if k in t and not f["brief"] for a in f["articles"]}
+        return [{**a, "treatment": by[a.get("id")]} if a.get("id") in by else a for a in articles]
+
+    def _retreat(self) -> None:
+        """A treatment chosen, changed or given back to the house rule: the stories are built again with the choices,
+        and a story whose records changed is measured again (as for new text)."""
+        if self._treatments() != getattr(self, "_built_treatments", {}):
+            self._set_articles(self.articles)
 
     def sync(self) -> None:
         """Before anything is done on this page: text another page of the run has set (Update text) reaches it, so a
@@ -542,12 +579,13 @@ class PageSession:
 
     @staticmethod
     def _attrs(m: dict) -> dict:
-        """A module's attributes, as the editor sends them: locked (true or false; missing is false) and the photo crop
-        (crop_value: missing or null is none). Anything else is refused."""
+        """A module's attributes, as the editor sends them: locked (true or false; missing is false), the photo crop
+        (crop_value: missing or null is none) and the treatment (treatment_value: missing or null is the house rule's).
+        Anything else is refused."""
         locked = m.get("locked")
         if locked is not None and not isinstance(locked, bool):
             raise ValueError(msg("m.edit.lockBool"))
-        return {"locked": bool(locked), "crop": crop_value(m.get("crop"))}
+        return {"locked": bool(locked), "crop": crop_value(m.get("crop")), "treatment": treatment_value(m.get("treatment"))}
 
     def set_modules(self, modules: list[dict]) -> None:
         """The page's new modules, as the editor sends them (each story at most once; only stories of the edition). A
@@ -556,10 +594,13 @@ class PageSession:
         attributes (the lock, the crop) never move it: only its place is compared. A story that is on another page
         stays there too until this page is saved (see export). A story's crop is the one its own module sends, kept only
         when it names the story's own photo: a crop naming another photo (another story's, a replaced or removed one)
-        is dropped, so a crop never applies to another picture, and null (no crop) always wins."""
+        is dropped, so a crop never applies to another picture, and null (no crop) always wins. A story's treatment is
+        the one its own module sends (a column of short items has none); a changed one sets its story again (_retreat).
+        A module keeps a "treatment" key only while one is chosen, so a page without treatments stores what it did."""
         before = {m["story"]: m for m in self.modules}
         first = self._first(modules)
         sent = {k: self._attrs(m) for k, m in first.items()}
+        briefs = {i["key"] for i in self.built.items if i["brief"]}
         out = []
         for k, m in first.items():
             self._ensure_options(k)
@@ -568,8 +609,12 @@ class PageSession:
                      dict(o) if o is not None and self._same_place(o, m) else self.snap(m))
             crop = sent[k]["crop"]
             place.update(locked=sent[k]["locked"], crop=crop if crop is not None and crop["photo"] == self._photo_of(k) else None)
+            place.pop("treatment", None)
+            if sent[k]["treatment"] is not None and k not in briefs:
+                place["treatment"] = sent[k]["treatment"]
             out.append(place)
         self.modules = out
+        self._retreat()
 
     def _photo_of(self, key: str) -> str | None:
         """The story's photo as gen1 sets it (generate.Story: the largest of its pictures in the photo index), or None
@@ -645,6 +690,7 @@ class PageSession:
             return self.draw()
         except Exception:
             self.modules, self.rev = before
+            self._retreat()
             self._write_edit()
             raise
 
@@ -774,7 +820,8 @@ class PageSession:
         _, notes = self.placed()
         elsewhere = self.where()
         also = [m["story"] for m in self.modules if m["story"] in elsewhere]
-        return {"page": self.page, "role": self.role, "rev": self.rev, "modules": self.modules, "notes": notes,
+        treatments = DA.panels.available()          # the choices the editor offers; none: the paper has no treatments
+        return {**({"treatments": treatments} if treatments else {}), "page": self.page, "role": self.role, "rev": self.rev, "modules": self.modules, "notes": notes,
                 "problems": self.problems(notes, text),
                 "pool": self.pool(elsewhere), "grid": self.grid(),
                 "also_on_pages": {k: elsewhere[k]["page"] for k in also},
@@ -941,6 +988,7 @@ class PageSession:
         """A move whose own page could not be set without the story: this page goes back to its stories and revision
         before receive (no answer has shown that revision), so the story is on its own page only, as before."""
         self.modules, self.rev = before
+        self._retreat()
         self._write_edit()
 
     def _depth(self, m: dict) -> float:
@@ -1050,8 +1098,10 @@ class PageSession:
         if sorted(g.stories[i].id for i, *_ in placed) != sorted(free):      # never a story lost on the way
             raise ValueError(msg("m.edit.notAllPlaced"))
         crop = {m["story"]: m.get("crop") for m in self.modules}             # a crop goes with its story
+        tr = self._treatments()                                              # and so does a treatment
         return self.apply([dict(m) for m in held] + [{"story": g.stories[i].id, "x": x, "y": y, "w": w, "h": h,
-                                                      "locked": False, "crop": crop.get(g.stories[i].id)}
+                                                      "locked": False, "crop": crop.get(g.stories[i].id),
+                                                      **({"treatment": tr[g.stories[i].id]} if g.stories[i].id in tr else {})}
                                                      for i, x, y, w, h, o in placed])
 
     def _around(self, areas: list, held: list[dict]) -> list:

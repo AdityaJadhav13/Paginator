@@ -71,6 +71,7 @@ const CHECK: Readonly<Record<Exclude<FileCheckCode, "onboard.frames_excluded">, 
   "onboard.page_size_mix": "onboarding.check.page_size_mix",
   "onboard.duplicate": "onboarding.check.duplicate",
   "onboard.no_date": "onboarding.check.no_date",
+  "onboard.legacy_font": "onboarding.check.legacy_font",
 };
 
 const REJECT: Readonly<Record<string, PlainKey>> = {
@@ -78,6 +79,7 @@ const REJECT: Readonly<Record<string, PlainKey>> = {
   "onboard.no_grid": "onboarding.reject.no_grid",
   "onboard.too_many_excluded": "onboarding.reject.too_many_excluded",
   "onboard.failed": "onboarding.reject.failed",
+  "onboard.script_unconfirmed": "onboarding.reject.script_unconfirmed",
 };
 
 const ROLE_NAME: Readonly<Record<string, PlainKey>> = {

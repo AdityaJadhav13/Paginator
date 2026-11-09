@@ -101,6 +101,8 @@ export const ONBOARDING_MR: Readonly<Record<keyof typeof ONBOARDING_EN, string>>
   "onboarding.reject.too_many_excluded":
     "खूप जास्त मजकूर वाचता आला नाही. Pageinator मधील एक व्यक्ती ते पाहील आणि तुमच्याशी संपर्क करेल.",
   "onboarding.reject.failed": "या फाइलींवर वाचन थांबले. Pageinator मधील एक व्यक्ती ते पाहील.",
+  "onboarding.reject.script_unconfirmed":
+    "तुमच्या अंकांमध्ये जुना मराठी फॉन्ट आहे. Pageinator मधील एक व्यक्ती भाषा निश्चित करून तुमच्याशी संपर्क साधेल.",
   "onboarding.reject.worker":
     "रचना वाचणारे काम अनपेक्षितपणे थांबले. थोड्या वेळाने पुन्हा प्रयत्न करा; पुन्हा असे झाल्यास आमच्याशी संपर्क करा.",
   "onboarding.table": "प्रत्येक फाइलची तपासणी",
@@ -125,4 +127,5 @@ export const ONBOARDING_MR: Readonly<Record<keyof typeof ONBOARDING_EN, string>>
   "onboarding.check.no_date":
     "हिच्या अंकाची तारीख कळली नाही. फाइलच्या नावात तारीख घाला, जसे 2026-09-14 किंवा 20260914.",
   "onboarding.check.frames_excluded": "वाचता न आलेल्या, म्हणून सोडलेल्या मजकूर-चौकटी: {count}.",
+  "onboarding.check.legacy_font": "यातील मजकूर जुन्या मराठी फॉन्टमध्ये आहे. त्यातून आम्ही तुमची मांडणी शिकतो, पण त्यातील शब्द कधीही वापरत नाही.",
 };

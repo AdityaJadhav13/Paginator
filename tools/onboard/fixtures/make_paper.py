@@ -15,10 +15,16 @@ Two papers, both with a grid and page size unlike the pilot's:
   en  "The Riverside Chronicle", English, 315 x 470 mm, 6 columns of 45.0 mm, gutter 4.2 mm
   mr  "सह्याद्री वार्ता", Marathi, 280 x 400 mm, 5 columns of 48.4 mm, gutter 4.0 mm
 
-Usage: <pdfx1 python> tools/onboard/fixtures/make_paper.py --paper en|mr --out DIR
+A LEGACY-ENCODED variant (variant "legacy", any paper): the same pages, but every font is renamed to a fictional
+"SHREE-DEV-FICT-<StemV>" (the weight only in the FontDescriptor's StemV, as legacy fonts carry it), its ToUnicode maps
+each glyph to a Latin letter or symbol (LEGACY_ALPHA: Devanagari glyphs packed into 8-bit slots) and no ActualText is
+written: the text reads as Latin garbage while the glyphs are Devanagari. "legacy_noname" uses names intake's name
+rule does not know (FICTDEVA-<StemV>), so only the ToUnicode test can find it.
+
+Usage: <pdfx1 python> tools/onboard/fixtures/make_paper.py --paper en|mr [--variant legacy] --out DIR
   writes DIR/*.pdf, DIR/files.json (the onboard CLI's input), DIR/masthead.png and DIR/READY.json.
 `tiny_pdf(path, variant)` makes the one-page files the intake tests need (good, scanned, fonts_missing, type3,
-no_unicode, big_page), generated at test time so no binary is committed.
+no_unicode, big_page, legacy, legacy_noname), generated at test time so no binary is committed.
 """
 from __future__ import annotations
 
@@ -43,6 +49,10 @@ FONT_FILES = {"Mukta-Bold": DEVA_FONTS / "Mukta-Bold.ttf", "Mukta-SemiBold": DEV
               "Mukta-Light": DEVA_FONTS / "Mukta-Light.ttf", "Mukta-Regular": DEVA_FONTS / "Mukta-Regular.ttf",
               "Martel-Regular": C2_FONTS / "martel" / "Martel-Regular.ttf", "Hind-Regular": C2_FONTS / "hind" / "Hind-Regular.ttf"}
 PT = 72 / 25.4                                   # points per mm
+LEGACY_STEMV = {"Mukta-Bold": 160, "Mukta-SemiBold": 140, "Mukta-Regular": 90, "Mukta-Light": 60, "Martel-Regular": 100,
+                "Hind-Regular": 100}
+LEGACY_ALPHA = ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz{}|~^`[]<>@#$%&*_=+"
+                + "".join(chr(c) for c in range(0xA1, 0xC0) if c != 0xAD))
 CREATOR = "Adobe InDesign 18.5 (Macintosh)"
 PRODUCER = "Adobe PDF Library 17.0"
 
@@ -118,11 +128,14 @@ class PdfFonts:
             out = io.BytesIO()
             tt.save(out)
             prog = out.getvalue()
-            base = f"{tag}+{f.name}"
+            legacy = variant.startswith("legacy")
+            name = (("SHREE-DEV-FICT-" if variant == "legacy" else "FICTDEVA-") + str(LEGACY_STEMV[f.name])) if legacy else f.name
+            base = f"{tag}+{name}"
             sc = 1000 / f.upem
             desc = pikepdf.Dictionary(Type=pikepdf.Name.FontDescriptor, FontName=pikepdf.Name("/" + base), Flags=4,
                                       FontBBox=[-500, round(f.desc * sc), 1500, round(f.asc * sc)], ItalicAngle=0,
-                                      Ascent=round(f.asc * sc), Descent=round(f.desc * sc), CapHeight=700, StemV=80)
+                                      Ascent=round(f.asc * sc), Descent=round(f.desc * sc), CapHeight=700,
+                                      StemV=LEGACY_STEMV[f.name] if legacy else 80)
             if variant != "fonts_missing":
                 desc.FontFile2 = pdfikestream(pdf, prog, Length1=len(prog))
             w = []
@@ -204,10 +217,11 @@ class Page:
                 cur, pen = pen + xoff + f.hmtx.get(gid, 0), pen + adv
                 alone = sum(1 for g in glyphs if g[3] == ctext) == 1
                 # as InDesign: a glyph alone in its cluster maps to the cluster, else to its own character if it has one
-                used.setdefault(gid, "?" if self.variant == "no_unicode" else ctext if alone or gid not in f.rev else f.rev[gid])
+                used.setdefault(gid, "?" if self.variant == "no_unicode" else LEGACY_ALPHA[gid % len(LEGACY_ALPHA)]
+                                if self.variant.startswith("legacy") else ctext if alone or gid not in f.rev else f.rev[gid])
             pos = f"1 0 0 1 {x * PT:.3f} {self.y(bl):.3f} Tm"
             body = f"{pos} [{' '.join(tj)}] TJ"
-            if is_deva(word) and self.variant != "no_unicode":
+            if is_deva(word) and self.variant not in ("no_unicode", "legacy", "legacy_noname"):
                 body = f"/Span <</ActualText <FEFF{word.encode('utf-16-be').hex().upper()}>>> BDC {body} EMC"
             if space:
                 gap = f"{-(pen - cur) * sc:.2f} " if pen != cur else ""
@@ -352,8 +366,8 @@ HEAD_PT = {1: 16, 2: 22, 3: 28, 4: 34, 5: 38, 6: 42}
 
 
 class Paper:
-    def __init__(self, key: str, fonts: dict):
-        self.key, self.p = key, PAPERS[key]
+    def __init__(self, key: str, fonts: dict, variant: str = ""):
+        self.key, self.p, self.variant = key, PAPERS[key], variant
         self.F = fonts
         p = self.p
         self.body = fonts[p["body"][0]]
@@ -494,7 +508,7 @@ class Paper:
         m, W, H = p["m"], p["w"], p["h"]
         right = W - m
         for pno in range(1, n_pages + 1):
-            pg = Page(W, H, fonts)
+            pg = Page(W, H, fonts, self.variant)
             r = random.Random(f"{self.key}-{d.isoformat()}-p{pno}")
             seed = f"{self.key}-{d.isoformat()}-p{pno}"
             if pno == 1:
@@ -545,16 +559,16 @@ def load_fonts() -> dict:
     return {k: Font(k) for k in FONT_FILES}
 
 
-def make_paper(key: str, out: Path) -> dict:
+def make_paper(key: str, out: Path, variant: str = "") -> dict:
     out.mkdir(parents=True, exist_ok=True)
-    paper = Paper(key, load_fonts())
+    paper = Paper(key, load_fonts(), variant)
     files = []
     for n, (ds, pages_n, name) in enumerate(PAPERS[key]["editions"], 1):
         d = date.fromisoformat(ds)
         pages, fonts = paper.edition(n, d, pages_n)
         path = out / name
         title = name.rsplit(".", 1)[0] if "final" in name else f"{PAPERS[key]['name']} {ds}"
-        write_pdf(path, pages, fonts, info_for(d, name, title))
+        write_pdf(path, pages, fonts, info_for(d, name, title), variant)
         files.append({"n": n, "name": name, "path": str(path)})
     (out / "files.json").write_text(json.dumps({"files": files}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     from PIL import Image, ImageDraw  # noqa: PLC0415
@@ -571,7 +585,8 @@ def make_paper(key: str, out: Path) -> dict:
 # ------------------------------------------------------------------------------------------------ intake test files
 def tiny_pdf(path: Path, variant: str = "good", key: str = "en", when: str = "2026-03-02") -> Path:
     """One fictional page. variant: good | scanned (one picture, no text) | fonts_missing (fonts not embedded) |
-    type3 (a Type 3 font) | no_unicode (no ToUnicode, no ActualText) | big_page (another page size)."""
+    type3 (a Type 3 font) | no_unicode (no ToUnicode, no ActualText) | big_page (another page size) |
+    legacy / legacy_noname (legacy-encoded fonts, module docstring)."""
     paper = Paper(key, {k: Font(k) for k in ("Mukta-Bold", "Mukta-SemiBold", "Mukta-Light", "Mukta-Regular", PAPERS[key]["body"][0])})
     p = paper.p
     w, h = (p["w"] + 40, p["h"] + 40) if variant == "big_page" else (p["w"], p["h"])
@@ -600,9 +615,10 @@ def tiny_pdf(path: Path, variant: str = "good", key: str = "en", when: str = "20
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--paper", choices=sorted(PAPERS), required=True)
+    ap.add_argument("--variant", choices=("legacy", "legacy_noname"), default="")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
-    print(json.dumps(make_paper(a.paper, a.out), ensure_ascii=False))
+    print(json.dumps(make_paper(a.paper, a.out, a.variant), ensure_ascii=False))
 
 
 if __name__ == "__main__":

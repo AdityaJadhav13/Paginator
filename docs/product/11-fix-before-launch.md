@@ -750,3 +750,25 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | ED-17 | `apps/api` printed record | Every read of a run's pages now also reads the edition's stories to check what the pages print: an editor change reads them once or twice more, a save about six times (the reviewer's count) | Fine for 16 pages in tests and on the real stack; `pageCall` (open, state) could read the plain pages if timings show it |
 | ED-18 | `apps/api` desk import | A Desk page's record is signed again over the hosted text only for stories laid out at import; a story whose photo is still being prepared keeps the Desk's signature, so its page may say "changed" once the photo is ready | "Save page" (after Update text) makes it current; the import runs once |
 | ED-12 | tests | `apps/web/tests/release/editor-approval.test.tsx` waits with the default 1 s `findBy`, which overran once while four batches loaded the machine (load average about 90); the database projects now have 30 s / 60 s limits (`vitest.config.ts`) after their 5 s / 10 s defaults overran the same way | It passes when run again; give it an honest wait if CI shows it |
+
+
+## Engine refinement for the weekly (ENG, 2026-11-10)
+
+| # | Where | What | Why it can wait |
+|---|---|---|---|
+| ENG-1 | `layout/generate.py` grid | The weekly's 4-column pages (pp 5–6, 60.5 mm) are learned (`grid_alternates`), but the engine lays out every page on one grid | The 5-column grid serves every page; per-page grids need the measured options per grid |
+| ENG-2 | photos | Ellipse crops exist (`compose_page.ellipse_raster`, contour wrap), but no 9 November story qualified (an uncaptioned near-square inset). Cut-outs are not offered: the photo desk makes no masks | Rectangles with wrap carry the look; cut-outs need masks first |
+| ENG-3 | headlines, centred | In a two-line centred headline, each line is filled by its own scale, so a short second line can read larger than a squeezed first line | Every line fills its measure, as the weekly's do; equalising them is a rule to tune with the owner |
+| ENG-4 | captions | Every photo still gets a caption and a credit, where the weekly prints almost none. A Latin credit is set in a larger face, and the English page's credit says "छाया:" | The licence's attribution must print; the owner chooses the style |
+| ENG-5 | English page | Set in the sans; the weekly uses a serif (Minion, Centaur). An OFL serif stand-in is not wired | Readable; a font choice for the owner |
+| ENG-6 | legacy running head and imprint | The folio band's shaded fill is left out (a shading has no raster). The masthead strip (RNI, issue, price) and the imprint print nothing until the owner gives their text (`paper.json` `imprint_text`) | Never garbage: empty rather than wrong |
+| ENG-7 | weekly profile | Learned from one edition (`--min-editions 1`, provisional; 28 headlines) | Onboard again when the owner's further editions arrive (ask for 8) |
+| ENG-8 | tests | The learned block and its mapping are tested on realistic edge cases, but never as one round trip (`onboard build` → `settings_for`) in CI | The private weekly ran that path end to end |
+| ENG-9 | `deskedit.py` | Rollback paths call `_retreat()` inside `except`, so a second failure hides the first | Either way the page is left as it was |
+| ENG-10 | page editor, crops | A crop of an inset photo (`photo_cols` 0) is rebuilt as gen1's head-photo window | Only on refined papers; the pilot is unaffected |
+| ENG-11 | boxes | A boxed story with no display text gets no top padding | Every planned story has a headline |
+| ENG-12 | planner | Pinned stories beyond a page's capacity make the whole page fail ("do not fill exactly") instead of the lowest-priority story leaving. For the weekly test the builder left out 20 of 72 stories by capacity | The editor sees the warning before the layout; unpin or cut |
+| ENG-13 | `layout/` imports | `settings` and `panels` are imported by top-level names | No collision exists today |
+| ENG-14 | `generate.head_size` | The old "8col:" key fallback also applies at the defaults for a non-8-column paper with an old profile | Intended (the key bug fix); the pilot is 8 columns and identical |
+| ENG-15 | timings | The contour wrap is dry-run at every grid position: measuring 52 weekly stories took 79–133 s the first time (cached afterwards) | Cached by content |
+| ENG-16 | centred photos | On 47.5 mm columns, a photo centred across a gutter leaves strips of about 21 mm (2–3 words a line). Kept because the weekly prints it; insets now leave two thirds of a column | A threshold to tune with the owner |

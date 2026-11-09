@@ -99,6 +99,8 @@ export const ONBOARDING_EN = {
   "onboarding.reject.too_many_excluded":
     "Too much of the text could not be read. A person from Pageinator will look at it and contact you.",
   "onboarding.reject.failed": "The reading stopped on these files. A person from Pageinator will look at it.",
+  "onboarding.reject.script_unconfirmed":
+    "Your editions use an older Marathi font. A person from Pageinator will confirm the language and contact you.",
   "onboarding.reject.worker": "The design reader stopped unexpectedly. Try again later; if it happens again, contact us.",
   "onboarding.table": "Each file's check",
   "onboarding.col.file": "File",
@@ -122,4 +124,6 @@ export const ONBOARDING_EN = {
   "onboarding.check.no_date":
     "We could not tell its edition date. Put the date in the file name, like 2026-09-14 or 20260914.",
   "onboarding.check.frames_excluded": "Text frames that could not be read, left out: {count}.",
+  "onboarding.check.legacy_font":
+    "Its text is in an older Marathi font. We learn your design from it, but never use its words.",
 } as const;
