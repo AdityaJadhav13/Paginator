@@ -147,8 +147,9 @@ def _mm(v) -> float:
 def outline(tpl) -> dict:
     """A template page as the engine reads it, in mm: the page, its news area, what it keeps every day (masthead,
     folio, rules, panels: at most MAX_KEPT) and its ad slots. An outline, not the printed page."""
-    return {"page_w_mm": _mm(tpl.page_w), "page_h_mm": _mm(tpl.page_h),
-            "news": [[_mm(v) for v in G.region_box(r)] for r in tpl.regions],
+    with DG.on_grid(getattr(tpl, "grid", None)):                 # its regions are in its own grid's columns
+        news = [[_mm(v) for v in G.region_box(r)] for r in tpl.regions]
+    return {"page_w_mm": _mm(tpl.page_w), "page_h_mm": _mm(tpl.page_h), "news": news,
             "kept": [{"kind": str(e["kind"]), "box": [_mm(v) for v in e["bbox_mm"]]}
                      for e in tpl.keep if e["kind"] != "ad"][:MAX_KEPT],
             "ad_slots": [[_mm(v) for v in s["bbox_mm"]] for s in tpl.ad_slots]}
@@ -400,11 +401,12 @@ DESK_CODE = hashlib.sha256(b"".join((Path(__file__).resolve().parent / f).read_b
 
 
 def options_cache_key(story: dict, elements: list, photo: dict | None, cal, cx) -> str:
-    """The story's content, photo, house calibration and code versions (gen1's, compose_page's, the Desk's). Not its
-    rank size (the headline element's size_pt only orders the stories; the options do not depend on it)."""
+    """The story's content, photo, house calibration, the grid in force (a page on another grid has its own options:
+    deskgen.on_grid) and code versions (gen1's, compose_page's, the Desk's). Not its rank size (the headline element's
+    size_pt only orders the stories; the options do not depend on it)."""
     els = sorted(({**e, "size_pt": 0.0} if e["kind"] == "headline" else e for e in elements), key=lambda e: e["id"])
     blob = json.dumps([story, els, photo, sorted(cal.styles.items()), cal.space_em, cx.inputs, cx.r_cal, ENGINE_VERSION, G.GEN,
-                       DG.RANK_CLASSES, DESK_CODE], sort_keys=True, ensure_ascii=False, default=str)
+                       DG.RANK_CLASSES, DESK_CODE, DG.grid_now()], sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()[:32]
 
 
@@ -673,25 +675,29 @@ def make_pool(home: Path, ds: Path, cal, n_tasks: int, on_stop=None):
     return ex
 
 
-def measure_items(ex, home: Path, ds: Path, cfg: dict, cal, b: Built, mphotos: Path, progress) -> tuple[dict, dict]:
-    """Module options of every item, from the cache (content-keyed) or measured in the pool. → (options, failed)."""
+def measure_items(ex, home: Path, ds: Path, cfg: dict, cal, b: Built, mphotos: Path, progress, items=None,
+                  grid=None) -> tuple[dict, dict]:
+    """Module options of every item (or of items), from the cache (content-keyed) or measured in the pool, on the paper's
+    grid (or on grid: deskgen.on_grid). → (options, failed)."""
+    items = b.items if items is None else items
     cx_inputs = DG.CP.Context(ds, "story")                 # cache keys only (inputs and code hashes)
     cx_inputs.r_cal = cfg.get("calibration", {}).get("r_cal")
     cache = home / "cache" / "options"
     cache.mkdir(parents=True, exist_ok=True, mode=0o700)
     options, todo = {}, {}
-    for it in b.items:
+    for it in items:
         k = it["key"]
-        f = cache / f"{options_cache_key(b.story_of[k], b.els_of[k], b.photo_of[k], cal, cx_inputs)}.pkl"
+        with DG.on_grid(grid):
+            f = cache / f"{options_cache_key(b.story_of[k], b.els_of[k], b.photo_of[k], cal, cx_inputs)}.pkl"
         if f.exists():
             try:
                 options[k] = pickle.loads(f.read_bytes())
                 continue
             except Exception:  # noqa: BLE001 — a damaged cache entry is measured again
                 pass
-        todo[ex.submit(DW.measure_task, [b.story_of[k]], b.els_of[k], str(mphotos))] = (k, f)
+        todo[ex.submit(DW.measure_task, [b.story_of[k]], b.els_of[k], str(mphotos), grid)] = (k, f)
     failed = {}
-    progress(len(options), len(b.items))
+    progress(len(options), len(items))
     while todo:
         done, _ = wait(list(todo), timeout=2.0, return_when=FIRST_COMPLETED)
         for fut in done:
@@ -711,7 +717,7 @@ def measure_items(ex, home: Path, ds: Path, cfg: dict, cal, b: Built, mphotos: P
             tmp.write_bytes(pickle.dumps(by))
             os.replace(tmp, f)
         if done:
-            progress(len(options) + len(failed), len(b.items))
+            progress(len(options) + len(failed), len(items))
     return options, failed
 
 
@@ -796,19 +802,31 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
     # 1. measure every story (cached by content; usually measured in the background already)
     def progress(done, total):
         status.set(state="planning", message=DM.msg("m.run.measured", done=done, total=total))
+    tkeys = template_keys(cfg, roles)               # each page's template (not the plan's story keys)
+    tpls = {k: template_of(cfg, k) for k in set(tkeys)}
     options, failed_measure = measure_items(ex, home, ds, cfg, cal, b, mphotos, progress)
+    # a page on another grid (a weekly's 4-column pages): the stories that may go there measured on it too
+    by_grid = {}
+    for g in sorted({tpls[k].grid for k in tkeys} - {DG.MAIN_GRID}):
+        on = {n for n, k in enumerate(tkeys, 1) if tpls[k].grid == g}
+        by_grid[g], failed_g = measure_items(ex, home, ds, cfg, cal, b, mphotos, progress, grid=g,
+                                             items=[it for it in items if it["key"] in options and it["pin"] in on | {None}])
+        failed_measure.update({k: why for k, why in failed_g.items() if any(it["key"] == k and it["pin"] in on for it in items)})
     t_measured = time.time()
 
     # 2. plan the pages
     status.set(message=DM.msg("m.run.choosing"))
-    tkeys = template_keys(cfg, roles)               # each page's template (not the plan's story keys)
-    tpls = {k: template_of(cfg, k) for k in set(tkeys)}
-    live = [it for it in items if it["key"] in options]
+    live = [it for it in items if it["key"] in options and it["key"] not in failed_measure]
     per = cfg.get("needs_per_role") or {}
-    pages = [{"page": i + 1, "regions": tpls[tkeys[i]].regions,
-              "target": stories_target(per, r) + sum(1 for it in live if it["brief"] and it["pin"] == i + 1)}
-             for i, r in enumerate(roles)]
-    planner = DP.Planner(live, options, pages)
+    pages = []
+    for i, r in enumerate(roles):
+        briefs = sum(1 for it in live if it["brief"] and it["pin"] == i + 1)
+        tpl = tpls[tkeys[i]]
+        spp = getattr(G, "ST", {}).get("stories_per_page")
+        pages.append({"page": i + 1, "regions": tpl.regions, "target": stories_target(per, r) + briefs}
+                     | ({"cap": spp[1] + briefs} if spp else {})            # the most the paper prints on a page
+                     | ({"grid": tpl.grid, "options": by_grid[tpl.grid]} if tpl.grid in by_grid else {}))
+    planner = DP.Planner(live, options, pages, hold=bool(getattr(G, "ST", {}).get("refined")))
     plan, left, dropped = planner.plan()
     not_placed = list(b.skipped)
     for k, reason in dropped.items():
@@ -860,11 +878,12 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
             if slot["slot"] in ads_idx and (ads_dir / f"{slot['slot']}.cmyk.gz").exists():
                 renames[slot["element"]] = (ads_dir, slot["slot"], ads_idx[slot["slot"]])
         pdir = DG.link_photo_dir(run_dir / "work" / f"page-{n:02d}" / "photos", srcs, renames)
-        pre = {f"{k}|{w}|{cls}": opts for k in keys for cls, byw in options[k].items() for w, opts in byw.items()}
+        page_opts = by_grid.get(tpl.grid, options)
+        pre = {f"{k}|{w}|{cls}": opts for k in keys for cls, byw in page_opts[k].items() for w, opts in byw.items()}
         rank_size = {k: 1000.0 - i for i, k in enumerate(keys)}      # gen1 ranks by headline size: the planner's order
         page_els = [{**e, "size_pt": rank_size[k]} if e["kind"] == "headline" else e for k in keys for e in els_of[k]]
         task = {"page": n, "pages": len(roles), "date": day.isoformat(), "edition": {k: edition.get(k, "") for k in ("volume", "issue", "price")},
-                "template": tpl.name, "role": role, "stories": [story_of[k] for k in keys],
+                "template": tpl.name, "role": role, "grid": tpl.grid, "stories": [story_of[k] for k in keys],
                 "elements": page_els, "photo_dir": str(pdir), "precomputed": pre, "regions": regions,
                 "out_pdf": f"page-{n:02d}.pdf", "out_dir": str(run_dir)}
         futs[ex.submit(DW.layout_task, task)] = n
@@ -1004,8 +1023,10 @@ def cmd_edit_service(home: Path, args) -> dict:
         current = list(sessions.values())[-1:]            # only the page last asked for: pages left alone wait
         if any(s.partial for s in current):
             wait = max(0.0, IDLE_AFTER_S - (time.monotonic() - last))
-            if not select.select([sys.stdin], [], [], wait)[0] and current[0].complete_one():
-                continue
+            if not select.select([sys.stdin], [], [], wait)[0]:
+                with DG.on_grid(current[0].tpl.grid):            # measured on the page's own grid
+                    if current[0].complete_one():
+                        continue
         line = sys.stdin.readline()
         if not line:
             break
@@ -1021,40 +1042,42 @@ def cmd_edit_service(home: Path, args) -> dict:
             elif cmd == "open":
                 DE.request_ok(req, ("edition", "run", "page"))
                 key, s = eng.session_for(req["edition"], req["run"], req["page"], bool(req.get("reload")))
-                s.sync()
-                res = {"session": key, **s.draw()}
+                with DG.on_grid(s.tpl.grid):                            # every page is edited on its own grid
+                    s.sync()
+                    res = {"session": key, **s.draw()}
             elif cmd in ("set", "state", "draw", "export", "close", "alternative", "refresh", "move"):
                 DE.request_ok(req, ("session",))
                 s = sessions.get(req["session"])
                 if s is None:
                     raise ValueError(DM.msg("m.edit.notOpen"))
-                if cmd != "close":
-                    s.sync()                                            # text another page set reaches this one first
-                if cmd == "move":                                       # to another page of the run, opened if need be
-                    DE.request_ok(req, ("story", "page"))
-                    eid, run, _ = req["session"].split("/")
-                    eng.touch(req["session"])                           # opening the other page never closes this one
-                    try:
-                        res = s.move_to(req["story"], req["page"], req.get("base_rev"),
-                                        lambda n: eng.session_for(eid, run, n)[1])
-                    finally:
-                        if req["session"] in sessions:
-                            eng.touch(req["session"])                   # the page asked for is the last used again
-                elif cmd == "set":
-                    res = s.apply(req.get("modules") or [], req.get("base_rev"))
-                elif cmd == "state":
-                    res = s.state()
-                elif cmd == "draw":
-                    res = s.draw()
-                elif cmd == "export":
-                    res = s.export(req.get("base_rev"))
-                elif cmd == "alternative":
-                    res = s.alternative(int(req.get("variant") or 1), req.get("base_rev"))
-                elif cmd == "refresh":
-                    res = s.refresh_text(req.get("base_rev"))
-                else:
-                    sessions.pop(req["session"], None)
-                    res = {"closed": True}
+                with DG.on_grid(s.tpl.grid):                            # every page is edited on its own grid
+                    if cmd != "close":
+                        s.sync()                                            # text another page set reaches this one first
+                    if cmd == "move":                                       # to another page of the run, opened if need be
+                        DE.request_ok(req, ("story", "page"))
+                        eid, run, _ = req["session"].split("/")
+                        eng.touch(req["session"])                           # opening the other page never closes this one
+                        try:
+                            res = s.move_to(req["story"], req["page"], req.get("base_rev"),
+                                            lambda n: eng.session_for(eid, run, n)[1])
+                        finally:
+                            if req["session"] in sessions:
+                                eng.touch(req["session"])                   # the page asked for is the last used again
+                    elif cmd == "set":
+                        res = s.apply(req.get("modules") or [], req.get("base_rev"))
+                    elif cmd == "state":
+                        res = s.state()
+                    elif cmd == "draw":
+                        res = s.draw()
+                    elif cmd == "export":
+                        res = s.export(req.get("base_rev"))
+                    elif cmd == "alternative":
+                        res = s.alternative(int(req.get("variant") or 1), req.get("base_rev"))
+                    elif cmd == "refresh":
+                        res = s.refresh_text(req.get("base_rev"))
+                    else:
+                        sessions.pop(req["session"], None)
+                        res = {"closed": True}
             else:
                 raise ValueError(DM.msg("m.edit.unknownCommand", cmd=cmd))
             answer({"id": rid, "ok": True, "result": res})

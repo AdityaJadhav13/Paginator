@@ -69,6 +69,7 @@ def use_dataset(ds: Path) -> None:
         G.COL_W, G.GUT, G.ORIGIN, G.NCOL = g["column_width_mm"], g["gutter_mm"], g["origin_mm"], g["columns"]
         G.PITCH = G.COL_W + G.GUT
         G.SP = {k: G._sp(k, d) for k, d in SP_DEFAULTS}
+    DG.MAIN_GRID = DG.grid_now()
     if hasattr(G, "ST"):                                  # the Desk's copy (the frozen gen1 has no settings)
         import settings as LS
         LS.use(settings_for(ds))
@@ -81,7 +82,8 @@ def settings_for(ds: Path) -> dict:
     """The layout settings (layout/settings.py) of a dataset: none (the defaults: the pilot's output exactly) unless its
     paper.json says "refined_layout": true; then the house profile's learned "layout" block, mapped."""
     lay = layout_block(ds)
-    return {} if lay is None else {"refined": True} | _map_layout(lay, is_legacy(ds))
+    # nothing learned for it: a strip beside a photo narrower than 40 mm or a column is not worth a wrap
+    return {} if lay is None else {"refined": True, "wrap_min_mm": max(40.0, G.COL_W)} | _map_layout(lay, is_legacy(ds))
 
 
 def layout_block(ds: Path) -> dict | None:
@@ -91,6 +93,29 @@ def layout_block(ds: Path) -> dict | None:
         return None
     hp = house_profile_file(ds)
     return _obj(_checked(hp).get("layout")) if hp is not None else {}
+
+
+def page_grid(ds: Path, page: int) -> tuple | None:
+    """The grid of a refined paper's template page that the paper prints on another grid (layout.grid_alternates: [{columns,
+    column_width_mm, gutter_mm, origin_mm (else the paper's), pages}], a weekly's 4-column pages 5 and 6), as
+    deskgen.on_grid takes it; None: the paper's own grid (every other page, every other paper)."""
+    lay = layout_block(ds)
+    alts = (lay or {}).get("grid_alternates") or []
+    if not isinstance(alts, list):
+        raise DamagedFile(BAD_PROFILE)
+    found = None
+    for a in alts:                                        # every entry checked, the first naming the page taken
+        a = _obj(a)
+        pages = a.get("pages")
+        if not isinstance(pages, list) or not all(type(n) is int for n in pages) or type(a.get("columns")) is not int:
+            raise DamagedFile(BAD_PROFILE)
+        grid = (int(_num(a["columns"], 1, 20)), _num(a.get("column_width_mm"), 1.0, 1000.0), _num(a.get("gutter_mm"), 0.0, 100.0),
+                _num(a.get("origin_mm", DG.MAIN_GRID[3]), 0.0, 1000.0))
+        if grid[0] > DG.MAIN_GRID[0] or grid[3] + grid[0] * grid[1] + (grid[0] - 1) * grid[2] > DG.MAIN_GRID[3] + DG.MAIN_GRID[0] * DG.MAIN_GRID[1] + (DG.MAIN_GRID[0] - 1) * DG.MAIN_GRID[2] + 1.0:
+            raise DamagedFile(BAD_PROFILE)                # more columns than the paper's grid, or wider than its type area
+        if found is None and page in pages:
+            found = grid
+    return found
 
 
 BAD_PROFILE = "the file house_profile.json of this dataset is not a house profile the engine reads"
@@ -235,6 +260,33 @@ def _map_layout(lay: dict, legacy: bool = False) -> dict:
         if not lo <= mid <= hi:
             raise DamagedFile(BAD_PROFILE)
         out["stories_per_page"] = (lo, hi)
+    if "lead_area_share" in dn:
+        out["lead_area_share"] = _num(dn["lead_area_share"], 0.0, 1.0)
+    if "area_share" in ph:
+        out["photo_area_share"] = _num(ph["area_share"], 0.0, 1.0)
+    if "width_cols" in ph:                               # {"k": photos k grid columns wide} → {k: share} (0: an inset)
+        wc = _obj(ph["width_cols"])
+        if any(re.fullmatch(r"[0-9]{1,2}", k) is None or int(k) > 20 for k in wc):
+            raise DamagedFile(BAD_PROFILE)
+        n = {int(k): _num(v, 0, 1e9) for k, v in wc.items() if int(k) >= 1}   # under a column: an inset, not a width
+        if sum(n.values()) > 0:
+            out["photo_cols"] = {k: round(v / sum(n.values()), 4) for k, v in sorted(n.items()) if v > 0}
+    cp = _obj(lay.get("captions"))
+    if "caption_share" in cp and _num(cp["caption_share"], 0.0, 1.0) < LOW_SHARE:
+        out["caption_mode"] = "small"
+    if ("caption_share" in cp and "credit_share" in cp and _num(cp["caption_share"], 0.0, 1.0) < LOW_SHARE
+            and _num(cp["credit_share"], 0.0, 1.0) < LOW_SHARE):
+        out["credit_mode"] = "line"                      # few captions or credits, but a licence's credit prints: a tiny line
+    hb = _obj(_obj(lay.get("furniture")).get("head_band"))
+    if hb:
+        stops, axis = hb.get("stops"), hb.get("axis", "x")
+        if not isinstance(stops, list) or not 1 <= len(stops) <= 16 or axis not in ("x", "y"):
+            raise DamagedFile(BAD_PROFILE)
+        if "box_mm" in hb and (not isinstance(hb["box_mm"], list) or len(hb["box_mm"]) != 4):
+            raise DamagedFile(BAD_PROFILE)
+        for v in hb.get("box_mm") or []:                 # checked only: the fill goes in each template's own band
+            _num(v, -10.0, 2000.0)
+        out["head_band_fill"] = {"stops": tuple(_cmyk(c) for c in stops), "axis": axis}
     return out
 
 
@@ -329,25 +381,34 @@ def _template_init(real):
         """Template, and for another paper (paper.json): when the news is taken down to the page's foot (no ad block
         in it), it stops 3 mm above the first thing printed below its lowest story: a foot rule, a narrow imprint line,
         or a band of ads each narrower than half the page (the frozen rule looks only at items wider than that)."""
-        real(self, ds, name, role)
         if paper(Path(ds)) is None:
+            real(self, ds, name, role)                        # the pilot's: its one grid, as it was
             return
         model = json.loads((Path(ds) / "report" / "page1" / "pages" / f"{name}.json").read_text(encoding="utf-8"))
-        _keep_lettering(self, model)
-        _keep_head_band(self, model)
-        _drop_legacy_text(self, model, paper(Path(ds)))
-        _drop_unpainted_graphics(self)
-        if self.ad_block is not None:
-            return
-        hole, _ = G.newshole(model)
-        low, x0, x1 = hole[1], G.ORIGIN, G.ORIGIN + G.span_mm(G.NCOL)
-        tops = [b[1] for b in (e["bbox_mm"] for e in self.keep) if low - 0.5 < b[1] < self.news_bottom + 3.0 and min(b[2], x1) > max(b[0], x0)]
-        bottom = max(low, min(tops, default=self.news_bottom + 3.0) - 3.0)
-        if bottom < self.news_bottom:
-            self.news_bottom = bottom
-            self.regions = G.regions_for(self.news_top, bottom, None)
+        # a page the paper prints on another grid is made on it (and measured, planned, laid out and edited on it: tpl.grid)
+        with DG.on_grid(page_grid(Path(ds), model.get("page")) or DG.MAIN_GRID):
+            real(self, ds, name, role)
+            self.grid = DG.grid_now()
+            _paper_template(self, model, ds)
     init.desk_profile = True
     return init
+
+
+def _paper_template(self, model: dict, ds) -> None:
+    """Another paper's template (_template_init), on the template page's grid."""
+    _keep_lettering(self, model)
+    _keep_head_band(self, model)
+    _drop_legacy_text(self, model, paper(Path(ds)))
+    _drop_unpainted_graphics(self)
+    if self.ad_block is not None:
+        return
+    hole, _ = G.newshole(model)
+    low, x0, x1 = hole[1], G.ORIGIN, G.ORIGIN + G.span_mm(G.NCOL)
+    tops = [b[1] for b in (e["bbox_mm"] for e in self.keep) if low - 0.5 < b[1] < self.news_bottom + 3.0 and min(b[2], x1) > max(b[0], x0)]
+    bottom = max(low, min(tops, default=self.news_bottom + 3.0) - 3.0)
+    if bottom < self.news_bottom:
+        self.news_bottom = bottom
+        self.regions = G.regions_for(self.news_top, bottom, None)
 
 
 def _head_bands(model: dict) -> list:
@@ -369,9 +430,12 @@ def _keep_head_band(tpl, model: dict) -> None:
     paper's furniture, though the page model may hand its logo to the story below it: the news starts 2 mm under the
     band and everything printed inside the band stays (its text then follows the rules for kept text)."""
     bands = _head_bands(model)
-    if not bands or tpl.news_top >= max(b[3] for b in bands):
+    if not bands:
         return
     band = (min(b[0] for b in bands), min(b[1] for b in bands), max(b[2] for b in bands), max(b[3] for b in bands))
+    tpl.head_band = band                                  # its learned shaded fill is drawn there (draw_head_band)
+    if tpl.news_top >= band[3]:
+        return
     kept = {e["id"] for e in tpl.keep}
     inside = [e for e in model["elements"] if e["id"] not in kept and e["kind"] not in DG.STORY_KINDS and _within(e["bbox_mm"], band)]
     tpl.keep += inside
@@ -429,12 +493,14 @@ def _drop_legacy_text(tpl, model: dict, pj: dict) -> None:
         bb = e["bbox_mm"]
         if (e["kind"] == "box" and e["id"] not in gone and not any(_within(bb, hb) for hb in _head_bands(model))   # drawn fresh
                 and any(holds(bb, b) for b in lb) and not any(holds(bb, b) for b in rest)
-                and not ((pj or {}).get("imprint_text") and bb[1] >= tpl.news_bottom - 1)):
+                and not ((pj or {}).get("imprint_text") and bb[1] >= tpl.news_bottom - 1)
+                and not ((pj or {}).get("masthead_strip_text") and bb[3] <= tpl.news_top + 1)):
             gone.add(e["id"])
     tpl.keep = [e for e in tpl.keep if e["id"] not in gone]
     tpl.dropped = sorted(set(tpl.dropped) | gone)
     tpl.legacy_text = legacy
     tpl.imprint_text = list((pj or {}).get("imprint_text") or [])
+    tpl.masthead_strip_text = list((pj or {}).get("masthead_strip_text") or [])
 
 
 DATE_SAMPLE = ("सोमवार, १ जानेवारी २०००", "Monday, 1 January 2000")   # rewritten with deskfolio's words for the day
@@ -443,7 +509,9 @@ DATE_SAMPLE = ("सोमवार, १ जानेवारी २०००", 
 def fresh_folios(tpl, page: int, day) -> list:
     """[(slot element, [text])] a legacy paper's page draws afresh (geometry only, from the text elements it dropped):
     the date centred in the folio band, the page number where the printed one stood (at the band's right; not on the
-    front page), and paper.json's imprint lines on the dropped lines below the news, one each (none: nothing)."""
+    front page), paper.json's masthead strip lines (in the bold, centred) on the dropped lines above the news that are
+    not the running head's (the strip under a masthead), and its imprint lines on the dropped lines below the news, one
+    each (none: nothing)."""
     legacy = getattr(tpl, "legacy_text", None)
     if not legacy:
         return []
@@ -463,6 +531,12 @@ def fresh_folios(tpl, page: int, day) -> list:
             nb = num_el["bbox_mm"]
             out.append(({"id": "fresh-page", "kind": "folio", "fresh": _slot(num_el, (nb[0] + nb[2]) / 2, "center", True, None)},
                         [str(page) if DF.ENGLISH else DF.digits_like("०", page)]))
+    strip = sorted(((ln, e) for e in legacy if e not in top and e["bbox_mm"][3] <= tpl.news_top + 1.0 for ln in e.get("lines") or []),
+                   key=lambda le: (le[0]["baseline_mm"], le[0]["x0_mm"]))
+    for k, (text, (ln, e)) in enumerate(zip(getattr(tpl, "masthead_strip_text", []), strip)):
+        if text.strip():
+            slot = {**_slot(e, (ln["x0_mm"] + ln["x1_mm"]) / 2, "center", True, ln["x1_mm"] - ln["x0_mm"]), "baseline_mm": ln["baseline_mm"]}
+            out.append(({"id": f"fresh-strip-{k + 1}", "kind": "furniture", "fresh": slot}, [text]))
     lines = sorted(((ln, e) for e in legacy if e["bbox_mm"][1] >= tpl.news_bottom - 1.0 for ln in e.get("lines") or []),
                    key=lambda le: (le[0]["baseline_mm"], le[0]["x0_mm"]))
     for k, (text, (ln, e)) in enumerate(zip(tpl.imprint_text, lines)):
@@ -488,8 +562,10 @@ def _folio_plan(real):
 
 def _draw_folios(real):
     def draw(B, tpl, cx, redo, rep):
-        """The running head's changed lines (deskgen.draw_folios), then a legacy paper's fresh lines: the house size
-        in stand-in pt (× the paper's ratio), the stand-in sans (Bold for the date and number), never wider than room."""
+        """The running head's band fill (draw_head_band), its changed lines (deskgen.draw_folios), then a legacy paper's
+        fresh lines: the house size in stand-in pt (× the paper's ratio), the stand-in sans (Bold for the date and number),
+        never wider than room."""
+        draw_head_band(B, tpl)
         done = real(B, tpl, cx, [r for r in redo if "fresh" not in r[0]], rep)
         for e, (text,) in (r for r in redo if "fresh" in r[0]):
             s = e["fresh"]
@@ -504,6 +580,36 @@ def _draw_folios(real):
         return done
     draw.desk_profile = True
     return draw
+
+
+BAND_PX = 512                    # the band fill's raster: BAND_PX steps along its axis, 4 px across, stretched to the band
+
+
+def band_raster(stops: tuple, axis: str) -> tuple[int, int, bytes]:
+    """→ (width px, height px, 8-bit CMYK bytes): the stops (evenly spaced, left → right or top → bottom) blended linearly.
+    The frozen PDF writer has no shadings: a raster drawn as an image prints the same gradient."""
+    row = bytearray()
+    n = len(stops)
+    for i in range(BAND_PX):
+        t = i / (BAND_PX - 1) * (n - 1) if n > 1 else 0.0
+        a = min(int(t), n - 2) if n > 1 else 0
+        f = t - a
+        c0, c1 = stops[a], stops[min(a + 1, n - 1)]
+        row += bytes(round(255 * (u + (v - u) * f)) for u, v in zip(c0, c1, strict=True))
+    if axis == "x":
+        return BAND_PX, 4, bytes(row) * 4
+    return 4, BAND_PX, b"".join(bytes(row[4 * i:4 * i + 4]) * 4 for i in range(BAND_PX))
+
+
+def draw_head_band(B, tpl) -> None:
+    """The learned shaded fill of the running head's band (layout.furniture.head_band, ST["head_band_fill"]) on a page
+    whose template has that band: drawn first (under the band's frame, page tab and text). Nothing on any other page."""
+    fill, band = getattr(G, "ST", {}).get("head_band_fill"), getattr(tpl, "head_band", None)
+    if not fill or band is None:
+        return
+    w, h, raw = band_raster(fill["stops"], fill["axis"])
+    x0, top, x1, bottom = band
+    B.items.insert(0, CP.X.Image(x0 * DG.MM, (tpl.page_h - bottom) * DG.MM, (x1 - x0) * DG.MM, (bottom - top) * DG.MM, w, h, raw))
 
 
 if not getattr(CP.Context.__init__, "desk_profile", False):

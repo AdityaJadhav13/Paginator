@@ -54,19 +54,22 @@ def template(name: str, role: str) -> DG.Template:
     return _STATE["templates"][key]
 
 
-def measure_task(stories: list, elements: list, photo_dir: str) -> dict:
+def measure_task(stories: list, elements: list, photo_dir: str, grid=None) -> dict:
+    """grid: the grid the options are for (deskgen.on_grid; None: the paper's own)."""
     t0 = time.time()
     _MEMO.clear()
     try:
-        out = DG.measure(_STATE["cx"], _STATE["cal"], stories, elements, Path(photo_dir))
+        with DG.on_grid(grid):
+            out = DG.measure(_STATE["cx"], _STATE["cal"], stories, elements, Path(photo_dir))
         return {"ok": True, "options": out, "seconds": round(time.time() - t0, 1)}
     except Exception as ex:  # noqa: BLE001 — reported per story, never fatal for the run
         return {"ok": False, "error": f"{type(ex).__name__}: {ex}", "trace": traceback.format_exc()[-2000:]}
 
 
 def layout_task(task: dict) -> dict:
-    """task: page, pages, date, edition, template (name, role), stories, elements, photo_dir, precomputed, regions,
-    out_pdf, out_dir. Writes the PDF and returns the manifest (no PDF bytes through the pipe)."""
+    """task: page, pages, date, edition, template (name, role), grid (the template's: deskgen.on_grid), stories,
+    elements, photo_dir, precomputed, regions, out_pdf, out_dir. Writes the PDF and returns the manifest (no PDF bytes
+    through the pipe)."""
     t0 = time.time()
     _MEMO.clear()
     out_dir = Path(task["out_dir"])
@@ -76,9 +79,10 @@ def layout_task(task: dict) -> dict:
         tpl = template(task["template"], task["role"])
         work = out_dir / "work" / f"page-{task['page']:02d}"
         work.mkdir(parents=True, exist_ok=True, mode=0o700)
-        res = DG.layout_page(_STATE["cx"], _STATE["cal"], tpl, task["stories"], task["elements"], Path(task["photo_dir"]),
-                             task["precomputed"], task["page"], task["pages"], date.fromisoformat(task["date"]), task["edition"],
-                             work, regions=task.get("regions"))
+        with DG.on_grid(task.get("grid") or tpl.grid):
+            res = DG.layout_page(_STATE["cx"], _STATE["cal"], tpl, task["stories"], task["elements"], Path(task["photo_dir"]),
+                                 task["precomputed"], task["page"], task["pages"], date.fromisoformat(task["date"]),
+                                 task["edition"], work, regions=task.get("regions"))
         res["seconds"] = round(time.time() - t0, 1)
         if res.get("ok"):
             pdf = out_dir / task["out_pdf"]

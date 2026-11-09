@@ -9,12 +9,17 @@ How many stories a page gets: about as many as the paper prints on such a page (
 pages), fewer when the edition has fewer articles than the pages hold, so every page gets its share. Articles keep
 their order of importance: the front page takes the most important ones, then page 2, 3 …; pinned articles stay on
 their page. Deterministic: the same articles and options always give the same plan.
+
+A refined paper (hold): a page never fails because too many stories are pinned to it. The pinned stories beyond the
+page's target (the stories the paper usually prints on such a page, its learned stories per page) and, while the rest cannot fill the page exactly, the least
+important of them go to the holding list ("no room on page N"), least important first. A page on another grid
+(layout.grid_alternates) is planned on it, with the options measured on it.
 """
 from __future__ import annotations
 
 import math
 
-from deskgen import BRIEF_WIDTHS, G, rank_class
+from deskgen import BRIEF_WIDTHS, G, grid_now, on_grid, rank_class
 from deskmsg import msg
 
 MAX_MODULES = 10                 # modules per page the planner gives the search (gen1's limit is 11; fewer is faster)
@@ -81,18 +86,21 @@ def brief_widths_only(by_w: dict) -> dict:
 
 class Planner:
     """items: [{"key", "order", "pin", "brief"}] in order of importance; options: {key: {class: {w: [option]}}};
-    pages: [{"page", "regions", "target"}] (target: stories the paper usually prints on such a page)."""
+    pages: [{"page", "regions", "target"}, and "grid" and "options" (the stories' options on that grid) for a page on
+    another grid] (target: stories the paper usually prints on such a page; with hold, the most it takes).
+    hold: a refined paper's rule for stories pinned beyond what a page holds (module docstring)."""
 
-    def __init__(self, items, options, pages):
+    def __init__(self, items, options, pages, hold: bool = False):
         self.items = items
         self.by_key = {it["key"]: it for it in items}
-        self.options = options
+        self.options = self.base = options
         self.pages = pages
+        self.hold = hold
         self.log = []
         self._status = {}
 
     def opts(self, key, rank):
-        o = self.options[key][rank_class(rank)]
+        o = self.options.get(key, {}).get(rank_class(rank), {})     # not measured on this page's grid: none
         return brief_widths_only(o) if self.by_key[key]["brief"] else o
 
     def has_options(self, key, rank) -> bool:
@@ -121,7 +129,7 @@ class Planner:
 
     def status(self, keys, regions):
         """'fits' | 'short' | 'over' | 'gap' | 'none' (a story with no options at all), and the reachable heights."""
-        ck = (tuple(sorted(keys)), tuple(map(tuple, regions)))
+        ck = (tuple(sorted(keys)), tuple(map(tuple, regions)), grid_now())
         if ck in self._status:
             return self._status[ck]
         out = self._status_uncached(keys, regions)
@@ -156,35 +164,65 @@ class Planner:
         """→ (pages, unpinned stories left over, {pinned story: reason it is not placed})."""
         free = [it["key"] for it in self.items if it["pin"] is None]
         out, dropped = [], {}
-        for idx, pg in enumerate(self.pages):
-            p, regions = pg["page"], pg["regions"]
-            fixed = []
-            for it in self.items:
-                if it["pin"] != p:
-                    continue
-                if self.placeable(it["key"]):
-                    fixed.append(it["key"])
-                else:
-                    dropped[it["key"]] = msg("m.plan.headlineTooLong")
-            if len(fixed) > MAX_MODULES:                   # the layout search takes at most MAX_MODULES per page
-                keep = self.page_order(fixed)[:MAX_MODULES]
-                for k in fixed:
-                    if k not in keep:
-                        dropped[k] = msg("m.plan.pinnedFull", max=MAX_MODULES, page=p)
-                fixed = [k for k in fixed if k in keep]
-            # this page's share of what is left: as many as usual, fewer when the edition is short of stories
-            later = self.pages[idx:]
-            want = sum(q["target"] for q in later)
-            have = len(free) + sum(1 for it in self.items if it["pin"] is not None and it["pin"] >= p)
-            target = pg["target"] if have >= want else max(MIN_MODULES, round(pg["target"] * have / max(1, want)))
-            target = min(MAX_MODULES, max(target, len(fixed)))
-            chosen, shrink, why = self.fill(fixed, free, regions, target)
-            for k in chosen:
-                if k in free:
-                    free.remove(k)
-            out.append({"page": p, "keys": self.page_order(chosen), "shrink_units": shrink, "why": why})
-            self.log.append((p, why, len(chosen), target))
+        try:
+            for idx, pg in enumerate(self.pages):
+                self.options = pg.get("options", self.base)
+                with on_grid(pg.get("grid")):
+                    out.append(self._page(idx, pg, free, dropped))
+        finally:
+            self.options = self.base
         return out, free, dropped
+
+    def _page(self, idx, pg, free, dropped):
+        """One page of plan(): its stories (free loses those it takes; dropped gains the pinned ones it cannot hold)."""
+        p, regions = pg["page"], pg["regions"]
+        fixed = []
+        for it in self.items:
+            if it["pin"] != p:
+                continue
+            if self.placeable(it["key"]):
+                fixed.append(it["key"])
+            else:
+                dropped[it["key"]] = msg("m.plan.headlineTooLong")
+        if self.hold:                                  # the most the page holds: the least important wait
+            cap = min(MAX_MODULES, pg.get("cap", pg["target"]))
+            keep = self.page_order(fixed)[:cap]
+            for k in fixed:
+                if k not in keep:
+                    dropped[k] = msg("m.plan.noRoomOnPage", page=p)
+            fixed = [k for k in fixed if k in keep]
+        elif len(fixed) > MAX_MODULES:                 # the layout search takes at most MAX_MODULES per page
+            keep = self.page_order(fixed)[:MAX_MODULES]
+            for k in fixed:
+                if k not in keep:
+                    dropped[k] = msg("m.plan.pinnedFull", max=MAX_MODULES, page=p)
+            fixed = [k for k in fixed if k in keep]
+        # this page's share of what is left: as many as usual, fewer when the edition is short of stories
+        later = self.pages[idx:]
+        want = sum(q["target"] for q in later)
+        have = len(free) + sum(1 for it in self.items if it["pin"] is not None and it["pin"] >= p)
+        target = pg["target"] if have >= want else max(MIN_MODULES, round(pg["target"] * have / max(1, want)))
+        target = min(MAX_MODULES, max(target, len(fixed)))
+        chosen, shrink, why = self.fill(fixed, free, regions, target)
+        # pinned stories that cannot fill it exactly: the least important waits, as long as that leads to an exact fill
+        # with some of them still on it; otherwise all stay and the page is laid out with the not-fill warning (as
+        # without holding: a page around an ad that its stories only fall short of)
+        if self.hold and shrink is None and fixed:
+            kept, held = list(fixed), []
+            while shrink is None and len(kept) > 1:
+                held.append(self.page_order(kept)[-1])
+                kept.remove(held[-1])
+                chosen, shrink, why = self.fill(kept, free, regions, target)
+            if shrink is None:
+                chosen, shrink, why = self.fill(fixed, free, regions, target)
+            else:
+                for k in held:
+                    dropped[k] = msg("m.plan.noRoomOnPage", page=p)
+        for k in chosen:
+            if k in free:
+                free.remove(k)
+        self.log.append((p, why, len(chosen), target))
+        return {"page": p, "keys": self.page_order(chosen), "shrink_units": shrink, "why": why}
 
     def fill(self, fixed, free, regions, target):
         """The page's stories: the fixed ones (pinned, the page's short items), then free ones in order of importance up

@@ -21,6 +21,7 @@ HOUSE_BODY_BOLD = "HouseBody-Bold"   # role_font(): "Body" + "Bold" → the seri
 INDENT = 5.0                     # any value > 0.5: gen1 then applies the house's first-line indent (nearly every printed
                                  # paragraph is indented, the first one included)
 KICKER_PT, BYLINE_PT, CAPTION_PT, CROSSHEAD_PT = 22.8, 13.0, 13.0, 12.0   # house medians (page models)
+CREDIT_PT = 6.0                  # credit_mode "line" (gen1 sets it at its own CREDIT_PT)
 
 
 SENTENCE_END = ".!?।॥:;\"'”’)"
@@ -94,6 +95,8 @@ def caption_text(photo: dict | None) -> str:
     if not photo:
         return ""
     cap, credit = one_line(photo.get("caption")), one_line(photo.get("credit"))
+    if ST["credit_mode"] == "line":                  # the credit is a line of its own (credit_text)
+        return cap
     if credit and ST["caption_mode"] == "small":
         credit = short_credit(credit)
         if re.match(r"(छायाचित्र|छाया|फोटो|Photo|Image)\s*:", credit, re.I):   # already labelled: never "छाया: छायाचित्र:"
@@ -101,6 +104,13 @@ def caption_text(photo: dict | None) -> str:
     if cap and credit:
         return f"{cap} (छाया: {credit})"
     return cap or (f"छाया: {credit}" if credit else "")
+
+
+def credit_text(photo: dict | None) -> str:
+    """credit_mode "line": the credit as the article gives it (author, source, licence), only a Creative Commons
+    licence's long name shortened (short_credit); "" without a credit or in the other modes (it is in the caption)."""
+    credit = one_line((photo or {}).get("credit"))
+    return short_credit(credit) if credit and ST["credit_mode"] == "line" else ""
 
 
 def _el(eid: str, kind: str, text: str, size_pt: float, font: str = HOUSE_BODY_BOLD, **extra) -> dict:
@@ -191,6 +201,10 @@ def to_story(article: dict, rank_size: float, photo_ids: set) -> tuple[dict, lis
             small = {"small": True} if ST["caption_mode"] == "small" else {}     # regular weight, smaller
             els.append(_el(f"{sid}-c", "caption", cap, CAPTION_PT, **small))
             story["captions"] = [f"{sid}-c"]
+        credit = credit_text(photo)
+        if credit:                                   # credit_mode "line": a tiny line under the photo, not in the caption
+            els.append(_el(f"{sid}-cr", "caption", credit, CREDIT_PT, credit=True))
+            story["credit"] = f"{sid}-cr"
     for n, (kind, text) in enumerate(blocks(article.get("body", ""))):
         if kind == "crosshead":
             els.append(_crosshead(f"{sid}-x{n}", text))

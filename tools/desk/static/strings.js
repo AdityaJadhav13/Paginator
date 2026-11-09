@@ -1967,6 +1967,10 @@ const TABLE = {
     "More than {max} stories are pinned to page {page} — pin it to another page",
     "पान {page} वर {max} पेक्षा जास्त बातम्या पिन केल्या आहेत — ती दुसऱ्या पानावर पिन करा",
   ],
+  "m.plan.noRoomOnPage": [
+    "No room on page {page} — it waits: pin it to another page, or shorten the page's stories",
+    "पान {page} वर जागा नाही — ती थांबवली आहे: ती दुसऱ्या पानावर पिन करा, किंवा त्या पानावरील बातम्या छोट्या करा",
+  ],
   "m.plan.pageFailed": ["Page {n} could not be laid out: {message}", "पान {n} ची मांडणी होऊ शकली नाही: {message}"],
   "m.store.pasteText": ["Paste the articles as text.", "बातम्या मजकूर म्हणून पेस्ट करा."],
   "m.store.dateFormat": [

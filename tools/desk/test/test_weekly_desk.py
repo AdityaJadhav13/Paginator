@@ -18,7 +18,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 import desk_engine as DE  # noqa: E402
 import deskarticles as DA  # noqa: E402
 import deskgen as DG  # noqa: E402
+import deskplan as DP  # noqa: E402
 import deskprofile as DPR  # noqa: E402
+import deskworker as DW  # noqa: E402
 import settings as LS  # noqa: E402  (layout/settings.py, on the path through deskgen)
 
 PAPER = {"format": "pageinator.paper/1", "script": "deva", "refined_layout": True, "legacy_text": True}
@@ -60,8 +62,34 @@ class MapLayoutTest(unittest.TestCase):
         LS.use(got)                                       # every key is a setting
         LS.use(None)
 
+    def test_photos_density_captions_and_head_band_map(self):
+        got = DPR._map_layout({"density": {"lead_area_share": 0.42},
+                               "photos": {"width_cols": {"1": 3, "2": 1, "0": 0}, "area_share": 0.2, "per_page": [1, 2, 3],
+                                          "lead_width_cols": 2.0},
+                               "captions": {"caption_share": 0.0, "credit_share": 0.1},   # both rare: a credit line
+                               "furniture": {"head_band": {"stops": [[0, 0, 0, 0.1], [0, 0, 0, 0.3]], "axis": "x",
+                                                           "box_mm": [7.5, 6.7, 262.5, 19.2], "n": 7}}})
+        self.assertEqual(got, {"head_weight": 700, "lead_area_share": 0.42, "photo_area_share": 0.2, "photo_cols": {1: 0.75, 2: 0.25},
+                               "caption_mode": "small", "credit_mode": "line",
+                               "head_band_fill": {"stops": ((0.0, 0.0, 0.0, 0.1), (0.0, 0.0, 0.0, 0.3)), "axis": "x"}})
+        LS.use(got)
+        LS.use(None)
+        self.assertNotIn("credit_mode", DPR._map_layout({"captions": {"caption_share": 0.6, "credit_share": 0.1}}))
+        for path, bad in ((("photos", "width_cols"), {"x": 1}), (("photos", "width_cols"), {"1": -1}),
+                          (("photos", "area_share"), 2), (("density", "lead_area_share"), "half"),
+                          (("captions", "caption_share"), 1.5), (("furniture", "head_band"), {"stops": [[1, 0, 0]]}),
+                          (("furniture", "head_band"), {"stops": [[0, 0, 0, 1]], "axis": "z"}),
+                          (("furniture", "head_band"), {"stops": [], "axis": "x"}),
+                          (("furniture", "head_band"), {"stops": [[0, 0, 0, 1]], "box_mm": [1, 2]})):
+            with self.subTest(path=path, bad=bad), self.assertRaises(DPR.DamagedFile):
+                DPR._map_layout({path[0]: {path[1]: bad}})
+
     def test_missing_keys_keep_their_defaults(self):
         self.assertEqual(DPR._map_layout({}), {"head_weight": 700})
+
+    def test_photo_widths_under_a_column_are_not_widths(self):
+        self.assertEqual(DPR._map_layout({"photos": {"width_cols": {"0": 3, "1": 2}}})["photo_cols"], {1: 1.0})
+        self.assertNotIn("photo_cols", DPR._map_layout({"photos": {"width_cols": {"0": 3}}}))
 
     def test_what_a_real_paper_learns_never_damages_it(self):
         # an ad page (0 headlines), a gray rule (no CMYK), a hairline, nothing on the grid, a Unicode paper's ratio
@@ -110,7 +138,8 @@ class SettingsForTest(unittest.TestCase):
             DE.write_json(ds / "paper.json", {**PAPER, "refined_layout": False})
             self.assertEqual(DPR.settings_for(ds), {})
             DE.write_json(ds / "paper.json", PAPER)
-            self.assertEqual(DPR.settings_for(ds), {"refined": True} | DPR._map_layout(LAYOUT, DPR.is_legacy(ds)))
+            self.assertEqual(DPR.settings_for(ds), {"refined": True, "wrap_min_mm": max(40.0, DG.G.COL_W)}
+                             | DPR._map_layout(LAYOUT, DPR.is_legacy(ds)))
             DPR.use_dataset(ds)
             self.assertEqual(LS.ST["head_sizes"], {1: 20.8, 3: 32.0})
 
@@ -130,10 +159,12 @@ def legacy_model() -> dict:
 
 
 class LegacyTemplateTest(unittest.TestCase):
-    def template(self, ds: Path, pj: dict, role="inside"):
+    def template(self, ds: Path, pj: dict, role="inside", extra=()):
         m = legacy_model()
+        m["elements"] += list(extra)
 
         def real(self, ds, name, role):
+            self.seen_grid = DG.grid_now()
             self.role, self.page_w, self.page_h, self.model = role, 270.0, 340.0, {"page": 3}
             self.news_top, self.news_bottom, self.ad_block, self.regions = 22.0, 330.0, {"an": "ad block"}, []
             self.keep, self.dropped = [dict(e) for e in m["elements"]], []
@@ -181,6 +212,199 @@ class LegacyTemplateTest(unittest.TestCase):
         self.assertEqual(drawn, [("सोमवार, ९ नोव्हेंबर २०२६", 11.2, 135.0, (0, 0, 0, 1), "center"),     # house pt × r_cal
                                  ("३", 24.0, 257.0, (0, 0, 0, 0), "center")])                              # white, as printed
         self.assertNotIn(GARBAGE, " ".join(t for t, *_ in drawn))
+
+
+    def test_the_head_band_is_recorded_and_its_fill_drawn_under_the_tab(self):
+        with tempfile.TemporaryDirectory() as d:
+            tpl = self.template(Path(d), PAPER)
+        self.assertEqual(tpl.head_band, (7.5, 6.7, 262.5, 19.2))
+        B = types.SimpleNamespace(items=["band frame", "black page tab"])     # what the render drew of the band
+        fill = {"stops": ((0.0, 0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 0.4)), "axis": "x"}
+        DPR._draw_folios(lambda *a: [])(B, tpl, types.SimpleNamespace(r_cal=0.8), [], {"colour": {}})
+        self.assertEqual(B.items, ["band frame", "black page tab"])         # no learned fill: nothing (the pilot too)
+        with mock.patch.dict(DG.G.ST, {"head_band_fill": fill}):
+            DPR._draw_folios(lambda *a: [])(B, tpl, types.SimpleNamespace(r_cal=0.8), [], {"colour": {}})
+        img = B.items[0]
+        self.assertEqual(B.items[1:], ["band frame", "black page tab"])     # drawn first: the tab stays on top
+        self.assertIsInstance(img, DG.X.Image)
+        self.assertEqual((img.width_px, img.height_px), (DPR.BAND_PX, 4))
+        mm = DG.MM
+        self.assertEqual([round(v / mm, 3) for v in (img.x_pt, img.y_pt, img.w_pt, img.h_pt)], [7.5, 320.8, 255.0, 12.5])
+        front = types.SimpleNamespace(items=[], page_h=340.0)
+        with mock.patch.dict(DG.G.ST, {"head_band_fill": fill}):
+            DPR.draw_head_band(front, types.SimpleNamespace(page_h=340.0))   # a page without the band (a front page)
+        self.assertEqual(front.items, [])
+
+    def test_the_band_raster_blends_its_stops_along_its_axis(self):
+        w, h, raw = DPR.band_raster(((0, 0, 0, 0), (1, 0, 0, 0), (0, 0, 0, 1)), "x")
+        self.assertEqual((w, h, len(raw)), (512, 4, 512 * 4 * 4))
+        self.assertEqual((raw[:4], raw[4 * 511:4 * 512]), (bytes(4), bytes((0, 0, 0, 255))))
+        mid = 4 * 255
+        self.assertEqual(raw[mid:mid + 4], bytes((255, 0, 0, 0)))          # at the middle stop
+        self.assertEqual(raw[:4 * 512], raw[4 * 512:8 * 512])              # every row the same
+        w, h, raw = DPR.band_raster(((0, 0, 0, 0), (0, 0, 0, 1)), "y")
+        self.assertEqual((w, h), (4, 512))
+        self.assertEqual((raw[:16], raw[-16:]), (bytes(16), bytes((0, 0, 0, 255)) * 4))   # top row, bottom row
+
+    def test_the_masthead_strip_is_set_only_from_paper_json(self):
+        strip = {"id": "strip", "kind": "caption", "text": GARBAGE, "legacy_text": True, "size_pt": 13.0,
+                 "bbox_mm": [12.0, 19.5, 258.0, 21.5], "lines": [{"text": GARBAGE, "x0_mm": 12.0, "x1_mm": 258.0, "baseline_mm": 20.5}]}
+        with tempfile.TemporaryDirectory() as d:
+            front = self.template(Path(d), PAPER, "front", [strip])
+        self.assertEqual([e["id"] for e, _ in DPR.fresh_folios(front, 1, date(2026, 11, 9))], ["fresh-date"])   # empty: nothing
+        with tempfile.TemporaryDirectory() as d:
+            front = self.template(Path(d), {**PAPER, "masthead_strip_text": ["काल्पनिक नोंदणी क्र. ०००"]}, "front", [strip])
+        got = [(e["id"], e["fresh"], t) for e, t in DPR.fresh_folios(front, 1, date(2026, 11, 9))][1:]
+        self.assertEqual(len(got), 1)
+        i, slot, text = got[0]
+        self.assertEqual((i, text), ("fresh-strip-1", ["काल्पनिक नोंदणी क्र. ०००"]))
+        self.assertEqual((slot["x_mm"], slot["baseline_mm"], slot["align"], slot["bold"], slot["max_w_mm"]), (135.0, 20.5, "center", True, 246.0))
+        self.assertNotIn("strip", [e["id"] for e in front.keep])
+
+    def test_masthead_strip_text_is_checked(self):
+        with tempfile.TemporaryDirectory() as d:
+            ds = Path(d)
+            for bad in ("one line", [1], {"a": "b"}):
+                DE.write_json(ds / "paper.json", {**PAPER, "masthead_strip_text": bad})
+                with self.subTest(bad=bad), self.assertRaises(DE.DamagedFile):
+                    DPR.paper(ds)
+            DE.write_json(ds / "paper.json", {**PAPER, "masthead_strip_text": ["a", ""]})
+            self.assertEqual(DPR.paper(ds)["masthead_strip_text"], ["a", ""])
+
+    def test_a_page_on_the_other_grid_is_made_on_it(self):
+        alt = {"columns": 4, "column_width_mm": 60.5, "gutter_mm": 4.22, "pages": [3]}
+        main = DG.grid_now()
+        with tempfile.TemporaryDirectory() as d:
+            ds = Path(d)
+            DE.write_json(ds / "house_profile.json", profile({**LAYOUT, "grid_alternates": [alt]}))
+            tpl = self.template(ds, PAPER)
+            self.assertEqual(DPR.page_grid(ds, 3), (4, 60.5, 4.22, DG.MAIN_GRID[3]))
+            self.assertIsNone(DPR.page_grid(ds, 2))
+        self.assertEqual(tpl.seen_grid, (4, 60.5, 4.22, DG.MAIN_GRID[3]))
+        self.assertEqual(tpl.grid, tpl.seen_grid)
+        self.assertEqual(DG.grid_now(), main)                               # put back
+        with tempfile.TemporaryDirectory() as d:
+            tpl = self.template(Path(d), PAPER)                              # no alternates: the paper's grid
+        self.assertEqual(tpl.grid, DG.MAIN_GRID)
+
+
+class GridTest(unittest.TestCase):
+    ALT = (4, 60.5, 4.22, 7.5)
+
+    def test_on_grid_sets_and_puts_back_gen1s_grid(self):
+        main, pitch = DG.grid_now(), DG.G.PITCH
+        with DG.on_grid(self.ALT):
+            self.assertEqual((DG.G.NCOL, DG.G.COL_W, DG.G.GUT, DG.G.ORIGIN), self.ALT)
+            self.assertAlmostEqual(DG.G.PITCH, 64.72)
+            self.assertEqual(DG.G.span_mm(4), 4 * 60.5 + 3 * 4.22)
+            with DG.on_grid(main):
+                self.assertEqual(DG.grid_now(), main)
+            self.assertEqual(DG.grid_now(), self.ALT)
+        self.assertEqual((DG.grid_now(), DG.G.PITCH), (main, pitch))
+        with self.assertRaises(RuntimeError), DG.on_grid(self.ALT):
+            raise RuntimeError                                               # put back after an error too
+        self.assertEqual(DG.grid_now(), main)
+        with DG.on_grid(None):
+            self.assertEqual(DG.grid_now(), main)
+
+    def test_the_manifest_records_a_refined_pages_grid(self):
+        self.assertEqual(DG.grid_record(), {})                               # the pilot's manifest: unchanged
+        with mock.patch.dict(DG.G.ST, {"refined": True}), DG.on_grid(self.ALT):
+            self.assertEqual(DG.grid_record(), {"grid": {"columns": 4, "column_width_mm": 60.5, "gutter_mm": 4.22, "origin_mm": 7.5}})
+
+    def test_options_are_cached_per_grid(self):
+        cal, cx = types.SimpleNamespace(styles={}, space_em=0.3), types.SimpleNamespace(inputs={}, r_cal=0.8)
+        key = DE.options_cache_key({"id": "s1"}, [], None, cal, cx)
+        with DG.on_grid(self.ALT):
+            self.assertNotEqual(DE.options_cache_key({"id": "s1"}, [], None, cal, cx), key)
+        self.assertEqual(DE.options_cache_key({"id": "s1"}, [], None, cal, cx), key)
+
+    def test_workers_measure_and_lay_out_on_the_tasks_grid(self):
+        seen = []
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(DW._STATE, {"cx": None, "cal": None}), \
+                mock.patch.object(DG, "measure", lambda *a: seen.append(DG.G.NCOL) or {}), \
+                mock.patch.object(DG, "layout_page", lambda *a, **k: seen.append(DG.G.NCOL) or {"ok": False}), \
+                mock.patch.object(DW, "template", lambda name, role: types.SimpleNamespace(grid=self.ALT)):
+            self.assertTrue(DW.measure_task([], [], d, self.ALT)["ok"])
+            DW.measure_task([], [], d)
+            DW.layout_task({"page": 5, "pages": 8, "date": "2026-11-09", "edition": {}, "template": "w__p5", "role": "inside",
+                            "grid": self.ALT, "stories": [], "elements": [], "photo_dir": d, "precomputed": {}, "out_dir": d})
+        self.assertEqual(seen, [4, DG.G.NCOL, 4])
+
+    def test_damaged_alternates_are_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            ds = Path(d)
+            DE.write_json(ds / "paper.json", PAPER)
+            for bad in ({"columns": "4", "column_width_mm": 60.5, "gutter_mm": 4.2, "pages": [5]},
+                        {"columns": 4, "column_width_mm": 60.5, "gutter_mm": 4.2, "pages": "5"},
+                        {"columns": 4, "column_width_mm": -1, "gutter_mm": 4.2, "pages": [5]},
+                        {"columns": 4, "gutter_mm": 4.2, "pages": [9]}, "4 columns",
+                        {"columns": DG.MAIN_GRID[0] + 1, "column_width_mm": 10.0, "gutter_mm": 1.0, "pages": [5]},   # more columns
+                        {"columns": 2, "column_width_mm": 900.0, "gutter_mm": 1.0, "pages": [5]}):                   # too wide
+                DE.write_json(ds / "house_profile.json", profile({"grid_alternates": [bad]}))
+                with self.subTest(bad=bad), self.assertRaises(DE.DamagedFile):
+                    DPR.page_grid(ds, 5)
+        with tempfile.TemporaryDirectory() as d:                             # the pilot: never another grid
+            self.assertIsNone(DPR.page_grid(Path(d), 5))
+
+
+def opt(lo, hi):
+    return {"lo": lo, "hi": hi}
+
+
+class HoldingTest(unittest.TestCase):
+    """A refined paper's page never fails for its pinned stories: what it cannot hold waits (deskplan, hold)."""
+    W, TOP = DG.G.NCOL, 30.0
+
+    def page(self, **kw):
+        return {"page": 5, "regions": [(0, self.W, self.TOP, self.TOP + 100 * DG.G.UNIT + 0.01)], "target": 4, **kw}
+
+    def items(self, n):
+        return [{"key": f"s{i}", "order": i, "pin": 5, "brief": False} for i in range(n)]
+
+    def test_stories_beyond_the_target_wait_least_important_first(self):
+        side = {c: {w: [opt(90, 110)] for w in range(1, self.W + 1)} for c in (0, 1, 3)}   # any number fills, side by side
+        its = self.items(8)
+        pages, left, dropped = DP.Planner(its, {it["key"]: side for it in its}, [self.page(target=6)], hold=True).plan()
+        self.assertEqual(pages[0]["keys"], [f"s{i}" for i in range(6)])
+        self.assertEqual(sorted(dropped), ["s6", "s7"])
+        self.assertEqual(dropped["s7"], "No room on page 5 — it waits: pin it to another page, or shorten the page's stories")
+
+    def test_pinned_stories_that_overfill_the_page_lose_the_least_important(self):
+        stack = {c: {w: ([opt(45, 55)] if w == self.W else []) for w in range(1, self.W + 1)} for c in (0, 1, 3)}   # two fill it
+        its = self.items(3)
+        opts = {it["key"]: stack for it in its}
+        pages, _, dropped = DP.Planner(its, opts, [self.page()], hold=True).plan()
+        self.assertEqual((pages[0]["keys"], pages[0]["shrink_units"], list(dropped)), (["s0", "s1"], 0, ["s2"]))
+        pages, _, dropped = DP.Planner(its, opts, [self.page()]).plan()    # the pilot's rule: as it was
+        self.assertEqual((pages[0]["keys"], pages[0]["shrink_units"], dropped), (["s0", "s1", "s2"], None, {}))
+
+    def test_pinned_stories_that_only_fall_short_all_stay(self):
+        # a page around an ad (two regions) one short pinned story cannot fill: it stays (not-fill warning), never waits
+        short = {c: {w: [opt(10, 12)] for w in range(1, self.W + 1)} for c in (0, 1, 3)}
+        page = {**self.page(), "regions": [(0, 4, self.TOP, self.TOP + 100 * DG.G.UNIT), (4, self.W - 4, self.TOP, self.TOP + 60 * DG.G.UNIT)]}
+        pages, _, dropped = DP.Planner(self.items(1), {"s0": short}, [page], hold=True).plan()
+        self.assertEqual((pages[0]["keys"], dropped), (["s0"], {}))
+
+    def test_the_cap_is_the_most_the_paper_prints(self):
+        side = {c: {w: [opt(90, 110)] for w in range(1, self.W + 1)} for c in (0, 1, 3)}
+        its = self.items(8)
+        pages, _, dropped = DP.Planner(its, {it["key"]: side for it in its}, [self.page(cap=6)], hold=True).plan()
+        self.assertEqual((len(pages[0]["keys"]), sorted(dropped)), (6, ["s6", "s7"]))
+
+    def test_a_page_on_another_grid_is_planned_on_it_with_its_options(self):
+        alt = (4, 60.5, 4.22, 7.5)
+        none = {c: {w: [] for w in range(1, self.W + 1)} for c in (0, 1, 3)}
+        four = {c: {w: ([opt(90, 110)] if w == 4 else []) for w in range(1, 5)} for c in (0, 1, 3)}
+        its = self.items(1)
+        seen = []
+        real = DP.reach
+        with mock.patch.object(DP, "reach", lambda opts, W, Hn: seen.append(W) or real(opts, W, Hn)):
+            page = {**self.page(), "regions": [(0, 4, self.TOP, self.TOP + 100 * DG.G.UNIT + 0.01)], "grid": alt, "options": {"s0": four}}
+            pages, _, dropped = DP.Planner(its, {"s0": none}, [page], hold=True).plan()
+        self.assertEqual((pages[0]["keys"], pages[0]["shrink_units"], dropped), (["s0"], 0, {}))
+        self.assertEqual(set(seen), {4})
+        self.assertEqual(DG.grid_now(), DG.MAIN_GRID)
 
 
 class LegacyRatioTest(unittest.TestCase):

@@ -45,7 +45,7 @@ def photo(name, w, h):
     (PHOTO_DIR / f"{name}.cmyk.gz").write_bytes(gzip.compress(bytes([10, 20, 30, 40]) * (w * h)))
 
 
-def story(paras=4, image=None, treatment=None, kicker=True, byline=True, head=HEAD, caption=False):
+def story(paras=4, image=None, treatment=None, kicker=True, byline=True, head=HEAD, caption=False, credit=False):
     els = [el("h1", "headline", head, 30.0)]
     st = {"id": "s1", "synthetic": True, "headline": "h1", "headline_parts": [], "kicker": None, "decks": [], "byline": None,
           "captions": [], "images": [image] if image else [], "jump_lines": [], "other_elements": [], "parent_story": None,
@@ -59,6 +59,8 @@ def story(paras=4, image=None, treatment=None, kicker=True, byline=True, head=HE
         st["treatment"] = treatment
     if caption:
         els.append(el("c1", "caption", "नवे वाचनालय (छाया: प्रतिनिधी)", 10.0)); st["captions"] = ["c1"]
+    if credit:
+        els.append(el("cr1", "caption", "A. Writer / Example Commons / CC BY-SA 4.0", 6.0)); st["credit"] = "cr1"
     return G.Generator(cx, {"page": 0, "elements": els, "stories": [st]}, PHOTO_DIR, {(10.0, 13.0): 10, (9.5, 12.5): 5}, {"s1"}, 0.25)
 
 
@@ -325,6 +327,130 @@ class PhotoTest(Settings):
         self.assertEqual(g.photo_pos(g.stories[0], 2, 24.0), "head")        # the strip beside it too narrow for a line
         self.assertEqual(g.photo_pos(g.stories[0], 3, 47.5), "inset")       # two thirds of a weekly column stay beside it
         self.assertEqual(g.photo_pos(g.stories[0], 4, 47.5), "centre")
+
+class WrapMinTest(Settings):
+    over = {**WEEKLY, "wrap_min_mm": 30.0}
+
+    def strips(self, o, res):
+        """Every piece of a column line the photo's geometry leaves beside it (CP.line_intervals at each line band of
+        the photo's depth) that the photo narrows: [(column measure, piece width)]."""
+        ph, box = o["photo"], res["photo_box"]
+        sh = CP.wrap_shape({"box": (box[0], box[1], box[2], box[1] + ph["ob_h"]), "shape": ph["shape"], "gap_mm": settings.ST["wrap_gap_mm"]})
+        out = []
+        for c in res["columns"]:
+            for y in range(int(box[1]) - 3, int(box[1] + ph["ob_h"]) + 4):
+                for a, b in CP.line_intervals(c[0], c[2], y - 2.0, y + 1.0, [sh]):   # (the composer's own floor: no wrap_min)
+                    if b - a < c[2] - c[0] - 0.05:
+                        out.append((c[2] - c[0], b - a))
+        return out
+
+    def test_no_strip_narrower_than_wrap_min(self):
+        photo("p1", 1500, 1000)
+        photo("p2", 1000, 1300)
+        seen = set()
+        for img, w in (("p1", 4), ("p2", 4), ("p2", 3)):
+            g = story(paras=16, image=img, kicker=False)
+            s = g.stories[0]
+            opts = [o for o in g._options(s, w) if o["photo"] and o["photo"].get("pos")]
+            self.assertTrue(all(o["photo"]["pos"] == g.photo_pos(s, o["m"], o["cw"]) for o in opts))
+            for pos in {o["photo"]["pos"] for o in opts}:
+                with self.subTest(img=img, w=w, pos=pos):
+                    o = min((o for o in opts if o["photo"]["pos"] == pos), key=lambda o: o["static"])
+                    res = render_one(g, w, o)
+                    self.assertEqual(res["overset_lines"], 0)
+                    self.assertTrue(all(piece >= 30.0 for _, piece in self.strips(o, res)), self.strips(o, res))
+                    seen.add(pos)
+                    if pos == "inset":                      # (a real strip, so the check above is not empty)
+                        self.assertTrue(self.strips(o, res))
+                    if pos == "cols":                       # whole columns: no strip at all, the photo on the column edges
+                        box, cols = res["photo_box"], res["columns"]
+                        self.assertEqual(self.strips(o, res), [])
+                        self.assertTrue(any(abs(box[0] - c[0]) < 0.02 for c in cols) and any(abs(box[2] - c[2]) < 0.02 for c in cols))
+                        self.assertEqual(o["photo"]["ph_w"], o["photo"]["k"] * o["cw"] + (o["photo"]["k"] - 1) * G.GUT)
+                        self.assertLess(o["photo"]["ph_top"], o["y_b0"])   # at the head of its columns: no line above it
+                        self.assertLessEqual(o["photo"]["ph_h"], o["photo"]["ph_w"] + 1e-6)   # a portrait cropped towards square
+        self.assertIn("cols", seen)
+
+    def test_rule_by_strip_width(self):
+        photo("p1", 1500, 1000)
+        photo("p2", 1000, 1300)
+        g = story(image="p1")
+        s = g.stories[0]
+        self.assertEqual(g.photo_pos(s, 4, 47.5), "cols")       # half a column (20.8 mm) and two thirds (28.7) < 30 mm
+        settings.use({**WEEKLY, "wrap_min_mm": 20.0})
+        self.assertEqual(g.photo_pos(s, 4, 47.5), "centre")     # the centre across the gutter re-checked: 20.8 ≥ 20
+        settings.use({**WEEKLY, "wrap_min_mm": 30.0})
+        self.assertEqual(g.photo_pos(s, 3, 50.0), "inset")      # a wide column: two thirds of it (30.4 mm) stay beside
+        settings.use({**WEEKLY, "wrap_min_mm": 30.0, "photo_positions": ("head",)})
+        self.assertEqual(g.photo_pos(s, 4, 47.5), "head")       # no inside positions in the house: the head photo
+
+
+class PhotoColsTest(Settings):
+    over = {**WEEKLY, "photo_positions": ("head",), "photo_cols": {"2": 0.7, "3": 0.3}}
+
+    def grid(self, o):
+        return round(G.Generator.grid_cols(o["photo"]["ph_w"]))
+
+    def test_only_widths_the_paper_prints(self):
+        photo("p1", 1500, 1000)
+        g = story(paras=8, image="p1")
+        for w in (3, 4):
+            opts = [o for o in g._options(g.stories[0], w) if o["photo"]]
+            self.assertTrue(opts)
+            self.assertEqual({self.grid(o) for o in opts} - {2, 3}, set(), w)
+        settings.use({**WEEKLY, "photo_cols": {5: 1.0}})
+        self.assertEqual(g.photo_ks(3, 36.5), [3])                # none printed this narrow: the nearest (the widest)
+        settings.use({**WEEKLY, "photo_cols": {1: 1.0}})
+        self.assertEqual(g.photo_ks(3, 50.0), [1])
+
+    def test_the_lead_takes_the_widest_common_width(self):
+        photo("p1", 1500, 1000)
+        settings.use({**self.over, "photo_cols": {1: 0.4, 2: 0.4, 3: 0.3}})
+        g = story(paras=8, image="p1")
+        best = min((o for o in g._options(g.stories[0], 4) if o["photo"]), key=lambda o: o["static"])
+        self.assertEqual(self.grid(best), 3)
+        self.assertEqual(g.width_cost(g.stories[0], best["photo"]["ph_w"]), 0.0)
+        g.stories[0].rank = 3                                      # not the lead: the commonest widths cost nothing
+        self.assertEqual(g.width_cost(g.stories[0], 2 * G.COL_W + G.GUT), 0.0)
+        self.assertGreater(g.width_cost(g.stories[0], 3 * G.COL_W + 2 * G.GUT), 0.0)
+        settings.use({**self.over, "photo_cols": {1: 0.8, 2: 0.2}})     # the weekly: leads 2 columns, the rest 1
+        for rank, want in ((0, 2), (3, 1)):
+            g = story(paras=8, image="p1")
+            g.stories[0].rank = rank
+            best = min((o for o in g._options(g.stories[0], 4) if o["photo"]), key=lambda o: o["static"])
+            self.assertEqual(self.grid(best), want, rank)
+
+
+class CreditLineTest(Settings):
+    over = {**WEEKLY, "credit_mode": "line"}
+
+    def page(self, caption, pos):
+        photo("p2", 1000, 1300)
+        g = story(paras=16, image="p2", kicker=False, caption=caption, credit=True)
+        o = min((o for o in g._options(g.stories[0], 4) if o["photo"] and bool(o["photo"].get("pos")) == pos), key=lambda o: o["static"])
+        g.regions = [(0, G.NCOL, TOP, TOP + o["lo"] * G.UNIT)]
+        B, rep, _ = G.render(g, MODEL, [(0, G.ORIGIN, TOP, 4, o["lo"] * G.UNIT, o)], TOP, 500.0, PHOTO_DIR, [], [], ({}, {}))
+        return B, rep["stories"][0]
+
+    def test_credit_alone_without_a_caption(self):
+        for pos in (False, True):                                 # a head photo and an inset
+            with self.subTest(inset=pos):
+                B, res = self.page(False, pos)
+                box = res["photo_box"]
+                cr = [ln for ln in B.lines if ln.get("role") == "credit"]
+                self.assertEqual(res["overset_lines"], 0)
+                self.assertEqual([ln for ln in B.lines if ln.get("role") == "caption"], [])
+                self.assertEqual(" ".join(ln["text"] for ln in cr), "A. Writer / Example Commons / CC BY-SA 4.0")
+                self.assertEqual({ln["size_pt"] for ln in cr}, {G.CREDIT_PT})
+                self.assertTrue(all(abs(ln["x1_mm"] - box[2]) < 0.01 and ln["baseline_mm"] > box[3] for ln in cr))   # right, under
+
+    def test_caption_under_the_credit(self):
+        B, res = self.page(True, True)
+        cr = [ln for ln in B.lines if ln.get("role") == "credit"]
+        cap = [ln for ln in B.lines if ln.get("role") == "caption"]
+        self.assertEqual(res["overset_lines"], 0)
+        self.assertTrue(cr and cap and min(c["baseline_mm"] for c in cap) > max(c["baseline_mm"] for c in cr))
+
 
 if __name__ == "__main__":
     unittest.main()

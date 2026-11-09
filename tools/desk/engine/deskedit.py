@@ -236,6 +236,12 @@ class PageSession:
     refreshed since, if any), manifest and photo folder, so it sets exactly what the run set until something is changed."""
 
     def __init__(self, engine, home: Path, edition_dir: Path, run_dir: Path, page: int):
+        """Opened on its template's grid (a paper's page on another grid: deskgen.on_grid), as every request to it is."""
+        man = read_json(run_dir / f"page-{page:02d}.manifest.json")
+        with DG.on_grid(engine.template(man["template_role"]).grid):
+            self._open(engine, home, edition_dir, run_dir, page)
+
+    def _open(self, engine, home: Path, edition_dir: Path, run_dir: Path, page: int):
         self.engine, self.home, self.run_dir, self.page = engine, home, run_dir, page
         req = read_json(run_dir / "request.json")
         man = read_json(run_dir / f"page-{page:02d}.manifest.json")
@@ -948,12 +954,14 @@ class PageSession:
             raise ValueError(msg("m.edit.moveLockedThere", name=self._name(story), page=held[0]))
         pinned = self._pinned(story, to)
         target = open_page(to)
-        placed, module, before = target.receive(m)
+        with DG.on_grid(target.tpl.grid):                # that page is set on its own grid
+            placed, module, before = target.receive(m)
         try:
             drawn = self.apply([x for x in self.modules if x["story"] != story])
         except Exception:
             if before is not None:
-                target.give_back(before)
+                with DG.on_grid(target.tpl.grid):
+                    target.give_back(before)
             raise
         return {**drawn, "moved": {"story": story, "page": to, "rev": target.rev, "module": module, "placed": placed,
                                    "pinned": pinned}}

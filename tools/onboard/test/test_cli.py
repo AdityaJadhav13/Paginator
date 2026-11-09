@@ -4,7 +4,8 @@ Fast: a set that is too small is rejected (a finished job, exit 0); --min-editio
 fonts without --script are refused (never a script vote on garbage); SIGTERM stops a build promptly; O6 rules.
 SLOW (PGN_ONBOARD_SLOW=1, a few minutes, needs the oracle's Python): build + pack of the English paper end to end, the
 outputs in the contract's shapes, and a deterministic ZIP; the legacy-encoded Marathi paper built by geometry with
---script deva --refined-layout (script confirmed, not voted; legacy text marked; the learned "layout" block).
+--script deva --refined-layout (script confirmed, not voted; legacy text marked; the learned "layout" block, its photo,
+caption and lead-story keys).
 """
 from __future__ import annotations
 
@@ -169,6 +170,11 @@ class EndToEnd(unittest.TestCase):
             lay = prof["layout"]
             self.assertEqual(lay["schema"], "pageinator.layout/1")
             self.assertTrue({"headline", "body", "rules", "density", "margins_mm"} <= set(lay))
+            # the fixture's photos span 2 or 3 columns with a caption under each and no credit line
+            self.assertTrue(set(lay["photos"]["width_cols"]) <= {"2", "3"} and lay["photos"]["lead_width_cols"] in (2, 2.5, 3))
+            self.assertGreaterEqual(lay["captions"]["caption_share"], 0.8)
+            self.assertEqual(lay["captions"]["credit_share"], 0.0)
+            self.assertTrue(0 < lay["photos"]["area_share"] < lay["density"]["lead_area_share"] < 1)
             self.assertTrue(all(k.startswith(("5col:", "6col:", "off_grid")) for k in prof["headline_size"]["by_span"]))
 
 

@@ -1461,6 +1461,12 @@ Each is learned from its own PDFs.
   and read for geometry only. The script must be confirmed (`--script`, else `onboard.script_unconfirmed`). Legacy text
   is never set again; the running head is drawn fresh. The headline-size key now uses the real column count.
 - **Fonts.** OFL stand-ins (Noto Sans Devanagari) until the owner's Unicode Shree fonts arrive.
+- **Round 2 (2026-11-10):**
+  - **Holding list:** stories that do not fit wait as "No room on page N" instead of failing the page.
+  - **Per-page grids:** the 4-column pages are built on their own grid (`deskgen.on_grid`).
+  - **Photos:** widths follow what the paper prints, and the page lead gets the widest. No text strip is narrower than the learned minimum: photos take whole columns instead.
+  - **Credits:** a separate 6 pt credit line.
+  - **Running head:** the band's learned shaded fill is drawn, and the masthead strip text comes from paper.json.
 - **Open items** are in doc 11, ENG.
 
 ## Appendix A. Versions and licences checked on 2026-10-20

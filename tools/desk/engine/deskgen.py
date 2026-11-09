@@ -18,6 +18,7 @@ import json
 import math
 import os
 import sys
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 
@@ -37,6 +38,47 @@ BRIEF_WIDTHS = (1, 2)            # an "in brief" column is one or two grid colum
 
 def rank_class(rank: int) -> int:
     return 0 if rank == 0 else 1 if rank <= 2 else 3
+
+
+# ------------------------------------------------------------------------------------------- grids
+GRID_KEYS = ("NCOL", "COL_W", "GUT", "ORIGIN")
+
+
+def grid_now() -> tuple:
+    """gen1's grid in force: (columns, column width mm, gutter mm, origin mm)."""
+    return tuple(getattr(G, k) for k in GRID_KEYS)
+
+
+MAIN_GRID = grid_now()           # the paper's own grid (deskprofile.use_dataset sets it with the dataset's)
+
+
+def _set_grid(grid: tuple) -> None:
+    for k, v in zip(GRID_KEYS, grid, strict=True):
+        setattr(G, k, v)
+    G.PITCH = G.COL_W + G.GUT
+
+
+def grid_record() -> dict:
+    """A refined paper's page manifest records the grid it was laid out on; the pilot's manifest stays as it was."""
+    if not getattr(G, "ST", {}).get("refined"):
+        return {}
+    return {"grid": dict(zip(("columns", "column_width_mm", "gutter_mm", "origin_mm"), grid_now(), strict=True))}
+
+
+@contextmanager
+def on_grid(grid):
+    """gen1's grid (its module globals; PITCH follows) set to grid for the block, then put back. gen1 reads them at every
+    call, so a page of a paper's other grid (layout.grid_alternates, deskprofile.page_grid) is measured, planned, laid out
+    and edited on it. None, or the grid in force: nothing changes (the pilot's one grid)."""
+    old = grid_now()
+    if grid is None or tuple(grid) == old:
+        yield
+        return
+    _set_grid(tuple(grid))
+    try:
+        yield
+    finally:
+        _set_grid(old)
 
 
 # ------------------------------------------------------------------------------------------- calibration
@@ -99,7 +141,7 @@ class Template:
     imprint, rules and panels) and the ad spaces, emptied."""
 
     def __init__(self, ds: Path, name: str, role: str):
-        self.name, self.role = name, role
+        self.name, self.role, self.grid = name, role, grid_now()
         f = ds / "report" / "page1" / "pages" / f"{name}.json"
         m_orig = json.loads(f.read_text(encoding="utf-8"))
         hole, why = G.newshole(m_orig)
@@ -181,7 +223,8 @@ class Template:
                          for k, e in enumerate(ads)]
 
     def news_mm2(self) -> float:
-        return sum(G.span_mm(w) * (b - t) for _, w, t, b in self.regions)
+        with on_grid(self.grid):
+            return sum(G.span_mm(w) * (b - t) for _, w, t, b in self.regions)
 
     def summary(self) -> dict:
         return {"role": self.role, "news_top_mm": round(self.news_top, 1), "news_bottom_mm": round(self.news_bottom, 1),
@@ -405,7 +448,7 @@ def layout_page(cx, cal: Calibration, tpl: Template, stories: list, elements: li
                          "ink_retries": ink_retries, "overset_lines": overset, "unset_paragraphs": unset,
                          "placed": placed_out, "folios_rewritten": folios, "fixed_problems": rep["fixed_problems"],
                          "problems": problems, "news_box_mm": [G.ORIGIN, round(news_top, 2), round(G.ORIGIN + G.span_mm(G.NCOL), 2), round(news_bottom, 2)],
-                         "photos_drawn": rep.get("photos", 0)},
+                         "photos_drawn": rep.get("photos", 0)} | grid_record(),
             "warnings": warnings}
 
 

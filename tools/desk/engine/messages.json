@@ -118,6 +118,7 @@
   "m.plan.tooLong": "Too long for a whole page — shorten it",
   "m.plan.noRoom": "No room left — add pages, lower another story's priority, or pin it to a page",
   "m.plan.pinnedFull": "More than {max} stories are pinned to page {page} — pin it to another page",
+  "m.plan.noRoomOnPage": "No room on page {page} — it waits: pin it to another page, or shorten the page's stories",
   "m.plan.pageFailed": "Page {n} could not be laid out: {message}",
   "m.store.pasteText": "Paste the articles as text.",
   "m.store.dateFormat": "Give the edition's date as YYYY-MM-DD, for example 2026-10-21.",

@@ -162,6 +162,22 @@ class ArticlesTest(Weekly):
         _, els = DA.to_story(ARTS[0], 999.0, set())
         self.assertEqual([e.get("end_signature") for e in els if e["kind"] == "byline"], [True])
 
+    def test_credit_line_apart_from_the_caption(self):
+        """credit_mode "line": the caption without the credit, the credit as its own element (author, source, licence:
+        only the licence's name shortened), referenced by the story's "credit"; no caption: only the credit."""
+        self.weekly(caption_mode="small", credit_mode="line")
+        s, els = DA.to_story(ARTS[0], 999.0, {"p-0000000001"})
+        ids = {e["id"]: e for e in els}
+        self.assertEqual(ids[s["captions"][0]]["text"], "काल्पनिक छायाचित्र")
+        self.assertEqual((ids[s["credit"]]["text"], ids[s["credit"]]["size_pt"]), ("A. Writer / Wikimedia Commons / CC BY-SA 4.0", DA.CREDIT_PT))
+        s, els = DA.to_story({**ARTS[0], "photo": {**ARTS[0]["photo"], "caption": ""}}, 999.0, {"p-0000000001"})
+        self.assertEqual((s["captions"], [e["text"] for e in els if e["id"] == s["credit"]]),
+                         ([], ["A. Writer / Wikimedia Commons / CC BY-SA 4.0"]))
+        s, _ = DA.to_story({**ARTS[0], "photo": {**ARTS[0]["photo"], "credit": ""}}, 999.0, {"p-0000000001"})
+        self.assertNotIn("credit", s)
+        s, _ = DA.to_story(ARTS[0], 999.0, set())                          # the photo not available: no credit either
+        self.assertNotIn("credit", s)
+
     def test_short_credit_never_drops_the_attribution(self):
         self.assertEqual(DA.short_credit("Photo: B. Name, CC BY 4.0"), "Photo: B. Name, CC BY 4.0")
         self.assertEqual(DA.short_credit("X / Creative Commons Attribution-NonCommercial-NoDerivs 3.0 Unported License"),

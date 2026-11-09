@@ -1234,7 +1234,7 @@ class MoveCase(LockCase):
         s.page, s.pages, s.run_dir, s.rev, s.edition_dir = n, 4, self.run, 3, self.run.parent.parent
         s.edit_path = self.run / f"page-{n:02d}.edit.json"
         s.modules, s.origin, s.built = [dict(m) for m in modules], {}, self.built()
-        s.tpl = types.SimpleNamespace(news_top=TOP, news_bottom=FOOT, regions=[(0, G.NCOL, TOP, FOOT)], model={})
+        s.tpl = types.SimpleNamespace(news_top=TOP, news_bottom=FOOT, regions=[(0, G.NCOL, TOP, FOOT)], model={}, grid=None)
         s.engine, s.fixed_boxes = self.engine, []
         s.options, s.partial, s.extra_rows, s.keep = {}, set(), {}, []
         s.draw = lambda: {"rev": s.rev, "modules": s.modules}     # setting the page itself is not under test here

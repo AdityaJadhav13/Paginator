@@ -1362,6 +1362,7 @@ export const EN = {
   "m.plan.headlineTooLong": "Its headline is too long to set (at most four lines) — shorten the headline",
   "m.plan.tooLong": "Too long for a whole page — shorten it",
   "m.plan.noRoom": "No room left — add pages, lower another story's priority, or pin it to a page",
+  "m.plan.noRoomOnPage": "No room on page {page} — it waits: pin it to another page, or shorten the page's stories",
   "m.plan.pinnedFull": "More than {max} stories are pinned to page {page} — pin it to another page",
   "m.plan.pageFailed": "Page {n} could not be laid out: {message}",
   "m.store.adBusy": "Ads cannot be changed while the pages are being made. Wait until that finishes, or cancel it.",

@@ -40,10 +40,16 @@ DEFAULTS = {
     "photo_positions": ("head",),     # "head" (gen1: top left) | "inset" (right, in the text) | "centre" (across a gutter)
     "photo_shapes": ("rect",),        # "rect" | "ellipse" (cut-outs need masks: not available)
     "wrap_gap_mm": 1.5,               # clearance between a photo and the text running round it (compose_page WRAP_GAP_MM)
+    "wrap_min_mm": None,              # a text strip beside a photo narrower than this: no wrap (the photo takes whole columns)
+    "photo_cols": None,               # {k: share} photo widths in grid columns the paper prints (None: gen1's k = 1 … m)
+    "photo_area_share": None,         # median share of a page's news area its photos take
+    "credit_mode": "caption",         # "caption": the credit inside the caption (today) | "line": a tiny credit line
     # --- panels (B6)
     "panels": None,                   # {treatment: spec} from the profile (layout/panels.py); None: no treatments
     # --- pages (B7)
     "stories_per_page": None,         # (min, max) target per page; None: the Desk's needs_per_role
+    "lead_area_share": None,          # median share of a page's news area its lead story takes
+    "head_band_fill": None,           # the running-head band's shaded fill: {"stops": [[c, m, y, k], …], "axis": "x"|"y"}
 }
 
 ST: dict = dict(DEFAULTS)

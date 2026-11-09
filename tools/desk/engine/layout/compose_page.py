@@ -876,7 +876,8 @@ def set_story(B: Builder, cx: Context, story: dict, words_width, els: dict, obst
             a = rect_avail(c, yb)
             if a[0] == "blocked":
                 return a
-            return line_intervals(a[0], a[1], yb - ASC * em, yb + DESC * em, shapes, min_line) or ("blocked", -1e9)  # one leading down
+            return line_intervals(a[0], a[1], yb - ASC * em, yb + DESC * em, shapes, max(min_line, ST["wrap_min_mm"] or 0.0)) \
+                or ("blocked", -1e9)  # one leading down; wrap_min_mm: no strip beside a photo narrower than the house's
 
         def sub_at(c, yb):
             return state["sub"] if state.get("sub_at") == (c, yb) else 0

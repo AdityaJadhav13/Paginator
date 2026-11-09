@@ -256,3 +256,13 @@ photos. Twenty stories were left out by page capacity, and 5 were skipped as ask
 - **Only one weekly edition.** The owner is sending more, and the profile is provisional until there are 3 or more.
 - **Not done yet:** the 4-column pages, ellipse crops on a real page (none qualified), cut-outs (no masks exist), the
   English page's serif, the imprint and masthead-strip text (doc 11, ENG).
+
+**Round 2 (2026-11-10).** Three changes:
+- A holding list: stories that do not fit wait as "No room on page N" and no page fails.
+- The weekly's 4-column pages are built on their own grid.
+- Photos are sized by the widths the weekly prints, with no text strip under 40 mm. Credits are a separate 6 pt line. The band's shaded fill is drawn.
+
+On the 9 November weekly, all 72 stories were sent, minus 5 skipped. Results:
+- **Layout:** 47 stories on 8 pages (5–6 per page); 25 waited for space.
+- **PDF/X-1a:** every page passed with 0 failures.
+- **Parity:** the pilot's 8 pages are byte-identical, against the frozen gen1 and against the round-1 commit.

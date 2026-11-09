@@ -2496,6 +2496,217 @@ def panel_kind(fill, text: list):
     return None
 
 
+def photo_cols(w: float, colw: float, gut: float) -> int:
+    """A photo's width in whole columns of a grid (a photo across a gutter: its covered span, rounded)."""
+    return max(1, round((w + gut) / (colw + gut)))
+
+
+def news_area(P: dict, x0: float, x1: float) -> float:
+    """The page's news area (mm²): the type area's width from under the top block to the lowest text, less its ads."""
+    top = P["topblock"]["y1"] if P["topblock"] else 0.0
+    ads = sum((a["x1"] - a["x0"]) * (a["y_bot"] - a["y_top"]) for a in P["ads"])
+    return max(0.0, (x1 - x0) * (P["content_bottom"] - top) - ads)
+
+
+def lead_story(P: dict, photos: list):
+    """(bbox, photo or None) of the story under the page's largest headline: its span, from the headline's cap top down
+    to the lowest body run or photo (centre in the span) above the next headline or rule across the span; None without
+    a headline."""
+    heads = [d for d in P["disp"] if d["kind"] == "headline"]
+    if not heads:
+        return None
+    d = max(heads, key=lambda d: (d["size"], d["span"][1] - d["span"][0], -d["y_top"]))
+    s0, s1 = d["span"]
+    sw = s1 - s0
+    top = d["y_top"] - 0.75 * d["size"] / MM
+    stop = [P["content_bottom"] + 1.0]
+    stop += [e["y_top"] - 0.75 * e["size"] / MM for e in P["disp"] if e is not d and e["kind"] in HEAD_KINDS
+             and e["y_top"] > d["y_bot"] and HL.overlap(s0, s1, e["x0"], e["x1"]) >= 0.5 * min(sw, e["x1"] - e["x0"])]
+    stop += [s["y0"] for s in P["strokes"] if s["y1"] - s["y0"] <= 0.5 and s["y0"] > d["y_bot"]
+             and HL.overlap(s0, s1, s["x0"], s["x1"]) >= 0.5 * sw]
+    stop = min(stop)
+    parts = [e for e in body_runs(P) + photos if s0 <= (e["x0"] + e["x1"]) / 2 <= s1 and d["y_bot"] < e["y_top"] < stop]
+    box = (s0, top, s1, max([d["y_bot"]] + [e["y_bot"] for e in parts]))
+    ph = [im for im in photos if any(im is e for e in parts)]
+    return box, max(ph, key=lambda im: (im["x1"] - im["x0"]) * (im["y_bot"] - im["y_top"]), default=None)
+
+
+def caption_credit(P: dict, im: dict) -> tuple:
+    """(caption, credit) beside a photo. Lines: caption frames (headlines.py) under the photo (first baseline -1..10 mm
+    below it) or beside it (overlapping its depth, <= 5 mm to the side), and loose small-type rows (<= 0.85 x body)
+    from 6 mm inside its foot to 5 mm under it. A credit is a short line (<= half the photo's width) flush right with
+    the photo; a caption is any other caption line."""
+    w = im["x1"] - im["x0"]
+    lines, taken = [], []
+    for d in P["disp"]:
+        if d["kind"] != "caption":
+            continue
+        under = -1 <= d["y_top"] - im["y_bot"] <= 10 and HL.overlap(d["x0"], d["x1"], im["x0"], im["x1"]) >= 0.5 * (d["x1"] - d["x0"])
+        beside = HL.overlap(d["y_top"], d["y_bot"] + 2, im["y_top"], im["y_bot"]) > 0 and 0 <= max(d["x0"] - im["x1"], im["x0"] - d["x1"]) <= 5
+        if under or beside:
+            lines += [(l["x0"], l["x1"]) for l in d["lines"]]
+        taken += [l["y"] for l in d["lines"]]
+    rows = defaultdict(list)
+    for g in P["glyphs"]:
+        if g["size"] <= 0.85 * P["body_size"] and im["y_bot"] - 6 <= g["y"] <= im["y_bot"] + 5 and im["x0"] - 1 <= g["x0"] \
+                and g["x1"] <= im["x1"] + 1 and not any(abs(g["y"] - y) <= SAME_LINE_MM for y in taken):
+            rows[round(g["y"], 1)].append(g)
+    lines += [(min(g["x0"] for g in gs), max(g["x1"] for g in gs)) for gs in rows.values()]
+    credit = [l for l in lines if l[1] - l[0] <= 0.5 * w and abs(l[1] - im["x1"]) <= 2.0 and l[0] > im["x0"] + 0.25 * w]
+    return len(lines) > len(credit), bool(credit)
+
+
+def fn_eval(f, t: float):
+    """A PDF function's outputs at t: Type 2 (exponential), Type 3 (stitching) or an array of them; else None."""
+    import pikepdf  # noqa: PLC0415
+    if isinstance(f, pikepdf.Array):
+        outs = [fn_eval(g, t) for g in f]
+        return None if any(o is None for o in outs) else [v for o in outs for v in o]
+    ft, dom = int(f.FunctionType), [float(v) for v in f.Domain]
+    t = min(max(t, dom[0]), dom[1])
+    if ft == 2:
+        c0, c1 = [float(v) for v in f.get("/C0", [0])], [float(v) for v in f.get("/C1", [1])]
+        return [a + t ** float(f.N) * (b - a) for a, b in zip(c0, c1)]
+    if ft == 3:
+        bs, enc, fs = [float(v) for v in f.Bounds], [float(v) for v in f.Encode], list(f.Functions)
+        i = sum(1 for b in bs if t >= b)
+        lo, hi = ([dom[0]] + bs)[i], (bs + [dom[1]])[i]
+        e0, e1 = enc[2 * i], enc[2 * i + 1]
+        return fn_eval(fs[i], e0 + (t - lo) * (e1 - e0) / (hi - lo) if hi > lo else e0)
+    return None
+
+
+def cs_cmyk(cs, v: list):
+    """Shading colour components as CMYK 0–1 (gray → K = 1 − g; DeviceN/Separation of process inks); else None."""
+    import pikepdf  # noqa: PLC0415
+    arr = isinstance(cs, pikepdf.Array)
+    name = str(cs[0] if arr else cs)
+    if name == "/DeviceCMYK" or (name == "/ICCBased" and int(cs[1].N) == 4):
+        return [round(x, 3) for x in v[:4]]
+    if name == "/DeviceGray" or (name == "/ICCBased" and int(cs[1].N) == 1):
+        return [0.0, 0.0, 0.0, round(1 - v[0], 3)]
+    if name in ("/DeviceN", "/Separation"):
+        names = [str(n) for n in (cs[1] if name == "/DeviceN" else [cs[1]])]
+        slot = {"/Cyan": 0, "/Magenta": 1, "/Yellow": 2, "/Black": 3}
+        if all(n in slot for n in names):
+            out = [0.0] * 4
+            for n, x in zip(names, v):
+                out[slot[n]] = round(x, 3)
+            return out
+    return None
+
+
+def shade_bands(P: dict) -> list:
+    """Axial shadings painted with `sh` inside a clip (form XObjects descended): {"box": trim mm [x0, y0, x1, y1] of the
+    clip it fills, "axis", "stops": 2–5 CMYK colours in order along the axis (left → right, top → bottom)}.
+    shortcut: shading patterns (scn + fill) and radial/mesh shadings are not read; add them when a paper uses them."""
+    import pikepdf  # noqa: PLC0415
+    tx0, _, _, ty1 = P["trim_mm"]
+    out = []
+
+    def mul(a, b):
+        return (a[0] * b[0] + a[1] * b[2], a[0] * b[1] + a[1] * b[3], a[2] * b[0] + a[3] * b[2], a[2] * b[1] + a[3] * b[3],
+                a[4] * b[0] + a[5] * b[2] + b[4], a[4] * b[1] + a[5] * b[3] + b[5])
+
+    def ap(m, x, y):
+        return m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]
+
+    def walk(res, stream, ctm, clip):
+        if "/Shading" not in res and not any(x.get("/Subtype") == "/Form" for _, x in (res.get("/XObject") or {}).items()):
+            return                                       # nothing to find: skip parsing the stream
+        stack, path = [], []
+        for ops, op in pikepdf.parse_content_stream(stream):
+            o = str(op)
+            if o == "q":
+                stack.append((ctm, clip))
+            elif o == "Q" and stack:
+                ctm, clip = stack.pop()
+            elif o == "cm":
+                ctm = mul(tuple(float(v) for v in ops), ctm)
+            elif o == "re":
+                x, y, w, h = (float(v) for v in ops)
+                path += [ap(ctm, x, y), ap(ctm, x + w, y), ap(ctm, x, y + h), ap(ctm, x + w, y + h)]
+            elif o in ("m", "l", "c", "v", "y"):
+                path += [ap(ctm, float(ops[k]), float(ops[k + 1])) for k in range(0, len(ops), 2)]
+            elif o in ("W", "W*") and path:
+                b = (min(p[0] for p in path), min(p[1] for p in path), max(p[0] for p in path), max(p[1] for p in path))
+                clip = b if clip is None else (max(clip[0], b[0]), max(clip[1], b[1]), min(clip[2], b[2]), min(clip[3], b[3]))
+            elif o in ("n", "S", "s", "f", "F", "f*", "B", "B*", "b", "b*"):
+                path = []
+            elif o == "Do":
+                x = (res.get("/XObject") or {}).get(str(ops[0]))
+                if x is not None and x.get("/Subtype") == "/Form":
+                    walk(x.get("/Resources", res), x, mul(tuple(float(v) for v in x.get("/Matrix", [1, 0, 0, 1, 0, 0])), ctm), clip)
+            elif o == "sh" and clip is not None:
+                sh = (res.get("/Shading") or {}).get(str(ops[0]))
+                if sh is None or int(sh.get("/ShadingType", 0)) != 2:
+                    continue
+                c = [float(v) for v in sh.Coords]
+                (ax, ay), (bx, by) = ap(ctm, c[0], c[1]), ap(ctm, c[2], c[3])
+                d0, d1 = (float(v) for v in sh.get("/Domain", [0, 1]))
+                f = sh.Function
+                ts = [d0] + [float(b) for b in f.Bounds] + [d1] if not isinstance(f, pikepdf.Array) and int(f.FunctionType) == 3 else [d0, d1]
+                if len(ts) > 5:
+                    ts = [d0 + (d1 - d0) * k / 4 for k in range(5)]
+                vals = [fn_eval(f, t) for t in ts]
+                stops = [cs_cmyk(sh.ColorSpace, v) if v else None for v in vals]
+                if any(s is None for s in stops):
+                    continue
+                axis = "x" if abs(bx - ax) >= abs(by - ay) else "y"
+                if (axis == "x" and bx < ax) or (axis == "y" and by > ay):   # PDF y is up; stops run top → bottom
+                    stops.reverse()
+                out.append({"box": (clip[0] / MM - tx0, ty1 - clip[3] / MM, clip[2] / MM - tx0, ty1 - clip[1] / MM),
+                            "axis": axis, "stops": stops})
+
+    with pikepdf.open(P["pdf"]) as pdf:
+        pg = pdf.pages[P["page"] - 1]
+        walk(pg.Resources, pg, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0), None)
+    return out
+
+
+def head_band(P: dict):
+    """The running head's shaded band: the topmost full-width shading at the page head (width >= 0.85 x page, top <
+    8 % of the page height, height < 8 %), or None."""
+    ok = [b for b in shade_bands(P) if b["box"][2] - b["box"][0] >= 0.85 * P["W"] and b["box"][1] < 0.08 * P["H"]
+          and b["box"][3] - b["box"][1] < 0.08 * P["H"]]
+    return min(ok, key=lambda b: b["box"][1], default=None)
+
+
+def news_keys(pages: list, ph_of: dict, grid_of, tx: list) -> dict:
+    """Over news pages (>= 1 headline): {"photos": width_cols (each page's grid), per_page [lo, median, hi], area_share,
+    lead_width_cols}, {"captions": caption_share, credit_share} and lead_area_share (medians of per-page shares of the
+    news area). ph_of: id(page) -> its photos; grid_of(page) -> (column width, gutter) mm; tx: the type area's x mm."""
+    news = [P for P in pages if any(d["kind"] == "headline" for d in P["disp"])]
+    wc, per, ashare, lead_w, lead_a, cap, cred = Counter(), [], [], [], [], 0, 0
+    for P in news:
+        colw, gut = grid_of(P)
+        phs, na = ph_of.get(id(P), []), news_area(P, *tx)
+        per.append(len(phs))
+        for im in phs:
+            wc[photo_cols(im["x1"] - im["x0"], colw, gut)] += 1
+            c, k = caption_credit(P, im)
+            cap, cred = cap + c, cred + k
+        box, lp = lead_story(P, phs)
+        if na:
+            ashare.append(sum((im["x1"] - im["x0"]) * (im["y_bot"] - im["y_top"]) for im in phs) / na)
+            lead_a.append((box[2] - box[0]) * (box[3] - box[1]) / na)
+        if lp:
+            lead_w.append(photo_cols(lp["x1"] - lp["x0"], colw, gut))
+    out = {}
+    if news:
+        out["photos"] = {"width_cols": {str(k): wc[k] for k in sorted(wc)}, "per_page": [min(per), round(HL.q(per, 0.5), 1), max(per)]}
+        if not wc:
+            del out["photos"]["width_cols"]
+        if ashare:
+            out["photos"]["area_share"] = round(HL.q(ashare, 0.5), 4)
+            out["lead_area_share"] = round(HL.q(lead_a, 0.5), 4)
+        if lead_w:
+            out["photos"]["lead_width_cols"] = round(HL.q(lead_w, 0.5), 1)
+    if sum(per):
+        out["captions"] = {"caption_share": share(cap, sum(per)), "credit_share": share(cred, sum(per))}
+    return out
+
+
 def layout_section(pages: list, grids: dict, prof: dict) -> dict:
     """onboard: the refined engine's house settings, aggregates only (schema pageinator.layout/1); every value is measured
     from geometry (runs, Tz, clip paths, fills, strokes) and a key that cannot be measured is left out."""
@@ -2577,11 +2788,12 @@ def layout_section(pages: list, grids: dict, prof: dict) -> dict:
                               "mode": "every" if share(above, n_heads) and share(above, n_heads) >= 0.6 else "tiers"}
     out["rules"] = rules
     # photos
-    treat, posn, gaps, n_ph = Counter(), Counter(), [], 0
+    treat, posn, gaps, n_ph, ph_of = Counter(), Counter(), [], 0, {}
     for sid in dict.fromkeys(P["sid"] for P in pages):
         pdoc = pdfium.PdfDocument(str(next(P["pdf"] for P in pages if P["sid"] == sid)))
         for P in (P for P in pages if P["sid"] == sid):
-            for im in page_photos(pdoc, P):
+            ph_of[id(P)] = page_photos(pdoc, P)
+            for im in ph_of[id(P)]:
                 n_ph += 1
                 shape, pos, gp = photo_wrap(P, im)
                 treat[shape] += 1
@@ -2632,7 +2844,7 @@ def layout_section(pages: list, grids: dict, prof: dict) -> dict:
         out["density"] = {"stories_per_page": [min(spp), round(HL.q(spp, 0.5), 1), max(spp)]}
     if all(v is not None for v in cd["page"]["margins_mm"].values()):
         out["margins_mm"] = {k: cd["page"]["margins_mm"][k] for k in ("top", "right", "bottom", "left")}
-    alts = defaultdict(list)
+    alts, alt_of = defaultdict(list), {}
     for P in pages:
         w = Counter()
         for r in body_runs(P):
@@ -2652,8 +2864,23 @@ def layout_section(pages: list, grids: dict, prof: dict) -> dict:
         if abs(n * (w + gw) - gw - area) > 3.0:      # not a grid that tiles the type area (an off-grid frame width)
             continue
         ga.append({"columns": n, "column_width_mm": w, "gutter_mm": gw, "pages": sorted({P["page"] for P in ps})})
+        alt_of.update({id(P): (w, gw) for P in ps})
     if ga:
         out["grid_alternates"] = ga
+    # photo widths in columns of each page's grid, photo load, captions and the lead story
+    news = news_keys(pages, ph_of, lambda P: alt_of.get(id(P), (g8["width"], g8["pitch"] - g8["width"])), cd["page"]["type_area_x_mm"])
+    if "photos" in out and news.get("photos"):
+        out["photos"].update(news["photos"])
+    if "photos" in out and news.get("captions"):
+        out["captions"] = news["captions"]
+    if "lead_area_share" in news:
+        out["density"]["lead_area_share"] = news["lead_area_share"]
+    # the running head's shaded band
+    bands = [b for b in (head_band(P) for P in pages) if b]
+    if bands:
+        out["furniture"] = {"head_band": {"stops": [list(c) for c in _mode(tuple(map(tuple, b["stops"])) for b in bands)],
+                                          "axis": _mode(b["axis"] for b in bands),
+                                          "box_mm": [round(HL.q([b["box"][k] for b in bands], 0.5), 2) for k in range(4)], "n": len(bands)}}
     return out
 
 

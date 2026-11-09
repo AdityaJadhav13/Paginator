@@ -136,6 +136,11 @@ HEAD_SIZE_STEP = 0.92                        # … and then the size steps down 
 INSET_COLS = 4 / 3                           # an inset photo covers the story's last text column and a third of the one
                                              # before it: two thirds of a column stay beside it (half a column read 1–2 words a line)
 POS_FALLBACK = 2.0                           # cost of a head photo where the house rule puts the photo inside the text
+PHOTO_W_COST = 1.5                           # photo_cols: cost of a photo width the paper prints rarely (or, for the lead,
+                                             # of one narrower than its widest common width)
+COMMON_SHARE = 0.1                           # … the lead's: the widest width that carries at least 10 % of the paper's photos
+CREDIT_PT = 6.0                              # credit_mode "line": the photo credit, regular, right-aligned under the photo
+CREDIT_GAP = 0.8                             # photo bottom → the credit line's ink
 
 
 def refined(*keys) -> bool:
@@ -230,6 +235,10 @@ class Story:
         self.jumps = [e for e in jl if e not in self.jump_in]
         caps = [els[c] for c in s.get("captions", []) if c in els]
         self.caption = {"text": " ".join(_text(c) for c in caps), "ids": [c["id"] for c in caps], "el": caps[0]} if caps and self.photo else None
+        cr = els.get(s.get("credit")) if s.get("credit") else None      # credit_mode "line": the credit apart from the caption
+        self.credit = cr if cr and self.photo else None
+        if self.credit and not self.caption:                             # no caption: the credit line alone
+            self.caption = {"text": "", "ids": [], "el": cr}
         # parts not set by the generator: reported, and failed by the checker
         self.not_set = {"photos": [i for i in s.get("images", []) if i not in photos_index],
                         "captions": [c["id"] for c in caps] if caps and not self.photo else [],
@@ -264,6 +273,7 @@ class Generator:
         self._lines: dict = {}
         self._disp: dict = {}
         self._cap: dict = {}
+        self._credit: dict = {}
         self._xh: dict = {}
         self._fill: dict = {}
         # every element a flow sets as a crosshead (merged boxes and brief stacks use item headlines): re-anchored too
@@ -511,27 +521,71 @@ class Generator:
         the middle m − 2 columns and half of each column beside them): an even m, a landscape photo (aspect ≥ 1), when
         each half column left beside it holds a line (≥ max(MIN_LINE_MM, 0.4 × cw) after the wrap gap). "inset" (flush right, the last
         column and a third of the one before it, mid-depth): m ≥ 2, when the two thirds left beside it hold half a
-        column's line. Both need a story with one photo; else "head" (gen1). Narrower strips read 1–2 words a line."""
+        column's line. Both need a story with one photo; else "head" (gen1). Narrower strips read 1–2 words a line.
+        wrap_min_mm: a strip beside the photo is at least this wide; photo_cols: the photo's width is one the paper prints.
+        When either rules out the inset and the centre: "cols" (the photo takes whole text columns mid-story, no strip)."""
         P = ST["photo_positions"]
         if s.photos_extra or m < 2:
             return "head"
+        wmin = ST["wrap_min_mm"] or 0.0
         room = (2 - INSET_COLS) * cw - ST["wrap_gap_mm"] - 0.2         # 0.2: the wrap's 0.1 mm rounding
-        if "centre" in P and m % 2 == 0 and s.photo["aspect"] >= 1.0 and cw / 2 - ST["wrap_gap_mm"] - 0.2 >= max(CP.MIN_LINE_MM, 0.4 * cw):
+        if "centre" in P and m % 2 == 0 and s.photo["aspect"] >= 1.0 and cw / 2 - ST["wrap_gap_mm"] - 0.2 >= max(CP.MIN_LINE_MM, 0.4 * cw, wmin) \
+                and self.prints((m - 1) * (cw + GUT)):
             return "centre"
-        return "inset" if "inset" in P and room >= max(CP.MIN_LINE_MM, 0.5 * cw) else "head"
+        if "inset" in P and room >= max(CP.MIN_LINE_MM, 0.5 * cw, wmin) and self.prints(INSET_COLS * cw + GUT):
+            return "inset"
+        return "cols" if (wmin or ST["photo_cols"]) and ("inset" in P or "centre" in P) else "head"
+
+    # ---- photo widths the paper prints (ST["photo_cols"]: {grid columns: share of its photos})
+    @staticmethod
+    def grid_cols(ph_w: float) -> float:
+        return (ph_w + GUT) / PITCH
+
+    @staticmethod
+    def pcols() -> dict:
+        return {int(k): float(v) for k, v in ST["photo_cols"].items()}
+
+    def prints(self, ph_w: float) -> bool:
+        return not ST["photo_cols"] or round(self.grid_cols(ph_w)) in self.pcols()
+
+    def photo_ks(self, m: int, cw: float) -> list:
+        """Photo widths k (of m text columns of cw mm) the paper prints; none: the one nearest a printed width."""
+        ks = list(range(1, m + 1))
+        if not ST["photo_cols"]:
+            return ks
+        gw = {k: self.grid_cols(k * cw + (k - 1) * GUT) for k in ks}
+        pc = self.pcols()
+        return [k for k in ks if round(gw[k]) in pc] or [min(ks, key=lambda k: (min(abs(gw[k] - c) for c in pc), -k))]
+
+    def width_cost(self, s: Story, ph_w: float) -> float:
+        """photo_cols: the paper's common widths cost nothing; the page lead's photo prefers the widest common width."""
+        pc = self.pcols()
+        top, g = max(pc.values()), round(self.grid_cols(ph_w))
+        if s.rank == 0:
+            widest = max((c for c, v in pc.items() if v >= COMMON_SHARE * sum(pc.values())), default=max(pc, key=pc.get))
+            return PHOTO_W_COST * min(1.0, abs(g - widest) / widest)
+        return PHOTO_W_COST * (1.0 - pc.get(g, 0.0) / top)
 
     def obstacle(self, box, shape):
         return {"box": tuple(box), "shape": shape, "gap_mm": ST["wrap_gap_mm"], "sides": "both" if shape == "ellipse" else "auto"}
 
-    def wrap_options(self, s: Story, w, y_b0, m, cw, fit, style, pos, L, extra, bpad):
+    def wrap_options(self, s: Story, w, y_b0, m, cw, fit, style, pos, L, extra, bpad, k=0):
         """→ [(rows, cost, photo)] for the photo at pos: its own aspect (no crop), never below its min_ppi, its caption
         (if any) under it inside the wrap; the ellipse for a near-round inset (aspect 0.8–1.25) when the house allows it.
         Rows: the fewest whose dry runs (the real columns, the photo as an obstacle) set every line wherever on the grid a
-        module of w columns can stand (wrap_rows: the composer rounds the wrap to 0.1 mm on the page, so x matters)."""
+        module of w columns can stand (wrap_rows: the composer rounds the wrap to 0.1 mm on the page, so x matters).
+        "cols": the photo across k whole text columns (each printed width k < m), flush right (centred when "centre" is a
+        house position and m − k is even), mid-depth: the text runs above and below it in those columns."""
+        if pos == "cols" and not k:
+            return [o for k_ in self.photo_ks(m, cw) if k_ < m
+                    for o in self.wrap_options(s, w, y_b0, m, cw, fit, style, pos, L, extra, bpad, k_)]
         lead_b = style[1] / MM
-        ph_w = (INSET_COLS * cw + GUT) if pos == "inset" else (m - 1) * (cw + GUT)
-        ph_h = ph_w / s.photo["aspect"]
-        if s.photo["w"] / (ph_w / 25.4) < s.photo["min_ppi"]:
+        ph_w = (INSET_COLS * cw + GUT) if pos == "inset" else k * cw + (k - 1) * GUT if pos == "cols" else (m - 1) * (cw + GUT)
+        asp = s.photo["aspect"]
+        if pos == "cols":                                # a tall portrait across whole columns is cropped towards square (≤ CROP)
+            asp = max(asp, min(1.0, asp * CROP))
+        ph_h = ph_w / asp
+        if min(s.photo["w"], s.photo["h"] * asp) / (ph_w / 25.4) < s.photo["min_ppi"]:
             return []
         cap = self.caption(s, ph_w) if s.caption else None
         if s.caption and cap is None:
@@ -539,17 +593,24 @@ class Generator:
         ob_h = ph_h + (cap[2] + cap[4] if cap else 0.0)
         shape = "ellipse" if pos == "inset" and "ellipse" in ST["photo_shapes"] and not cap and 0.8 <= s.photo["aspect"] <= 1.25 else "rect"
         inner = m * cw + (m - 1) * GUT
-        ph_x = bpad + (inner - ph_w if pos == "inset" else (inner - ph_w) / 2)
+        ph_x = bpad + (inner - ph_w if pos == "inset" or (pos == "cols" and ((m - k) % 2 or "centre" not in ST["photo_positions"]))
+                       else (inner - ph_w) / 2)
         j = math.ceil(ob_h / lead_b) + 1                 # rows the photo takes from the columns it covers
-        R0 = max(j + 2, math.ceil((L + (INSET_COLS if pos == "inset" else m - 1.0) * j) / m)) + extra
+        R0 = max(j + 2, math.ceil((L + {"inset": INSET_COLS, "cols": k}.get(pos, m - 1.0) * j) / m)) + extra
         for R in range(R0, R0 + 8):
-            t = max(1, (R - j) // 2)                     # mid-depth, on the leading grid
-            ph = {"pos": pos, "shape": shape, "k": 0, "j": 0, "ph_x": ph_x, "ph_top": y_b0 + (t - 0.5) * lead_b, "ph_h": ph_h,
+            if pos == "cols":                            # at the head of its columns: never a line or two above or below it
+                top = y_b0 - 0.8 * style[0] / MM
+            else:                                        # mid-depth, on the leading grid, at least 3 lines above and below
+                t = (R - j) // 2
+                if t < 3 or R - j - t < 3:
+                    continue
+                top = y_b0 + (t - 0.5) * lead_b
+            ph = {"pos": pos, "shape": shape, "k": k, "j": 0, "ph_x": ph_x, "ph_top": top, "ph_h": ph_h,
                   "ph_w": ph_w, "ob_h": ob_h, "cap": bool(cap)}
             shorts = [self.wrap_rows(s, x, y_b0, m, cw, fit, style, ph, R, bpad) for x in (ORIGIN + c * PITCH for c in range(NCOL - w + 1))]
             if None not in shorts:
                 short = max(shorts)
-                return [(R, SHORT_COST * short, ph)]
+                return [(R, SHORT_COST * short + (self.width_cost(s, ph_w) if ST["photo_cols"] else 0.0), ph)]
         return []
 
     def wrap_cols(self, x, y_b0, m, cw, style, R, bpad):
@@ -724,6 +785,8 @@ class Generator:
         if not s.caption:
             return None
         key = (s.id, round(ph_w, 2))
+        if key not in self._cap and s.credit and not s.caption["text"]:   # credit_mode "line", no caption: the credit alone
+            self._cap[key] = None
         if key not in self._cap:
             el = s.caption["el"]
             cs = max(8.0, min(13.0, el["size_pt"] or 10.0))
@@ -732,7 +795,25 @@ class Generator:
                 cs, font = max(7.0, round(0.8 * cs, 2)), (font[0], {**font[1], "wght": 400.0}, 400)
             cb = self.compose_block(s.caption["text"], *font, cs, ph_w, 8, 1.15)
             self._cap[key] = None if cb is None else (cb[0], cb[1], CAPTION_GAP + cb[2] + (len(cb[0].lines) - 1) * cb[1], font, cb[3])
-        return self._cap[key]
+        return self.credit_line(s, ph_w, self._cap[key]) if s.credit else self._cap[key]
+
+    def credit_line(self, s: Story, ph_w: float, cap):
+        """credit_mode "line": the credit at CREDIT_PT, regular, right-aligned under the photo (up to 3 lines: a long
+        attribution is never cut), the caption (cap, if any) under it. → the caption tuple with the credit's height in it
+        (composition None when there is no caption), or None (no layout). Drawn by draw_credit."""
+        key = (s.id, round(ph_w, 2))
+        if key not in self._credit:
+            font = CP.role_font(s.credit.get("font") or "", "caption")
+            font = (font[0], {**font[1], "wght": 400.0}, 400)
+            cc = self.compose_block(_text(s.credit), *font, CREDIT_PT, ph_w, 3, 1.15)
+            if cc is None or (s.caption["text"] and cap is None):
+                self._credit[key] = None
+            else:
+                r, lead, asc, desc = cc
+                bl = [CREDIT_GAP + asc + n * lead for n in range(len(r.lines))]      # baselines below the photo bottom
+                tup = (cap[0], cap[1], bl[-1] + desc + cap[2], cap[3], cap[4]) if cap else (None, lead, bl[-1], font, desc)
+                self._credit[key] = ((r, bl, font), tup)
+        return self._credit[key] and self._credit[key][1]
 
     # ---- module options of a story at width w
     def options(self, s: Story, w: int):
@@ -783,7 +864,7 @@ class Generator:
                         else:
                             ph_top = top_text + max({"deck": SP["deck_to_photo"]}.get(after, SP["headline_to_photo"]), desc + 1.0) \
                                 if dsp["has_display"] else SP["rule_to_photo"]
-                            for k in (range(1, m + 1) if L else (m,)):
+                            for k in ((self.photo_ks(m, cw) if ST["photo_cols"] else range(1, m + 1)) if L else (m,)):
                                 ph_w = k * cw + (k - 1) * GUT
                                 if any(e["w"] / (ph_w / 25.4) < e["min_ppi"] for e in s.photos_extra):
                                     continue
@@ -808,6 +889,8 @@ class Generator:
                                     R = max(j, math.ceil((L + k * j) / m))
                                     short = k * (R - j) + (m - k) * R - L          # empty lines at the last column's foot
                                     pc = 3.0 * math.log(asp / s.photo["aspect"]) ** 2 + (3.0 if s.rank <= 2 else 1.0) * (1 - k / m) + SHORT_COST * short
+                                    if ST["photo_cols"]:
+                                        pc += self.width_cost(s, ph_w)
                                     cands.append((R, pc, {"k": k, "j": j, "ph_top": ph_top, "ph_h": ph_h, "ph_w": ph_w, "cap": bool(cap)}))
                             pos = self.photo_pos(s, m, cw) if L else "head"
                             if pos != "head":                   # B5: the photo inside the text; a head photo only as a fallback
@@ -996,7 +1079,7 @@ class Generator:
 # ------------------------------------------------------------------------------------------- page inputs
 def owned_ids(story) -> set:
     """Element ids a story owns: display parts, images, captions, jump lines, its crossheads and its body frames."""
-    ids = {story.get(k) for k in ("headline", "kicker", "byline")} - {None}
+    ids = {story.get(k) for k in ("headline", "kicker", "byline", "credit")} - {None}
     for k in ("decks", "captions", "images", "headline_parts", "jump_lines", "other_elements"):
         ids.update(x if isinstance(x, str) else x.get("id") for x in story.get(k) or [])
     for c in story.get("columns") or []:
@@ -1616,8 +1699,10 @@ def render(g: Generator, model, placed, news_top, news_bottom, photo_dir, kept_s
                 yb += PHOTO_GAP + eh
             if ph["cap"]:
                 cr, clead, cap_h, font, _ = g.caption(s, ph_w)
-                bl = [yb + cap_h - (len(cr.lines) - 1) * clead + n * clead for n in range(len(cr.lines))]
-                draw_block(B, ("caption", f"gen-c-{s.id}", cr, [b - y for b in bl], font, "left"), x, y, ph_w, meta)
+                if cr is not None:                       # (None: a credit line alone, credit_mode "line")
+                    bl = [yb + cap_h - (len(cr.lines) - 1) * clead + n * clead for n in range(len(cr.lines))]
+                    draw_block(B, ("caption", f"gen-c-{s.id}", cr, [b - y for b in bl], font, "left"), x, y, ph_w, meta)
+                draw_credit(g, B, s, x, y, yb, ph_w, meta)
         cols = []
         for k in range(o["m"]):
             x0 = x + k * (o["cw"] + GUT)
@@ -1669,19 +1754,35 @@ def draw_treatment(B, tr, x, y, span, h):
             B.line_mm(p0, p1, float(sp.get("stroke_pt", 0.5)), tuple(sp.get("stroke_cmyk") or CP.BLACK))
 
 
+def draw_credit(g: Generator, B, s: Story, x0, y, yb, w_, meta):
+    """credit_mode "line": the story's credit right-aligned under the photo (bottom yb, width w_), as Generator.credit_line set it."""
+    c = g._credit.get((s.id, round(w_, 2))) if s.credit else None
+    if c:
+        r, bl, font = c[0]
+        draw_block(B, ("credit", f"gen-cr-{s.id}", r, [yb + b - y for b in bl], font, "right"), x0, y, w_, meta)
+
+
 def draw_inset(g: Generator, B, s: Story, ph, x, y, meta):
     """B5: the photo whole (it was sized to its own aspect), an ellipse by whitening outside it (CP.ellipse_raster: the
     PDF writer has no clip paths), its caption under it. → (photo box, [the obstacle the body wraps])."""
     x0, top, w_, h_ = x + ph["ph_x"], y + ph["ph_top"], ph["ph_w"], ph["ph_h"]
     raw = gzip.decompress(s.photo["path"].read_bytes())
     W0, H0 = s.photo["w"], s.photo["h"]
+    want = w_ / h_
+    if want > W0 / H0 + 1e-6:                            # cropped towards square ("cols"): its upper part (a face) kept
+        chp = min(H0, max(1, round(W0 / want)))
+        y_off = (H0 - chp) // 3
+        raw = b"".join(raw[((y_off + r_) * W0) * 4:((y_off + r_) * W0 + W0) * 4] for r_ in range(chp))
+        H0 = chp
     if ph["shape"] == "ellipse":
         raw = CP.ellipse_raster(raw, W0, H0)
     B.items.append(X.Image(x0 * MM, (B.page_h - top - h_) * MM, w_ * MM, h_ * MM, W0, H0, raw))
     if ph["cap"]:
         cr, clead, cap_h, font, _ = g.caption(s, w_)
-        bl = [top + h_ + cap_h - (len(cr.lines) - 1) * clead + n * clead for n in range(len(cr.lines))]
-        draw_block(B, ("caption", f"gen-c-{s.id}", cr, [b - y for b in bl], font, "left"), x0, y, w_, meta)
+        if cr is not None:                               # (None: a credit line alone, credit_mode "line")
+            bl = [top + h_ + cap_h - (len(cr.lines) - 1) * clead + n * clead for n in range(len(cr.lines))]
+            draw_block(B, ("caption", f"gen-c-{s.id}", cr, [b - y for b in bl], font, "left"), x0, y, w_, meta)
+        draw_credit(g, B, s, x0, y, top + h_, w_, meta)
     return [round(x0, 3), round(top, 3), round(x0 + w_, 3), round(top + h_, 3)], [g.obstacle((x0, top, x0 + w_, top + ph["ob_h"]), ph["shape"])]
 
 

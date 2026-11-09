@@ -190,6 +190,7 @@ OLD = {
     "m.plan.tooLong": ({}, "Too long for a whole page — shorten it"),
     "m.plan.noRoom": ({}, "No room left — add pages, lower another story's priority, or pin it to a page"),
     "m.plan.pinnedFull": ({"max": 10, "page": 2}, "More than 10 stories are pinned to page 2 — pin it to another page"),
+    "m.plan.noRoomOnPage": ({"page": 5}, "No room on page 5 — it waits: pin it to another page, or shorten the page's stories"),
     "m.plan.pageFailed": ({"n": 3, "message": "the layout search ran out of time"},
                           "Page 3 could not be laid out: the layout search ran out of time"),
     # Pageinator story bundles (PR 24): new messages, the English as first written (there was no older text)
