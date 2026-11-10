@@ -172,6 +172,35 @@ def assign_treatments(articles: list[dict], overrides: dict | None = None) -> di
     return panels.assign(stories, overrides)
 
 
+SUDOKU_BUDGET = 20000            # solver nodes a sudoku from a request may take (a generated one needs a few hundred)
+
+
+def sudoku_of(article: dict) -> dict | None:
+    """A refined paper's sudoku filler article ({"sudoku": {"puzzle", "solution"}}, layout/sudoku.py), checked: 81 digits
+    each, the solution the puzzle's one solution; None otherwise (and on the pilot's paper: never a sudoku)."""
+    sd = article.get("sudoku")
+    if not ST["refined"] or not isinstance(sd, dict):
+        return None
+    pz, so = sd.get("puzzle"), sd.get("solution")
+    if not (isinstance(pz, str) and isinstance(so, str) and re.fullmatch(r"[0-9]{81}", pz) and re.fullmatch(r"[1-9]{81}", so)):
+        return None
+    if article.get("photo") or any(k == "para" for k, _ in blocks(article.get("body") or "")):
+        return None                                  # a sudoku is its grid alone (a photo or text would be lost)
+    import sudoku as SU                              # (layout/sudoku.py, on the path through deskgen)
+    rows = [so[i:i + 9] for i in range(0, 81, 9)]
+    unit = all(len(set(u)) == 9 for u in rows + ["".join(r[c] for r in rows) for c in range(9)]
+               + ["".join(rows[r][c] for r in range(b // 3 * 3, b // 3 * 3 + 3) for c in range(b % 3 * 3, b % 3 * 3 + 3)) for b in range(9)])
+    if not unit or any(p_ != "0" and p_ != q for p_, q in zip(pz, so)):
+        return None                                  # (cheap checks first: a full valid grid that agrees with the givens)
+    try:
+        if SU.solve(pz, budget=SUDOKU_BUDGET) != [so]:
+            return None                              # not unique
+    except SU.Budget:
+        return None
+    help_ = sd.get("help")
+    return {"puzzle": pz, "solution": so} | ({"help": one_line(help_)[:600]} if isinstance(help_, str) and help_.strip() else {})
+
+
 def to_story(article: dict, rank_size: float, photo_ids: set) -> tuple[dict, list[dict]]:
     """One article → (story, elements). rank_size orders the stories (gen1 ranks by headline size: the larger, the
     more important); the size the headline is set at comes from the house's size-by-span table."""
@@ -185,6 +214,9 @@ def to_story(article: dict, rank_size: float, photo_ids: set) -> tuple[dict, lis
              "other_elements": [], "parent_story": None, "columns": [], "flow": flow}
     if treatment != "none":
         story["treatment"] = treatment
+    sd = sudoku_of(article)
+    if sd:
+        story["sudoku"] = sd
     if one_line(article.get("kicker")) and (ST["kicker_mode"] != "lead" or treatment == "strap"):
         els.append(_el(f"{sid}-k", "kicker", one_line(article["kicker"]), KICKER_PT))
         story["kicker"] = f"{sid}-k"

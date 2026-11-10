@@ -468,5 +468,38 @@ class CreditLineTest(Settings):
         self.assertTrue(cr and cap and min(c["baseline_mm"] for c in cap) > max(c["baseline_mm"] for c in cr))
 
 
+
+
+class DailyRulesTest(Settings):
+    """Round 4 (the daily broadsheet): one scale per headline, balanced columns, gap limits, the sudoku filler."""
+    over = {**WEEKLY, "refined": True, "photo_positions": ("head",)}
+
+    def test_every_line_of_a_headline_has_one_size_width_and_scale(self):
+        g = story(paras=6)
+        fh = g.fill_refined(HEAD + " आणि वर्तमानपत्रे", G.span_mm(2), 28.0, g.cx.head_pol, False)
+        self.assertGreater(len(fh[0]), 1)
+        self.assertEqual(len({ax["wdth"] for _, ax, _, _, _ in fh[0]}), 1)
+        self.assertEqual(len({hs for _, _, _, _, hs in fh[0]}), 1)
+
+    def test_columns_are_balanced_and_white_stays_within_the_limit(self):
+        g = story(paras=7, kicker=False, byline=False)
+        for o in g._options(g.stories[0], 3):
+            if o["photo"] is None and o["rows"]:
+                lead = o["style"][1] / G.MM
+                self.assertLessEqual((o["hi"] - o["lo"]) * G.UNIT, G.GAP_LINES * lead + G.UNIT)
+        for o in [o for w in (2, 3) for o in g._options(g.stories[0], w) if o["m"] >= 2][:6]:
+            res = render_one(g, o["w"], o)                  # the short lines spread one to a column: still no overset
+            self.assertEqual(res["overset_lines"], 0)
+
+    def test_the_sudoku_filler(self):
+        import sudoku as SU
+        sd = SU.make("2026-11-11", "easy")
+        g = story(paras=0, kicker=False, byline=False, head="सुडोकू")
+        g.stories[0].src["sudoku"] = {"puzzle": sd["puzzle"], "solution": sd["solution"], "help": "प्रत्येक ओळीत १ ते ९ अंक एकदाच."}
+        self.assertEqual(g._options(g.stories[0], 1), [])                  # never narrower than two grid columns
+        o = g._options(g.stories[0], 3)[0]
+        res = render_one(g, 3, o)
+        self.assertEqual(res["overset_lines"], 0)
+
 if __name__ == "__main__":
     unittest.main()

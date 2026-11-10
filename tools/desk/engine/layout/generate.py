@@ -133,6 +133,9 @@ HEAD_KEYS = ("head_weight", "head_wdth", "head_max_lines", "head_max_lines_1col"
              "head_tz_max", "head_grow", "head_align", "lead_ratio_max")
 HEAD_WDTH_MIN = 62.5                         # refined headlines: the width axis goes down to this before the letters are squeezed
 HEAD_SIZE_STEP = 0.92                        # … and then the size steps down by this factor (to half the ladder size at most)
+SUDOKU_MM = 110.0                            # a sudoku's grid at most this wide
+SUDOKU_SOL = 0.34                            # … its solution printed this much smaller, under it
+GAP_LINES = 2                                # refined: no text column ends more than this many lines above its module's foot
 INSET_COLS = 4 / 3                           # an inset photo covers the story's last text column and a third of the one
                                              # before it: two thirds of a column stay beside it (half a column read 1–2 words a line)
 POS_FALLBACK = 2.0                           # cost of a head photo where the house rule puts the photo inside the text
@@ -501,11 +504,12 @@ class Generator:
                 wd = max(HEAD_WDTH_MIN, math.floor(a / 2.5) * 2.5)
             wds.append(wd)
         wd = min(wds)                                    # … and one face for the whole headline: the narrowest any line needs
-        for i, j in best.lines:
-            t = " ".join(texts[i:j])
-            p = K3.prepare(t, "mr", "Deva", CP.SANS, size, {**ax, "wdth": wd}, wt)
+        preps = [K3.prepare(" ".join(texts[i:j]), "mr", "Deva", CP.SANS, size, {**ax, "wdth": wd}, wt) for i, j in best.lines]
+        widest = max((width(p) for p in preps), default=0.0)
+        hs_all = max(tz0, min(tz1, measure / widest)) if widest > 0 else 1.0   # one scale: the longest line fills the measure
+        for p in preps:
             w = width(p)
-            hs = max(tz0, min(tz1, measure / w)) if w > 0 else 1.0
+            hs = hs_all
             extra, gaps = measure - w * hs, len(p.words) - 1
             if ST["head_align"] == "centre" or not gaps or extra <= 0:
                 gap = 0.0
@@ -613,6 +617,8 @@ class Generator:
             shorts = [self.wrap_rows(s, x, y_b0, m, cw, fit, style, ph, R, bpad) for x in (ORIGIN + c * PITCH for c in range(NCOL - w + 1))]
             if None not in shorts:
                 short = max(shorts)
+                if ST["refined"] and short > GAP_LINES:
+                    continue                                 # (a taller module only adds empty lines)
                 return [(R, SHORT_COST * short + (self.width_cost(s, ph_w) if ST["photo_cols"] else 0.0), ph)]
         return []
 
@@ -833,6 +839,8 @@ class Generator:
         MIN_PPI. The body needs R rows with k·(R − j) + (m − k)·R ≥ L (L = the story's lines at that measure, from the
         real typesetter). A story without body text (a loose headline, a picture) is its display block (and photo)."""
         span = span_mm(w)
+        if ST["refined"] and s.src.get("sudoku"):
+            return self.sudoku_options(s, w)
         best = {}
         for step, step_cost in (HEAD_STEPS if s.rank > 0 and s.head else HEAD_STEPS[:1]):
             dsp = self.display(s, w, step)
@@ -894,9 +902,11 @@ class Generator:
                                     if px_w / (ph_w / 25.4) < s.photo["min_ppi"]:
                                         continue
                                     R = max(j, math.ceil((L + k * j) / m))
+                                    if ST["refined"] and k < m and 0 < R - j < 3:
+                                        continue                # refined: under a photo none or at least three lines
                                     short = k * (R - j) + (m - k) * R - L          # empty lines at the last column's foot
-                                    if ST["photo_cols"] and short > max(3, R // 3):
-                                        continue                # refined: no column left more than a third empty
+                                    if ST["refined"] and short > m:
+                                        continue                # refined: balanced columns, each at most one line short
                                     pc = 3.0 * math.log(asp / s.photo["aspect"]) ** 2 + (3.0 if s.rank <= 2 else 1.0) * (1 - k / m) + SHORT_COST * short
                                     if ST["photo_cols"]:
                                         pc += self.width_cost(s, ph_w)
@@ -914,6 +924,13 @@ class Generator:
                             else:
                                 lo = math.ceil((y_b0 + (R - 1) * lead_b + dsp["tail_h"] + foot) / UNIT)
                                 hi = math.floor((y_b0 + (R - 1 + ST["white_max"]) * lead_b + dsp["tail_h"] + foot) / UNIT)  # white at the feet
+                            if ST["refined"] and R:                      # refined: a column's own short lines (balanced: at most
+                                if ph and ph.get("pos"):                 # one; a photo in the text: the last column's) and the
+                                    col_short = GAP_LINES                # white at the feet stay within GAP_LINES
+                                else:
+                                    cap_ = (ph["k"] * (R - ph["j"]) + (m - ph["k"]) * R) if ph else R * m
+                                    col_short = 1 if cap_ > L else 0
+                                hi = min(hi, lo + math.floor(max(0, GAP_LINES - 1 - col_short) * lead_b / UNIT))   # (1: a descent)
                             if lo > hi:
                                 continue
                             c = base + pc
@@ -921,6 +938,40 @@ class Generator:
                                 best[lo] = {"w": w, "m": m, "cw": cw, "fit": fit, "rows": R, "lines": L, "lo": lo, "hi": hi, "y_b0": y_b0,
                                             "size_h": dsp["size_h"] if s.head else 0.0, "step": step, "photo": ph, "style": style, "static": c}
         return [best[k] for k in sorted(best)]
+
+    def sudoku_options(self, s: Story, w: int):
+        """A sudoku (a filler; layout/sudoku.py): its title, the 9 × 9 grid (at most SUDOKU_MM across, centred), and under it
+        the solution small (SUDOKU_SOL × the grid) beside its label "उत्तर". At least two grid columns; the module may be up
+        to GAP_LINES body leadings taller (the grid centred in it)."""
+        span = span_mm(w)
+        dsp = self.display(s, w)
+        if span < 2 * COL_W or dsp is None:
+            return []
+        style = min(self.styles, key=lambda st_: self.style_cost[st_])
+        g = min(span, SUDOKU_MM)
+        if span - g > 12.0:                              # no wide white beside the grid: only widths the grid fills
+            return []
+        sol = round(g * SUDOKU_SOL, 1)
+        top = dsp["top_text"] + dsp["desc_last"] + 3.0
+        hb = self.sudoku_help(s, g - sol - 4.0, style)
+        under = max(sol, len(hb[0].lines) * hb[1] if hb else 0.0)    # how to play, in the body face, beside the solution
+        h = top + g + 3.0 + under + SP["body_to_rule"]
+        lo = math.ceil(h / UNIT)
+        return [{"w": w, "m": 1, "cw": span, "fit": 1.0, "rows": 0, "lines": 0, "lo": lo, "hi": lo + math.floor(GAP_LINES * style[1] / MM / UNIT),
+                 "y_b0": top, "size_h": dsp["size_h"], "step": 1.0, "photo": None, "style": style, "static": 0.5 * w,
+                 "sudoku": {"top": top, "g": g, "sol": sol, "under": under}}]
+
+    def sudoku_help(self, s: Story, span: float, style):
+        """The sudoku's how-to-play text composed at the body size, first-fit, the module's width: (composition, leading mm)."""
+        text = s.src["sudoku"].get("help")
+        if not text:
+            return None
+        key = ("sudoku-help", s.id, round(span, 2), tuple(style))
+        if key not in self._cap:
+            fam, ax = CP.body_face()
+            cb = self.compose_block(text, fam, ax, 400, style[0], span, 8, style[1] / style[0])
+            self._cap[key] = (cb[0], cb[1]) if cb else None
+        return self._cap[key]
 
     # ---- the search
     def run(self, regions, span_prior, lead_side):
@@ -1678,6 +1729,12 @@ def render(g: Generator, model, placed, news_top, news_bottom, photo_dir, kept_s
         for t0, t1, _ in dsp["boxes"]:
             for p0, p1 in (((x, y + t0), (x + span, y + t0)), ((x + span, y + t0), (x + span, y + t1)), ((x + span, y + t1), (x, y + t1)), ((x, y + t1), (x, y + t0))):
                 B.line_mm(p0, p1, 1.0, CP.BLACK)
+        if o.get("sudoku"):                              # a sudoku filler: the grid and, small under it, its solution
+            draw_sudoku(g, B, s, o, x, y, span, h, meta)
+            rep["stories"].append({"story": s.id, "overset_lines": 0, "w": w, "m": 1, "fit": 1.0, "style": list(o["style"]),
+                                   "photo_box": None, "extra_photo_boxes": [], "photo_cols": None, "x": round(x, 2), "y": round(y, 2),
+                                   "h": round(h, 2), "photo": False, "not_set": s.not_set, "bullet_columns_skipped": []})
+            continue
         style, ph = o["style"], o["photo"]
         lead_b = style[1] / MM
         R, y_b0 = o["rows"], y + o["y_b0"]
@@ -1721,6 +1778,19 @@ def render(g: Generator, model, placed, news_top, news_bottom, photo_dir, kept_s
             cols.append({"frame_ids": [], "x0_mm": x0, "x1_mm": x0 + o["cw"], "top_mm": first - 0.8 * style[0] / MM,
                          "bottom_mm": y_b0 + (R - 1) * lead_b + 0.3, "first_baseline_mm": first, "n_lines": max(n, 0), "leading_mm": lead_b})
         x = x_mod
+        if ST["refined"] and not obst and R:             # refined: balanced columns, the short lines one to a column from the
+            bal = [dict(c) for c in cols]                # last (never a column far shorter than the others) …
+            extra_ = sum(c["n_lines"] for c in bal) - o["lines"]
+            k_ = len(bal) - 1
+            while extra_ > 0 and any(c["n_lines"] > 0 for c in bal):
+                if bal[k_]["n_lines"] > 0:
+                    bal[k_]["n_lines"] -= 1
+                    extra_ -= 1
+                k_ = k_ - 1 if k_ > 0 else len(bal) - 1
+            if bal != cols:                              # … when the text still fits them (column breaks can cost a line)
+                trial = g.set_body(CP.Builder(B.page_h), s, [dict(c) for c in bal], meta, {"colour": {}}, o["fit"], style)
+                if not trial["overset_lines"] and not trial.get("overset_crosshead_words"):
+                    cols = bal
         if obst:                                         # the dry run's own columns (wrap_rows)
             cols = g.wrap_cols(x, y_b0, o["m"], o["cw"], style, R, bpad)
         res = g.set_body(B, s, cols, meta, rep, o["fit"], style, obst)
@@ -1769,6 +1839,29 @@ def draw_credit(g: Generator, B, s: Story, x0, y, yb, w_, meta):
     if c:
         r, bl, font = c[0]
         draw_block(B, ("credit", f"gen-cr-{s.id}", r, [yb + b - y for b in bl], font, "right"), x0, y, w_, meta)
+
+
+def draw_sudoku(g_: Generator, B, s: Story, o: dict, x: float, y: float, span: float, h: float, meta: dict) -> None:
+    """The sudoku module's grid (vector lines, Latin digits in the display sans) centred under its title, and its solution
+    small under the grid, right-aligned, with the label उत्तर at its left."""
+    import sudoku as SU
+    sd, q = s.src["sudoku"], o["sudoku"]
+    g, sol, top = q["g"], q["sol"], q["top"]
+    spare = max(0.0, h - (top + g + 3.0 + q["under"] + SP["body_to_rule"])) / 2   # the module's spare height, above and below
+    fk = B.font(CP.SANS, {"wght": 700.0}, 700)
+    hb = g_.sudoku_help(s, g - sol - 4.0, o["style"])
+    if hb:                                               # how to play, beside the solution, under the grid
+        fam, ax = CP.body_face()
+        r_, lead_ = hb
+        y0 = y + top + spare + g + 3.0 + 0.8 * o["style"][0] / MM
+        draw_block(B, ("other_text", f"gen-sudoku-help-{s.id}", r_, [y0 - y + k * lead_ for k in range(len(r_.lines))],
+                       (fam, ax, 400), "left"), x + (span - g) / 2, y, g - sol - 4.0, meta)
+    gx, gy = x + (span - g) / 2, y + top + spare
+    SU.draw(B, gx, gy, g, sd["puzzle"], fk, round(g / 9 * MM * 0.62, 2), meta=meta)
+    sx, sy = gx + g - sol, gy + g + 3.0
+    SU.draw(B, sx, sy, sol, sd["solution"], fk, round(sol / 9 * MM * 0.62, 2), thin_pt=0.25, thick_pt=0.6, meta=meta)
+    B.text_line("उत्तर", fk, round(max(8.0, sol / 9 * MM * 0.7), 2), sx - 2.0, sy + 0.25 * sol, CP.BLACK, "right",
+                meta={**meta, "role": "caption", "element": f"gen-sudoku-{s.id}"})
 
 
 def draw_inset(g: Generator, B, s: Story, ph, x, y, meta):

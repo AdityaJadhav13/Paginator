@@ -415,6 +415,11 @@ def _paper_template(self, model: dict, ds) -> None:
     _drop_registration(self, paper(Path(ds)))
     _imprint_region(self, paper(Path(ds)))
     _drop_unpainted_graphics(self)
+    if self.paper:                                       # a refined paper's news starts close under what the page keeps above it
+        above = [e["bbox_mm"][3] for e in self.keep if e["bbox_mm"][3] <= self.news_top + 0.5 and e["bbox_mm"][1] < self.news_top]
+        if above and self.news_top - max(above) > 6.0:
+            self.news_top = max(above) + 3.0
+            self.regions = G.regions_for(self.news_top, self.news_bottom, self.ad_block)
     if self.ad_block is not None:
         return
     hole, _ = G.newshole(model)
@@ -675,15 +680,15 @@ def _imprint_region(tpl, pj: dict | None) -> None:
 
 def draw_imprint(B, tpl, cx) -> None:
     """The imprint paragraphs in their slots (_imprint_region): justified, the body face (Latin in the same face), the
-    largest size from 8 pt down to 5 pt at which both fit, the same size for both; a ruled box round a slot that had none."""
+    largest size from 9.5 pt down to 5 pt at which both fit, the same size for both; a ruled box round a slot that had none."""
     slots, paras = getattr(tpl, "imprint_slots", None), getattr(tpl, "imprint_paras", None)
     if not slots or not paras:
         return
     from dataclasses import replace
     fam, ax, wt = CP.role_font("Body", "furniture")
     pol = replace(cx.head_pol, balance=False)
-    for k in range(13):
-        size = 8.0 - 0.25 * k
+    for k in range(19):
+        size = 9.5 - 0.25 * k
         rs = [CP.H.compose(t, fam, ax, wt, size, s[2] - s[0], pol, max_lines=20) for t, (s, _) in zip(paras, slots)]
         if all(r.fits and len(r.lines) * 1.15 * size / DG.MM <= s[3] - s[1] for r, (s, _) in zip(rs, slots)):
             break
@@ -744,7 +749,16 @@ def _folio_plan(real):
             for e in [e for e in keep if e["kind"] in DG.FURNITURE_KINDS and e.get("lines") and "रुपये" in (e.get("text") or "")]:
                 keep.remove(e)
                 redo.append((e, [" ".join((ln.get("text") or "").split()).replace("रुपये", tpl.rupee) for ln in e["lines"]]))
-        return keep, redo + fresh_folios(tpl, page, day, edition) + fresh_page_number(tpl, page, keep, redo)
+        num = fresh_page_number(tpl, page, keep, redo)
+        if num:                                          # the running head's lines keep clear of the fresh number (draw_folios'
+            f = num[0][0]["fresh"]                       # neighbours), and a kept line reaching it is set again to do so
+            w = 0.6 * max(2, len(num[0][1][0])) * f["size_pt"] / DG.MM
+            tpl.reserved = [(f["x_mm"] - w - 1.0, f["baseline_mm"] - 0.8 * f["size_pt"] / DG.MM, f["x_mm"], f["baseline_mm"] + 1.0)]
+            for e in [e for e in keep if e["kind"] in DG.FURNITURE_KINDS and e.get("lines") and e["bbox_mm"][2] > tpl.reserved[0][0]
+                      and min(e["bbox_mm"][3], tpl.reserved[0][3]) - max(e["bbox_mm"][1], tpl.reserved[0][1]) > 0.5]:
+                keep.remove(e)
+                redo.append((e, [" ".join((ln.get("text") or "").split()) for ln in e["lines"]]))
+        return keep, redo + fresh_folios(tpl, page, day, edition) + num
     plan.desk_profile = True
     return plan
 

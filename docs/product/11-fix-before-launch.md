@@ -784,4 +784,7 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | ENG-25 | content and photo size | With 4 stories on a broadsheet page (p4 of 10 Nov), the search fills the page with a large photo. A per-page photo-area cap (learned `photo_area_share`) is still not used | More stories fill the page as a real one is filled |
 | ENG-26 | daily front ear | The 2025 front ear (date box, pages, volume, price, PRGI) is the template's own design; it has no editor line, so the owner's daily strip (which names the editor) is not printed as a strip on the daily | The editor is named in the imprint on p6 |
 | ENG-27 | strip separators | The owner's ■ separators are drawn as small squares: no stand-in font has the glyph | They read the same |
+| ENG-28 | filler pool | Fillers (`"filler": true` articles) are placed by the editor, pinned to a page; the planner does not yet pick them by itself from a pool. On 11 November no page needed one beyond the sudoku | The gap check names any page that still needs one |
+| ENG-29 | page story cap | A refined page holds at most 9 stories (`REFINED_MAX_STORIES`): beyond that the layout search ran out of its budget. The least important wait | More would need a larger search budget |
+| ENG-30 | sudoku | Its digits use the stand-in sans; the solution is on the same page. The puzzle and solution come from the edition date (deterministic); difficulty easy unless asked | A house font for the grid can follow |
 

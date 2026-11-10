@@ -506,6 +506,54 @@ class FolioDetailsTest(unittest.TestCase):
         self.assertEqual(got["bul"], ["■", "", "■"])
 
 
+class GapCheckTest(unittest.TestCase):
+    def test_a_column_ending_far_above_its_foot_and_an_empty_news_foot_are_reported(self):
+        G = DG.G
+        lead = 13.0 / G.CP.MM
+        y, h = 50.0, 100.0
+        foot = y + 5.0 + 19 * lead                       # the last row of a 20-row module
+        cols = [[G.ORIGIN, y, G.ORIGIN + G.COL_W, foot], [G.ORIGIN + G.PITCH, y, G.ORIGIN + G.PITCH + G.COL_W, foot]]
+        lines = [{"role": "body", "story": "s", "x0_mm": cols[0][0], "baseline_mm": foot},                    # full
+                 {"role": "body", "story": "s", "x0_mm": cols[1][0], "baseline_mm": foot - 5 * lead}]          # 5 lines short
+        B = types.SimpleNamespace(lines=lines)
+        rep = {"stories": [{"story": "s", "style": [10.0, 13.0], "columns": cols}]}
+        placed = [(0, G.ORIGIN, y, 2, h, {"lines": 35, "style": (10.0, 13.0), "y_b0": 5.0, "rows": 20, "lo": h / G.UNIT})]
+        gaps = DG.column_gaps(B, None, rep, placed, [(0, 2, y, y + h + 40.0)])
+        self.assertEqual([(g["story"], round(g["lines"])) for g in gaps], [("s", 5), (None, 9), (None, 9)])
+
+
+class SudokuArticleTest(unittest.TestCase):
+    def test_a_sudoku_article_is_checked_before_it_is_used(self):
+        import sudoku as SU
+        sd = SU.make("2026-11-11", "easy")
+        art = {"sudoku": {"puzzle": sd["puzzle"], "solution": sd["solution"], "help": "x" * 700}}
+        LS.use({"refined": True})
+        try:
+            got = DA.sudoku_of(art)
+            self.assertEqual((got["puzzle"], len(got["help"])), (sd["puzzle"], 600))
+            wrong = sd["solution"][:80] + ("1" if sd["solution"][80] != "1" else "2")
+            for bad in ({"puzzle": "x" * 81, "solution": sd["solution"]}, {"puzzle": sd["puzzle"], "solution": wrong},
+                        {"puzzle": "0" * 81, "solution": sd["solution"]}):                        # (all zeros: not unique)
+                self.assertIsNone(DA.sudoku_of({"sudoku": bad}), bad["puzzle"][:5])
+            self.assertIsNone(DA.sudoku_of({**art, "body": "मजकूर आहे."}))                         # a sudoku is its grid alone
+            self.assertEqual(DA._para("नवी दिल्ली, ता. १० : वैद्यकीय")["text"][:21], "नवी दिल्ली, ता. १०\u00a0: ")
+        finally:
+            LS.use({})
+        self.assertIsNone(DA.sudoku_of(art))                                                     # the pilot: never a sudoku
+        self.assertEqual(DA._para("ता. १० : अ")["text"], "ता. १० : अ")
+
+    def test_the_running_heads_lines_keep_clear_of_a_fresh_page_number(self):
+        band = {"id": "band", "kind": "box", "bbox_mm": [12.0, 14.0, 335.0, 28.0]}
+        date_ = {"id": "d", "kind": "folio", "text": "Monday, May 4, 2026", "bbox_mm": [260.0, 18.0, 330.0, 24.0],
+                 "lines": [{"text": "Monday, May 4, 2026", "x0_mm": 260.0, "x1_mm": 330.0, "baseline_mm": 23.0}]}
+        tpl = types.SimpleNamespace(paper=True, legacy_text=None, role="inside", page_h=540.0, page_w=347.0, keep=[band, date_])
+        plan = DPR._folio_plan(lambda t, page, pages, day, ed: ([e for e in t.keep], []))
+        with mock.patch.object(DPR, "fresh_folios", lambda *a: []):
+            keep, redo = plan(tpl, 8, 8, DAY, {})
+        self.assertTrue(tpl.reserved and tpl.reserved[0][2] == 332.0)
+        self.assertIn("d", [e["id"] for e, _ in redo])             # set again by draw_folios, clear of the reserved box
+
+
 class EnglishRunningHeadTest(unittest.TestCase):
     def test_an_english_template_of_a_marathi_paper_gets_the_date(self):
         tpl = types.SimpleNamespace(paper=True, keep=[{"id": "d", "kind": "folio", "text": "Wednesday, August 27, 2025",

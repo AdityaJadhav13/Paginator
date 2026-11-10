@@ -1478,6 +1478,12 @@ Each is learned from its own PDFs.
   - paper.json carries the paper's own `imprint_text` (Marathi, then English), set as paragraphs in the template's ruled imprint boxes, and `masthead_strip_text` with `{day}`, `{date}`, `{from}`, `{to}` and `{issue}`.
   - `registration_pending` leaves out stale registration lines until the details are given.
   - An issue number that is not given is taken out of the running head.
+- **No empty space and uniform headlines (2026-11-11).** For refined papers:
+  - **Headlines:** every line of a headline has one size, one width and one horizontal scale; the longest line fills the measure.
+  - **Columns:** they are balanced, at most one line short each. The white at a module's foot is capped, so no column ends more than 2 lines above its foot (`GAP_LINES`).
+  - **Gap check:** each page manifest records a `gap_check`, and a run lists the pages that fail it.
+  - **Sudoku filler:** generated from the edition date with a unique solution (`layout/sudoku.py`), drawn as vector lines, its solution printed small and labelled उत्तर.
+  - **Story cap:** a refined page holds at most 9 stories; the rest wait.
 - **Open items** are in doc 11, ENG.
 
 ## Appendix A. Versions and licences checked on 2026-10-20

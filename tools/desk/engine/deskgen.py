@@ -289,6 +289,7 @@ def draw_folios(B, tpl: Template, cx, redo, rep) -> list:
             band = (ln["baseline_mm"] - 0.8 * size / MM, ln["baseline_mm"] + 0.3 * size / MM)
             beside = [o["bbox_mm"] for o in tpl.keep if o is not e and o["kind"] not in ("rule", "box")
                       and min(o["bbox_mm"][3], band[1]) - max(o["bbox_mm"][1], band[0]) > 0.5]
+            beside += [b for b in getattr(tpl, "reserved", ()) if min(b[3], band[1]) - max(b[1], band[0]) > 0.5]   # a fresh line's box
             right = min([b[0] - 2.0 for b in beside if b[0] >= ln["x0_mm"] + 1.0] + [tpl.page_w - 12.0])
             left = max([b[2] + 2.0 for b in beside if b[2] <= ln["x1_mm"] - 1.0] + [12.0])
             width = CP.per_pt(nt, family, axes, wt, spaces=True) / MM * size
@@ -441,6 +442,12 @@ def layout_page(cx, cal: Calibration, tpl: Template, stories: list, elements: li
         warnings.append(f"{unset} paragraphs could not be set (a character the stand-in fonts lack)")
     if info.get("ink_touch_kept"):
         warnings.append("two lines of a story touch in ink somewhere: check the page")
+    gap = {}
+    if getattr(G, "ST", {}).get("refined"):              # a refined paper's page leaves no column empty for long
+        gaps = column_gaps(B, g, rep, placed, regions)
+        gap = {"gap_check": {"limit_lines": G.GAP_LINES, "pass": not gaps, "gaps": gaps}}
+        if gaps:
+            warnings.append(f"{len(gaps)} columns end more than {G.GAP_LINES} lines above their foot: fill them")
     return {"ok": True, "pdf": data, "sha256": hashlib.sha256(data).hexdigest(),
             "manifest": {"schema": "pageinator.desk.page/1", "engine": ENGINE_VERSION, "generator": G.GEN, "template_role": tpl.role,
                          "page": page, "pages": pages, "date": day.isoformat(), "cost": round(res[0], 3),
@@ -448,8 +455,36 @@ def layout_page(cx, cal: Calibration, tpl: Template, stories: list, elements: li
                          "ink_retries": ink_retries, "overset_lines": overset, "unset_paragraphs": unset,
                          "placed": placed_out, "folios_rewritten": folios, "fixed_problems": rep["fixed_problems"],
                          "problems": problems, "news_box_mm": [G.ORIGIN, round(news_top, 2), round(G.ORIGIN + G.span_mm(G.NCOL), 2), round(news_bottom, 2)],
-                         "photos_drawn": rep.get("photos", 0)} | grid_record(),
+                         "photos_drawn": rep.get("photos", 0)} | grid_record() | gap,
             "warnings": warnings}
+
+
+def column_gaps(B, g, rep, placed, regions) -> list:
+    """The gap check (refined papers): every text column of every module, and every grid column of the news area, whose
+    empty foot is taller than G.GAP_LINES body lines. → [{"story" (None: the page itself), "x_mm", "lines"}]. A column
+    under a photo counts from the photo's foot; a sudoku or a module without body text is not a text column."""
+    out = []
+    lead0 = min((st_["style"][1] for st_ in rep["stories"] if st_.get("style")), default=13.0) / MM
+    for st_, (i, x, y, w, h, o) in zip(rep["stories"], placed, strict=True):
+        if o.get("sudoku") or not o.get("lines"):
+            continue
+        lead = o["style"][1] / MM
+        foot = y + o["y_b0"] + (o["rows"] - 1) * lead + (h - o["lo"] * G.UNIT)   # the last row, and the module's white below it
+        lines = [ln for ln in B.lines if ln.get("role") == "body" and ln.get("story") == st_["story"]]
+        for c in st_.get("columns") or []:
+            mine = [ln["baseline_mm"] for ln in lines if c[0] - 0.5 <= ln["x0_mm"] <= c[2] + 0.5]
+            last = max(mine, default=c[1])
+            n = (foot - last) / lead
+            if n > G.GAP_LINES:
+                out.append({"story": st_["story"], "x_mm": round(c[0], 1), "lines": round(n, 1)})
+    for c0, w, top, bottom in regions:                 # the news area itself: under the lowest module in each grid column
+        for k in range(c0, c0 + w):
+            xm = G.ORIGIN + k * G.PITCH + G.COL_W / 2
+            low = max((y + h for _, x, y, ww, h, _ in placed if x - 0.5 <= xm <= x + G.span_mm(ww) + 0.5), default=top)
+            n = (bottom - low) / lead0
+            if n > G.GAP_LINES:
+                out.append({"story": None, "x_mm": round(xm - G.COL_W / 2, 1), "lines": round(n, 1)})
+    return out
 
 
 # ------------------------------------------------------------------------------------------- photo folders

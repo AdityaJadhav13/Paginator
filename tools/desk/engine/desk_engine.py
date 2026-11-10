@@ -87,6 +87,9 @@ def template_of(cfg: dict, key: str) -> DG.Template:
     return DG.Template(Path(cfg["dataset"]), cfg["templates"][key], key)
 
 
+REFINED_MAX_STORIES = 9          # a refined page's stories at most (more, and the layout search runs out of its budget)
+
+
 def stories_target(per: dict, role: str) -> int:
     """Stories a page of this role usually holds: the house setting's (min, max) midpoint when the paper's layout
     is refined (layout/settings.py), else the median the Desk measured on the paper's pages (needs_per_role)."""
@@ -476,7 +479,8 @@ class Built:
         for i, a in enumerate(articles or []):
             if not ARTICLE_ID.match(str(a.get("id", ""))):
                 continue
-            if not (a.get("headline") or "").strip() or not any(k == "para" for k, _ in DA.blocks(a.get("body") or "")):
+            if not (a.get("headline") or "").strip() or (not any(k == "para" for k, _ in DA.blocks(a.get("body") or ""))
+                                                         and DA.sudoku_of(a) is None):     # (a refined paper's sudoku has no text)
                 self.skipped.append({"article": a["id"], "reason": DM.msg("m.plan.needsText")})
                 continue
             w = []
@@ -824,7 +828,7 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
         tpl = tpls[tkeys[i]]
         spp = getattr(G, "ST", {}).get("stories_per_page")
         pages.append({"page": i + 1, "regions": tpl.regions, "target": stories_target(per, r) + briefs}
-                     | ({"cap": spp[1] + briefs} if spp else {})            # the most the paper prints on a page
+                     | ({"cap": min(spp[1], REFINED_MAX_STORIES) + briefs} if spp else {})   # the most the paper prints on a page
                      | ({"grid": tpl.grid, "options": by_grid[tpl.grid]} if tpl.grid in by_grid else {}))
     planner = DP.Planner(live, options, pages, hold=bool(getattr(G, "ST", {}).get("refined")))
     plan, left, dropped = planner.plan()
@@ -907,6 +911,8 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
                                                                     "sha256": r["sha256"], "warnings": r.get("warnings", [])})
                 ps.update(state="done", pdf=f"page-{n:02d}.pdf", message="",
                           warnings=ps["warnings"] + [worker_text(w) for w in r.get("warnings", [])])
+                if r["manifest"].get("gap_check", {}).get("pass") is False:     # a refined paper's gap check
+                    status.data["gap_check_failed"] = sorted(status.data.get("gap_check_failed", []) + [n])
             else:
                 log(f"page {n} failed:", r.get("message"), r.get("trace", ""))
                 ps.update(state="failed", message=worker_text(r.get("message")) if r.get("message") else DM.msg("m.run.pageFailed"))
