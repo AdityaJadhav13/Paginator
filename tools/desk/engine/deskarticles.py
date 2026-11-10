@@ -125,6 +125,8 @@ def _crosshead(eid: str, text: str) -> dict:
 
 
 def _para(text: str, first: bool = False) -> dict:
+    if ST["refined"]:                                # a colon never starts a line ("नवी दिल्ली, ता. १० :"): tied to its word
+        text = re.sub(r" +([:;])", "\u00a0\\1", text)
     out = {"type": "para", "text": text, "indent_mm": INDENT, "lines": [{"line_ref": "gen:0", "col": 0, "text": text}]}
     n = run_in(text) if first and ST["dateline_bold"] else 0
     if n:

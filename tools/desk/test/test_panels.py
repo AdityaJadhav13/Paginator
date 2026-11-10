@@ -269,3 +269,14 @@ class EditorTreatmentTest(LockCase, Weekly):
         self.assertNotIn("treatments", DEd.PageSession.state(s))
         self.weekly()
         self.assertEqual(DEd.PageSession.state(s)["treatments"], panels.available())
+
+
+class RedStrapTextTest(unittest.TestCase):
+    def test_a_red_strap_without_a_text_colour_gets_white_text(self):
+        LS.use({"refined": True, "panels": {"strap": {"cmyk": (0.15, 1.0, 1.0, 0.0), "height_mm": 9.3}}})
+        try:
+            self.assertEqual(panels.spec("strap")["text_cmyk"], (0.0, 0.0, 0.0, 0.0))
+            self.assertIn("strap", panels.available())
+        finally:
+            LS.use({})
+

@@ -1829,6 +1829,10 @@ const TABLE = {
     "Issue number (अंक) not set in step 1: the front page keeps the old number",
     "पायरी 1 मध्ये अंक क्रमांक दिलेला नाही: पहिल्या पानावर जुनाच क्रमांक राहतो",
   ],
+  "m.warn.issueNotSetNone": [
+    "Issue number not set in step 1: the front page prints none",
+    "पायरी 1 मध्ये अंक क्रमांक दिलेला नाही: पहिल्या पानावर अंक क्रमांक छापला जात नाही",
+  ],
   "m.warn.overlap": ["stories overlap on the page", "पानावर बातम्या एकमेकींवर येतात"],
   "m.warn.outside": [
     "a story is outside the news area or over an advertisement",

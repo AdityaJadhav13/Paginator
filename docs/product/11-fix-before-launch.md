@@ -779,3 +779,9 @@ The review's minor findings, left for later. Each says where, and why it can wai
 | ENG-20 | manifest | `photos_drawn` counts the template's own pictures (as in the pilot), not the stories' photos | The PDF is right; the field name misleads |
 | ENG-21 | composer | A web address can break at a dot across lines ("cbse." / "gov.in"); straight quotes in English headlines leave visible gaps | Rare; both are text the editor can adjust |
 | ENG-22 | credits with several photos | A story with more than one photo gets its credit under the last one. Desk articles carry one photo | Only printed page models carry more |
+| ENG-23 | daily profile | The daily's learned 6- and 7-column "grid alternates" were left out of its private profile by hand: they are sections inside 8-column pages, not page grids. The learner should tell the two apart | Every daily page is laid out on its 8-column grid |
+| ENG-24 | front page warning | The Desk still warns "the front page keeps the old number" when no issue is given, but a refined paper's running head now takes the old number out | The page itself is right; the wording should change |
+| ENG-25 | content and photo size | With 4 stories on a broadsheet page (p4 of 10 Nov), the search fills the page with a large photo. A per-page photo-area cap (learned `photo_area_share`) is still not used | More stories fill the page as a real one is filled |
+| ENG-26 | daily front ear | The 2025 front ear (date box, pages, volume, price, PRGI) is the template's own design; it has no editor line, so the owner's daily strip (which names the editor) is not printed as a strip on the daily | The editor is named in the imprint on p6 |
+| ENG-27 | strip separators | The owner's ■ separators are drawn as small squares: no stand-in font has the glyph | They read the same |
+

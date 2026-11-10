@@ -859,7 +859,7 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
             ps.update(state="failed", message=DM.msg("m.run.noStoriesLeft"))
             continue
         if role == "front" and not str(edition.get("issue") or "").strip():
-            ps["warnings"].append(deskprinted.ISSUE_NOT_SET)
+            ps["warnings"].append(deskprinted.issue_warning())
         if pg["shrink_units"] is None:
             ps["warnings"].append(DM.msg("m.warn.notFill"))
         tpl = tpls[tkeys[n - 1]]

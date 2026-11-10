@@ -23,6 +23,7 @@ import deskprofile as DPR  # noqa: E402
 import deskworker as DW  # noqa: E402
 import settings as LS  # noqa: E402  (layout/settings.py, on the path through deskgen)
 
+DAY = date(2026, 11, 10)
 PAPER = {"format": "pageinator.paper/1", "script": "deva", "refined_layout": True, "legacy_text": True}
 GARBAGE = "a{ddma, {X. 8 Zmo"            # what a legacy font's extracted text looks like (fictional)
 LAYOUT = {
@@ -87,6 +88,16 @@ class MapLayoutTest(unittest.TestCase):
     def test_missing_keys_keep_their_defaults(self):
         self.assertEqual(DPR._map_layout({}), {"head_weight": 700})
 
+    def test_the_headline_line_cap_covers_95_percent_of_the_heads(self):
+        hd = {"lines_hist": {"1": 110, "2": 235, "3": 25, "4": 5, "5": 1, "7": 1}, "max_lines": 7}   # a daily: rare 5–7 line heads
+        self.assertEqual(DPR._map_layout({"headline": hd})["head_max_lines"], 3)
+        self.assertEqual(DPR._map_layout({"headline": {"lines_hist": {"1": 17, "2": 11}, "max_lines": 2}})["head_max_lines"], 2)
+
+    def test_a_rare_treatment_is_not_the_papers_practice(self):
+        got = DPR._map_layout({"panels": {"reverse": {"cmyk": [0, 1, 1, 0.5], "n": 47}, "tint": {"cmyk": [0, 0, 0, 0.2], "height_mm": 123.0, "n": 3},
+                                          "box": {"stroke_pt": 1.0, "n": 106}}})
+        self.assertEqual(sorted(got["panels"]), ["box", "reverse"])     # 3 of 156: below 5 %
+
     def test_photo_widths_under_a_column_are_not_widths(self):
         self.assertEqual(DPR._map_layout({"photos": {"width_cols": {"0": 3, "1": 2}}})["photo_cols"], {1: 1.0})
         self.assertNotIn("photo_cols", DPR._map_layout({"photos": {"width_cols": {"0": 3}}}))
@@ -96,8 +107,8 @@ class MapLayoutTest(unittest.TestCase):
         got = DPR._map_layout({"density": {"stories_per_page": [0, 3, 6]}, "rules": {"separator": {"cmyk": None, "weight_pt": 0.0}},
                                "headline": {"size_by_span": {}}, "body": {"leadings_pt": [], "visual_ratio": 1.03, "size_pt": 10.0},
                                "panels": {"box": {"cmyk": [], "stroke_pt": 0.5}}})
-        self.assertEqual((got["stories_per_page"], got["rule_weight_pt"], got["body_size_pt"]), ((1, 6), 0.1, 10.0))
-        self.assertNotIn("body_family", got)          # sans and the size scaling are for a legacy face only
+        self.assertEqual((got["stories_per_page"], got["rule_weight_pt"], got["body_size_pt"]), ((1, 6), 0.1, 10.3))
+        self.assertNotIn("body_family", got)          # the sans stand-in is for a legacy face only (sizes scale for any face)
         self.assertNotIn("head_sizes", got)
         self.assertEqual(got["panels"], {"box": {"stroke_pt": 0.5}})
         self.assertNotIn("photo_shapes", DPR._map_layout({"photos": {"treatments": {"cutout": 1.0}}}))   # never cut-outs
@@ -197,8 +208,10 @@ class LegacyTemplateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             tpl = self.template(Path(d), {**PAPER, "imprint_text": ["काल्पनिक मुद्रक, काल्पनिक प्रकाशन"]})
         imp = [(e, t) for e, t in DPR.fresh_folios(tpl, 3, date(2026, 11, 9)) if e["id"].startswith("fresh-imprint")]
-        self.assertEqual([(e["fresh"]["x_mm"], e["fresh"]["baseline_mm"], t) for e, t in imp],
-                         [(20.0, 336.5, ["काल्पनिक मुद्रक, काल्पनिक प्रकाशन"])])
+        self.assertEqual(imp, [])                         # a refined paper: set as a paragraph where its imprint stood
+        self.assertEqual(tpl.imprint_paras, ["काल्पनिक मुद्रक, काल्पनिक प्रकाशन"])
+        (x0, y0, x1, y1), ruled = tpl.imprint_slots[0]
+        self.assertTrue(ruled and x0 < 25.0 and y0 >= 333.0 and x1 > 195.0)
 
     def test_folio_plan_and_draw_set_only_the_fresh_lines(self):
         with tempfile.TemporaryDirectory() as d:
@@ -405,6 +418,106 @@ class HoldingTest(unittest.TestCase):
         self.assertEqual((pages[0]["keys"], pages[0]["shrink_units"], dropped), (["s0"], 0, {}))
         self.assertEqual(set(seen), {4})
         self.assertEqual(DG.grid_now(), DG.MAIN_GRID)
+
+
+class RegistrationPendingTest(unittest.TestCase):
+    """paper.json "registration_pending": the template's registration and imprint lines and the old issue number never print."""
+
+    def tpl(self):
+        els = [{"id": "reg", "kind": "furniture", "text": "PRGI No. FICT/00/A0000"},
+               {"id": "imp", "kind": "furniture", "text": "Printed and Published by A. Fictional for Fictional Press"},
+               {"id": "ear", "kind": "folio", "text": "पाने ८ ■ अंक : ५५ ■ वर्ष २", "lines": [{"text": "पाने ८ ■ अंक : ५५ ■ वर्ष २"}]},
+               {"id": "rule", "kind": "rule", "text": ""},
+               {"id": "bul", "kind": "furniture", "text": "■", "bbox_mm": [10.0, 50.0, 13.0, 53.0]}]
+        for e in els:
+            e.setdefault("bbox_mm", [15.0, 50.0, 60.0, 53.0] if e["id"] == "reg" else [0.0, 0.0, 1.0, 1.0])
+        return types.SimpleNamespace(keep=list(els), dropped=[], paper=True)
+
+    def test_registration_lines_leave_only_when_pending(self):
+        t = self.tpl()
+        DPR._drop_registration(t, {"registration_pending": False})
+        self.assertEqual(len(t.keep), 5)
+        DPR._drop_registration(t, {"registration_pending": True})
+        self.assertEqual([e["id"] for e in t.keep], ["ear", "rule"])      # the PRGI line's own bullet goes with it
+        self.assertEqual(t.dropped, ["bul", "imp", "reg"])
+
+    def test_the_old_issue_number_is_taken_out_when_no_issue_is_given(self):
+        t = self.tpl()
+        DPR._drop_registration(t, {"registration_pending": True})
+        plan = DPR._folio_plan(lambda tpl, page, pages, day, ed: (list(tpl.keep), []))
+        with mock.patch.object(DPR, "fresh_folios", lambda *a: []), mock.patch.object(DPR, "fresh_page_number", lambda *a: []):
+            keep, redo = plan(t, 1, 8, DAY, {"issue": ""})
+            self.assertEqual([(e["id"], new) for e, new in redo], [("ear", ["पाने ८ ■ वर्ष २"])])
+            keep, redo = plan(t, 1, 8, DAY, {"issue": "12"})
+            self.assertEqual(redo, [])                    # an issue given: the Desk's own rewrite (not this rule)
+
+
+class RegistrationWordsTest(unittest.TestCase):
+    def test_what_counts_as_registration_and_issue(self):
+        for t in ("PRGI No. FICT/1", "RNI: X", "Printed and published by A", "मुद्रक व प्रकाशक", "संपादक : अ"):
+            self.assertTrue(DPR.REGISTRATION.search(t), t)
+        for t in ("संपादकीय", "MORNING EDITION", "Regional news"):
+            self.assertFalse(DPR.REGISTRATION.search(t), t)
+        self.assertEqual(DPR._no_issue("अंक : ४६ ■ वर्ष २"), "वर्ष २")
+        self.assertEqual(DPR._no_issue("Vol. 2 No. 46 Rs 5"), "Vol. 2 Rs 5")
+
+
+class StripAndImprintTest(unittest.TestCase):
+    def test_strip_placeholders_take_the_editions_words(self):
+        s = "नाशिक ■ वर्ष १ ■ अंक : {issue} ■ {day}, दि. {from} ते {to} ■ पाने ८"
+        self.assertEqual(DPR.fill_strip(s, DAY, {}), "नाशिक ■ वर्ष १ ■ मंगळवार, दि. १० नोव्हेंबर ते १६ नोव्हेंबर २०२६ ■ पाने ८")
+        self.assertIn("अंक : ४", DPR.fill_strip(s, DAY, {"issue": "4"}))
+        self.assertEqual(DPR.fill_strip("{day}, दि. {date}", DAY, {}), "मंगळवार, दि. १० नोव्हेंबर २०२६")
+
+    def test_a_papers_own_imprint_replaces_the_templates(self):
+        tpl = types.SimpleNamespace(paper=True, news_bottom=500.0, page_h=540.0, page_w=347.0, dropped=[], keep=[
+            {"id": "mr", "kind": "furniture", "text": "काल्पनिक वृत्तपत्र मालक, मुद्रक, प्रकाशक", "bbox_mm": [20.0, 510.0, 320.0, 514.0]},
+            {"id": "en", "kind": "furniture", "text": "Printed and Published by A. Fiction", "bbox_mm": [20.0, 515.0, 320.0, 522.0]},
+            {"id": "box", "kind": "box", "bbox_mm": [18.0, 508.0, 322.0, 524.0]}])
+        DPR._imprint_region(tpl, {"imprint_text": ["मराठी परिच्छेद", "English paragraph"]})
+        self.assertEqual([e["id"] for e in tpl.keep], ["box"])
+        self.assertEqual(len(tpl.imprint_slots), 2)
+        self.assertFalse(any(r for _, r in tpl.imprint_slots))      # inside the paper's own ruled box: no second rule
+        DPR._imprint_region(types.SimpleNamespace(paper=False, keep=[1]), {"imprint_text": ["x"]})   # not refined: nothing
+
+
+class FolioDetailsTest(unittest.TestCase):
+    def test_a_page_number_is_set_fresh_where_the_template_keeps_none(self):
+        band = {"id": "band", "kind": "box", "bbox_mm": [12.0, 14.0, 335.0, 28.0]}
+        tpl = types.SimpleNamespace(paper=True, legacy_text=None, role="inside", page_h=540.0, page_w=347.0, keep=[band])
+        (e, text), = DPR.fresh_page_number(tpl, 8, [], [])
+        self.assertEqual((text, e["fresh"]["align"], e["fresh"]["x_mm"]), (["8"], "right", 332.0))
+        num = {"id": "n", "kind": "folio", "text": "3"}
+        self.assertEqual(DPR.fresh_page_number(tpl, 8, [num], []), [])     # the template's own number is rewritten instead
+        tpl.role = "front"
+        self.assertEqual(DPR.fresh_page_number(tpl, 1, [], []), [])
+
+    def test_bullets_of_a_removed_issue_line_and_the_papers_price_word(self):
+        ear = {"id": "ear", "kind": "folio", "text": "पाने ८ अंक : ५५ किंमत ५ रुपये",
+               "lines": [{"text": "पाने ८", "baseline_mm": 40.0}, {"text": "अंक : ५५", "baseline_mm": 44.0},
+                         {"text": "किंमत ५ रुपये", "baseline_mm": 48.0}]}
+        bul = {"id": "bul", "kind": "furniture", "text": "■ ■ ■", "lines": [{"text": "■", "baseline_mm": b} for b in (40.0, 44.0, 48.0)]}
+        tpl = types.SimpleNamespace(paper=True, rupee="रूपये", keep=[ear, bul])
+        plan = DPR._folio_plan(lambda t, page, pages, day, ed: (list(t.keep), []))
+        with mock.patch.object(DPR, "fresh_folios", lambda *a: []), mock.patch.object(DPR, "fresh_page_number", lambda *a: []):
+            keep, redo = plan(tpl, 1, 8, DAY, {})
+        got = {e["id"]: new for e, new in redo}
+        self.assertEqual(got["ear"], ["पाने ८", "", "किंमत ५ रूपये"])
+        self.assertEqual(got["bul"], ["■", "", "■"])
+
+
+class EnglishRunningHeadTest(unittest.TestCase):
+    def test_an_english_template_of_a_marathi_paper_gets_the_date(self):
+        tpl = types.SimpleNamespace(paper=True, keep=[{"id": "d", "kind": "folio", "text": "Wednesday, August 27, 2025",
+                                                       "lines": [{"text": "Wednesday, August 27, 2025"}]}])
+        plan = DPR._folio_plan(lambda t, page, pages, day, ed: (list(t.keep), []))
+        with mock.patch.object(DPR, "fresh_folios", lambda *a: []), mock.patch.object(DPR, "fresh_page_number", lambda *a: []):
+            keep, redo = plan(tpl, 8, 8, DAY, {})
+        self.assertEqual((keep, [(e["id"], new) for e, new in redo]), ([], [("d", ["Tuesday, November 10, 2026"])]))
+        tpl.paper = False                                  # the pilot's template: as it was
+        with mock.patch.object(DPR, "fresh_folios", lambda *a: []), mock.patch.object(DPR, "fresh_page_number", lambda *a: []):
+            keep, redo = plan(tpl, 8, 8, DAY, {})
+        self.assertEqual((len(keep), redo), (1, []))
 
 
 class LegacyRatioTest(unittest.TestCase):

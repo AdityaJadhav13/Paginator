@@ -1320,6 +1320,7 @@ export const EN = {
   "m.warn.emptyArea": "About {n} cm² of the news area is left empty: add a short item or a photo",
   "m.warn.notFill": "These stories do not fill the page exactly; the layout may fail",
   "m.warn.issueNotSet": "This edition has no issue number: the front page keeps the old number. Set it on the edition.",
+  "m.warn.issueNotSetNone": "This edition has no issue number: the front page prints none. Set it on the edition.",
   "m.warn.emptyFoot": "About {mm} mm of the page is left empty at the foot — add a short item or a photo",
   "m.warn.charRemoved": "{what}: removed a character the fonts do not have (U+{code})",
   "m.warn.sameHeadline": "Same headline as another article ({article}) — is it the same story twice?",

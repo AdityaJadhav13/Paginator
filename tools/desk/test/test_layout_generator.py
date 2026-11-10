@@ -391,6 +391,20 @@ class PhotoColsTest(Settings):
     def grid(self, o):
         return round(G.Generator.grid_cols(o["photo"]["ph_w"]))
 
+    def test_a_portrait_head_photo_is_never_taller_than_square(self):
+        photo("p2", 1000, 1300)                 # portrait: a crop (≤ CROP) can make it square
+        g = story(paras=12, image="p2")
+        opts = [o for w in (3, 4) for o in g._options(g.stories[0], w) if o["photo"]]
+        self.assertTrue(opts)
+        self.assertTrue(all(o["photo"]["ph_h"] <= o["photo"]["ph_w"] + 1e-6 for o in opts))
+
+    def test_a_tall_portrait_keeps_its_head_photo_options(self):
+        photo("p3", 1000, 1600)                 # 9:16 cropped by CROP reaches 0.94, never square: allowed as tall as that
+        g = story(paras=12, image="p3")
+        opts = [o for w in (3, 4) for o in g._options(g.stories[0], w) if o["photo"]]
+        self.assertTrue(opts)
+        self.assertTrue(all(o["photo"]["ph_w"] / o["photo"]["ph_h"] >= 1000 / 1600 - 1e-6 for o in opts))   # never taller than itself
+
     def test_only_widths_the_paper_prints(self):
         photo("p1", 1500, 1000)
         g = story(paras=8, image="p1")
@@ -407,8 +421,10 @@ class PhotoColsTest(Settings):
         photo("p1", 1500, 1000)
         settings.use({**self.over, "photo_cols": {1: 0.4, 2: 0.4, 3: 0.3}})
         g = story(paras=8, image="p1")
-        best = min((o for o in g._options(g.stories[0], 4) if o["photo"]), key=lambda o: o["static"])
-        self.assertEqual(self.grid(best), 3)
+        best = min((o for o in g._options(g.stories[0], 5) if o["photo"]), key=lambda o: o["static"])
+        self.assertEqual(self.grid(best), 3)                       # (at 4 columns a 3-column photo would leave one lone column)
+        opts = [o for w in (3, 4) for o in g._options(g.stories[0], w) if o["photo"]]
+        self.assertTrue(all(o["photo"]["k"] == o["m"] or o["m"] - o["photo"]["k"] >= 2 for o in opts if o["photo"].get("k")))
         self.assertEqual(g.width_cost(g.stories[0], best["photo"]["ph_w"]), 0.0)
         g.stories[0].rank = 3                                      # not the lead: the commonest widths cost nothing
         self.assertEqual(g.width_cost(g.stories[0], 2 * G.COL_W + G.GUT), 0.0)

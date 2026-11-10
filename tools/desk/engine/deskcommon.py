@@ -129,6 +129,7 @@ def paper(ds: Path) -> dict | None:
     lines = [pj.get(k) for k in ("imprint_text", "masthead_strip_text")] if isinstance(pj, dict) else []
     if (not isinstance(pj, dict) or pj.get("format") != "pageinator.paper/1" or pj.get("script") not in SCRIPT_RANGE
             or not isinstance(sizes or [], list) or not all(type(n) is int and 3 <= n <= 64 for n in sizes or [])
-            or not all(isinstance(v or [], list) and all(isinstance(t, str) for t in v or []) for v in lines)):
+            or not all(isinstance(v or [], list) and all(isinstance(t, str) for t in v or []) for v in lines)
+            or not isinstance(pj.get("registration_pending", False), bool)):
         raise DamagedFile("the file paper.json of this dataset is not a paper description the engine reads")
     return pj

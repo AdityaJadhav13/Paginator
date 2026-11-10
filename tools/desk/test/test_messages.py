@@ -134,6 +134,7 @@ OLD = {
     "m.press.folio": ({}, "The volume, issue or price changed: open the page and save it."),
     "m.press.ad": ({}, "An advertisement on this page changed: open the page and save it (Save page sets the new one first)."),
     "m.warn.issueNotSet": ({}, "Issue number (अंक) not set in step 1: the front page keeps the old number"),
+    "m.warn.issueNotSetNone": ({}, "Issue number not set in step 1: the front page prints none"),
     "m.warn.overlap": ({}, "stories overlap on the page"),
     "m.warn.outside": ({}, "a story is outside the news area or over an advertisement"),
     "m.warn.overset": ({"n": 3}, "3 lines of text did not fit"),

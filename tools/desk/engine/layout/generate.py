@@ -489,18 +489,21 @@ class Generator:
 
         def width(p):
             return sum(p.clusters[c].width for cl in p.words for c in cl) + sum(x or 0.0 for x in p.spaces[:len(p.words) - 1])
-        out, ink = [], []
-        for i, j in best.lines:
+        out, ink, wds = [], [], []
+        for i, j in best.lines:                          # the width axis each line needs …
             t = " ".join(texts[i:j])
             wd = ax["wdth"]
-            p = K3.prepare(t, "mr", "Deva", CP.SANS, size, {**ax, "wdth": wd}, wt)
-            if width(p) > measure:
+            if width(K3.prepare(t, "mr", "Deva", CP.SANS, size, {**ax, "wdth": wd}, wt)) > measure:
                 a, b = HEAD_WDTH_MIN, wd
                 for _ in range(8):
                     m_ = (a + b) / 2
                     a, b = (m_, b) if width(K3.prepare(t, "mr", "Deva", CP.SANS, size, {**ax, "wdth": m_}, wt)) <= measure else (a, m_)
                 wd = max(HEAD_WDTH_MIN, math.floor(a / 2.5) * 2.5)
-                p = K3.prepare(t, "mr", "Deva", CP.SANS, size, {**ax, "wdth": wd}, wt)
+            wds.append(wd)
+        wd = min(wds)                                    # … and one face for the whole headline: the narrowest any line needs
+        for i, j in best.lines:
+            t = " ".join(texts[i:j])
+            p = K3.prepare(t, "mr", "Deva", CP.SANS, size, {**ax, "wdth": wd}, wt)
             w = width(p)
             hs = max(tz0, min(tz1, measure / w)) if w > 0 else 1.0
             extra, gaps = measure - w * hs, len(p.words) - 1
@@ -865,6 +868,8 @@ class Generator:
                             ph_top = top_text + max({"deck": SP["deck_to_photo"]}.get(after, SP["headline_to_photo"]), desc + 1.0) \
                                 if dsp["has_display"] else SP["rule_to_photo"]
                             for k in ((self.photo_ks(m, cw) if ST["photo_cols"] else range(1, m + 1)) if L else (m,)):
+                                if ST["photo_cols"] and 0 < m - k < 2 and m > 1:
+                                    continue                    # refined: never one lone text column beside a photo
                                 ph_w = k * cw + (k - 1) * GUT
                                 if any(e["w"] / (ph_w / 25.4) < e["min_ppi"] for e in s.photos_extra):
                                     continue
@@ -881,6 +886,8 @@ class Generator:
                                     asp = ph_w / ph_h
                                     if asp < s.photo["aspect"] / CROP:
                                         break
+                                    if ST["photo_cols"] and asp < (1.0 if s.photo["aspect"] * CROP >= 1.0 else s.photo["aspect"]):
+                                        break                   # refined: never taller than square when a crop can make it so, else than itself
                                     if asp > s.photo["aspect"] * CROP:
                                         continue
                                     px_w = min(s.photo["w"], s.photo["h"] * asp)          # source pixels across the crop
@@ -888,6 +895,8 @@ class Generator:
                                         continue
                                     R = max(j, math.ceil((L + k * j) / m))
                                     short = k * (R - j) + (m - k) * R - L          # empty lines at the last column's foot
+                                    if ST["photo_cols"] and short > max(3, R // 3):
+                                        continue                # refined: no column left more than a third empty
                                     pc = 3.0 * math.log(asp / s.photo["aspect"]) ** 2 + (3.0 if s.rank <= 2 else 1.0) * (1 - k / m) + SHORT_COST * short
                                     if ST["photo_cols"]:
                                         pc += self.width_cost(s, ph_w)

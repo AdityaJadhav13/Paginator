@@ -1467,6 +1467,17 @@ Each is learned from its own PDFs.
   - **Photos:** widths follow what the paper prints, and the page lead gets the widest. No text strip is narrower than the learned minimum: photos take whole columns instead.
   - **Credits:** a separate 6 pt credit line.
   - **Running head:** the band's learned shaded fill is drawn, and the masthead strip text comes from paper.json.
+- **The daily (2026-11-10).** The broadsheet daily now runs on the refined settings too, with values learned from its own 2025 pages:
+  - 8 columns of 36.5 mm; body 12 pt on 13–15 pt leading (10.26 pt in the stand-in);
+  - headlines up to 3 lines (the cap covers 95 % of its heads), sized by span;
+  - red strap band, reverse heads and boxes (a treatment the paper uses on under 5 % of its panels is never assigned);
+  - photos sized by the widths the daily prints.
+
+  Its English page uses a real English template, and that template's running head gets the date. Engine changes that came with it:
+  - Sizes are scaled by the measured type-size ratio for every refined paper.
+  - paper.json carries the paper's own `imprint_text` (Marathi, then English), set as paragraphs in the template's ruled imprint boxes, and `masthead_strip_text` with `{day}`, `{date}`, `{from}`, `{to}` and `{issue}`.
+  - `registration_pending` leaves out stale registration lines until the details are given.
+  - An issue number that is not given is taken out of the running head.
 - **Open items** are in doc 11, ENG.
 
 ## Appendix A. Versions and licences checked on 2026-10-20

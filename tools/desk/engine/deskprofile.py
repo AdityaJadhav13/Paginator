@@ -179,14 +179,22 @@ def _map_layout(lay: dict, legacy: bool = False) -> dict:
     lay = _present(_obj(lay))
     hd, bd, rl, ph, dn = (_obj(lay.get(k)) for k in ("headline", "body", "rules", "photos", "density"))
     out: dict = {"head_weight": int(_num(hd.get("weight", 700), 300, 900))}   # a house knob: Bold unless learned
-    # house sizes in a legacy face's pt become stand-in pt; a Unicode paper's sizes are already the stand-in's
-    ratio = _num(bd["visual_ratio"], 0.3, 2.0) if legacy and "visual_ratio" in bd else None
+    # house sizes in the house face's pt become stand-in pt (the faces' measured shirorekha heights: a legacy face, or a
+    # Unicode face other than the stand-in, such as the daily's)
+    ratio = _num(bd["visual_ratio"], 0.3, 2.0) if "visual_ratio" in bd else None
     hist = _obj(hd.get("lines_hist"))
     if any(not _span_key(k, 9) for k in hist):
         raise DamagedFile(BAD_PROFILE)
     seen = [int(k) for k, n in hist.items() if _num(n, 0, 1e9) > 0]
-    if "max_lines" in hd or seen:
-        out["head_max_lines"] = out["head_max_lines_1col"] = int(_num(hd["max_lines"], 1, 9)) if "max_lines" in hd else max(seen)
+    if seen:                                             # the line count that covers 95 % of the paper's headlines (a rare
+        tot, acc = sum(hist.values()), 0                 # 5- or 7-line head is not the house's rule)
+        for k in sorted(seen):
+            acc += hist[str(k)]
+            if acc >= 0.95 * tot:
+                break
+        out["head_max_lines"] = out["head_max_lines_1col"] = min(k, int(_num(hd["max_lines"], 1, 9))) if "max_lines" in hd else k
+    elif "max_lines" in hd:
+        out["head_max_lines"] = out["head_max_lines_1col"] = int(_num(hd["max_lines"], 1, 9))
     if "tz_range" in hd:
         lo, hi = (_num(v, 0.3, 1.5) for v in _pair(hd["tz_range"]))
         if lo > hi:
@@ -210,7 +218,7 @@ def _map_layout(lay: dict, legacy: bool = False) -> dict:
         if bd["family"] not in ("sans", "serif"):
             raise DamagedFile(BAD_PROFILE)
         out["body_family"] = bd["family"]
-    elif ratio is not None:                              # a legacy paper's stand-in body: the humanist sans (GAP §5)
+    elif legacy and ratio is not None:                   # a legacy paper's stand-in body: the humanist sans (GAP §5)
         out["body_family"] = "sans"
     if "size_pt" in bd:
         out["body_size_pt"] = round(_num(bd["size_pt"], 4.0, 30.0) * (ratio or 1.0), 3)
@@ -300,11 +308,13 @@ def _panels(v) -> dict:
         s = {k: _cmyk(spec[k]) for k in ("cmyk", "text_cmyk") if k in spec}
         if "fill" in spec:
             s["fill"] = spec["fill"] if spec["fill"] is None or isinstance(spec["fill"], bool) else _cmyk(spec["fill"])
-        s |= {k: _num(spec[k], 0.0, hi) for k, hi in (("height_mm", 100.0), ("stroke_pt", 5.0), ("pad_mm", 20.0)) if k in spec}
+        s |= {k: _num(spec[k], 0.0, hi) for k, hi in (("height_mm", 1000.0), ("stroke_pt", 5.0), ("pad_mm", 20.0)) if k in spec}
         if "n" in spec:
             s["n"] = int(_num(spec["n"], 0, 1e9))
         out[kind] = s
-    return out
+    # a treatment on fewer than 5 % of the paper's panels is an exception, not its practice: never assigned by rule
+    total = sum(s.get("n", 0) for s in out.values())
+    return {k: s for k, s in out.items() if "n" not in s or s["n"] >= 0.05 * total}
 
 
 def _context_init(real):
@@ -396,9 +406,14 @@ def _template_init(real):
 
 def _paper_template(self, model: dict, ds) -> None:
     """Another paper's template (_template_init), on the template page's grid."""
+    self.paper = layout_block(Path(ds)) is not None      # a refined paper's template (its English running head is dated)
+    # the paper's own spelling of its price word, from the strip it gave (रूपये, not the template's रुपये)
+    self.rupee = "रूपये" if any("रूपये" in t for t in (paper(Path(ds)) or {}).get("masthead_strip_text") or []) else None
     _keep_lettering(self, model)
     _keep_head_band(self, model)
     _drop_legacy_text(self, model, paper(Path(ds)))
+    _drop_registration(self, paper(Path(ds)))
+    _imprint_region(self, paper(Path(ds)))
     _drop_unpainted_graphics(self)
     if self.ad_block is not None:
         return
@@ -506,7 +521,7 @@ def _drop_legacy_text(tpl, model: dict, pj: dict) -> None:
 DATE_SAMPLE = ("सोमवार, १ जानेवारी २०००", "Monday, 1 January 2000")   # rewritten with deskfolio's words for the day
 
 
-def fresh_folios(tpl, page: int, day) -> list:
+def fresh_folios(tpl, page: int, day, edition: dict | None = None) -> list:
     """[(slot element, [text])] a legacy paper's page draws afresh (geometry only, from the text elements it dropped):
     the date centred in the folio band, the page number where the printed one stood (at the band's right; not on the
     front page), paper.json's masthead strip lines (in the bold, centred) on the dropped lines above the news that are
@@ -534,16 +549,34 @@ def fresh_folios(tpl, page: int, day) -> list:
     strip = sorted(((ln, e) for e in legacy if e not in top and e["bbox_mm"][3] <= tpl.news_top + 1.0 for ln in e.get("lines") or []),
                    key=lambda le: (le[0]["baseline_mm"], le[0]["x0_mm"]))
     for k, (text, (ln, e)) in enumerate(zip(getattr(tpl, "masthead_strip_text", []), strip)):
+        text = fill_strip(text, day, edition or {})
         if text.strip():
             slot = {**_slot(e, (ln["x0_mm"] + ln["x1_mm"]) / 2, "center", True, ln["x1_mm"] - ln["x0_mm"]), "baseline_mm": ln["baseline_mm"]}
             out.append(({"id": f"fresh-strip-{k + 1}", "kind": "furniture", "fresh": slot}, [text]))
     lines = sorted(((ln, e) for e in legacy if e["bbox_mm"][1] >= tpl.news_bottom - 1.0 for ln in e.get("lines") or []),
                    key=lambda le: (le[0]["baseline_mm"], le[0]["x0_mm"]))
-    for k, (text, (ln, e)) in enumerate(zip(tpl.imprint_text, lines)):
+    for k, (text, (ln, e)) in enumerate(zip([] if getattr(tpl, "imprint_slots", None) else tpl.imprint_text, lines)):
         if text.strip():
             slot = {**_slot(e, ln["x0_mm"], "left", False, ln["x1_mm"] - ln["x0_mm"]), "baseline_mm": ln["baseline_mm"]}
             out.append(({"id": f"fresh-imprint-{k + 1}", "kind": "furniture", "fresh": slot}, [text]))
     return out
+
+
+def fresh_page_number(tpl, page: int, keep: list, redo: list) -> list:
+    """A refined paper's inside page whose template keeps no page number (an English flip page's number was artwork):
+    the number set fresh at the right end of its running-head band, in the stand-in bold."""
+    if not getattr(tpl, "paper", False) or getattr(tpl, "legacy_text", None) or tpl.role == "front":
+        return []
+    if any(e["kind"] == "folio" and DF.is_number_only(e.get("text") or "") for e in keep + [r[0] for r in redo]):
+        return []
+    bands = [e["bbox_mm"] for e in tpl.keep if e["kind"] == "box" and e["bbox_mm"][1] < 0.08 * tpl.page_h
+             and e["bbox_mm"][2] - e["bbox_mm"][0] >= 0.85 * (tpl.page_w - 2 * G.ORIGIN) and e["bbox_mm"][3] - e["bbox_mm"][1] < 0.06 * tpl.page_h]
+    if not bands:
+        return []
+    b = max(bands, key=lambda b: b[2] - b[0])
+    slot = {"x_mm": b[2] - 3.0, "baseline_mm": b[3] - 0.25 * (b[3] - b[1]), "size_pt": min(26.0, 0.6 * (b[3] - b[1]) * DG.MM),
+            "align": "right", "bold": True, "max_w_mm": None, "colour": None, "colour_cmyk": [0, 0, 0, 1]}
+    return [({"id": "fresh-page", "kind": "folio", "fresh": slot}, [str(page)])]
 
 
 def _slot(e: dict, x: float, align: str, bold: bool, max_w) -> dict:
@@ -552,10 +585,166 @@ def _slot(e: dict, x: float, align: str, bold: bool, max_w) -> dict:
             "align": align, "bold": bold, "max_w_mm": max_w, "colour": e.get("colour"), "colour_cmyk": e.get("colour_cmyk")}
 
 
+REGISTRATION = DF.re.compile(r"(?i:\bPRGI\b|\bRNI\b|\bRegd\b|\bReg\.\s*No|Printed\s*(?:and|&)\s*Published|MHBIL)|मुद्रक|प्रकाशक|संपादक(?!ीय)")
+ISSUE = DF.re.compile(r"(?:■\s*)?(?:अंक\s*(?:क्र\.?)?\s*[:\-]?\s*[0-9०-९]+|(?<![A-Za-z])No\.\s*\d+)\s*")
+
+
+def _no_issue(t: str) -> str:
+    """The line without its issue number (and a bullet left hanging at either end)."""
+    return ISSUE.sub("", t).strip().strip("■").strip()
+
+
+def _drop_registration(tpl, pj: dict | None) -> None:
+    """paper.json "registration_pending": true (the paper's registration details are not given yet): the template's
+    registration and imprint lines (PRGI/RNI numbers, printer, publisher, editor) are left out, never printed stale."""
+    if not (pj or {}).get("registration_pending"):
+        return
+    gone = {e["id"] for e in tpl.keep if e["kind"] in DG.FURNITURE_KINDS and REGISTRATION.search(e.get("text") or "")}
+    boxes = [e["bbox_mm"] for e in tpl.keep if e["id"] in gone]
+    gone |= {e["id"] for e in tpl.keep if e["kind"] in DG.FURNITURE_KINDS and (e.get("text") or "").strip()
+             and (CP.only_bullets(e["text"]) or set(e["text"].split()) <= {"■", "•"})
+             and any(min(e["bbox_mm"][3], b[3]) - max(e["bbox_mm"][1], b[1]) > 0 and b[0] - 6 <= e["bbox_mm"][2] <= b[0] + 1 for b in boxes)}
+    tpl.keep = [e for e in tpl.keep if e["id"] not in gone]
+    tpl.dropped = sorted(set(tpl.dropped) | gone)
+    tpl.registration_pending = True
+
+
+IMPRINT = DF.re.compile(r"(?i:Printed\s*(?:and|&)\s*Published)|मुद्रक|प्रकाशक")
+
+
+def fill_strip(text: str, day, edition: dict) -> str:
+    """A masthead strip line of paper.json with the edition's own words: {day} the weekday, {date} the date, {from} and
+    {to} the week a weekly covers (this day and six days on), {issue} its number (the item leaves when none is given)."""
+    from datetime import timedelta
+    def d(x, year=False):
+        return f"{DF.digits_like('०', x.day)} {DF.MONTHS[x.month - 1]}" + (f" {DF.digits_like('०', x.year)}" if year else "")
+    issue = str(edition.get("issue") or "").strip()
+    if not issue:
+        text = DF.re.sub(r"\s*■?\s*अंक\s*:?\s*\{issue\}\s*", " ", text)
+    to = day + timedelta(days=6)
+    for k, v in (("{day}", DF.WEEKDAYS[day.weekday()]), ("{date}", d(day, True)), ("{from}", d(day)), ("{to}", d(to, True)),
+                 ("{issue}", DF.digits_like("०", issue) if issue.isdigit() else issue)):
+        text = text.replace(k, v)
+    return " ".join(text.split())
+
+
+def _imprint_region(tpl, pj: dict | None) -> None:
+    """A refined paper with paper.json "imprint_text" (its imprint paragraphs: Marathi, then English): the template's own
+    imprint lines (or a legacy paper's dropped lines below the news) leave, and where they stood the paragraphs are set
+    (draw_imprint): one to each ruled box that held them, else one under the other, each in a 0.5 pt ruled box."""
+    paras = [t for t in (pj or {}).get("imprint_text") or [] if t.strip()]
+    if not getattr(tpl, "paper", False) or not paras:
+        return
+    own = [e for e in tpl.keep if e["kind"] in DG.FURNITURE_KINDS and IMPRINT.search(e.get("text") or "")]
+    legacy = [e for e in getattr(tpl, "legacy_text", None) or [] if e["bbox_mm"][1] >= tpl.news_bottom - 1.0]
+    if not own + legacy:
+        return
+    tpl.keep = [e for e in tpl.keep if e not in own]
+    tpl.dropped = sorted(set(tpl.dropped) | {e["id"] for e in own})
+    bbs = [e["bbox_mm"] for e in own + legacy]
+    region = (min(b[0] for b in bbs), min(b[1] for b in bbs), max(b[2] for b in bbs), max(b[3] for b in bbs))
+
+    def holds(box, b):
+        return box[0] - 1 <= (b[0] + b[2]) / 2 <= box[2] + 1 and box[1] - 1 <= (b[1] + b[3]) / 2 <= box[3] + 1
+    boxes = sorted((e["bbox_mm"] for e in tpl.keep if e["kind"] == "box" and any(holds(e["bbox_mm"], b) for b in bbs)
+                    and e["bbox_mm"][3] - e["bbox_mm"][1] < 0.1 * tpl.page_h), key=lambda b: (b[1], b[0]))
+    foot = sorted((e["bbox_mm"] for e in tpl.keep if e["kind"] == "box" and e["bbox_mm"][1] >= tpl.news_bottom - 1.0
+                   and e["bbox_mm"][2] - e["bbox_mm"][0] >= 0.5 * tpl.page_w and 8.0 <= e["bbox_mm"][3] - e["bbox_mm"][1] < 0.1 * tpl.page_h),
+                  key=lambda b: (b[1], b[0]))
+    if len(foot) == len(paras) and len(foot) > len(boxes):  # the page foot's ruled bands, one paragraph to each
+        boxes = foot
+    if len(boxes) == len(paras):
+        tpl.imprint_slots = [((b[0] + 1.5, b[1] + 1.0, b[2] - 1.5, b[3] - 1.0), False) for b in boxes]
+    else:                                                 # split the region, in proportion to the paragraphs' lengths
+        if boxes:
+            region = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+        y, tot, slots = region[1], sum(len(t) for t in paras), []
+        for t in paras:
+            h = (region[3] - region[1]) * len(t) / tot
+            slots.append(((region[0] + 1.5, y + 1.0, region[2] - 1.5, y + h - 1.0), not boxes))
+            y += h
+        tpl.imprint_slots = slots
+    tpl.imprint_paras = paras
+    area = (min(sl[0] for sl, _ in tpl.imprint_slots) - 2, min(sl[1] for sl, _ in tpl.imprint_slots) - 2,
+            max(sl[2] for sl, _ in tpl.imprint_slots) + 2, max(sl[3] for sl, _ in tpl.imprint_slots) + 2)
+    within = {e["id"] for e in tpl.keep if e["kind"] in DG.FURNITURE_KINDS + ("image", "graphic")   # contact lines and icons: the
+              and holds(area, e["bbox_mm"])}                                                         # imprint has them
+    tpl.keep = [e for e in tpl.keep if e["id"] not in within]
+    tpl.dropped = sorted(set(tpl.dropped) | within)
+
+
+def draw_imprint(B, tpl, cx) -> None:
+    """The imprint paragraphs in their slots (_imprint_region): justified, the body face (Latin in the same face), the
+    largest size from 8 pt down to 5 pt at which both fit, the same size for both; a ruled box round a slot that had none."""
+    slots, paras = getattr(tpl, "imprint_slots", None), getattr(tpl, "imprint_paras", None)
+    if not slots or not paras:
+        return
+    from dataclasses import replace
+    fam, ax, wt = CP.role_font("Body", "furniture")
+    pol = replace(cx.head_pol, balance=False)
+    for k in range(13):
+        size = 8.0 - 0.25 * k
+        rs = [CP.H.compose(t, fam, ax, wt, size, s[2] - s[0], pol, max_lines=20) for t, (s, _) in zip(paras, slots)]
+        if all(r.fits and len(r.lines) * 1.15 * size / DG.MM <= s[3] - s[1] for r, (s, _) in zip(rs, slots)):
+            break
+    fk = B.font(fam, ax, wt)
+    for t, r, (s, ruled) in zip(paras, rs, slots):
+        if not r.fits:
+            continue
+        B.register(fk, r.p)
+        lead = 1.15 * size / DG.MM
+        y = s[1] + (s[3] - s[1] - len(r.lines) * lead) / 2 + 0.8 * size / DG.MM
+        for n, ((i, j), w) in enumerate(zip(r.lines, r.widths_mm)):
+            gaps = j - i - 1
+            gap = (s[2] - s[0] - w) / gaps if gaps > 0 and n < len(r.lines) - 1 else 0.0
+            B.tokens_line(r.p, i, j, s[0], y + n * lead, fk, CP.BLACK, meta={"page": tpl.model["page"], "role": "furniture",
+                          "element": f"imprint-{paras.index(t) + 1}", "desk": "imprint"}, gap_extra=gap)
+        if ruled:
+            x0, y0, x1, y1 = s[0] - 1.5, s[1] - 1.0, s[2] + 1.5, s[3] + 1.0
+            for a, b in (((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0))):
+                B.line_mm(a, b, 0.5, CP.BLACK)
+
+
 def _folio_plan(real):
     def plan(tpl, page, pages, day, edition):
         keep, redo = real(tpl, page, pages, day, edition)
-        return keep, redo + fresh_folios(tpl, page, day)
+        if getattr(tpl, "paper", False) and not str(edition.get("issue") or "").strip():
+            # no issue number yet: the running head's old one is taken out, never printed as this edition's
+            redo = [(e, [_no_issue(t) for t in new]) for e, new in redo]
+            for e in [e for e in keep if e["kind"] in DG.FURNITURE_KINDS and e.get("lines")
+                      and any(ISSUE.search(ln.get("text") or "") for ln in e["lines"])]:
+                keep.remove(e)
+                redo.append((e, [_no_issue(" ".join((ln.get("text") or "").split())) for ln in e["lines"]]))
+            gone = [e["bbox_mm"] for e, new in redo if "fresh" not in e and new and not any(t.strip() for t in new)]
+            # a bullet column's bullet on a line whose issue item left goes with it
+            emptied = [e["lines"][i]["baseline_mm"] for e, new in redo if "fresh" not in e and e.get("lines")
+                       for i, t in enumerate(new) if i < len(e["lines"]) and not t.strip() and (e["lines"][i].get("text") or "").strip()]
+            for e in [e for e in keep if e["kind"] in DG.FURNITURE_KINDS and e.get("lines") and (e.get("text") or "").strip()
+                      and (CP.only_bullets(e["text"]) or set(e["text"].split()) <= {"■", "•"})]:
+                new = ["" if any(abs(ln["baseline_mm"] - b) < 1.0 for b in emptied) else " ".join((ln.get("text") or "").split())
+                       for ln in e["lines"]]
+                if any(not t for t in new):
+                    keep.remove(e)
+                    redo.append((e, new))
+            keep = [e for e in keep if not (e["kind"] in DG.FURNITURE_KINDS and set((e.get("text") or "").split()) <= {"■", "•"}
+                                            and (e.get("text") or "").strip() and any(min(e["bbox_mm"][3], b[3]) - max(e["bbox_mm"][1], b[1]) > 0
+                                                                                       and b[0] - 6 <= e["bbox_mm"][2] <= b[0] + 1 for b in gone))]
+        if getattr(tpl, "paper", False) and not DF.ENGLISH:
+            # an English page of a Marathi paper (a flip section's template): its English running head gets the date too
+            def en(t):
+                return DF._rewrite_en(t, day, page, pages, edition.get("volume", ""), edition.get("issue", ""), edition.get("price", ""))
+            redo = [(e, [en(t) for t in new]) for e, new in redo]
+            for e in [e for e in keep if e["kind"] in DG.FURNITURE_KINDS and e.get("lines")]:
+                old = [" ".join((ln.get("text") or "").split()) for ln in e["lines"]]
+                if [en(t) for t in old] != old:
+                    keep.remove(e)
+                    redo.append((e, [en(t) for t in old]))
+        if getattr(tpl, "rupee", None):
+            redo = [(e, [t.replace("रुपये", tpl.rupee) for t in new]) for e, new in redo]
+            for e in [e for e in keep if e["kind"] in DG.FURNITURE_KINDS and e.get("lines") and "रुपये" in (e.get("text") or "")]:
+                keep.remove(e)
+                redo.append((e, [" ".join((ln.get("text") or "").split()).replace("रुपये", tpl.rupee) for ln in e["lines"]]))
+        return keep, redo + fresh_folios(tpl, page, day, edition) + fresh_page_number(tpl, page, keep, redo)
     plan.desk_profile = True
     return plan
 
@@ -566,20 +755,50 @@ def _draw_folios(real):
         fresh lines: the house size in stand-in pt (× the paper's ratio), the stand-in sans (Bold for the date and number),
         never wider than room."""
         draw_head_band(B, tpl)
+        draw_imprint(B, tpl, cx)
         done = real(B, tpl, cx, [r for r in redo if "fresh" not in r[0]], rep)
         for e, (text,) in (r for r in redo if "fresh" in r[0]):
             s = e["fresh"]
             family, axes, wt = CP.role_font("Bold" if s["bold"] else "", e["kind"])
             size = s["size_pt"] * (cx.r_cal or 1.0)
+            meta = {"page": tpl.model["page"], "role": e["kind"], "element": e["id"], "desk": "folio"}
+            if "■" in text:                               # the strip's separators: small squares (no font here has ■)
+                _square_separated(B, text, family, axes, wt, size, s, CP._colour(s, rep), meta)
+                done.append(e["id"])
+                continue
             width = CP.per_pt(text, family, axes, wt, spaces=True) / DG.MM * size
             if s["max_w_mm"] and width > s["max_w_mm"]:
                 size *= s["max_w_mm"] / width
             B.text_line(text, B.font(family, axes, wt), round(size, 3), s["x_mm"], s["baseline_mm"], CP._colour(s, rep), s["align"],
-                        meta={"page": tpl.model["page"], "role": e["kind"], "element": e["id"], "desk": "folio"})
+                        meta=meta)
             done.append(e["id"])
         return done
     draw.desk_profile = True
     return draw
+
+
+def _square_separated(B, text, family, axes, wt, size, s, cmyk, meta) -> None:
+    """A strip line whose items are separated by ■: the items set in turn, a filled square (0.45 em) between them, the
+    whole line centred on (or aligned to) its slot and never wider than it."""
+    parts = [t.strip() for t in text.split("■") if t.strip()]
+    sq = 0.45 * size / DG.MM
+
+    def widths(sz):
+        return [CP.per_pt(t, family, axes, wt, spaces=True) / DG.MM * sz for t in parts]
+    gap = 1.2 * sq
+    total = sum(widths(size)) + (len(parts) - 1) * (sq + 2 * gap)
+    if s["max_w_mm"] and total > s["max_w_mm"]:
+        size *= s["max_w_mm"] / total
+        sq, gap = 0.45 * size / DG.MM, 1.2 * 0.45 * size / DG.MM
+        total = sum(widths(size)) + (len(parts) - 1) * (sq + 2 * gap)
+    x = s["x_mm"] - total / 2 if s["align"] == "center" else s["x_mm"] - total if s["align"] == "right" else s["x_mm"]
+    fk, y = B.font(family, axes, wt), s["baseline_mm"]
+    for k, (t, w) in enumerate(zip(parts, widths(size))):
+        B.text_line(t, fk, round(size, 3), x, y, cmyk, "left", meta=meta)
+        x += w
+        if k < len(parts) - 1:
+            B.rect_mm(x + gap, y - 0.36 * size / DG.MM - sq / 2, x + gap + sq, y - 0.36 * size / DG.MM + sq / 2, cmyk)
+            x += sq + 2 * gap
 
 
 BAND_PX = 512                    # the band fill's raster: BAND_PX steps along its axis, 4 px across, stretched to the band

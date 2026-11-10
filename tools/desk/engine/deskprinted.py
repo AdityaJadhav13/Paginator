@@ -29,6 +29,17 @@ VERSION = 3                       # how signatures are made: a record made anoth
                                   # folio as it prints, spaces included)
 OLDER = msg("m.press.olderRecord")           # messages of messages.json (deskmsg): English text and {code, params}
 ISSUE_NOT_SET = msg("m.warn.issueNotSet")
+ISSUE_NONE = msg("m.warn.issueNotSetNone")      # a refined paper's front page: the old number is taken out
+
+
+def issue_warning():
+    """The warning for an edition with no issue number: a refined paper prints none (deskprofile takes the old one
+    out), the pilot's front page keeps its old number."""
+    try:
+        import settings                          # (layout/settings.py, on the engine's path through deskgen)
+    except ImportError:                          # the Desk server's own process: the pilot's words
+        return ISSUE_NOT_SET
+    return ISSUE_NONE if settings.ST.get("refined") else ISSUE_NOT_SET
 
 
 def _n(v) -> str:
@@ -120,7 +131,7 @@ def unset(printed: dict | None, edition: dict) -> list[str]:
     """The page card's warnings for what the page prints from the edition's own fields that is not set: a folio's issue
     number (the layout run says the same)."""
     if isinstance(printed, dict) and printed.get("folio") is not None and not _n(edition.get("issue")):
-        return [ISSUE_NOT_SET]
+        return [issue_warning()]
     return []
 
 

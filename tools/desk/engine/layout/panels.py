@@ -26,6 +26,7 @@ SPEC_KEYS = ("cmyk", "text_cmyk", "height_mm", "stroke_pt", "stroke_cmyk", "pad_
 BOX_MAX_WORDS = 250          # "about two columns' worth" of body words at a weekly's 5-column measure
 CONTRAST_MIN = 4.5           # WCAG 2 AA contrast ratio for normal text: heads are larger, so this is on the safe side
 BLACK = (0.0, 0.0, 0.0, 1.0)
+WHITE = (0.0, 0.0, 0.0, 0.0)
 
 
 def _luminance(cmyk) -> float:
@@ -55,6 +56,9 @@ def spec(name: str) -> dict | None:
     if not panels or name == "none" or name not in TREATMENTS or not isinstance(panels.get(name), dict):
         return None
     out = {k: v for k, v in panels[name].items() if k in SPEC_KEYS}
+    if (out.get("cmyk") is not None and out.get("fill", True) and "text_cmyk" not in out
+            and not contrast_ok(BLACK, out["cmyk"]) and contrast_ok(WHITE, out["cmyk"])):
+        out["text_cmyk"] = WHITE                         # no text colour learned: white where black would not read (a red band)
     if out.get("cmyk") is not None and out.get("fill", True) and not contrast_ok(out.get("text_cmyk") or BLACK, out["cmyk"]):
         return None
     return out
