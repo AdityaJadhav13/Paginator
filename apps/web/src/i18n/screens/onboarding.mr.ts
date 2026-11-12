@@ -1,0 +1,131 @@
+/** Onboard a new paper's Marathi strings (spread into mr.ts): a first draft for the native reviewer (review.ts, D-5). */
+import type { ONBOARDING_EN } from "./onboarding.en.ts";
+
+export const ONBOARDING_MR: Readonly<Record<keyof typeof ONBOARDING_EN, string>> = {
+  "error.onboarding_active":
+    "तुमच्या वृत्तपत्राची रचना आत्ता शिकली जात आहे. ते पूर्ण होईपर्यंत थांबा, किंवा आधी ते रद्द करा.",
+  "error.onboarding_finished": "हे आधीच पूर्ण झाले आहे, त्यामुळे ते रद्द करता येत नाही.",
+  "error.onboarding_not_ready": "ही रचना अजून वापरता येत नाही. आम्ही पूर्ण वाचलेली रचनाच वापरता येते.",
+  "auditLog.action.onboarding.start": "वृत्तपत्राची रचना शिकण्यासाठी जुने अंक पाठवले",
+  "auditLog.action.onboarding.cancel": "वृत्तपत्राची रचना शिकणे रद्द केले",
+  "auditLog.action.onboarding.use": "जुन्या अंकांवरून शिकलेली रचना वापरली",
+  "auditLog.action.onboarding.test_edition": "नमुना बातम्यांचा चाचणी अंक तयार केला",
+  "auditLog.action.onboarding.ready": "जुन्या अंकांवरून वृत्तपत्राची रचना वाचली",
+  "auditLog.action.onboarding.fail": "जुन्या अंकांवरून वृत्तपत्राची रचना वाचता आली नाही",
+  "auditLog.target.onboarding": "जुन्या अंकांवरून रचना",
+  "profile.advanced": "प्रगत: इंजिन डेटासेट संच अपलोड करा (Pageinator कर्मचाऱ्यांसाठी)",
+  "profile.error.not_zip": "इंजिनला ही फाइल डेटासेट संच म्हणून उघडता आली नाही. Pageinator ने बनवलेलीच ZIP आहे ना, ते तपासा.",
+  "profile.error.too_large": "या डेटासेट संचात इंजिन घेऊ शकते त्यापेक्षा जास्त फाइली किंवा माहिती आहे.",
+  "profile.error.unsafe_path": "या डेटासेट संचात एक फाइल चुकीच्या जागी आहे, म्हणून सुरक्षेसाठी तो नाकारला.",
+  "profile.error.no_pages": "या डेटासेट संचात मोजलेली पाने नाहीत, त्यामुळे इंजिनला तयार होण्यासाठी काहीच नाही.",
+  "profile.error.setup": "या डेटासेट संचावरून इंजिन स्वतःला तयार करू शकले नाही.",
+  "profile.error.worker": "तयार होताना इंजिन अनपेक्षितपणे थांबले. थोड्या वेळाने पुन्हा प्रयत्न करा; पुन्हा असे झाल्यास आमच्याशी संपर्क करा.",
+  "onboarding.heading": "तुमच्या वृत्तपत्राची रचना तयार करा",
+  "onboarding.fileRefused": "एक फाइल वापरता येत नाही",
+  "onboarding.fileRefusedBody":
+    "\"{name}\" ही आम्हाला वाचता येणारी PDF नाही, किंवा ती पूर्ण पोहोचली नाही. ती काढून टाका, किंवा तुमच्या पान-रचना प्रोग्रामने छापखान्यासाठी तयार केलेली PDF पाठवा, आणि पुन्हा सुरू करा.",
+  "onboarding.profileNoAccess.heading": "इंजिन प्रोफाइल पाहण्याची तुम्हाला परवानगी नाही",
+  "onboarding.profileNoAccess.body":
+    "इंजिन प्रोफाइल प्रकाशनाच्या सेटिंग्जचा भाग आहे: संपादक, प्रीप्रेस, मुख्य संपादक आणि मालक ती पाहतात, आणि मुख्य संपादक किंवा मालक ती बदलतात. त्यांच्यापैकी कोणाला तरी सांगा.",
+  "onboarding.headingAgain": "जुन्या अंकांवरून रचना पुन्हा शिका",
+  "onboarding.lede":
+    "तुमचे काही जुने अंक PDF म्हणून अपलोड करा. Pageinator ते वाचून तुमच्या वृत्तपत्राची रचना शिकते: पानाचा आकार, स्तंभांची रचना आणि प्रत्येक प्रकारचे पान कोणत्या पानावर आधारित आहे. वापरण्याआधी आम्ही काय वाचले ते तुम्हाला दिसते.",
+  "onboarding.againLede":
+    "तुमच्या वृत्तपत्राची रचना बदलली असेल, तर अलीकडचे अंक अपलोड करा; Pageinator ती पुन्हा शिकेल. तुम्ही नवी रचना निवडेपर्यंत आताचीच वापरात राहते.",
+  "onboarding.loading": "वृत्तपत्राच्या रचनेची माहिती लोड होत आहे…",
+  "onboarding.begin": "जुने अंक निवडा",
+  "onboarding.recommend":
+    "सर्वोत्तम: किमान 3 आठवड्यांतील 12 ते 20 पूर्ण अंक, सर्व तुमच्या आताच्या रचनेतील. ज्यांच्या शेवटच्या पानावर जाहिराती आहेत असे अंकही घ्या. किमान 3 आणि जास्तीत जास्त 40 फाइली, प्रत्येक 200 MB पर्यंतची PDF.",
+  "onboarding.drop": "PDF फाइली इथे ओढून आणा, किंवा खाली निवडा.",
+  "onboarding.files": "जुन्या अंकांच्या PDF",
+  "onboarding.chosen": "निवडलेले अंक: जास्तीत जास्त 40 पैकी {count}",
+  "onboarding.remove": "काढा",
+  "onboarding.notPdf": "{name} ही PDF नाही, म्हणून ती जोडली नाही.",
+  "onboarding.tooLarge": "{name} 200 MB पेक्षा मोठी आहे, म्हणून ती जोडली नाही.",
+  "onboarding.tooMany": "जास्तीत जास्त 40 फाइली. {name} आणि तिच्यानंतरच्या फाइली जोडल्या नाहीत.",
+  "onboarding.tooFew": "किमान 3 जुने अंक निवडा.",
+  "onboarding.permission":
+    "ही पाने आमची आहेत, आणि आमच्या वृत्तपत्राची रचना शिकण्यासाठी Pageinator ला ती वाचण्याची आमची परवानगी आहे.",
+  "onboarding.permissionNeeded": "ही पाने देण्याचा तुम्हाला हक्क आहे हे सांगण्यासाठी चौकटीत खूण करा.",
+  "onboarding.submit": "अपलोड करा आणि रचना शिका",
+  "onboarding.cancelUpload": "अपलोड थांबवा",
+  "onboarding.uploading": "{name} अपलोड होत आहे: {percent}%",
+  "onboarding.uploaded": "अपलोड झाली",
+  "onboarding.waiting": "अपलोडच्या प्रतीक्षेत",
+  "onboarding.stopped": "अपलोड थांबले. जिथे थांबले तिथून पुढे नेण्यासाठी बटण पुन्हा दाबा.",
+  "onboarding.starting": "सुरू होत आहे…",
+  "onboarding.queued": "रचना वाचणारे काम सुरू होण्याची वाट पाहत आहे…",
+  "onboarding.step.checking": "फाइली तपासत आहे: {total} पैकी {done}",
+  "onboarding.step.reading": "पाने वाचत आहे: {total} पैकी {done}",
+  "onboarding.step.measuring": "स्तंभांची रचना मोजत आहे: {total} पैकी {done}",
+  "onboarding.step.learning": "प्रत्येक प्रकारचे पान शिकत आहे: {total} पैकी {done}",
+  "onboarding.step.pictures": "छायाचित्रे आणि जाहिराती पाहत आहे: {total} पैकी {done}",
+  "onboarding.step.packing": "रचना एकत्र बांधत आहे: {total} पैकी {done}",
+  "onboarding.working": "याला साधारण काही मिनिटे लागतात. तुम्ही हे पान सोडू शकता; काम चालूच राहते.",
+  "onboarding.cancel": "रद्द करा",
+  "onboarding.cancelled": "मागचा प्रयत्न रद्द केला होता.",
+  "onboarding.ready": "आम्ही तुमच्या वृत्तपत्राची रचना वाचली आहे",
+  "onboarding.readyBody":
+    "आम्ही काय वाचले ते तपासा. बरोबर वाटल्यास ती वापरा: इंजिन तिच्यावरून स्वतःला तयार करते, आणि मग साचे स्क्रीनवर प्रत्येक प्रकारच्या पानासाठी निवडण्याजोगी पाने दिसतात.",
+  "onboarding.read.editions": "वाचलेले अंक",
+  "onboarding.read.editionsValue":
+    "{editions} अंक, {pages} पाने. सर्वात जुन्या {calibration} अंकांवरून रचना शिकलो; बाकीच्यांवर ती तपासली.",
+  "onboarding.read.size": "पानाचा आकार",
+  "onboarding.read.sizeValue": "{width} × {height} मिमी",
+  "onboarding.read.grid": "स्तंभांची रचना",
+  "onboarding.read.gridsSeen": "आम्हाला {count} वेगवेगळ्या स्तंभ रचना दिसल्या; सर्वात जास्त वापरलेली रचना घेतली आहे.",
+  "onboarding.read.script": "लिपी",
+  "onboarding.read.deva": "देवनागरी (मराठी, हिंदी …)",
+  "onboarding.read.latn": "रोमन (इंग्रजी …)",
+  "onboarding.read.excluded": "सोडलेला मजकूर",
+  "onboarding.read.excludedValue": "मजकुराच्या {percent}% चौकटी वाचता आल्या नाहीत, म्हणून सोडल्या.",
+  "onboarding.read.roles": "सापडलेली पाने",
+  "onboarding.use": "ही रचना वापरा",
+  "onboarding.usingNow": "तयार होत आहे…",
+  "onboarding.used": "तुमच्या वृत्तपत्राची रचना वापरात आहे",
+  "onboarding.usedBody":
+    "इंजिन तिच्यावरून स्वतःला तयार करते, आणि मग साचे स्क्रीनवर प्रत्येक प्रकारच्या पानासाठी निवडण्याजोगी पाने दिसतात. ही स्क्रीन आपोआप बदलते.",
+  "onboarding.templatesLink": "साच्यांकडे जा",
+  "onboarding.test": "चाचणी मांडणी करा",
+  "onboarding.testBody":
+    "आम्ही नमुना बातम्यांचा एक चाचणी अंक तयार करून त्याचे मांडणी पान उघडतो. तुमची रचना काम करताना पाहण्यासाठी तिथले मांडणीचे बटण दाबा.",
+  "onboarding.testMaking": "चाचणी अंक तयार होत आहे…",
+  "onboarding.rejected": "या फाइलींवरून तुमच्या वृत्तपत्राची रचना शिकता आली नाही",
+  "onboarding.failed": "अंक वाचताना काहीतरी चुकले",
+  "onboarding.tryAgain": "दुसऱ्या फाइली घेऊन पुन्हा प्रयत्न करा",
+  "onboarding.reject.too_few_editions":
+    "3 पेक्षा कमी अंक वापरता आले. तुमच्या आताच्या रचनेतील आणखी अंक अपलोड करा.",
+  "onboarding.reject.no_grid":
+    "सर्व पानांत सारखी असलेली स्तंभ रचना सापडली नाही. सर्व अंक तुमच्या आताच्या रचनेतील आहेत ना, ते तपासा.",
+  "onboarding.reject.no_template": "{role} म्हणून वापरता येईल असे पान सापडले नाही. सर्व पानांसह पूर्ण अंक घ्या.",
+  "onboarding.reject.too_many_excluded":
+    "खूप जास्त मजकूर वाचता आला नाही. Pageinator मधील एक व्यक्ती ते पाहील आणि तुमच्याशी संपर्क करेल.",
+  "onboarding.reject.failed": "या फाइलींवर वाचन थांबले. Pageinator मधील एक व्यक्ती ते पाहील.",
+  "onboarding.reject.script_unconfirmed":
+    "तुमच्या अंकांमध्ये जुना मराठी फॉन्ट आहे. Pageinator मधील एक व्यक्ती भाषा निश्चित करून तुमच्याशी संपर्क साधेल.",
+  "onboarding.reject.worker":
+    "रचना वाचणारे काम अनपेक्षितपणे थांबले. थोड्या वेळाने पुन्हा प्रयत्न करा; पुन्हा असे झाल्यास आमच्याशी संपर्क करा.",
+  "onboarding.table": "प्रत्येक फाइलची तपासणी",
+  "onboarding.col.file": "फाइल",
+  "onboarding.col.date": "अंकाची तारीख",
+  "onboarding.col.pages": "पाने",
+  "onboarding.col.check": "तपासणी",
+  "onboarding.noDate": "सापडली नाही",
+  "onboarding.status.ok": "वापरली",
+  "onboarding.status.warning": "वापरली, एका सूचनेसह",
+  "onboarding.status.refused": "सोडली",
+  "onboarding.check.not_pdf": "ही फाइल PDF म्हणून उघडत नाही. ती खराब झालेली किंवा पासवर्डने बंद केलेली असू शकते.",
+  "onboarding.check.scanned":
+    "हे स्कॅन किंवा पानांचे चित्र दिसते: यात वाचता येईल असा मजकूर नाही. त्याऐवजी InDesign मधून PDF काढा.",
+  "onboarding.check.fonts_missing": "याचे फॉन्ट PDF मध्ये नाहीत. फॉन्टसह ती पुन्हा काढा.",
+  "onboarding.check.no_unicode":
+    "यातील मजकूर जुन्या फॉन्टमध्ये आहे, ज्याची अक्षरे आम्हाला वाचता येत नाहीत (जुन्या मराठी फॉन्टमध्ये असे अनेकदा होते). तुमच्या फॉन्टची नावे आम्हाला सांगा; आम्ही ती तपासू.",
+  "onboarding.check.untested_program":
+    "ही InDesign मध्ये बनवलेली नाही. आम्ही ती वाचली, पण या प्रोग्राममधील फाइली आम्ही अजून तपासलेल्या नाहीत.",
+  "onboarding.check.page_size_mix": "हिच्या पानांचा आकार बाकीच्या बहुतेक फाइलींपेक्षा वेगळा आहे.",
+  "onboarding.check.duplicate": "हा दुसऱ्या एका फाइलसारखाच अंक आहे.",
+  "onboarding.check.no_date":
+    "हिच्या अंकाची तारीख कळली नाही. फाइलच्या नावात तारीख घाला, जसे 2026-09-14 किंवा 20260914.",
+  "onboarding.check.frames_excluded": "वाचता न आलेल्या, म्हणून सोडलेल्या मजकूर-चौकटी: {count}.",
+  "onboarding.check.legacy_font": "यातील मजकूर जुन्या मराठी फॉन्टमध्ये आहे. त्यातून आम्ही तुमची मांडणी शिकतो, पण त्यातील शब्द कधीही वापरत नाही.",
+};

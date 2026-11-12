@@ -1,0 +1,64 @@
+/* The Release tab (L2.5). Tokens and logical properties only. */
+
+.pg-release__checks,
+.pg-release__releases,
+.pg-release__receipts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--pg-space-3);
+}
+
+.pg-release__checks > li {
+  display: grid;
+  gap: var(--pg-space-1);
+  padding-block-end: var(--pg-space-3);
+  border-block-end: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-release__receipts > li {
+  padding: var(--pg-space-3);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+}
+
+/* a SHA-256 is read and compared character by character: monospace, broken anywhere on a narrow screen */
+.pg-release__hash {
+  font-family: var(--pg-font-mono);
+  font-size: var(--pg-font-size-100);
+  overflow-wrap: anywhere;
+}
+
+.pg-release__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--pg-space-1) var(--pg-space-3);
+  margin: 0;
+}
+
+.pg-release__facts dd {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+@media (max-width: 767px) {
+  .pg-release__facts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* a wide files table scrolls inside its card at 390 px: the lists' items may shrink below their content */
+.pg-release,
+.pg-release__checks,
+.pg-release__releases,
+.pg-release__receipts {
+  grid-template-columns: minmax(0, 1fr);
+  min-inline-size: 0;
+}
+
+.pg-release__checks > li,
+.pg-release__releases > li,
+.pg-release__receipts > li {
+  min-inline-size: 0;
+}

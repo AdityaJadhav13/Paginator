@@ -1,0 +1,447 @@
+/* The Stories list and the story editor (plan §10 PRs 21–22; 02 §3): tokens only, logical properties only. */
+
+/* ── The list: one panel, a filter bar on top of a dense table ─────── */
+
+.pg-stories__new {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pg-space-2);
+  text-decoration: none;
+}
+
+.pg-stories .pg-page-header__actions .pg-button,
+.pg-editor .pg-page-header__actions .pg-button,
+.pg-stories__panel .pg-button {
+  gap: var(--pg-space-2);
+}
+
+.pg-stories__filter-bar {
+  padding: var(--pg-space-3) var(--pg-app-cell-padding-inline);
+  border-block-end: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-stories__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pg-space-2) var(--pg-space-3);
+  align-items: end;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.pg-stories__filters .pg-field {
+  gap: var(--pg-space-1);
+}
+
+.pg-stories__filters .pg-field__label {
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-100);
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+:lang(mr) .pg-stories__filters .pg-field__label {
+  font-size: 0.8125rem;
+}
+
+.pg-stories__filters .pg-select,
+.pg-stories__filters .pg-input,
+.pg-stories__filters .pg-button {
+  block-size: var(--pg-app-control-sm);
+  min-block-size: var(--pg-app-control-sm);
+}
+
+.pg-stories__filters .pg-checkbox {
+  min-block-size: var(--pg-app-control-sm);
+  gap: var(--pg-space-2);
+}
+
+.pg-stories__filters .pg-checkbox__label {
+  font-size: var(--pg-font-size-200);
+}
+
+.pg-stories__search {
+  position: relative;
+  flex: 1 1 14rem;
+  max-inline-size: 22rem;
+}
+
+.pg-stories__search .pg-input {
+  inline-size: 100%;
+  padding-inline-start: calc(var(--pg-space-3) + 1.5rem);
+}
+
+.pg-stories__search-icon {
+  position: absolute;
+  inset-inline-start: var(--pg-space-3);
+  inset-block-end: calc((var(--pg-app-control-sm) - 1rem) / 2);
+  color: var(--pg-app-text-secondary);
+  pointer-events: none;
+}
+
+.pg-stories__pad {
+  padding: var(--pg-space-4) var(--pg-app-cell-padding-inline);
+}
+
+.pg-stories__table .pg-stories__headline {
+  min-inline-size: 16rem;
+  font-size: var(--pg-font-size-200);
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-stories__headline a {
+  color: var(--pg-app-text);
+  text-decoration: none;
+}
+
+.pg-stories__headline a:hover {
+  color: var(--pg-app-accent);
+  text-decoration: underline;
+}
+
+/* the photo's "Download the original": the app's link look, not the browser's */
+.pg-photo a[download] {
+  color: var(--pg-app-accent);
+  font-weight: var(--pg-font-weight-semibold);
+  text-decoration: none;
+}
+
+.pg-photo a[download]:hover {
+  text-decoration: underline;
+}
+
+.pg-stories__person {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pg-space-2);
+  white-space: nowrap;
+}
+
+.pg-stories__muted,
+.pg-stories__brief,
+.pg-stories__nowrap {
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-stories__nowrap {
+  white-space: nowrap;
+}
+
+/* the phone's list */
+.pg-stories__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-stories__card {
+  padding: var(--pg-space-3) var(--pg-app-cell-padding-inline);
+  border-block-end: var(--pg-border-width) solid var(--pg-app-border);
+}
+
+.pg-stories__card:last-child {
+  border-block-end: none;
+}
+
+.pg-stories__card > * + * {
+  margin-block-start: var(--pg-space-1);
+}
+
+.pg-stories__card a {
+  color: var(--pg-app-text);
+}
+
+.pg-stories__meta {
+  color: var(--pg-app-text-secondary);
+}
+
+/* ── The editor: a command row, the document on paper, an inspector ── */
+
+.pg-editor {
+  overflow-wrap: anywhere;
+}
+
+.pg-editor__back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pg-space-1);
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-200);
+  text-decoration: none;
+}
+
+.pg-editor__back:hover {
+  color: var(--pg-app-accent);
+  text-decoration: underline;
+}
+
+.pg-editor__meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-2) var(--pg-space-3);
+}
+
+.pg-editor__save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pg-space-1);
+  margin: 0;
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-200);
+  white-space: nowrap;
+}
+
+.pg-editor__moves {
+  display: contents;
+}
+
+.pg-editor__busy,
+.pg-editor__notice {
+  margin: 0;
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-editor__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--pg-space-5);
+  align-items: start;
+}
+
+.pg-editor__paper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-5);
+  min-inline-size: 0;
+  padding: var(--pg-space-5);
+  background-color: var(--pg-app-surface);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  box-shadow: var(--pg-app-elevation-1);
+}
+
+.pg-editor__paper--locked {
+  background-color: var(--pg-app-sidebar-bg);
+}
+
+.pg-editor__readonly {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-2);
+  margin: 0;
+  padding: var(--pg-space-2) var(--pg-space-3);
+  border-radius: var(--pg-app-radius-sm);
+  background-color: var(--pg-app-tone-neutral-bg);
+  color: var(--pg-app-tone-neutral-text);
+  font-size: var(--pg-font-size-200);
+}
+
+.pg-editor__paper .pg-field__label {
+  color: var(--pg-app-text-secondary);
+  font-size: var(--pg-font-size-100);
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+:lang(mr) .pg-editor__paper .pg-field__label {
+  font-size: 0.8125rem;
+}
+
+.pg-editor__headline .pg-input {
+  inline-size: 100%;
+  block-size: auto;
+  padding-block: var(--pg-space-2);
+  font-size: var(--pg-font-size-400);
+  line-height: var(--pg-line-height-400);
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-editor__body .pg-textarea {
+  inline-size: 100%;
+  min-block-size: max(var(--pg-editor-body-min), 60vh);
+  padding: var(--pg-space-4);
+  font-size: var(--pg-font-size-300);
+  line-height: 1.7;
+}
+
+.pg-editor__inspector,
+.pg-editor__inspector-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-4);
+  min-inline-size: 0;
+}
+
+.pg-editor__inspector .pg-input,
+.pg-editor__inspector .pg-select,
+.pg-editor__inspector .pg-textarea {
+  inline-size: 100%;
+}
+
+/* the photo's and the comments' own sections, drawn as the inspector's cards */
+.pg-editor__inspector > section:not(.pg-panel),
+.pg-editor__inspector-form > section:not(.pg-panel) {
+  padding: var(--pg-app-panel-padding);
+  background-color: var(--pg-app-surface);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  box-shadow: var(--pg-app-elevation-1);
+}
+
+/* the sections' own stacks space them; no browser margins on top */
+.pg-editor__inspector section > .pg-stack > :is(h2, p),
+.pg-editor__inspector section > .pg-stack > .pg-stack > p {
+  margin-block: 0;
+}
+
+.pg-editor__inspector .pg-type-section-title {
+  font-size: var(--pg-font-size-300);
+  line-height: var(--pg-line-height-300);
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-editor__desk {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.pg-editor__desk-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--pg-space-3);
+}
+
+.pg-editor__conflict {
+  padding: var(--pg-app-panel-padding);
+  background-color: var(--pg-app-surface);
+  border: var(--pg-border-width) solid var(--pg-app-tone-warning-text);
+  border-inline-start-width: 4px;
+  border-radius: var(--pg-app-radius-md);
+}
+
+.pg-editor__versions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pg-space-4);
+}
+
+.pg-editor__version {
+  flex: 1 1 var(--pg-editor-version-min);
+  min-inline-size: 0;
+  padding: var(--pg-space-3);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  white-space: pre-wrap;
+}
+
+.pg-photo__img {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+  border-radius: var(--pg-radius-md);
+}
+
+.pg-photo__placeholder {
+  padding: var(--pg-space-4);
+  border: var(--pg-border-width) dashed var(--pg-color-border);
+  border-radius: var(--pg-radius-md);
+  background: var(--pg-color-surface-subtle);
+}
+
+/* a laptop: the inspector beside the document, narrower */
+@media (min-width: 64rem) {
+  .pg-editor__layout {
+    grid-template-columns: minmax(0, 1fr) 18rem;
+  }
+
+  .pg-editor__paper {
+    padding: var(--pg-space-6) var(--pg-space-7);
+  }
+
+  .pg-editor__headline .pg-input {
+    font-size: var(--pg-font-size-500);
+    line-height: var(--pg-line-height-500);
+  }
+}
+
+/* a desktop: the inspector at its full 360 px */
+@media (min-width: 80rem) {
+  .pg-editor__layout {
+    grid-template-columns: minmax(0, 1fr) 22.5rem;
+  }
+
+  .pg-editor__paper {
+    padding: var(--pg-space-7) var(--pg-space-8);
+  }
+}
+
+.pg-editor__inspector .pg-panel__body > p {
+  margin: 0;
+}
+
+/* Import a Word file (ImportWordDrawer): the file pick as the kit's button, the steps, the stories made and the notes */
+.pg-word-import__pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-3);
+}
+
+/* the input is visually hidden but keeps the focus: its button shows it */
+.pg-word-import__pick input:focus-visible + .pg-button {
+  outline: 2px solid var(--pg-color-focus);
+  outline-offset: 2px;
+}
+
+.pg-word-import__name {
+  overflow-wrap: anywhere;
+  color: var(--pg-color-text-muted);
+}
+
+.pg-word-import__steps,
+.pg-word-import__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-word-import__steps li,
+.pg-word-import__list li {
+  display: flex;
+  align-items: center;
+  gap: var(--pg-space-2);
+  overflow-wrap: anywhere;
+}
+
+.pg-word-import__steps li {
+  color: var(--pg-color-text-muted);
+}
+
+.pg-word-import__steps li.is-now {
+  color: inherit;
+  font-weight: var(--pg-font-weight-semibold);
+}
+
+.pg-word-import__steps li.is-done svg {
+  color: var(--pg-color-success);
+}
+
+.pg-word-import__notes li {
+  align-items: flex-start;
+}
+
+.pg-word-import__status,
+.pg-word-import__heading {
+  margin: 0;
+}
+
+.pg-word-import__heading {
+  font-weight: var(--pg-font-weight-semibold);
+}

@@ -1,0 +1,103 @@
+/* Editions (plan §10 PR 21, PR 24): the master table and the chosen edition's detail. Tokens and logical properties only. */
+
+.pg-editions {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--pg-app-gutter);
+  align-items: start;
+}
+
+/* a phone: the detail under the list */
+@media (max-width: 767px) {
+  .pg-editions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pg-editions__master tbody tr {
+  cursor: pointer;
+}
+
+/* the date: the row's own control, a plain link-like button */
+.pg-editions__select {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pg-app-text);
+  font: inherit;
+  font-weight: var(--pg-font-weight-semibold);
+  text-align: start;
+  cursor: pointer;
+}
+
+.pg-editions__select[aria-pressed="true"] {
+  color: var(--pg-app-selected-text);
+}
+
+.pg-editions__select:hover {
+  text-decoration: underline;
+}
+
+.pg-editions__detail {
+  position: sticky;
+  inset-block-start: var(--pg-app-gutter);
+}
+
+@media (max-width: 767px) {
+  .pg-editions__detail {
+    position: static;
+  }
+}
+
+.pg-editions__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pg-space-2) var(--pg-space-3);
+}
+
+.pg-editions__summary p,
+.pg-editions__detail p {
+  margin: 0;
+}
+
+.pg-editions__meta {
+  color: var(--pg-app-text-secondary);
+}
+
+.pg-editions__counts {
+  padding: var(--pg-space-3);
+  border-radius: var(--pg-app-radius-md);
+  background-color: var(--pg-app-canvas);
+}
+
+.pg-editions__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pg-space-2);
+}
+
+.pg-editions__made {
+  margin: 0;
+}
+
+/* the create sheet: one field a row */
+.pg-editions__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pg-space-4);
+  margin: 0;
+}
+
+.pg-editions__form > .pg-button {
+  align-self: flex-start;
+}
+
+.pg-editions__link {
+  color: var(--pg-app-accent);
+  text-decoration: none;
+}
+
+.pg-editions__link:hover {
+  text-decoration: underline;
+}

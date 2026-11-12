@@ -1,6 +1,6 @@
 # EXP-GEN-1: Pageinator Lays Out a Newspaper Page Itself (report)
 
-**Status:** COMPLETE (experiment). On the held-out editions Pageinator lays out **all 28 Marathi pages** by itself (gen1/2.9.6, 2026-10-21). Earlier versions are reported below; the latest results are in §9.
+**Status:** COMPLETE (experiment). On the held-out editions Pageinator lays out **all 28 Marathi pages** by itself (gen1/2.10.0, 2026-10-19). Earlier versions are reported below; the latest results are in §9.
 - **All 28 pass every automatic check.**
 - 11 pages are outside this version's scope or have no exact fit.
 - **No editor has judged the layouts yet. G1: NOT MET.**
@@ -33,7 +33,7 @@ Prerequisites: EXP-PAGE-1's page models, house profile and photos.
   - the paper's design language, learned in EXP-PAGE-1.
 
   It decides where each story goes, how wide it is, how many text columns it gets, how big its photo is, its headline size and its body type.
-- **Result on the held-out editions** (gen1/2.4.2; see §9 for the latest, 24 of 28 laid out, 23 passing): 17 of 28 Marathi pages laid out; **all 17 pass every check**.
+- **Result on the held-out editions** (gen1/2.4.2; see §9 for the latest: all 28 laid out, all 28 passing): 17 of 28 Marathi pages laid out; **all 17 pass every check**.
   - **Nothing is lost on any of the 17.** Every word of every story is set, and every part of the page appears:
     - headlines, decks, kickers, bylines, captions, sub-headings, fact boxes, "continued" lines and every photo;
     - text and photos the page model gave to no story. They are joined to the story they were printed with where that is clear (8 items: kickers, a second headline, an intro, photos and a credit). Where it is not clear, they stand as modules of their own (6: an editorial with its body, 3 headlines, 2 sub-headings), which is never wrong but can look odd.
@@ -431,6 +431,27 @@ His summary, through the owner's family: the placement of images, text and stori
 - **Collisions:** 0 display-text collisions; 2 body–body (print 47 by the laxer PDFium measure).
 - **Layout:** the lead is at the top on 28 pages; 25 empty lines at column feet.
 - **Press:** PDF/X-1a 0 FAIL.
+
+**Closing the test stage (gen1/2.10.0, page model 0.3.0, 2026-10-19):**
+- **Page model 0.3.0** fixes the two story-grouping errors recorded above:
+  - the front's brief now carries its own headline;
+  - the inside page's story is no longer split.
+  
+  It changes the grouping on 5 of 68 pages, each confirmed by the independent verifier against the printed text (EXP-PAGE-1 §7 item 12).
+- **The dateline-box lines are now set** on every front. The fixed-artwork ad growth (2.9.5–2.9.6) took them in; all 7 fronts report nothing unset.
+- **Body lines that touch, caught by the generator itself.** After the page model changed, one page had two body lines of one story touching in ink (a deep conjunct over a tall vowel sign), where print had none. The generator now runs the outline-based ink check (`inkcheck.py`) on its draft page. A story whose own body lines touch is set again with another of its options; the last complete layout is kept if none is left. It retried on 3 pages.
+  - After the verifier's review, a complete layout is never traded for an overflowing one, and a layout shipped with a touch is flagged (`ink_touch_kept`).
+  - A touch between two different stories is not retried; the gate still catches it.
+- **The verifier found text lost that no gate saw.** The front-page weather box, a small story the generator keeps where print had it, lost its last row (the temperatures) on 4 fronts. The generator had dropped the reports of the stories it keeps.
+  - Now those reports are kept (`fixed_stories_out`), and the overset and character-integrity gates cover them.
+  - Short table-like boxes are set line by line as printed (EXP-PAGE-1 §7 item 14).
+- **The paper's own masthead artwork** replaces the stand-in lettering on the fronts (EXP-PAGE-1 §7 item 15). It is supplied by the owner and is private.
+
+**Final, gen1/2.10.0 (held-out, 28 Marathi pages):**
+- **28 laid out, 28 pass every check.**
+- **Text and photos:** 0 text or photos lost, 0 duplicate characters.
+- **Collisions:** 0 display-text and **0 body–body** (print: 47 by the laxer PDFium measure).
+- **Layout:** the lead is at the top on 28 pages; 24 empty lines at column feet.
 
 ## 10. Next steps
 1. **Editors:** a blind review of generated vs printed pages, side by side and unlabelled: "which would you print?" and "what would you change?". Sheets come from `report/gen1/check/*.side.png` (private).

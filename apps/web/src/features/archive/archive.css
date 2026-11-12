@@ -1,0 +1,34 @@
+/* The archive (doc 06 §10.1): a list grouped by year and month, each release with its front page's thumbnail. */
+.pg-archive__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--pg-app-gutter);
+}
+
+.pg-archive__entry {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: var(--pg-app-gutter);
+  align-items: start;
+}
+
+.pg-archive__thumb {
+  inline-size: 5rem;
+  aspect-ratio: 5 / 7;
+  background: var(--pg-app-canvas);
+  border: var(--pg-border-width) solid var(--pg-app-border);
+  border-radius: var(--pg-app-radius-md);
+  overflow: hidden;
+}
+
+.pg-archive__thumb img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.pg-archive__month {
+  margin-block: 0 var(--pg-space-2);
+}

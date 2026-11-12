@@ -1,0 +1,31 @@
+/** The newsroom screen's Marathi strings (spread into mr.ts): a first draft for the native reviewer (review.ts, D-5). */
+import type { NEWSROOM_EN } from "./newsroom.en.ts";
+
+export const NEWSROOM_MR: Readonly<Record<keyof typeof NEWSROOM_EN, string>> = {
+  "newsroom.subtitle": "डेस्कचा फलक: आवृत्तीतील प्रत्येक बातमी ती कुठे आहे त्यानुसार.",
+  "newsroom.ownOnly": "तुम्ही लिहिलेल्या किंवा तुम्हाला दिलेल्या बातम्या तुम्हाला दिसतात.",
+  "newsroom.noAccess.heading": "वृत्तकक्ष तुमच्या भूमिकेचा भाग नाही",
+  "newsroom.noAccess.body": "वृत्तपत्राच्या बातम्या पाहायच्या असल्यास मालक किंवा अ‍ॅडमिनना विचारा.",
+  "newsroom.filters": "फलकाचे फिल्टर",
+  "newsroom.filter.edition": "आवृत्ती",
+  "newsroom.filter.anyEdition": "प्रत्येक आवृत्ती",
+  "newsroom.filter.noEdition": "कोणत्याही आवृत्तीत नाही",
+  "newsroom.filter.section": "विभाग",
+  "newsroom.filter.anySection": "प्रत्येक विभाग",
+  "newsroom.filter.noSection": "विभाग नाही",
+  "newsroom.filter.assignee": "कोणाला दिली",
+  "newsroom.filter.anyone": "कोणीही",
+  "newsroom.filter.me": "मला",
+  "newsroom.filter.nobody": "कोणालाही दिलेली नाही",
+  "newsroom.filter.spiked": "रद्द केलेल्या बातम्या दाखवा",
+  "newsroom.board": "स्थितीनुसार बातम्या",
+  "newsroom.column": "{status}: {count} बातम्या",
+  "newsroom.loading": "फलक लोड होत आहे…",
+  "newsroom.emptyColumn": "बातम्या नाहीत",
+  "newsroom.tooMany": "फलकावर पहिल्या {count} बातम्या दिसतात. उरलेल्या पाहण्यासाठी आवृत्ती किंवा विभाग निवडा.",
+  "newsroom.move": "“{headline}” हलवा",
+  "newsroom.moved": "“{headline}” आता: {status}.",
+  "newsroom.flag.noPhoto": "फोटो नाही",
+  "newsroom.flag.noCaption": "फोटोओळ नाही",
+  "newsroom.flag.photoRefused": "फोटो नाकारला",
+} as const;

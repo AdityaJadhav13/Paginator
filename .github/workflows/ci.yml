@@ -1,0 +1,277 @@
+name: ci
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled] # labeled: the evidence-change approval re-runs it
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }} # every push to main runs to the end
+
+jobs:
+  guard:
+    name: privacy and frozen-evidence guards
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: base commit (pull request base, or the commit main was at before this push)
+        id: base
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            base="origin/$BASE_REF"
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] && git cat-file -e "$BEFORE^{commit}"; then
+            base="$BEFORE"
+          else
+            base="HEAD~1"
+          fi
+          echo "ref=$base" >> "$GITHUB_OUTPUT"
+      - name: privacy guard (every file and every commit since the base)
+        env:
+          PAGEINATOR_DENYLIST: ${{ secrets.PAGEINATOR_DENYLIST }}
+          # forks get no secrets: their pull requests are scanned without terms, and again on main after merging
+          GUARD_REQUIRE_DENYLIST: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && '1' || '0' }}
+          GUARD_BASE: ${{ steps.base.outputs.ref }}
+        run: node tools/ts/guard-private.ts
+      - name: frozen-evidence guard
+        env:
+          EVIDENCE_CHANGE_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'evidence-change') && '1' || '0' }}
+          # on main the approval was given on the pull request; the oracle itself is checked on every push
+          FROZEN_SCOPE: ${{ github.event_name == 'pull_request' && 'all' || 'oracle' }}
+          GUARD_BASE: ${{ steps.base.outputs.ref }}
+        run: node tools/ts/check-frozen.ts
+
+  ts:
+    name: typescript workspace
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check:graph
+      - run: pnpm run check:licences
+      - run: pnpm run lint
+      - run: pnpm run format:check
+      - run: pnpm run typecheck
+      - run: pnpm run test
+      - run: pnpm --filter @pageinator/web build
+
+  api:
+    name: api on the development database
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: development settings (every name in .env.dev.example, each with a random value)
+        run: |
+          umask 077
+          grep -oE '^PGN_[A-Z0-9_]+=' .env.dev.example | while IFS== read -r name _; do
+            echo "$name=$(openssl rand -hex 24)"
+          done > .env.dev
+      - name: development services (compose refuses to start while a PGN_* value is missing)
+        run: docker compose -p pgn-ci --env-file .env.dev -f infra/docker/compose.dev.yml up -d --wait db s3 mail
+      - run: pnpm install --frozen-lockfile
+      - name: migrate the development database
+        run: pnpm --filter @pageinator/api db:migrate
+      - name: schema.gen.ts matches the migrations
+        run: pnpm --filter @pageinator/api db:codegen --check
+      - name: database and tenancy tests (they fail, never skip, without the database)
+        run: pnpm run test:db
+      - name: service logs
+        if: failure()
+        run: docker compose -p pgn-ci --env-file .env.dev -f infra/docker/compose.dev.yml logs
+
+  oracle:
+    name: frozen python oracle
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: oracle files unchanged (its manifest, and every tracked file)
+        run: node tools/ts/check-oracle-manifest.ts
+      - name: oracle tests
+        working-directory: tools/oracle/v0
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          uv venv --python 3.11.14 .venv
+          uv pip install --python .venv --require-hashes -r requirements.lock
+          .venv/bin/python -m pytest -p no:cacheprovider -m "not a10" tests/
+
+  desk:
+    name: pageinator desk tests
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: server environment (the pdfx1 pins, hashed in tools/desk/requirements.lock)
+        run: |
+          # the lock must pin exactly the versions of the frozen pdfx1 environment
+          grep -oE '^[a-z0-9._-]+==[^ ]+' tools/desk/requirements.lock | diff - experiments/phase0/pdfx1/requirements.txt
+          uv venv --python 3.11.14 experiments/phase0/pdfx1/.venv
+          uv pip install --python experiments/phase0/pdfx1/.venv --require-hashes -r tools/desk/requirements.lock
+      - name: engine environment (the frozen oracle's, as in the oracle job)
+        working-directory: tools/oracle/v0
+        run: |
+          uv venv --python 3.11.14 .venv
+          uv pip install --python .venv --require-hashes -r requirements.lock
+      - name: server, Word import, message and story bundle tests
+        run: experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_server.py tools/desk/test/test_docx.py tools/desk/test/test_messages.py tools/desk/test/test_bundle.py
+      - name: engine tests
+        run: tools/oracle/v0/.venv/bin/python -B -m unittest tools/desk/test/test_engine.py tools/desk/test/test_weekly_desk.py tools/desk/test/test_panels.py tools/desk/test/test_layout_composer.py tools/desk/test/test_layout_generator.py
+      - name: screen equals print, level L1 (a fictional page through the engine's writer; the hosted editor's draw list)
+        run: PGN_ENGINE_PYTHON=tools/oracle/v0/.venv/bin/python experiments/phase0/pdfx1/.venv/bin/python -B -m unittest apps/engine-worker/test/test_screenprint.py
+      - name: browser module tests (page editor view, words, paste)
+        run: node --test tools/desk/test/*.mjs
+      - name: onboarding (fictional papers; the copy of the Phase-0 chain equals the frozen one, byte for byte)
+        run: PGN_ENGINE_PYTHON=tools/oracle/v0/.venv/bin/python experiments/phase0/pdfx1/.venv/bin/python -B -m unittest discover -s tools/onboard/test -t tools/onboard/test
+      - name: layout parity (a fictional paper's pages from the Desk's copy of the page generator equal the frozen gen1's, byte for byte)
+        run: PGN_ENGINE_PYTHON=tools/oracle/v0/.venv/bin/python experiments/phase0/pdfx1/.venv/bin/python -B -m unittest tools/desk/test/test_layout_parity.py
+
+  worker:
+    name: engine worker and Python licences
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    defaults:
+      run:
+        shell: bash # -eo pipefail: a failing command in a pipe fails the step
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: worker environment (its lock, with hashes, as the worker's image installs it)
+        run: |
+          uv venv --python 3.11.14 apps/engine-worker/.venv
+          uv pip install --python apps/engine-worker/.venv --require-hashes -r apps/engine-worker/requirements.lock
+      - name: worker task core tests (fictional pictures; no colour profile, no network)
+        run: apps/engine-worker/.venv/bin/python -B -m unittest discover -s apps/engine-worker/test
+      - name: the licence inventory's own tests (offline)
+        run: apps/engine-worker/.venv/bin/python -B -m unittest discover -s tools/licences
+      - name: the Python licence inventory is the locks' manylinux wheels as PyPI serves them
+        run: apps/engine-worker/.venv/bin/python -B tools/licences/python_inventory.py --check
+      - name: a SeaweedFS and a Postgres of the job's own (random keys, as the api job's, masked in the log)
+        run: |
+          umask 077
+          grep -oE '^PGN_[A-Z0-9_]+=' .env.dev.example | while IFS== read -r name _; do
+            value="$(openssl rand -hex 24)"
+            echo "::add-mask::$value"
+            echo "$name=$value"
+          done > .env.dev.lines
+          grep -v '^::add-mask::' .env.dev.lines > .env.dev
+          grep '^::add-mask::' .env.dev.lines
+          rm .env.dev.lines
+          docker compose -p pgn-ci-worker --env-file .env.dev -f infra/docker/compose.dev.yml up -d --wait db s3
+      - name: the S3 adapter against it (buckets of the tests' own, removed after)
+        run: |
+          set -a; . ./.env.dev; set +a
+          PGN_WORKER_S3_RUN=1 apps/engine-worker/.venv/bin/python -B -m unittest discover -s apps/engine-worker/test
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: the queue on that database and store, with the worker's runner (roles and a database of its own, dropped after)
+        run: |
+          set -a; . ./.env.dev; set +a
+          PGN_QUEUE_DB_URL="postgres://postgres:${PGN_POSTGRES_PASSWORD}@127.0.0.1:55432/postgres" \
+            PGN_QUEUE_PYTHON="$PWD/apps/engine-worker/.venv/bin/python" pnpm exec vitest run --project engine-queue
+      - name: a photo end to end on that database and store (the API's upload, the queue, the real runner, the inbox)
+        run: |
+          set -a; . ./.env.dev; set +a
+          PAGEINATOR_DB_RUN=1 PGN_QUEUE_PYTHON="$PWD/apps/engine-worker/.venv/bin/python" \
+            pnpm exec vitest run --project api-db apps/api/test/db/engine-e2e.test.ts
+      - name: the worker image's tests, inside the image (linux/amd64; built, never pushed)
+        run: docker build --platform linux/amd64 -f infra/docker/engine-worker.Dockerfile --target test -t pgn-engine-worker:test .
+      - name: the worker image, and its files (the repository's own byte for byte, the stand-in fonts only, nothing private)
+        run: |
+          docker build --platform linux/amd64 -f infra/docker/engine-worker.Dockerfile -t pgn-engine-worker:ci .
+          container="$(docker create pgn-engine-worker:ci)"
+          docker export "$container" | python3 -B infra/docker/check_image_files.py
+          docker rm "$container"
+      - name: the image runs with a read-only root and reports itself healthy with a (fictional) profile mounted
+        run: |
+          printf 'a fictional colour profile' > "$RUNNER_TEMP/fictional.icc"
+          docker run --rm --read-only --tmpfs /tmp -v pgn-ci-homes:/var/lib/pageinator/homes \
+            -v "$RUNNER_TEMP/fictional.icc:/run/pageinator/newsprint.icc:ro" \
+            -e PGN_ICC_SHA256="$(sha256sum "$RUNNER_TEMP/fictional.icc" | cut -d' ' -f1)" pgn-engine-worker:ci \
+            python -B -m pgn_worker.health
+      - name: the image's queue process refuses to start without its settings (and names the one missing)
+        run: |
+          out="$(docker run --rm --read-only --tmpfs /tmp pgn-engine-worker:ci 2>&1)" && exit 1
+          echo "$out" | grep -q "PGN_DB_HOST is not set"
+
+  api-image:
+    name: the pilot's images build; the API answers /healthz; Caddy's configuration is valid
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: build (infra/docker/api.Dockerfile; no secret, no push)
+        run: docker build -f infra/docker/api.Dockerfile -t pageinator-api:ci .
+      - name: build the backup image, which has pg_dump 18 and Node
+        run: |
+          docker build -f infra/docker/api.Dockerfile --target backup -t pageinator-backup:ci .
+          docker run --rm pageinator-backup:ci sh -c 'pg_dump --version | grep -q " 18\." && node --version'
+      - name: build the web image, and validate its Caddyfile as the pilot and pilot-local run it
+        run: |
+          docker build -f infra/docker/web.Dockerfile -t pageinator-web:ci .
+          docker run --rm -e PGN_DOMAIN=example.test -e PGN_TLS_ISSUER=ops@example.test \
+            -e PGN_S3_PUBLIC_ORIGIN=https://pgn-pilot-work.s3.ap-south-1.amazonaws.com \
+            pageinator-web:ci caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm -e PGN_DOMAIN=localhost -e PGN_TLS_ISSUER=internal -e PGN_HTTPS_PORT=59443 \
+            -e PGN_S3_PUBLIC_ORIGIN=https://pgn-local-work.s3.localhost:59443 -e PGN_S3_LOCAL_HOST='*.s3.localhost' \
+            -v "$PWD/infra/caddy/local-s3.caddy:/etc/caddy/local/local-s3.caddy:ro" \
+            pageinator-web:ci caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: start it with throwaway settings (no database, which /healthz does not need)
+        run: |
+          docker run -d --name api --init -p 127.0.0.1:8780:8780 \
+            -e PGN_API_HOST=0.0.0.0 -e PGN_DB_HOST=127.0.0.1 -e PGN_DB_PORT=1 \
+            -e PGN_APP_PASSWORD="$(openssl rand -hex 16)" -e PGN_AUTH_PASSWORD="$(openssl rand -hex 16)" \
+            -e PGN_LISTEN_PASSWORD="$(openssl rand -hex 16)" -e PGN_AUTH_SECRET="$(openssl rand -hex 24)" \
+            pageinator-api:ci
+      - name: /healthz answers ok, and the process runs as node
+        run: |
+          for _ in $(seq 1 30); do
+            if [ "$(curl -fsS http://127.0.0.1:8780/healthz)" = '{"status":"ok"}' ]; then ok=1; break; fi
+            sleep 1
+          done
+          [ "${ok:-}" = 1 ]
+          [ "$(docker exec api id -un)" = node ]
+      - name: a stop ends it cleanly, well inside compose's 20 s
+        run: |
+          start=$(date +%s)
+          docker stop --time 20 api
+          [ "$(docker inspect api --format '{{.State.ExitCode}}')" = 0 ]
+          [ $(( $(date +%s) - start )) -lt 15 ]
+      - name: its log
+        if: always()
+        run: docker logs api || true

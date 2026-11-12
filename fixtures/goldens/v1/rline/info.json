@@ -1,0 +1,56 @@
+{
+ "body_pt_hex": "0x1.5b22d0e560419p+3",
+ "counts": {
+  "by_case": {
+   "BODY": 281,
+   "BREAKS": 278,
+   "HEADLINE": 118,
+   "NATURAL": 36,
+   "TRACKING": 179
+  },
+  "glyphs": 24863,
+  "hyphenated": 88,
+  "lines": 892,
+  "tracked": 69
+ },
+ "environment": {
+  "fonttools": "4.63.0",
+  "harfbuzz": "14.3.0",
+  "machine": "arm64",
+  "oracle_manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05",
+  "platform": "macOS-27.0.1",
+  "python": "3.11.14",
+  "uharfbuzz": "0.56.0"
+ },
+ "fonts": {
+  "F1": [
+   "Noto Serif Devanagari",
+   {
+    "wdth": 87.5
+   },
+   400,
+   "NotoSerifDevanagari-Condensed875"
+  ],
+  "F2": [
+   "Noto Sans Devanagari",
+   {
+    "wght": 700.0
+   },
+   700,
+   "NotoSansDevanagari-Bold"
+  ],
+  "F3": [
+   "Noto Sans Devanagari",
+   {
+    "wght": 400.0
+   },
+   400,
+   "NotoSansDevanagari-Regular"
+  ]
+ },
+ "house_k_hex": "0x1.25c2e0fcfb841p+0",
+ "nbsp_indent": 5,
+ "page_maker": "pdfx1-page/1.0.0",
+ "policy": "C3_floor0.66_stretch1.00",
+ "schema": "pageinator.golden.rline/1"
+}

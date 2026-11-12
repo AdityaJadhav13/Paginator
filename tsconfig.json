@@ -1,0 +1,41 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "tools/testkit"
+    },
+    {
+      "path": "packages/pyshim"
+    },
+    {
+      "path": "packages/pyshim/test"
+    },
+    {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/contracts/test"
+    },
+    {
+      "path": "packages/desk-text"
+    },
+    {
+      "path": "packages/desk-text/test"
+    },
+    {
+      "path": "apps/api"
+    },
+    {
+      "path": "apps/api/test"
+    },
+    {
+      "path": "apps/engine-queue"
+    },
+    {
+      "path": "apps/engine-queue/test"
+    },
+    {
+      "path": "tools/ts"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+ "counts": {
+  "assertions": 616073,
+  "float": 30027,
+  "json": 136,
+  "median": 5000,
+  "pow3": 19424,
+  "records": 67587,
+  "sort": 3000,
+  "split": 3000,
+  "stable_id": 2000,
+  "sum": 5000
+ },
+ "environment": {
+  "fonttools": "4.63.0",
+  "harfbuzz": "14.3.0",
+  "machine": "arm64",
+  "oracle_manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05",
+  "platform": "macOS-27.0.1",
+  "python": "3.11.14",
+  "uharfbuzz": "0.56.0"
+ },
+ "schema": "pageinator.golden.pyshim/1",
+ "seed": 20261020
+}

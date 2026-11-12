@@ -5,10 +5,11 @@
 .vscode/
 .idea/
 
-# Environment / secrets
+# Environment / secrets (.env.dev holds the development passwords; only the placeholder example is committed)
 .env
 .env.*
 !.env.example
+!.env.dev.example
 
 # Logs
 *.log
@@ -24,6 +25,11 @@ coverage/
 *.tsbuildinfo
 .vitest/
 
+# TypeScript build info and test reports
+.tsbuild/
+playwright-report/
+test-results/
+
 # Python environments and caches (experiments, oracle)
 .venv/
 venv/
@@ -34,5 +40,8 @@ __pycache__/
 # Local tooling: Claude Code personal settings, graphify knowledge-graph output (regenerated locally)
 .claude/
 graphify-out/
+
+# Brand artwork dropped in locally (mastheads, logos): private, never committed
+Logos/
 
 # Private pilot data never lives in the repo (it stays in $PAGEINATOR_PRIVATE_CORPUS outside git)

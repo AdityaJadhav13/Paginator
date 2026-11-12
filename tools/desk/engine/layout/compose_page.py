@@ -1,0 +1,1356 @@
+"""THE DESK'S COPY of the frozen experiments/phase0/page1/compose_page.py (EXP evidence stays as it was).
+Refinements go here behind house settings (settings.ST) whose defaults reproduce the frozen output byte for byte
+(tools/desk/test/test_layout_parity.py).
+
+EXP-PAGE-1: rebuild a printed page of the pilot newspaper with Pageinator's typesetting (EXPERIMENTAL; PRIVATE OUTPUT).
+
+Input: a page model from page_model.py (the printed page's stories, columns, exact text, rules, boxes, images).
+Pageinator re-sets every text element in OFL stand-in fonts and writes one PDF/X-1a:2003 page:
+  body       each story's flow (paragraphs, crossheads) through the story's printed columns, justified with the
+             EXP-COMPOSE-3 policy (no word breaks; a line may break after a hyphen inside a compound) on the printed
+             leading, with TEXT WRAP around images, graphics and ads (a line beside an obstacle is set narrower; a line
+             blocked by it moves below it on the leading grid; a paragraph whose available width changes is re-set from
+             that character on, as a typesetter re-flows text). Noto Serif Devanagari (wdth 87.5), sized
+               --size story (default): per story, so the story's words take their printed width (same-words calibration)
+               --size paper: one paper-level ratio (stand-in size ÷ house size × horizontal scale) learned on the
+                             CALIBRATION editions only — a held-out prediction of story depth
+             Columns never run below their printed bottom; what does not fit is counted as overset, never dropped.
+  headlines  head1 composer (EXP_HEAD_1_REPORT.md) with the printed number of lines (the page plan fixes it), shape
+             "fill" (the pre-registered selection) and the house pairs counted on the calibration editions; Noto Sans
+             Devanagari wght 800/700, width axis (2.5 steps) then size so the words take the printed width; decks alike
+  crossheads first-fit (house practice), centred (house practice) in the column they flow into; never truncated
+  other text kickers, bylines, captions, folios, furniture: each printed line at its position, sized by its printed glyph
+             widths; Wingdings bullets (decoded as l/u/v/n/q) become "•" (textfix.py); run-in leads are part of the
+             body line text and are not set a second time
+  graphics   box fills, then image/graphic/ad placeholders, then rules and box strokes, then text; colours as DeviceCMYK
+             (grey and RGB converted; other colour spaces counted and drawn black — both reported)
+Per story the manifest records printed vs our lines, overset lines/characters and paragraphs whose breaks equal print;
+per line its role, story/element, extent and baseline (for compare_page.py's geometry and accounting checks).
+PDF bytes are reproducible (SOURCE_DATE_EPOCH fixed unless set). Output: <dataset>/report/page1/rebuilt[_paper]/.
+Usage (repo root): PYTHONDONTWRITEBYTECODE=1 tools/oracle/v0/.venv/bin/python experiments/phase0/page1/compose_page.py
+                     <dataset_dir> [<sample>__p<page> | model.json ...] [--out DIR] [--size story|paper] [--photos]
+--photos: draw the printed photos and ads converted by photos.py instead of grey placeholders
+"""
+from __future__ import annotations
+
+import gzip
+import hashlib
+import io
+import json
+import math
+import os
+import statistics as st
+import sys
+from dataclasses import replace
+from pathlib import Path
+
+os.environ.setdefault("SOURCE_DATE_EPOCH", "1791849600")      # 2026-10-13T00:00Z: reproducible PDF bytes
+HERE = Path(__file__).resolve().parent
+PHASE0 = HERE.parents[3] / "experiments" / "phase0"     # the frozen Phase-0 code and results (read only)
+for _sub in ("head1", "pdfx1", "compose3", "compose2", "typeset_harness", "compose1"):
+    sys.path.insert(0, str(PHASE0 / _sub))
+import headliner as H  # noqa: E402  (installs the OFL font registry)
+import make_press_test as MP  # noqa: E402
+import pdfx as X  # noqa: E402
+import run_compose3 as R3  # noqa: E402
+import run_head1 as RH  # noqa: E402
+
+sys.path.insert(0, str(HERE))
+from textfix import dehyphenate, english_vocab, fix_bullet, fix_bullets_all, latin_text, only_bullets  # noqa: E402,F401  (fix_bullets_all, only_bullets: EXP-GEN-1)
+from settings import ST  # noqa: E402  (house settings; at the DEFAULTS every function below takes the frozen path)
+
+from fontTools.ttLib import TTFont  # noqa: E402
+
+K3 = H.K3
+MM = X.MM
+NBSP = "\u00a0"
+PAGE_MAKER = "page1-compose/2.8.0"
+BLACK, WHITE = (0, 0, 0, 1), (0, 0, 0, 0)
+SERIF, SANS = "Noto Serif Devanagari", "Noto Sans Devanagari"
+BODY_AXES = {"wdth": 87.5}
+PLACEHOLDER = {"image": ("छायाचित्र", "PHOTO"), "graphic": ("चित्र", "GRAPHIC"), "ad": ("जाहिरात", "AD")}
+OBSTACLE_KINDS = ("image", "graphic", "ad")
+SMALL_BOX_LINES = 6           # a table-like box (table_like) that overflows when flowed is set line by line as printed
+MASTHEAD_PT = 60.0            # the masthead's lettering: page-head furniture at least this size (brand.py artwork replaces it)
+TEXT_KINDS = ("headline", "deck", "kicker", "byline", "crosshead", "caption", "jump_line", "folio", "furniture", "other_text")
+WRAP_GAP_MM = 1.5            # horizontal clearance beside an obstacle
+WRAP_GAP_V_MM = 1.0          # vertical clearance below/above an obstacle
+EN_MIN_LINE_MM = 25.0        # English words do not fit narrower runaround lines (EXP-ENG-1)
+MIN_LINE_MM = 15.0           # narrower than this beside an obstacle: the line moves below it instead
+ASC, DESC = 0.80, 0.30       # line box above/below the baseline, in ems (Devanagari marks included)
+INK_CLEAR_MM = 0.25          # display lines: required clearance between one line's lowest and the next line's highest ink
+HYPHENATE_ENGLISH = "--no-hyphenate" not in sys.argv    # EXP-ENG-1: English stories break words like print
+EN_HYPHEN_MIN = (2, 2)        # print's shortest fragments before / after an English line-end break (EXP-ENG-1 measure)
+EN_HYPHEN_PENALTY = 300.0     # in-word break penalty for English (sweep 30–3000 on the 8 pages: depth best up to 300); --en-hyphen-penalty
+EN_MAX_CONSECUTIVE = 3        # print runs at most 3 broken lines in a row, bar one 4
+HEAD_FILLED = 0.85            # a headline line print set to ≥ this share of its measure is filled to the measure
+HEAD_HSCALE_MAX = 1.18        # … stretching its letters by at most this much
+HEAD_GAP_EM = 0.5             # … and its word spaces by at most this much each
+MIN_LEAD_EM = 1.20           # the stand-in's vowel signs reach further than the house face's: below 1.20 em of leading
+                             # a falling sign (ु ू) touches a rising one (ि ी) on the next line, so the stand-in is capped
+CODE_HASH = hashlib.sha256(b"".join((HERE / f).read_bytes() for f in ("compose_page.py", "textfix.py"))).hexdigest()[:12]
+
+
+def is_deva(s: str) -> bool:
+    return any("\u0900" <= ch <= "\u097f" for ch in s)
+
+
+def to_cmyk(colour):
+    """Model colour → (DeviceCMYK tuple or None, how): cmyk | gray→cmyk | rgb→cmyk | unsupported."""
+    if not colour:
+        return None, None
+    if isinstance(colour, (list, tuple)):
+        return tuple(float(v) for v in colour), "cmyk"
+    space, v = colour.get("space"), [float(x) for x in colour.get("values") or []]
+    if space == "cmyk" and len(v) == 4:
+        return tuple(v), "cmyk"
+    if space == "gray" and len(v) == 1:
+        return (0.0, 0.0, 0.0, round(1.0 - v[0], 4)), "gray"
+    if space == "rgb" and len(v) == 3:
+        k = 1.0 - max(v)
+        if k >= 0.999:
+            return BLACK, "rgb"
+        return tuple(round(x, 4) for x in ((1 - v[0] - k) / (1 - k), (1 - v[1] - k) / (1 - k), (1 - v[2] - k) / (1 - k), k)), "rgb"
+    return None, "unsupported"
+
+
+class Builder(MP.PageBuilder):
+    """The press-test page builder on a real page: fonts per (family, axes, weight), positions on the model's page."""
+
+    def __init__(self, page_h_mm: float):
+        super().__init__(actualtext=True)
+        self.page_h = page_h_mm
+        self.problems: list = []
+
+    def font(self, family: str, axes: dict, weight: int) -> str:
+        key = ("S" if family == SERIF else "N") + str(int(weight)) + "".join(f"_{k}{v:g}" for k, v in sorted(axes.items()) if k != "wght")
+        if key not in MP.FONTS:
+            MP.FONTS[key] = (family, dict(axes), int(weight), f"{family.replace(' ', '')}-{key}")
+        return key
+
+    def register(self, fkey: str, p) -> None:
+        """Embed the font instance of an externally prepared text (head1 composer) and refuse missing glyphs."""
+        h = hashlib.sha256(p.face_bytes).hexdigest()
+        if fkey not in self.fonts:
+            self.fonts[fkey] = X.EmbeddedFont(fkey, p.face_bytes, MP.FONTS[fkey][3])
+            self.face_hash[fkey] = h
+        elif self.face_hash[fkey] != h:
+            raise RuntimeError(f"{fkey}: font bytes changed between shapings")
+        if any(g == 0 for r in p.runs for g in r.glyph_ids):
+            raise RuntimeError(f"missing glyph (.notdef) in {fkey}")
+
+    def _emit(self, fkey, size, cmyk, clusters, overprint, meta, hscale=1.0):
+        runs = [(t, [X.Glyph(g, round(x * MM, 3), round((self.page_h - y) * MM, 3)) for g, x, y in gl]) for t, gl in clusters]
+        self.items.append(X.TextRun(fkey, size, cmyk, runs, overprint, hscale))
+        self.lines.append({**meta, "font": fkey, "size_pt": round(size, 4), "text": "".join(t for t, _ in clusters)})
+
+    def body_line(self, p, c, ln, x0, y, fkey, meta):
+        x_end = self.composed_line(p, c, ln, x0, y, fkey, meta=meta)
+        self.lines[-1]["x1_mm"] = round(x_end, 3)
+
+    def tokens_line(self, p, i, j, x0, y, fkey, cmyk=BLACK, meta=None, gap_extra=0.0, hscale=1.0):
+        """Glued tokens i..j-1 of a prepared text at natural spacing (head1 layouts); gap_extra mm is added to every
+        word space and hscale stretches the glyphs horizontally (a line justified to its measure)."""
+        widths, spaces, _ = H._words(p)
+        out, x = [], x0
+        for k in range(i, j):
+            for ci in p.words[k]:
+                cl = p.clusters[ci]
+                gl = []
+                for ri, gi in cl.glyphs:
+                    r = p.runs[ri]
+                    gl.append((r.glyph_ids[gi], x + r.x_offsets_mm[gi] * hscale, y + r.y_offsets_mm[gi]))
+                    x += r.x_advances_mm[gi] * hscale
+                out.append((p.text[cl.start:cl.end].replace(NBSP, " "), gl))
+            if k < j - 1:
+                sc = self._space_cluster_after(p, k)
+                if sc is not None:
+                    r = p.runs[sc.glyphs[0][0]]
+                    out.append((" ", [(r.glyph_ids[sc.glyphs[0][1]], x, y)]))
+                x += (spaces[k] or 0.0) * hscale + gap_extra
+        self._emit(fkey, p.size_pt, cmyk, out, tuple(cmyk) == BLACK,
+                   {"kind": "justified" if (gap_extra or hscale != 1.0) else "natural", "x0_mm": round(x0, 3), "x1_mm": round(x, 3), "baseline_mm": round(y, 3), **(meta or {})},
+                   hscale)
+        return x - x0
+
+    def text_line(self, text, fkey, size, x, y, cmyk=BLACK, align="left", meta=None, justify_to=None):
+        """One line of short text; justify_to (mm): spread the word spaces so the line spans exactly that width."""
+        p = self.prepare(text, fkey, size)
+        width = sum(a for r in p.runs for a in r.x_advances_mm)
+        n_sp = sum(1 for cl in p.clusters if cl.is_space)
+        sp_extra = (justify_to - width) / n_sp if justify_to and n_sp and justify_to > width else 0.0
+        if sp_extra:
+            width, align = justify_to, "left"
+        x0 = x - width if align == "right" else x - width / 2 if align == "center" else x
+        out, cx = [], x0
+        for cl in p.clusters:
+            gl = []
+            for ri, gi in cl.glyphs:
+                r = p.runs[ri]
+                gl.append((r.glyph_ids[gi], cx + r.x_offsets_mm[gi], y + r.y_offsets_mm[gi]))
+                cx += r.x_advances_mm[gi]
+            if cl.is_space:
+                cx += sp_extra
+            out.append((" " if cl.is_space else p.text[cl.start:cl.end], gl))
+        self._emit(fkey, size, cmyk, out, tuple(cmyk) == BLACK,
+                   {"kind": "justified" if sp_extra else "natural", "x0_mm": round(x0, 3), "x1_mm": round(x0 + width, 3), "baseline_mm": round(y, 3), **(meta or {})})
+        return width
+
+    def rect_mm(self, x0, top, x1, bottom, cmyk):
+        self.items.append(X.Rect(x0 * MM, (self.page_h - bottom) * MM, (x1 - x0) * MM, (bottom - top) * MM, cmyk, False))
+
+    def line_mm(self, p0, p1, width_pt, cmyk):
+        op = tuple(cmyk) == BLACK
+        self.items.append(X.Line(p0[0] * MM, (self.page_h - p0[1]) * MM, p1[0] * MM, (self.page_h - p1[1]) * MM, width_pt, cmyk, op))
+
+
+# ------------------------------------------------------------------------------------------- inputs
+def _sha(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:12] if path.exists() else "-"
+
+
+class Context:
+    """Everything shared by the pages of one dataset: measured frames, display records, policies, learned defaults."""
+
+    def __init__(self, ds: Path, size_mode: str = "story"):
+        self.ds, self.size_mode = ds, size_mode
+        hl = ds / "report" / "headlines.jsonl"
+        self.display = {h["id"]: h for h in (json.loads(l) for l in open(hl, encoding="utf-8"))}
+        pols = RH.policies(RH.eligible(list(self.display.values())))
+        self.head_pol = pols["FILL_C7"]                         # pre-registered selection + calibration house pairs
+        self.c7_hash = RH.c7_hash(pols["FILL_C7"])
+        summ = R3.OUT / "summary.json"
+        chosen = json.loads(summ.read_text())["selection"]["chosen"] if summ.exists() else None
+        self.body_choice = chosen or "C3_floor0.66_stretch1.00"
+        self._docs: dict = {}
+        # learned design language (house_profile.py): fallbacks where a page does not show the spacing itself
+        prof = PHASE0 / "results" / "page1" / "house_profile.json"
+        pj = json.loads(prof.read_text()) if prof.exists() else {}
+        sp = pj.get("composer_defaults", {}).get("spacing", {})
+        self.xh_above = (sp.get("crosshead_space_above") or {}).get("body_leadings", 1.0)
+        self.xh_below = (sp.get("crosshead_space_below") or {}).get("body_leadings", 1.0)
+        self.indent_mm = pj.get("composer_defaults", {}).get("roles", {}).get("body", {}).get("first_line_indent_mm", 5.0)
+        self.inputs = {"headlines.jsonl": _sha(hl), "house_profile.json": _sha(prof), "code": CODE_HASH}
+        # the paper's masthead artwork (brand.py; private), drawn in place of the masthead's lettering
+        bj = ds / "report" / "page1" / "brand" / "masthead.json"
+        self.masthead = json.loads(bj.read_text()) if bj.exists() else None
+        if self.masthead:
+            self.masthead["raw"] = gzip.decompress((bj.parent / "masthead.cmyk.gz").read_bytes())
+            self.inputs["masthead"] = _sha(bj)
+        self._en_vocab = None
+        self.r_cal = None
+        if size_mode == "paper":
+            self.r_cal = self._paper_ratio()
+
+    @property
+    def en_vocab(self) -> set:
+        """English words print sets inside a line, over every page model (textfix.english_vocab)."""
+        if self._en_vocab is None:
+            self._en_vocab = english_vocab(json.loads(f.read_text(encoding="utf-8"))
+                                           for f in sorted((self.ds / "report" / "page1" / "pages").glob("*.json")))
+        return self._en_vocab
+
+    def frames(self, sample: str, page: int) -> dict:
+        if sample not in self._docs:
+            w = self.ds / "work" / sample
+            f = w / "corrected.json"
+            f = f if f.exists() else w / "measure.json"
+            self._docs[sample] = (json.loads(f.read_text()), _sha(f))
+        pg = next(p for p in self._docs[sample][0]["pages"] if p["page"] == page)
+        return {fr["id"]: fr for fr in pg["frames"]}
+
+    def _paper_ratio(self) -> float:
+        """Median over CALIBRATION-edition stories of (story-calibrated stand-in size) ÷ (house size × horizontal scale)."""
+        ratios = []
+        for f in sorted((self.ds / "report" / "page1" / "pages").glob("*.json")):
+            m = json.loads(f.read_text(encoding="utf-8"))
+            if m["split"] != "cal":
+                continue
+            ww = make_words_width(m, self.frames(m["sample"], m["page"]))
+            by_frame = {e["frame_id"]: e for e in m["elements"] if e["kind"] == "body_frame"}
+            for s in m["stories"]:
+                paras = [b for b in s["flow"] if b["type"] == "para" and b["text"].strip()]
+                if not paras or not s.get("body_size_pt") or not is_deva(paras[0]["text"]):
+                    continue
+                w = pp = 0.0
+                for b in paras:
+                    try:
+                        q = per_pt(b["text"], *body_face(), 400)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    for ln in b["lines"]:
+                        fid, k = ln["line_ref"].rsplit(":", 1)
+                        e = by_frame.get(fid)
+                        if e:
+                            w += ww(e["lines"][int(k)])
+                    pp += q
+                if w > 0 and pp > 0:
+                    ratios.append((w / pp) / (s["body_size_pt"] * (s.get("body_hscale") or 1.0)))
+        return round(st.median(ratios), 5)
+
+
+_GLYF: dict = {}
+
+
+def line_ink(p, i, j) -> tuple[float, float]:
+    """Highest ink above and lowest ink below the baseline (mm) of glued tokens i..j-1 (glyph bounds + mark offsets)."""
+    h = hashlib.sha256(p.face_bytes).hexdigest()
+    if h not in _GLYF:
+        f = TTFont(io.BytesIO(p.face_bytes))
+        _GLYF[h] = (f["glyf"], f.getGlyphOrder(), f["head"].unitsPerEm)
+    glyf, order, upem = _GLYF[h]
+    s = p.em_mm / upem
+    asc = desc = 0.0
+    for k in range(i, j):
+        for ci in p.words[k]:
+            for ri, gi in p.clusters[ci].glyphs:
+                r = p.runs[ri]
+                g = glyf[order[r.glyph_ids[gi]]]
+                if hasattr(g, "yMax"):
+                    asc = max(asc, s * g.yMax - r.y_offsets_mm[gi])
+                    desc = max(desc, r.y_offsets_mm[gi] - s * g.yMin)
+    return asc, desc
+
+
+def make_words_width(model: dict, frames: dict):
+    """Printed word width (pt) of a model line: measured glyph tokens on its baseline inside its extent."""
+    toks = [(ln["baseline_pt"], t["x0"], t["x1"], fr["size_pt"]) for fr in frames.values() for ln in fr["lines"] for t in ln["tokens"]]
+
+    def words_width(line) -> float:
+        b = (model["page_h_mm"] - line["baseline_mm"]) * MM
+        x0, x1 = line["x0_mm"] * MM - 1.5, line["x1_mm"] * MM + 1.5
+        return sum(t1 - t0 for bl, t0, t1, sz in toks if abs(bl - b) < 0.15 * sz and x0 <= (t0 + t1) / 2 <= x1)
+    return words_width
+
+
+def per_pt(text: str, family: str, axes: dict, weight: int, spaces: bool = False) -> float:
+    """Width in pt of the text at 1 pt (non-space clusters only, unless spaces)."""
+    deva = is_deva(text)
+    p = K3.prepare(text, "mr" if deva else "en", "Deva" if deva else "Latn", family, 10.0, axes, weight)
+    return sum(c.width for c in p.clusters if spaces or not c.is_space) * MM / 10.0
+
+
+def role_font(font_name: str, role: str) -> tuple[str, dict, int]:
+    """Stand-in for a house face: serif for the body face family, sans for display faces; weight from the name."""
+    heavy = any(w in font_name for w in ("ExtraBold", "Black", "Laxman"))
+    bold = heavy or "Bold" in font_name or role in ("headline", "deck", "kicker", "crosshead")
+    weight = 800 if heavy else 700 if bold else 400
+    if "Body" in font_name and role not in ("headline", "deck", "kicker"):
+        fam, ba = body_face()
+        return fam, {**ba, "wght": float(weight)}, weight
+    return SANS, {"wght": float(weight)}, weight
+
+
+# ------------------------------------------------------------------------------------------- refinements (settings.ST)
+def body_face() -> tuple[str, dict]:
+    """(family, axes) of the body role. At the defaults exactly (SERIF, BODY_AXES), the frozen objects; otherwise
+    ST["body_family"] "serif" (Noto Serif Devanagari) | "sans" (Noto Sans Devanagari) with ST["body_wdth"]. Builder.font
+    keys stay apart: serif keys start "S", sans keys "N", and the body's wdth is in the key ("N400_wdth90")."""
+    fam, wd = ST["body_family"], ST["body_wdth"]
+    if fam == "serif" and wd == BODY_AXES["wdth"]:
+        return SERIF, BODY_AXES
+    if fam not in ("serif", "sans"):
+        raise ValueError(f"body_family must be 'serif' or 'sans', not {fam!r}")
+    return (SANS if fam == "sans" else SERIF), {"wdth": float(wd)}
+
+
+COPYFIT_WDTH = 0.04          # fixed body size: copyfit changes the set width by at most 4 % (house: hscale 0.96–1.04)
+
+
+def copyfit_wdth(text: str, family: str, axes: dict, weight: int, fit: float) -> float:
+    """Width axis that sets `text` at fit × its width at axes["wdth"] (fit clamped to 1 ± COPYFIT_WDTH; wdth 62.5–100,
+    in 0.5 steps). Bisection on the shaped width; deterministic."""
+    f = min(1.0 + COPYFIT_WDTH, max(1.0 - COPYFIT_WDTH, fit))
+    base = axes["wdth"]
+    try:
+        target = f * per_pt(text, family, axes, weight)
+        lo, hi = 62.5, 100.0
+        for _ in range(12):
+            mid = (lo + hi) / 2
+            lo, hi = (mid, hi) if per_pt(text, family, {**axes, "wdth": mid}, weight) < target else (lo, mid)
+        wd = (lo + hi) / 2
+    except Exception:  # noqa: BLE001  (a character the face lacks: proportional estimate)
+        wd = base * f
+    return max(62.5, min(100.0, round(wd * 2) / 2))
+
+
+SHAPES = ("rect", "ellipse")
+
+
+def wrap_shape(o: dict) -> dict:
+    """A shaped obstacle (text wraps its contour): {"box": (x0, top, x1, bottom) mm, "shape": "rect" | "ellipse",
+    "gap_mm": clearance on every side (default ST["wrap_gap_mm"]), "sides": "both" | "auto"} → validated copy.
+    "both" keeps each side of a line at least MIN_LINE_MM wide; "auto" keeps only the wider side (the left on a tie).
+    "cutout" is refused: it needs alpha masks the photo desk does not make yet."""
+    shape = o.get("shape", "rect")
+    if shape == "cutout":
+        raise ValueError("cut-out photos are not available until the photo desk makes alpha masks")
+    if shape not in SHAPES:
+        raise ValueError(f"unknown obstacle shape {shape!r} (rect, ellipse)")
+    x0, t, x1, b = (float(v) for v in o["box"])
+    if not (x1 > x0 and b > t):
+        raise ValueError(f"empty obstacle box {o['box']!r}")
+    gap = float(o.get("gap_mm", ST["wrap_gap_mm"]))
+    sides = o.get("sides", "both")
+    if gap < 0 or sides not in ("both", "auto"):
+        raise ValueError(f"bad obstacle gap_mm {gap!r} or sides {sides!r}")
+    return {"box": (x0, t, x1, b), "shape": shape, "gap_mm": gap, "sides": sides}
+
+
+def wrap_extent(sh: dict, top: float, bot: float):
+    """(left, right) mm that the shape grown by its gap blocks in the line band top..bot, or None. Ellipse: the exact
+    chord of the ellipse whose semi-axes are grown by the gap, at the band height nearest the centre (the band's widest
+    chord); rounded outwards to 0.1 mm."""
+    x0, t, x1, b = sh["box"]
+    g = sh["gap_mm"]
+    if sh["shape"] == "rect":
+        if bot <= t - g or top >= b + g:
+            return None
+        lft, rgt = x0 - g, x1 + g
+    else:
+        ecx, ecy, ra, rb = (x0 + x1) / 2, (t + b) / 2, (x1 - x0) / 2 + g, (b - t) / 2 + g
+        if bot <= ecy - rb or top >= ecy + rb:
+            return None
+        y = min(max(ecy, top), bot)
+        hw = ra * math.sqrt(max(0.0, 1.0 - ((y - ecy) / rb) ** 2))
+        lft, rgt = ecx - hw, ecx + hw
+    return math.floor(lft * 10 + 1e-9) / 10, math.ceil(rgt * 10 - 1e-9) / 10
+
+
+def line_intervals(x0: float, x1: float, top: float, bot: float, shapes: list, min_line: float = MIN_LINE_MM) -> list:
+    """The intervals of the line x0..x1 (band top..bot) left beside the shapes (wrap_shape dicts), in reading order:
+    one, two, or [] (the line is blocked). A piece narrower than min_line is dropped."""
+    ivs = [(x0, x1)]
+    for sh in shapes:
+        ext = wrap_extent(sh, top, bot)
+        if ext is None:
+            continue
+        lft, rgt = ext
+        new = []
+        for a, b in ivs:
+            if rgt <= a or lft >= b:
+                new.append((a, b))
+                continue
+            parts = [p for p in ((a, min(b, lft)), (max(a, rgt), b)) if p[1] - p[0] >= min_line]
+            if sh["sides"] == "auto" and len(parts) == 2:
+                parts = [max(parts, key=lambda p: p[1] - p[0])]
+            new += parts
+        ivs = new
+    return ivs
+
+
+def ellipse_raster(raw: bytes, w_px: int, h_px: int) -> bytes:
+    """An 8-bit CMYK raster (w × h × 4 bytes) with every pixel outside the inscribed ellipse set to white (0,0,0,0): on
+    newsprint the rectangle reads as an ellipse (the frozen PDF writer has no clip paths; draw images before text).
+    Pixel (i, j) is inside when its centre is: (2i+1−w)²·h² + (2j+1−h)²·w² ≤ w²·h², in exact integers."""
+    if len(raw) != w_px * h_px * 4:
+        raise ValueError(f"raster is {len(raw)} bytes, not {w_px}×{h_px}×4")
+    out = bytearray(raw)
+    w2, h2 = w_px * w_px, h_px * h_px
+    for j in range(h_px):
+        dy = 2 * j + 1 - h_px
+        dmax = math.isqrt(w2 * (h2 - dy * dy) // h2)        # largest |2i+1−w| inside on this row
+        lo, hi = -(-(w_px - 1 - dmax) // 2), (w_px - 1 + dmax) // 2
+        row = j * w_px * 4
+        if lo > hi:
+            out[row:row + w_px * 4] = bytes(w_px * 4)
+            continue
+        out[row:row + lo * 4] = bytes(lo * 4)
+        out[row + (hi + 1) * 4:row + w_px * 4] = bytes((w_px - 1 - hi) * 4)
+    return bytes(out)
+
+
+def mixed_prepare(B, seg: str, a: int, b: int, fkey: str, fkey_b: str, size: float):
+    """One paragraph in two faces: seg[a:b] (a run-in dateline) shaped in fkey_b, the rest in fkey, merged into ONE
+    prepared text so the composer breaks and justifies the paragraph as a whole (the bold words' own spaces stretch
+    too). Returns (prepared, n_regular_runs): glyphs of runs ≥ n_regular_runs are the bold face's. None when a or b is
+    not a cluster boundary of the body face."""
+    p = B.prepare(seg, fkey, size)
+    starts = {cl.start for cl in p.clusters} | {len(seg)}
+    if a not in starts or b not in starts:
+        return None
+    q = B.prepare(seg[a:b], fkey_b, size)
+    nreg = len(p.runs)
+    clusters = ([cl for cl in p.clusters if cl.start < a]
+                + [replace(cl, start=cl.start + a, end=cl.end + a, glyphs=[(ri + nreg, gi) for ri, gi in cl.glyphs]) for cl in q.clusters]
+                + [cl for cl in p.clusters if cl.start >= b])
+    words, spaces, cur = [], [], []                      # grouped into words as composer3.prepare does
+    for idx, cl in enumerate(clusters):
+        if cl.is_space:
+            if cur:
+                words.append(cur); spaces.append(cl.width); cur = []
+            elif spaces:
+                spaces[-1] += cl.width
+        else:
+            cur.append(idx)
+    if cur:
+        words.append(cur); spaces.append(None)
+    elif spaces:
+        spaces[-1] = None
+    return replace(p, runs=list(p.runs) + list(q.runs), clusters=clusters, words=words, spaces=spaces, token_words=set()), nreg
+
+
+def mixed_line(B, p, c, ln, x0, y, fkey, fkey_b, nreg, meta):
+    """make_press_test.composed_line for a mixed_prepare paragraph: the same positions; the bold clusters are emitted
+    as a second text run (role "dateline") before the body run, which stays B.lines[-1] (with x1_mm)."""
+    outs, x = ([], []), x0
+    for k in range(ln.a, ln.b):
+        pc = c.pieces[k]
+        ids = p.words[pc.word][pc.cl_from:pc.cl_to]
+        for n_ci, ci in enumerate(ids):
+            cl = p.clusters[ci]
+            text = p.text[cl.start:cl.end]
+            gl = []
+            for ri, gi in cl.glyphs:
+                r = p.runs[ri]
+                gl.append((r.glyph_ids[gi], x + r.x_offsets_mm[gi], y + r.y_offsets_mm[gi]))
+                x += r.x_advances_mm[gi]
+            if ln.tracking_mm_per_gap and n_ci < len(ids) - 1:
+                x += ln.tracking_mm_per_gap
+            if text.strip(NBSP) == "":
+                continue
+            outs[cl.glyphs[0][0] >= nreg].append((text, gl))
+        if k < ln.b - 1 and c.btype[k] == "space":
+            sc = B._space_cluster_after(p, pc.word)
+            if sc is not None:
+                r = p.runs[sc.glyphs[0][0]]
+                outs[sc.glyphs[0][0] >= nreg].append((" ", [(r.glyph_ids[sc.glyphs[0][1]], x, y)]))
+            sf = ln.applied_sf if ln.kind in ("justified", "semi") else min(1.0, ln.applied_sf)
+            x += p.spaces[pc.word] * sf
+    if ln.end_break == "inword":
+        hp = B.prepare("-", fkey, p.size_pt)
+        outs[0].append(("-", [(hp.runs[0].glyph_ids[0], x, y)]))
+        x += hp.runs[0].x_advances_mm[0]
+    if x > x0 + ln.measure_mm + 0.05 or ln.kind == "overfull":
+        raise ValueError(f"composed line overflows its measure by {x - x0 - ln.measure_mm:.2f} mm")
+    m = {"kind": ln.kind, "x0_mm": round(x0, 3), "baseline_mm": round(y, 3), **meta}
+    if outs[1]:
+        B._emit(fkey_b, p.size_pt, BLACK, outs[1], True, {**m, "role": "dateline"} if outs[0] else m)
+    if outs[0]:
+        B._emit(fkey, p.size_pt, BLACK, outs[0], True, m)
+    B.lines[-1]["x1_mm"] = round(x, 3)
+
+
+def _colour(el: dict, rep: dict) -> tuple:
+    c = el.get("colour_cmyk")
+    if c:
+        return tuple(c)
+    c, how = to_cmyk(el.get("colour"))
+    if how and how != "cmyk":
+        rep["colour"][how] = rep["colour"].get(how, 0) + 1
+    return c or BLACK
+
+
+# ------------------------------------------------------------------------------------------- text elements
+def set_display(B: Builder, cx: Context, el: dict, policy, kind_meta: dict, rep: dict, default_align: str = "left") -> dict:
+    """Headline / deck / crosshead with the head1 composer. Every composed line is set (never truncated): lines beyond
+    the printed count go one leading lower. Returns metrics, the number of lines used and the last baseline."""
+    rec = cx.display.get(el.get("source"))
+    lines = el["lines"]
+    family, axes0, wt = role_font(el.get("font") or "", el["kind"])
+    text = fix_bullet(" ".join(el["text"].split()))
+    target = sum(l.get("words_width_pt") or 0 for l in rec["lines"]) if rec else 0.0
+    if target <= 0:                                            # no measured word widths: use the printed line extents
+        target = sum((l["x1_mm"] - l["x0_mm"]) * MM for l in lines) * 0.85
+    axes = dict(axes0)
+    if family == SANS and el["kind"] in ("headline", "deck"):  # condensed house display type: width axis first
+        size_pt = el["size_pt"]
+        lo, hi = 62.5, 100.0
+        w = lambda d: per_pt(text, family, {**axes0, "wdth": d}, wt) * size_pt  # noqa: E731
+        wd = hi if w(hi) <= target else lo if w(lo) >= target else None
+        if wd is None:
+            for _ in range(12):
+                mid = (lo + hi) / 2
+                lo, hi = (mid, hi) if w(mid) < target else (lo, mid)
+            wd = (lo + hi) / 2
+        axes["wdth"] = max(62.5, min(100.0, round(wd / 2.5) * 2.5))
+    size = target / per_pt(text, family, axes, wt)
+    x0s, x1s = [l["x0_mm"] for l in lines], [l["x1_mm"] for l in lines]
+    span = (rec["span_x0_mm"], rec["span_x0_mm"] + rec["span_width_mm"]) if rec and rec.get("span_width_mm") else (min(x0s), max(x1s))
+    measure = max(span[1] - span[0], max(x1 - x0 for x0, x1 in zip(x0s, x1s)))
+    if el.get("gen_measure_mm"):                     # a generated layout (EXP-GEN-1): printed size, the new column's measure
+        size, measure = el["size_pt"], el["gen_measure_mm"]
+    n_lines = len(lines) if policy.balance else None
+    r = H.compose(text, family, axes, wt, round(size, 3), measure, policy, n_lines=n_lines)
+    if not r.fits:
+        r = H.compose(text, family, axes, wt, round(size, 3), measure + 1.0, policy, n_lines=n_lines)
+    if not r.fits:
+        raise ValueError("no layout with the printed number of lines")
+    # ink clearance: the stand-in's vowel signs reach further than the house face's. Where two composed lines would
+    # touch at their (printed) baselines, the size shrinks just enough to clear and the width axis widens to keep the
+    # printed width (heights scale with size only)
+    lead = (el.get("leading_pt") or r.size_pt * 1.083) / MM
+    shrunk = 1.0
+    for _ in range(4):
+        if len(r.lines) < 2:
+            break
+        ys = []
+        for n in range(len(r.lines)):
+            ys.append(lines[n]["baseline_mm"] if n < len(lines) else ys[-1] + lead)
+        ink = [line_ink(r.p, i, j) for i, j in r.lines]
+        f = min(((ys[n + 1] - ys[n] - INK_CLEAR_MM) / (ink[n][1] + ink[n + 1][0]) for n in range(len(r.lines) - 1)
+                 if ink[n][1] + ink[n + 1][0] > 0), default=1.0)
+        if f >= 0.995:
+            break
+        new = r.size_pt * max(0.6, f)
+        if "wdth" in axes:
+            wd = axes["wdth"]
+            while wd < 100.0 and per_pt(text, family, {**axes, "wdth": wd}, wt) * new < target:
+                wd = min(100.0, wd + 2.5)
+            axes["wdth"] = wd
+            new = min(new, target / per_pt(text, family, axes, wt))
+        shrunk *= new / r.size_pt
+        r2 = H.compose(text, family, axes, wt, round(new, 3), measure, policy, n_lines=n_lines)
+        if not r2.fits:
+            r2 = H.compose(text, family, axes, wt, round(new, 3), measure + 1.0, policy, n_lines=n_lines)
+        if not r2.fits:
+            break
+        r = r2
+    fkey = B.font(family, axes, wt)
+    B.register(fkey, r.p)
+    align = el.get("alignment") if el.get("alignment") in ("left", "center", "right") else default_align
+    cmyk = _colour(el, rep)
+    centre = st.median((a + b) / 2 for a, b in zip(x0s, x1s))
+    y = lines[0]["baseline_mm"]
+    for n, ((i, j), wmm) in enumerate(zip(r.lines, r.widths_mm)):
+        y = lines[n]["baseline_mm"] if n < len(lines) else y + lead
+        x = min(x0s) if align == "left" else max(x1s) - wmm if align == "right" else centre - wmm / 2
+        gap, hs = 0.0, 1.0
+        printed_w = (lines[n]["x1_mm"] - lines[n]["x0_mm"]) if n < len(lines) else 0.0
+        if el["kind"] == "headline" and printed_w >= HEAD_FILLED * measure and 0 < wmm < printed_w:
+            # print filled this headline line: the rebuild fills it to exactly its printed extent (the editors' review:
+            # justify headlines); letters stretch a little, the rest goes into word spaces, never letter-spacing
+            hs = min(HEAD_HSCALE_MAX, printed_w / wmm)
+            gaps = j - i - 1
+            extra = printed_w - wmm * hs
+            gap = min(extra / gaps, HEAD_GAP_EM * r.size_pt / MM) if gaps and extra > 0 else 0.0
+            x = lines[n]["x0_mm"] + max(0.0, extra - gap * gaps) / 2
+        B.tokens_line(r.p, i, j, x, y, fkey, cmyk, meta={**kind_meta, "role": el["kind"], "element": el["id"]}, gap_extra=gap, hscale=hs)
+    cuts = RH.to_unglued(r.text_glued, r.lines)
+    pr, acc = [], 0
+    for ln in lines:
+        acc += len(ln["text"].split()); pr.append(acc)
+    return {"element": el["id"], "kind": el["kind"], "lines": len(lines), "lines_used": len(r.lines), "last_baseline_mm": y,
+            "same_breaks": list(cuts) == pr, "relaxed": r.relaxed, "size_pt": round(r.size_pt, 3), "wdth": axes.get("wdth"),
+            "ink_shrink": round(shrunk, 4)}
+
+
+def set_lines(B: Builder, el: dict, meta: dict, rep: dict, words_width=None) -> None:
+    """Short text (kicker, byline, caption, folio, furniture …): each printed line at its position. Size: the printed
+    glyph widths (measured tokens) when available — robust to tabs inside a line's extent — else the line's extent."""
+    family, axes, wt = role_font(el.get("font") or "", el["kind"])
+    cmyk = _colour(el, rep)
+    align = el.get("alignment") if el.get("alignment") in ("left", "center", "right") else "left"
+    todo = []
+    for ln in el["lines"]:
+        text = fix_bullet(" ".join(ln["text"].split()))
+        if not text:
+            continue
+        w_tok = words_width(ln) if words_width else 0.0
+        if w_tok > 0:
+            size = w_tok / per_pt(text, family, axes, wt)
+        else:
+            w1 = per_pt(text, family, axes, wt, spaces=True) / MM          # mm per pt of size
+            size = (ln["x1_mm"] - ln["x0_mm"]) / w1 if w1 > 0 else el["size_pt"]
+        todo.append([ln, text, max(0.6 * el["size_pt"], min(1.3 * el["size_pt"], size))])
+    # ink clearance between consecutive lines of the block (the stand-in's vowel signs reach further than the house
+    # face's): one factor for the block; a width-axis face widens to keep each line's printed width
+    if len(todo) > 1:
+        fkey0 = B.font(family, axes, wt)
+        inks = []
+        for ln, text, size in todo:
+            p0 = B.prepare(text, fkey0, round(size, 3))
+            inks.append(line_ink(p0, 0, len(p0.words)))
+        f = min(((b[0]["baseline_mm"] - a[0]["baseline_mm"] - INK_CLEAR_MM) / (ia[1] + ib[0])
+                 for a, b, ia, ib in zip(todo, todo[1:], inks, inks[1:]) if 0 < b[0]["baseline_mm"] - a[0]["baseline_mm"] < 3 * a[2] / MM
+                 and ia[1] + ib[0] > 0), default=1.0)
+        if f < 0.995:
+            f = max(0.6, f)
+            if "wdth" in axes:
+                axes = {**axes, "wdth": min(100.0, round(axes["wdth"] / f / 2.5) * 2.5)}
+                for t in todo:                                   # size back to the printed width, never above the clear size
+                    t[2] = min(t[2] * f, t[2] * per_pt(t[1], family, {**axes, "wdth": body_face()[1]["wdth"]}, wt) / per_pt(t[1], family, axes, wt))
+            else:
+                for t in todo:
+                    t[2] *= f
+    fkey = B.font(family, axes, wt)
+    # lines print justified to the block's full width (not the block's last line) stay justified (the editors' review)
+    left, right = (min(t[0]["x0_mm"] for t in todo), max(t[0]["x1_mm"] for t in todo)) if todo else (0, 0)
+    for k, (ln, text, size) in enumerate(todo):
+        x = ln["x0_mm"] if align == "left" else ln["x1_mm"] if align == "right" else (ln["x0_mm"] + ln["x1_mm"]) / 2
+        full = (len(todo) >= 3 and k < len(todo) - 1 and ln["x1_mm"] - ln["x0_mm"] >= 0.97 * (right - left)
+                and abs(ln["x0_mm"] - left) < 1.0 and " " in text)
+        B.text_line(text, fkey, round(size, 3), ln["x0_mm"] if full else x, ln["baseline_mm"], cmyk, "left" if full else align,
+                    meta={**meta, "role": el["kind"], "element": el["id"]}, justify_to=(ln["x1_mm"] - ln["x0_mm"]) if full else None)
+
+
+# ------------------------------------------------------------------------------------------- body stories
+def story_from_frame(el: dict) -> dict:
+    """A body frame that the page model left outside every story becomes a one-column story of its own."""
+    em = el["size_pt"] / MM
+    flow, cur = [], None
+    for n, ln in enumerate(el["lines"]):
+        if ln.get("excluded") or ln.get("use", "body") != "body":
+            continue
+        starts = ln.get("left_offset_mm", 0.0) >= 0.5 * em
+        if cur is None or starts:
+            cur = {"type": "para", "text": "", "indent_mm": ln.get("left_offset_mm", 0.0) if starts else 0.0, "lines": []}
+            flow.append(cur)
+        cur["lines"].append({"col": 0, "line_ref": f"{el['frame_id']}:{n}", "text": ln["text"], "n_words": ln.get("n_words")})
+        cur["text"] = (cur["text"] + " " + ln["text"]).strip()
+    bls = [l["baseline_mm"] for l in el["lines"] if not l.get("excluded") and l.get("use", "body") == "body"]
+    return {"id": f"frame-{el['id']}", "headline": None, "columns": [{"frame_ids": [el["frame_id"]], "x0_mm": el["x0_mm"], "x1_mm": el["x1_mm"],
+            "top_mm": el["bbox_mm"][1], "bottom_mm": el["bbox_mm"][3], "first_baseline_mm": min(bls) if bls else el["bbox_mm"][1], "n_lines": len(bls)}],
+            "flow": flow, "body_font": el["font"], "body_size_pt": el["size_pt"], "body_leading_pt": el["leading_pt"] or el["size_pt"] * 1.15,
+            "body_hscale": el.get("hscale") or 1.0, "space_em": el.get("space_em"), "complete": False, "from_frame": True}
+
+
+def _col_of(cols, x_mid, y):
+    """Column whose box contains the point (x AND y), else None."""
+    return next((i for i, c in enumerate(cols) if c["x0_mm"] - 1 <= x_mid <= c["x1_mm"] + 1
+                 and c["top_mm"] - 1 <= y <= c["bottom_mm"] + 1), None)
+
+
+COPYFIT_STEPS = (0.99, 0.98, 0.97, 0.96)   # house per-story horizontal scale reaches 0.96 (house_profile: body hscale 0.96–1.06)
+
+
+def set_story(B: Builder, cx: Context, story: dict, words_width, els: dict, obstacles: list, meta: dict, rep: dict,
+              fit: float = 1.0) -> dict:
+    """One story's flow through its columns. Refinements (settings.ST; at the defaults the frozen path exactly):
+      body_family / body_wdth  the body face (body_face())
+      body_size_pt             one stand-in size (pt) for every story: no calibration, no MIN_LEAD_EM cap or widening;
+                               the leading is the story's/columns' as given. fit != 1 then changes the WIDTH axis so the
+                               text sets fit × wider (≤ ±4 %, copyfit_wdth), never the size. A leading below
+                               size × MIN_LEAD_EM is reported as out["lead_below_ink_min"] (pt needed), the size kept.
+      dateline_bold            a para block's "run_in_bold": n sets its first n characters in Noto Sans Devanagari 700
+                               (body wdth, body size), composed with the rest as one paragraph (mixed_prepare)
+    obstacles: (x0, top, x1, bottom) tuples (frozen behaviour) and/or wrap_shape dicts (rect/ellipse contour wrap: a
+    line gets one or two intervals, set left then right). out["overset_lines"] / ["overset_chars"] count what did not
+    fit: a dry run on a scratch Builder with the real columns and obstacles measures the real geometry."""
+    flow = story["flow"]
+    # English stories are hyphenated like print (EXP-ENG-1): set from the words print broke at line ends, made whole
+    english = HYPHENATE_ENGLISH and latin_text(b["text"] for b in flow if b["type"] == "para")
+    if english:
+        flow = [{**b, "text": dehyphenate(b["text"], cx.en_vocab)} if b["type"] == "para" else b for b in flow]
+    paras = [b for b in flow if b["type"] == "para" and b["text"].strip()]
+    min_line = EN_MIN_LINE_MM if english else MIN_LINE_MM
+    cols = story["columns"]
+    out = {"story": story["id"], "printed_lines": sum(len(b["lines"]) for b in paras), "our_lines": 0, "overset_lines": 0, "overset_words": 0,
+           "overset_chars": 0, "paragraphs": len(paras), "paragraphs_same_breaks": 0, "words": sum(len(b["text"].split()) for b in paras),
+           "columns": [[round(c["x0_mm"], 2), round(c["top_mm"], 2), round(c["x1_mm"], 2), round(c["bottom_mm"], 2)] for c in cols]}
+    if not paras:
+        return out
+    mark = (len(B.items), len(B.lines))
+    by_frame = {e["frame_id"]: e for e in els.values() if e["kind"] == "body_frame"}
+
+    def printed_line(ref):
+        fid, k = ref.rsplit(":", 1)
+        e = by_frame.get(fid)
+        return e["lines"][int(k)] if e and int(k) < len(e["lines"]) else None
+    base_of, ww_of = {}, {}
+    for b in paras:
+        for ln in b["lines"]:
+            pl = printed_line(ln["line_ref"])
+            base_of[ln["line_ref"]] = pl["baseline_mm"] if pl else None
+            ww_of[ln["line_ref"]] = words_width(pl) if pl else 0.0
+    family, BA = body_face()
+    wt = 400
+    fkey = B.font(family, BA, wt)
+    house_size = story.get("body_size_pt") or st.median(e["size_pt"] for e in by_frame.values() if e.get("size_pt"))
+    hscale = story.get("body_hscale") or 1.0
+    fixed = ST["body_size_pt"]
+    if fixed:                                       # one stand-in size for the edition
+        size = round(float(fixed), 3)
+    elif cx.size_mode == "paper":
+        size = round(house_size * hscale * cx.r_cal, 3)
+    else:   # calibration over the paragraphs the stand-in can shape (a missing character must not void the whole story)
+        w_ok = pp_ok = 0.0
+        for b in paras:
+            try:
+                pp = per_pt(b["text"], family, BA, wt)
+            except Exception:  # noqa: BLE001
+                continue
+            w_ok += sum(ww_of.get(ln["line_ref"], 0.0) for ln in b["lines"]); pp_ok += pp
+        size = round(w_ok / pp_ok, 3) if w_ok > 0 and pp_ok > 0 else round(house_size * hscale * 0.904, 3)
+    lead_pt_story = story.get("body_leading_pt") or None
+    lead_mm_cols = [c["leading_mm"] for c in cols if c.get("leading_mm")]
+    lead_pt_eff = lead_pt_story or (st.median(lead_mm_cols) * MM if lead_mm_cols else house_size * 1.083)
+    axes = dict(BA)
+    if fixed:                                       # the size stays; copyfit by width only
+        if size * MIN_LEAD_EM > lead_pt_eff + 1e-6:
+            out["lead_below_ink_min"] = round(size * MIN_LEAD_EM, 3)
+        if fit != 1.0:
+            axes["wdth"] = copyfit_wdth(" ".join(b["text"] for b in paras), family, axes, wt, fit)
+            out["copyfit"], out["wdth"] = fit, axes["wdth"]
+            fkey = B.font(family, axes, wt)
+    elif size * MIN_LEAD_EM > lead_pt_eff:            # vertical: size the leading allows; horizontal: wider letterforms (wdth)
+        out["size_capped_from"] = size
+        cap = lead_pt_eff / MIN_LEAD_EM
+        text_ok = " ".join(b["text"] for b in paras if b["text"].strip())
+        try:
+            target = size * per_pt(text_ok, family, axes, wt)                      # printed words width (pt)
+            wd = axes["wdth"]
+            while wd < 100.0 and per_pt(text_ok, family, {**axes, "wdth": wd}, wt) * cap < target:
+                wd = min(100.0, wd + 2.5)
+            axes["wdth"] = wd
+            size = round(min(cap, target / per_pt(text_ok, family, axes, wt)), 3)
+        except Exception:  # noqa: BLE001
+            size = round(cap, 3)
+        out["wdth"] = axes["wdth"]
+        fkey = B.font(family, axes, wt)
+    if fit != 1.0 and not fixed:
+        size = round(size * fit, 3)
+        out["copyfit"] = fit
+    out["size_pt"] = size
+    probe = B.prepare("क ख", fkey, size)
+    our_space = st.median(s for s in probe.spaces if s)
+    space_em = story.get("space_em") or next((e["space_em"] for fid in cols[0].get("frame_ids", [])
+                                              if (e := by_frame.get(fid)) and e.get("space_em")), 0.25)
+    k = (space_em * house_size * hscale / MM) / our_space          # house word space (nominal × horizontal scale)
+    kind, prm = R3.candidates()[cx.body_choice]
+    pol = R3.policy_for(cx.body_choice, kind, prm, k)
+    if english:
+        pol = replace(pol, inword="rules", inword_min=EN_HYPHEN_MIN, pattern_min=EN_HYPHEN_MIN, max_consecutive_inword=EN_MAX_CONSECUTIVE,
+                      compound_breaks=True)
+        if EN_HYPHEN_PENALTY is not None:
+            pol = replace(pol, weights=replace(pol.weights, hyphen=EN_HYPHEN_PENALTY))
+        out["hyphenate"] = True
+    # obstacles the PRINTED lines of this story overlap are backgrounds (e.g. a shape behind a box), not wrap objects
+    em_h = house_size / MM
+    plines = [pl for b in paras for ln in b["lines"] if (pl := printed_line(ln["line_ref"]))]
+    shapes = [wrap_shape(o) for o in obstacles if isinstance(o, dict)]     # contour wrap (generated photos: never backgrounds)
+    obstacles = [o for o in obstacles if not isinstance(o, dict)]
+    obstacles = [o for o in obstacles if not any(min(o[2], pl["x1_mm"]) - max(o[0], pl["x0_mm"]) > 1.0
+                                                 and min(o[3], pl["baseline_mm"] + DESC * em_h) - max(o[1], pl["baseline_mm"] - ASC * em_h) > 1.0
+                                                 for pl in plines)]
+    out["obstacles"] = len(obstacles) + len(shapes)
+    lead_mm = [c["leading_mm"] for c in cols if c.get("leading_mm")]
+    lead = story["body_leading_pt"] / MM if story.get("body_leading_pt") else st.median(lead_mm) if lead_mm else house_size * 1.083 / MM
+    em = size / MM
+    # usable baselines per column: up to the last printed baseline in that column (body lines, and crossheads assigned
+    # by x AND y), never below the column's printed bottom
+    last_bl = {}
+    for b in flow:
+        if b["type"] == "para":
+            for ln in b["lines"]:
+                if base_of.get(ln["line_ref"]) is not None:
+                    last_bl[ln["col"]] = max(last_bl.get(ln["col"], -1e9), base_of[ln["line_ref"]])
+        elif b["type"] == "crosshead" and b.get("element") in els:
+            for ln in els[b["element"]]["lines"]:
+                c = _col_of(cols, (ln["x0_mm"] + ln["x1_mm"]) / 2, ln["baseline_mm"])
+                if c is not None:
+                    last_bl[c] = max(last_bl.get(c, -1e9), ln["baseline_mm"])
+
+    def limit(c):
+        col = cols[c]
+        lb = last_bl.get(c, col["first_baseline_mm"] + (col["n_lines"] - 1) * lead)
+        return min(lb + 0.3 * lead, col["bottom_mm"] + 0.3 * lead)
+
+    def avail(c, yb):
+        """(x0, x1) available at baseline yb in column c with text wrap, or ("blocked", y_below) if an obstacle blocks it."""
+        col = cols[c]
+        x0, x1 = col["x0_mm"], col["x1_mm"]
+        top, bot = yb - ASC * em, yb + DESC * em
+        below = None
+        for ox0, ot, ox1, ob in obstacles:
+            if ob <= top or ot >= bot or ox1 <= x0 or ox0 >= x1:
+                continue
+            if ox0 - WRAP_GAP_MM - x0 >= max(min_line, 0.4 * (col["x1_mm"] - col["x0_mm"])) and ox0 > (x0 + x1) / 2 - 1:
+                x1 = min(x1, ox0 - WRAP_GAP_MM)                       # obstacle on the right: narrower line
+            elif x1 - (ox1 + WRAP_GAP_MM) >= max(min_line, 0.4 * (col["x1_mm"] - col["x0_mm"])) and ox1 < (x0 + x1) / 2 + 1:
+                x0 = max(x0, ox1 + WRAP_GAP_MM)                       # obstacle on the left
+            else:
+                below = max(below or -1e9, ob)
+        if below is not None:
+            return "blocked", below
+        if x1 - x0 < min_line:
+            obs = [ob for ox0, ot, ox1, ob in obstacles if not (ob <= top or ot >= bot or ox1 <= col["x0_mm"] or ox0 >= col["x1_mm"])]
+            return ("blocked", max(obs)) if obs else (x0, x1)       # a column narrower than min_line by itself
+        return x0, x1
+
+    state = {"ci": 0, "y": cols[0]["first_baseline_mm"], "placed": 0}
+    if shapes:                                      # a line may hold two intervals: state["sub"] is the one in use
+        rect_avail = avail
+
+        def intervals(c, yb):
+            a = rect_avail(c, yb)
+            if a[0] == "blocked":
+                return a
+            return line_intervals(a[0], a[1], yb - ASC * em, yb + DESC * em, shapes, max(min_line, ST["wrap_min_mm"] or 0.0)) \
+                or ("blocked", -1e9)  # one leading down; wrap_min_mm: no strip beside a photo narrower than the house's
+
+        def sub_at(c, yb):
+            return state["sub"] if state.get("sub_at") == (c, yb) else 0
+
+        def avail(c, yb):  # noqa: F811  (rebinds the closure position() reads)
+            a = intervals(c, yb)
+            return a if a[0] == "blocked" else a[min(sub_at(c, yb), len(a) - 1)]
+
+    def advance():
+        """Past the line just set: the next interval on this baseline (contour wrap), else one leading down."""
+        if shapes:
+            c, yb = state["ci"], state["y"]
+            a, k = intervals(c, yb), sub_at(c, yb)
+            if a[0] != "blocked" and k + 1 < len(a):
+                state["sub"], state["sub_at"] = k + 1, (c, yb)
+                return
+        state["y"] += lead
+
+    def next_col():
+        state["ci"] += 1; state["placed"] = 0
+        if state["ci"] < len(cols):
+            state["y"] = cols[state["ci"]]["first_baseline_mm"]
+
+    def position():
+        """Next usable (x0, x1) for a body line at state y (moves y past obstacles and to later columns); None = overset."""
+        while state["ci"] < len(cols):
+            if state["y"] > limit(state["ci"]):
+                next_col(); continue
+            a = avail(state["ci"], state["y"])
+            if a[0] == "blocked":
+                need = a[1] + WRAP_GAP_V_MM + ASC * em                # first baseline on the leading grid below the obstacle
+                steps = max(1, int((need - state["y"]) / lead + 0.999))
+                state["y"] += steps * lead
+                continue
+            return a
+        return None
+
+    prev_printed_base = None
+    for bi, b in enumerate(flow):
+        if b["type"] == "crosshead":
+            el = els.get(b["element"])
+            if el is None:
+                continue
+            words = len(el["text"].split())
+            if state["ci"] >= len(cols) or position() is None:
+                out["overset_crosshead_words"] = out.get("overset_crosshead_words", 0) + words
+                continue
+            if shapes and state.get("sub_at") == (state["ci"], state["y"]):
+                state["y"] += lead                      # a crosshead never sits in the right half of a split line
+            ci = state["ci"]
+            cbl = [l["baseline_mm"] for l in el["lines"]]
+            gap_before = (cbl[0] - prev_printed_base) if prev_printed_base is not None and 0 < cbl[0] - prev_printed_base < 6 * lead else cx.xh_above * lead
+            first = (state["y"] - lead + gap_before) if state["placed"] else state["y"] + max(0.0, gap_before - lead)
+            if first + (cbl[-1] - cbl[0]) + el.get("gen_keep_lines", 0) * lead > limit(ci):   # (generated layouts: keep with next)
+                next_col()
+                if state["ci"] >= len(cols):
+                    out["overset_crosshead_words"] = out.get("overset_crosshead_words", 0) + words
+                    continue
+                ci, first = state["ci"], state["y"]
+            pc = _col_of(cols, (el["lines"][0]["x0_mm"] + el["lines"][0]["x1_mm"]) / 2, cbl[0])
+            dx = 0.0 if pc is None or pc == ci else cols[ci]["x0_mm"] - cols[pc]["x0_mm"]
+            shifted = {**el, "lines": [{**l, "baseline_mm": first + (l["baseline_mm"] - cbl[0]), "x0_mm": l["x0_mm"] + dx,
+                                        "x1_mm": l["x1_mm"] + dx} for l in el["lines"]]}
+            last = shifted["lines"][-1]["baseline_mm"]
+            try:
+                d = set_display(B, cx, shifted, replace(cx.head_pol, balance=False), {**meta, "story": story["id"]}, rep, default_align="center")
+                last = d["last_baseline_mm"]
+            except Exception as e:  # noqa: BLE001
+                B.problems.append({"element": el["id"], "problem": f"crosshead: {type(e).__name__}: {e}"})
+                set_lines(B, shifted, {**meta, "story": story["id"]}, rep)
+            nxt = next((bb for bb in flow[bi + 1:] if bb["type"] == "para" and bb["lines"]), None)
+            nb = base_of.get(nxt["lines"][0]["line_ref"]) if nxt else None
+            gap_after = (nb - cbl[-1]) if nb is not None and 0 < nb - cbl[-1] < 6 * lead else cx.xh_below * lead
+            state["y"] = last + gap_after
+            state["placed"] += 1
+            continue
+        if not b["text"].strip():
+            continue
+        indent = b.get("indent_mm") or 0.0
+        if indent > 2.0 * house_size / MM:                       # an offset beside an obstacle, not a paragraph indent
+            indent = cx.indent_mm
+        rest, first_part, per_line_all, unset = fix_bullet(b["text"]), True, [], False
+        n_bold = (b.get("run_in_bold") or 0) if ST["dateline_bold"] else 0       # run-in dateline: characters in bold
+        if n_bold and (n_bold > len(rest) or rest[:n_bold] != b["text"][:n_bold]):
+            n_bold = 0
+        nreg = None
+        while rest:                                        # one pass per line width the paragraph runs through
+            pos = position()
+            x0, x1 = pos if pos else (cols[-1]["x0_mm"], cols[-1]["x1_mm"])
+            width = x1 - x0
+            seg = (NBSP * max(1, round(indent / C_shape_nbsp(family, size, axes))) + rest) if first_part and indent > 0 else rest
+            try:
+                mixed = None
+                if n_bold:
+                    fkey_b = B.font(SANS, {**axes, "wght": 700.0}, 700)
+                    mixed = mixed_prepare(B, seg, len(seg) - len(rest), len(seg) - len(rest) + n_bold, fkey, fkey_b, size)
+                    if mixed is None:
+                        out["dateline_not_bold"] = out.get("dateline_not_bold", 0) + 1
+                        n_bold = 0
+                if mixed:
+                    p, nreg = mixed
+                else:
+                    p, nreg = B.prepare(seg, fkey, size), None
+            except Exception as ex:  # noqa: BLE001  — a character the stand-in font lacks: report, never guess
+                B.problems.append({"story": story["id"], "problem": f"paragraph not set: {type(ex).__name__}: {ex}"})
+                out["unset_paragraphs"] = out.get("unset_paragraphs", 0) + 1
+                out["unset_chars"] = out.get("unset_chars", 0) + _chars(rest)
+                out.setdefault("unset_para_index", []).append(next(i for i, q in enumerate(paras) if q is b))
+                unset = True
+                break
+            c = K3.compose(p, pol, width)
+            if c.status != "OK":
+                B.problems.append({"story": story["id"], "problem": f"paragraph overset: {c.status}"})
+            per_line = _line_words(p, c)
+            restart = False
+            for n_ln, ln in enumerate(c.lines):
+                pos = position()
+                if pos is not None and abs((pos[1] - pos[0]) - width) > (0.05 if shapes else 0.5):   # contour: every chord
+                    if n_ln > 0:                           # the available width changed: re-set the rest from this character
+                        pc_ = c.pieces[ln.a]
+                        rest_was = rest
+                        rest = p.text[p.clusters[p.words[pc_.word][pc_.cl_from]].start:].lstrip(NBSP + " ")
+                        first_part = False
+                        if n_bold:                         # what is left of the bold run-in
+                            n_bold = max(0, n_bold - (len(rest_was) - len(rest)))
+                    restart = True
+                    break
+                out["our_lines"] += 1
+                per_line_all.append(per_line[n_ln])
+                if pos is None:
+                    out["overset_lines"] += 1
+                    out["overset_words"] += per_line[n_ln]
+                    out["overset_chars"] += _line_chars(p, c, ln)
+                    continue
+                lmeta = {**meta, "role": "body", "story": story["id"], "column": state["ci"],
+                         **({"hy": True} if ln.end_break == "inword" else
+                            {"eb": ln.end_break} if ln.end_break in ("token", "emergency") else {})}
+                if nreg is not None:
+                    mixed_line(B, p, c, ln, pos[0], state["y"], fkey, fkey_b, nreg, lmeta)
+                else:
+                    B.body_line(p, c, ln, pos[0], state["y"], fkey, lmeta)
+                advance(); state["placed"] += 1
+            if not restart:
+                break
+        if unset:
+            continue
+        pr_counts = [len(l["text"].split()) for l in b["lines"]]
+        out["paragraphs_same_breaks"] += int(_cuts(pr_counts) == _cuts(per_line_all))
+        prev_printed_base = base_of.get(b["lines"][-1]["line_ref"])
+    if out["overset_lines"] and table_like(paras) and not english and not out.get("unset_paragraphs"):
+        as_printed(B, story, paras, printed_line, cols, fkey, size, meta, out, mark)
+    return out
+
+
+def table_like(paras) -> bool:
+    """A short box of short lines with figures (weather, rates): 2..SMALL_BOX_LINES printed lines of at most 4 words,
+    one with a digit. Prose, however short, is never set as printed."""
+    lines = [ln["text"] for b in paras for ln in b["lines"]]
+    return (2 <= len(lines) <= SMALL_BOX_LINES and all(len(t.split()) <= 4 for t in lines)
+            and any(ch.isdigit() for t in lines for ch in t))
+
+
+def as_printed(B, story, paras, printed_line, cols, fkey, size, meta, out, mark):
+    """A short story that overflows when flowed (a table-like box: weather, rates) is set line by line where print set
+    each line, a line wider than its printed extent set smaller (never below 85%). Only when the story stands where
+    print had it (every printed line inside one of its columns): a moved story keeps its flowed setting."""
+    pls = [(ln, printed_line(ln["line_ref"])) for b in paras for ln in b["lines"]]
+    if any(pl is None or _col_of(cols, (pl["x0_mm"] + pl["x1_mm"]) / 2, pl["baseline_mm"]) is None for _, pl in pls):
+        return
+    keep = []
+    for ln, pl in pls:
+        text = fix_bullet(" ".join(ln["text"].split()))
+        p = B.prepare(text, fkey, size)
+        width = sum(a for r in p.runs for a in r.x_advances_mm)
+        k = min(1.0, (pl["x1_mm"] - pl["x0_mm"] + 0.3) / width) if width else 1.0
+        if k < 0.85:
+            return
+        keep.append((text, size * k, pl))
+    del B.items[mark[0]:], B.lines[mark[1]:]
+    for text, sz, pl in keep:
+        B.text_line(text, fkey, sz, pl["x0_mm"], pl["baseline_mm"], meta={**meta, "role": "body", "story": story["id"],
+                    "column": _col_of(cols, (pl["x0_mm"] + pl["x1_mm"]) / 2, pl["baseline_mm"])})
+    out.update({"our_lines": len(keep), "overset_lines": 0, "overset_words": 0, "overset_chars": 0, "set_as_printed": True})
+
+
+def _chars(text: str) -> int:
+    return sum(1 for ch in text if not ch.isspace())
+
+
+def _line_chars(p, c, ln) -> int:
+    """Non-space characters of one composed line (exact overset accounting, including breaks inside a token)."""
+    n = 0
+    for k in range(ln.a, ln.b):
+        pc = c.pieces[k]
+        for ci in p.words[pc.word][pc.cl_from:pc.cl_to]:
+            n += _chars(p.text[p.clusters[ci].start:p.clusters[ci].end])
+    return n
+
+
+def _cuts(counts):
+    acc, out = 0, []
+    for n in counts:
+        acc += n; out.append(acc)
+    return out
+
+
+def _line_words(p, c) -> list:
+    """Words (space-separated tokens) touched by each composed line."""
+    return [len({c.pieces[k].word for k in range(ln.a, ln.b)}) for ln in c.lines]
+
+
+_NBSP_W: dict = {}
+
+
+def C_shape_nbsp(family: str, size: float, axes: dict = BODY_AXES) -> float:  # noqa: N802
+    key = (family, size, tuple(sorted(axes.items())))
+    if key not in _NBSP_W:
+        _NBSP_W[key] = K3.C.shape_paragraph(NBSP, "mr", family, size, axes=axes).runs[0].x_advances_mm[0]
+    return _NBSP_W[key]
+
+
+# ------------------------------------------------------------------------------------------- page
+def masthead_box(model: dict):
+    """The masthead's area: page-head furniture of MASTHEAD_PT or more, grown by the text, graphics and boxes mostly
+    inside it (tagline, lettering panels); its foot is the rule under the lettering. None on pages without one.
+    Returns (box, ids of the elements the artwork replaces)."""
+    big = [e for e in model["elements"] if e["kind"] in ("furniture", "folio") and (e.get("size_pt") or 0) >= MASTHEAD_PT
+           and e["bbox_mm"][1] < 0.25 * model["page_h_mm"]]
+    if not big:
+        return None
+    box = [min(e["bbox_mm"][0] for e in big), min(e["bbox_mm"][1] for e in big), max(e["bbox_mm"][2] for e in big), max(e["bbox_mm"][3] for e in big)]
+
+    def share(b):
+        if b[3] - b[1] < 0.1 or b[2] - b[0] < 0.1:      # a hairline rule: give it a little thickness
+            cx_, cy_ = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+            b = (min(b[0], cx_ - 0.05), min(b[1], cy_ - 0.05), max(b[2], cx_ + 0.05), max(b[3], cy_ + 0.05))
+        a = max(1e-6, (b[2] - b[0]) * (b[3] - b[1]))
+        return max(0.0, min(b[2], box[2]) - max(b[0], box[0])) * max(0.0, min(b[3], box[3]) - max(b[1], box[1])) / a
+    kinds = set(TEXT_KINDS) | {"graphic", "box", "image"}
+    for _ in range(3):                                    # grow until stable (a panel brings in the tagline it holds)
+        part = [e for e in model["elements"] if e["kind"] in kinds and share(e["bbox_mm"]) >= 0.5]
+        new = [min([box[0]] + [e["bbox_mm"][0] for e in part]), min([box[1]] + [e["bbox_mm"][1] for e in part]),
+               max([box[2]] + [e["bbox_mm"][2] for e in part]), max([box[3]] + [e["bbox_mm"][3] for e in part])]
+        if new == box:
+            break
+        box = new
+    ids = [e["id"] for e in model["elements"] if e["kind"] in kinds | {"rule"} and share(e["bbox_mm"]) >= 0.8]
+    mid = (box[1] + box[3]) / 2
+    under = [min(r["bbox_mm"][1], r["bbox_mm"][3]) for r in model["elements"] if r["kind"] == "rule"
+             and mid < r["bbox_mm"][1] <= box[3] and r["bbox_mm"][2] - r["bbox_mm"][0] >= 0.8 * (box[2] - box[0])]
+    if under:
+        box[3] = min(under) - 0.5
+    els = {e["id"]: e for e in model["elements"]}
+    ids = [i for i in ids if els[i]["bbox_mm"][1] < box[3]]          # what starts under the rule (date, folio) stays
+    # text: the artwork replaces the lettering and the tagline above it; any other line in the area (an editor's
+    # name, an edition note) stays, and the artwork is fitted above it
+    top = min(e["bbox_mm"][1] for e in big)
+    keep = [i for i in ids if els[i]["kind"] in TEXT_KINDS and els[i] not in big and els[i]["bbox_mm"][3] > top + 1.0]
+    for i in keep:
+        box[3] = min(box[3], els[i]["bbox_mm"][1] - 0.5)
+    return box, [i for i in ids if i not in keep]
+
+
+def build(cx: Context, model: dict, photo_dir: Path | None = None) -> tuple[Builder, dict]:
+    B = Builder(model["page_h_mm"])
+    mh = masthead_box(model) if cx.masthead else None
+    if mh:                                                # the artwork replaces the masthead's lettering and panels
+        mh_els = {e["id"]: e for e in model["elements"]}
+        gone = set(mh[1])
+        model = {**model, "elements": [e for e in model["elements"] if e["id"] not in gone]}
+    photos = {}
+    if photo_dir and (photo_dir / "index.json").exists():
+        photos = json.loads((photo_dir / "index.json").read_text())["elements"]
+    els = {e["id"]: e for e in model["elements"]}
+    frames = cx.frames(model["sample"], model["page"])
+    words_width = make_words_width(model, frames)
+    ads = [e["bbox_mm"] for e in model["elements"] if e["kind"] == "ad"]
+    obstacles = [tuple(e["bbox_mm"]) for e in model["elements"] if e["kind"] in OBSTACLE_KINDS
+                 and (e["bbox_mm"][2] - e["bbox_mm"][0]) > 3 and (e["bbox_mm"][3] - e["bbox_mm"][1]) > 3]
+    # text blocks other stories' text wraps around in print: child stories (pull quotes, sidebars) and free text frames.
+    # Per story, obstacles its own printed lines overlap are dropped as backgrounds (set_story), so a story never
+    # wraps around itself.
+    text_obstacles = [(s["id"], tuple(s["bbox_mm"])) for s in model["stories"] if s.get("parent_story") and s.get("bbox_mm")]
+    text_obstacles += [(None, tuple(e["bbox_mm"])) for e in model["elements"] if e["kind"] in ("other_text", "caption")
+                       and e["id"] in set(model.get("unassigned", []))]
+
+    def in_ad(e):
+        x0, t, x1, b = e["bbox_mm"]
+        return any(a[0] - 0.5 <= x0 and x1 <= a[2] + 0.5 and a[1] - 0.5 <= t and b <= a[3] + 0.5 for a in ads)
+    meta = {"page": model["page"]}
+    rep = {"stories": [], "display": [], "skipped_in_ads": 0, "run_in_skipped": 0, "colour": {}, "unsupported_colour_items": 0}
+    # 1. box fills, 2. placeholders, 3. rules and box strokes, 4. text
+    for e in model["elements"]:
+        if e["kind"] == "box" and e.get("fill"):
+            c, how = to_cmyk(e["fill"])
+            if how and how != "cmyk":
+                rep["colour"][how] = rep["colour"].get(how, 0) + 1
+            if c:
+                B.rect_mm(*e["bbox_mm"], c)
+    rep["photos"] = 0
+    drawn = []
+    for e in model["elements"]:
+        if e["kind"] in PLACEHOLDER and not (e["kind"] != "ad" and in_ad(e)):
+            x0, t, x1, b = e["bbox_mm"]
+            if photos.get(e["id"]):
+                drawn.append(e)                           # drawn after every placeholder: a placeholder never covers a photo
+                continue
+            B.rect_mm(x0, t, x1, b, (0, 0, 0, 0.06))
+            for p0, p1 in (((x0, t), (x1, t)), ((x1, t), (x1, b)), ((x1, b), (x0, b)), ((x0, b), (x0, t))):
+                B.line_mm(p0, p1, 0.3, (0, 0, 0, 0.4))
+            mr, en = PLACEHOLDER[e["kind"]]
+            if (x1 - x0) > 25 and (b - t) > 12 and not any(
+                    te["kind"] in TEXT_KINDS and min(x1, te["bbox_mm"][2]) > max(x0, te["bbox_mm"][0])
+                    and min(b, te["bbox_mm"][3]) > max(t, te["bbox_mm"][1]) for te in model["elements"]):
+                fk = B.font(SANS, {"wght": 400.0}, 400)
+                B.text_line(f"{mr} · {en}", fk, 8.0, (x0 + x1) / 2, (t + b) / 2, (0, 0, 0, 0.5), "center", meta={**meta, "role": "placeholder"})
+    if mh:                                                # fitted into the masthead's area, centred, aspect kept
+        (x0, t, x1, b), a = mh[0], cx.masthead
+        k = min((x1 - x0) / a["width_px"], (b - t) / a["height_px"])
+        w, h = a["width_px"] * k, a["height_px"] * k
+        mx, my = (x0 + x1 - w) / 2, (t + b - h) / 2
+        B.items.append(X.Image(mx * MM, (B.page_h - my - h) * MM, w * MM, h * MM, a["width_px"], a["height_px"], a["raw"]))
+        rep["masthead"] = {"ids": mh[1], "box_mm": [round(v, 2) for v in (mx, my, mx + w, my + h)],
+                           "text_replaced": [i for i in mh[1] if (e := mh_els.get(i)) and e["kind"] in TEXT_KINDS
+                                             and (e.get("size_pt") or 0) < MASTHEAD_PT],      # taglines: the artwork has its own
+                           "ppi": round(a["width_px"] / (w / 25.4), 1)}
+    for e in drawn:                                       # the printed photo / ad, converted to newsprint CMYK (photos.py)
+        x0, t, x1, b = e["bbox_mm"]
+        ph = photos[e["id"]]
+        raw = gzip.decompress((photo_dir / f"{e['id']}.cmyk.gz").read_bytes())
+        B.items.append(X.Image(x0 * MM, (B.page_h - b) * MM, (x1 - x0) * MM, (b - t) * MM, ph["width_px"], ph["height_px"], raw))
+        rep["photos"] += 1
+    for e in model["elements"]:
+        if e["kind"] == "rule":
+            c, how = to_cmyk(e.get("colour"))
+            if how and how != "cmyk":
+                rep["colour"][how] = rep["colour"].get(how, 0) + 1
+            B.line_mm(e["p0_mm"], e["p1_mm"], e.get("stroke_pt") or 0.5, c or BLACK)
+        elif e["kind"] == "box" and e.get("stroke_pt") and e.get("stroke"):
+            x0, t, x1, b = e["bbox_mm"]
+            c, how = to_cmyk(e["stroke"])
+            if how and how != "cmyk":
+                rep["colour"][how] = rep["colour"].get(how, 0) + 1
+            for p0, p1 in (((x0, t), (x1, t)), ((x1, t), (x1, b)), ((x1, b), (x0, b)), ((x0, b), (x0, t))):
+                B.line_mm(p0, p1, e["stroke_pt"], c or BLACK)
+    in_story = set()
+    stories = list(model["stories"])
+    for s in stories:
+        in_story.update(x for x in [s.get("headline"), s.get("kicker"), s.get("byline"), *s.get("decks", []), *s.get("captions", [])] if x)
+        in_story.update(b["element"] for b in s["flow"] if b["type"] == "crosshead")
+    for eid in model.get("unassigned", []):
+        e = els.get(eid)
+        if e and e["kind"] == "body_frame" and not in_ad(e):
+            stories.append(story_from_frame(e))
+    for s in stories:
+        for role in ("kicker", "headline", "byline"):
+            e = els.get(s.get(role)) if s.get(role) else None
+            if e and not in_ad(e) and not e.get("run_in"):
+                _display_or_lines(B, cx, e, rep, meta, s["id"], words_width)
+        for eid in s.get("decks", []) + s.get("captions", []):
+            e = els.get(eid)
+            if e and not in_ad(e) and not e.get("run_in"):
+                _display_or_lines(B, cx, e, rep, meta, s["id"], words_width)
+        try:
+            obst = obstacles + [o for sid, o in text_obstacles if sid != s["id"]]
+            mark = (len(B.items), len(B.lines), len(B.problems))
+            res = set_story(B, cx, s, words_width, els, obst, meta, rep)
+            for f in (COPYFIT_STEPS if res["overset_lines"] or res.get("overset_crosshead_words") else ()):
+                keep = (B.items[mark[0]:], B.lines[mark[1]:], B.problems[mark[2]:])
+                del B.items[mark[0]:], B.lines[mark[1]:], B.problems[mark[2]:]
+                trial = set_story(B, cx, s, words_width, els, obst, meta, rep, fit=f)
+                if trial["overset_lines"] == 0 and not trial.get("overset_crosshead_words"):
+                    res = trial
+                    break
+                del B.items[mark[0]:], B.lines[mark[1]:], B.problems[mark[2]:]   # keep the full-size setting
+                B.items += keep[0]; B.lines += keep[1]; B.problems += keep[2]
+            rep["stories"].append(res)
+        except Exception as ex:  # noqa: BLE001
+            B.problems.append({"story": s["id"], "problem": f"{type(ex).__name__}: {ex}"})
+    for e in model["elements"]:
+        if e["kind"] in TEXT_KINDS and e["id"] not in in_story:
+            if e.get("run_in"):                          # its words are already in the body line that starts with them
+                rep["run_in_skipped"] += 1
+                continue
+            if in_ad(e):
+                rep["skipped_in_ads"] += 1
+                continue
+            _display_or_lines(B, cx, e, rep, meta, None, words_width)
+    return B, rep
+
+
+def _display_or_lines(B, cx, e, rep, meta, story_id, words_width=None):
+    m = {**meta, "story": story_id}
+    try:
+        if e["kind"] in ("headline", "deck") and len(e["lines"]) > 0:
+            rep["display"].append(set_display(B, cx, e, cx.head_pol, m, rep))
+        else:
+            set_lines(B, e, m, rep, words_width)
+    except Exception as ex:  # noqa: BLE001
+        B.problems.append({"element": e["id"], "kind": e["kind"], "problem": f"{type(ex).__name__}: {ex}"})
+        if e["kind"] in ("headline", "deck"):
+            rep["display"].append({"element": e["id"], "kind": e["kind"], "lines": len(e["lines"]), "failed": True, "same_breaks": False})
+            try:
+                set_lines(B, e, m, rep, words_width)
+            except Exception as ex2:  # noqa: BLE001
+                B.problems.append({"element": e["id"], "kind": e["kind"], "problem": f"fallback: {type(ex2).__name__}: {ex2}"})
+
+
+def main():
+    args = sys.argv[1:]
+    out_dir, size_mode = None, "story"
+    if "--out" in args:
+        i = args.index("--out"); out_dir = Path(args[i + 1]).expanduser(); del args[i:i + 2]
+    if "--no-hyphenate" in args:
+        args.remove("--no-hyphenate")
+    if "--en-hyphen-penalty" in args:
+        global EN_HYPHEN_PENALTY
+        i = args.index("--en-hyphen-penalty"); EN_HYPHEN_PENALTY = float(args[i + 1]); del args[i:i + 2]
+    use_photos = "--photos" in args
+    if use_photos:
+        args.remove("--photos")
+    if "--size" in args:
+        i = args.index("--size"); size_mode = args[i + 1]; del args[i:i + 2]
+    assert size_mode in ("story", "paper"), size_mode
+    ds = Path(args[0]).expanduser()
+    names = args[1:]
+    src = ds / "report" / "page1" / "pages"
+    out_dir = out_dir or ds / "report" / "page1" / ("rebuilt" if size_mode == "story" else "rebuilt_paper")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cx = Context(ds, size_mode)
+    files = [Path(n) if n.endswith(".json") else src / f"{n}.json" for n in names] if names else sorted(src.glob("*.json"))
+    intent, fl = MP.OUTPUT_INTENTS["IFRA26"], MP.PDFX["X-1a:2003"]
+    for f in files:
+        model = json.loads(f.read_text(encoding="utf-8"))
+        if size_mode == "paper" and model["split"] != "test":
+            continue                                       # the held-out prediction is reported on the test editions
+        pdir = ds / "report" / "page1" / "photos" / f.stem if use_photos else None
+        B, rep = build(cx, model, pdir)
+        cx.frames(model["sample"], model["page"])
+        inputs = {**cx.inputs, "model": _sha(f), "measure": cx._docs[model["sample"]][1]}
+        build_id = hashlib.sha256(json.dumps([inputs, sorted(B.face_hash.items()), cx.body_choice, cx.c7_hash, size_mode, cx.r_cal,
+                                              X.WRITER_VERSION, PAGE_MAKER, K3.COMPOSER_VERSION, H.HEADLINER_VERSION]).encode()).hexdigest()[:10]
+        fk = B.font(SANS, {"wght": 400.0}, 400)
+        B.text_line(f"PAGEINATOR REBUILD — TEST, NOT FOR PUBLICATION — page {model['page']} — build {build_id}", fk, 5.5, 8.0,
+                    model["page_h_mm"] - 6.0, (0, 0, 0, 1), "left", meta={"role": "slug", "page": model["page"]})
+        data, stats = X.build_pdf([X.Page(model["page_w_mm"] * MM, model["page_h_mm"] * MM, B.items)], B.fonts,
+                                  title=f"Pageinator page rebuild {build_id} (TEST - not for publication)", output_intent=intent,
+                                  actualtext=True, pdf_version=fl["pdf_version"], pdfx_info=fl["info"], creator="Pageinator EXP-PAGE-1")
+        pdf = out_dir / f"{f.stem}.pdf"
+        pdf.write_bytes(data)
+        st_ = rep["stories"]
+        summary = {"printed_body_lines": sum(s["printed_lines"] for s in st_), "our_body_lines": sum(s["our_lines"] for s in st_),
+                   "overset_lines": sum(s["overset_lines"] for s in st_),
+                   "overset_crosshead_words": sum(s.get("overset_crosshead_words", 0) for s in st_),
+                   "paragraphs": sum(s["paragraphs"] for s in st_), "paragraphs_same_breaks": sum(s["paragraphs_same_breaks"] for s in st_),
+                   "display": len(rep["display"]), "display_same_breaks": sum(d["same_breaks"] for d in rep["display"]),
+                   "display_failed": sum(bool(d.get("failed")) for d in rep["display"]), "problems": len(B.problems)}
+        manifest = {"schema": "pageinator.page1.rebuild/2", "page_maker": PAGE_MAKER, "build_id": build_id, "model": f.name,
+                    "size_mode": size_mode, "r_cal": cx.r_cal, "inputs": inputs,
+                    "sha256": hashlib.sha256(data).hexdigest(), "writer": X.WRITER_VERSION, "composer": K3.COMPOSER_VERSION,
+                    "headliner": H.HEADLINER_VERSION, "body_policy": cx.body_choice, "head_policy": cx.head_pol.name, "c7_hash": cx.c7_hash,
+                    "house_profile": cx.inputs["house_profile.json"], "crosshead_space_leadings": [cx.xh_above, cx.xh_below],
+                    "stats": stats, "summary": summary, "stories": st_, "display": rep["display"], "problems": B.problems,
+                    "skipped_in_ads": rep["skipped_in_ads"], "photos": rep.get("photos", 0), "run_in_skipped": rep["run_in_skipped"], "colour_conversions": rep["colour"],
+                    "fonts": {k: {"family": MP.FONTS[k][0], "axes": MP.FONTS[k][1], "weight": MP.FONTS[k][2], "face_sha256": B.face_hash[k]} for k in B.fonts},
+                    "masthead": rep.get("masthead"), "lines": B.lines}
+        mp = pdf.with_suffix(".manifest.json")
+        mp.write_text(json.dumps(manifest, ensure_ascii=False) + "\n", encoding="utf-8")
+        pdf.chmod(0o600); mp.chmod(0o600)
+        print(f.stem, json.dumps(summary))
+    if cx.r_cal is not None:
+        print("paper-level calibration ratio (calibration editions):", cx.r_cal)
+
+
+if __name__ == "__main__":
+    main()

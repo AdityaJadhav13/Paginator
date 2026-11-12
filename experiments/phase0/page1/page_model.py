@@ -166,7 +166,7 @@ from pdfminer.pdfpage import PDFPage  # noqa: E402
 from pdfminer.utils import apply_matrix_pt  # noqa: E402
 
 SCHEMA = "pageinator.page1.page_model/1"
-TOOL = "page1-model/0.2.0"
+TOOL = "page1-model/0.3.0"
 MM = AT.MM                              # points per mm
 SPLIT_DATE = "2025-11-10"               # protocol: editions before this date are calibration ("cal"), the rest "test"
 BASELINE_EM = HL.BASELINE_EM            # 0.15 em: same line (measure.py, actualtext.py)
@@ -185,6 +185,7 @@ COL_ASC, COL_DESC = 0.80, 0.30          # column box: first baseline - 0.8 em to
 HEAD_COVER = 0.5                        # a headline span owns a column it covers by >= 50 % of the column width
 RULE_MAX_MM = 1.0                       # filled rectangles at most this thick and at least RULE_MIN_MM long are rules
 RULE_MIN_MM = 3.0
+RUNON_GAP_MM = 12.0                     # a flow ending mid-sentence runs on into a column this close to its right
 GRAPHIC_JOIN_MM = 1.0                   # graphic paths this close (consecutive in content order) form one graphic
 PANEL_MIN_MM2 = 1500.0                  # boxes this large (and >= PANEL_MIN_SIDE_MM on both sides) are panels
 PANEL_MIN_SIDE_MM = 30.0
@@ -1551,7 +1552,12 @@ class PageModel:
         self.hrules = [r for r in self.rules if r["orient"] == "h"]
 
     def panel_set(self, pt):
-        return frozenset(p["id"] for p in self.panels if contains(p["bbox"], pt, 0.5))
+        """Panels around a point. A panel that holds no body line (a boxed headline or label) does not separate a
+        headline from the text under it, so only panels holding body text count."""
+        if getattr(self, "_body_panels", None) is None:
+            self._body_panels = [p for p in self.panels if any(contains(p["bbox"], centre(L["box"]), 0.5)
+                                                              for L in self.all_body_lines)]
+        return frozenset(p["id"] for p in self._body_panels if contains(p["bbox"], pt, 0.5))
 
     def geo_heads(self, L, heads, panels=True):
         """Heads that may own body line L geometrically (span covers >= 50 % of its column, above it, same panels,
@@ -1690,7 +1696,8 @@ class PageModel:
                 if c and g["id"] not in c:
                     T["conflict"] = sorted(c)
             elif c:
-                cands = [h for h in heads if h["id"] in c and overlap(h["_span"][0], h["_span"][1],
+                # a headline lies above its text: a content-order neighbour below the flow's first line is not its head
+                cands = [h for h in heads if h["id"] in c and h["_bottom"] <= T["first"]["ink_top"] + 1.0 and overlap(h["_span"][0], h["_span"][1],
                          min(L["L"] for L in T["lines"]) - 5, max(L["R"] for L in T["lines"]) + 5) > 0]
                 if cands:
                     T["head"], T["evidence"] = sorted(cands, key=lambda h: h["id"])[0], "content"
@@ -1707,7 +1714,9 @@ class PageModel:
         for hid in sorted(by_head, key=lambda k: (heads_by_id[k]["bbox"][1], heads_by_id[k]["bbox"][0])):
             h = heads_by_id[hid]
             ts = by_head[hid]
-            main = max(ts, key=lambda T: (len(T["lines"]), hid in T["content"], -T["first"]["idx"][0]))
+            # the flow under the headline (geometric evidence) before one that is only its content-order neighbour
+            main = max(ts, key=lambda T: (T["evidence"].startswith("geo"), len(T["lines"]), hid in T["content"],
+                                          -T["first"]["idx"][0]))
             S = {"head": h, "threads": [main], "evidence": main["evidence"], "parent": None, "reasons": []}
             if main.get("conflict"):
                 S["reasons"].append("content order also links this flow to another headline")
@@ -1762,8 +1771,99 @@ class PageModel:
                                 ["separate text flow drawn next to this story's flow (pull quote / sidebar)"]})
             else:
                 stories.append({"head": None, "threads": [T], "evidence": "none", "parent": None, "reasons": []})
+        self.join_runons(stories)
         self.stories_ = stories
         self.attach()
+
+    def join_runons(self, stories):
+        """A flow that ends mid-sentence runs on into the next column: a thread of another story that starts
+        mid-paragraph (not indented, no run-in dateline) at the top of the column just right of that last line (gap <=
+        RUNON_GAP_MM, the column reaching down to that line's level) moves to the first story. A story left with no
+        text is one with it: the larger headline heads it, the smaller becomes its deck (a secondary heading)."""
+        moved = set()                                     # a thread moves at most once: the loop always ends
+        changed = True
+        while changed:
+            changed = False
+            for A in stories:
+                last = A["threads"][-1]["last"]
+                if not self.ends_mid(last):
+                    continue
+                root = A["parent"] or A
+                for B in stories:
+                    if B is A or B is root:
+                        continue
+                    for T in B["threads"]:
+                        f = T["first"]
+                        if f["ref"] in moved or self.indented(f) or self.runin_start(f) or not 0 <= f["L"] - last["R"] <= RUNON_GAP_MM:
+                            continue
+                        col = [L for L in T["lines"] if abs(L["L"] - f["L"]) <= COL_TOL_MM]
+                        if f["bl"] > last["bl"] + 1.0 or max(L["bl"] for L in col) < last["bl"] - 2.0:
+                            continue
+                        if (B["head"] is not None and self.geo_heads(f, [B["head"]], panels=False) and self.top_under(f, B["head"])
+                                and not (root["head"] is not None and self.nested_heads(root["head"], B["head"]))):
+                            continue                       # the column opens under B's own headline: B's text
+                        if (len(B["threads"]) == 1 and self.split_runon(T)[1] is None and B["head"] is not None
+                                and root["head"] is not None and not self.nested_heads(root["head"], B["head"])):
+                            continue                       # would merge two side-by-side headed stories
+                        break
+                    else:
+                        continue
+                    if A is not root:                      # a run-on flow is body text, not a pull quote
+                        root["threads"] += A["threads"]
+                        stories.remove(A)
+                    run, rest = self.split_runon(T)
+                    k = B["threads"].index(T)
+                    B["threads"][k:k + 1] = [rest] if rest else []
+                    root["threads"].append(run)
+                    moved.add(run["first"]["ref"])
+                    root["reasons"].append("a flow ending mid-sentence runs on into the next column: joined")
+                    if not B["threads"]:
+                        for C in stories:
+                            if C["parent"] is B:
+                                C["parent"] = root
+                        stories.remove(B)
+                        if B["head"] is not None:
+                            big, small = B["head"], root["head"]
+                            if small is not None and (small["_size"], -small["bbox"][1]) > (big["_size"], -big["bbox"][1]):
+                                big, small = small, big
+                            if small is not None:
+                                small["_kind_was"], small["kind"] = small["kind"], "deck"
+                                small["_kind_reason"] = "secondary heading of a story whose flow runs on from under it"
+                                root.setdefault("forced_decks", []).extend([small] + small.get("_parts", []))
+                            root["head"] = big
+                        root.setdefault("forced_decks", []).extend(B.get("forced_decks", []))
+                    changed = True
+                    break
+                if changed:
+                    break
+
+    def nested_heads(self, h1, h2):
+        """The smaller headline lies below the larger one, within its span: a secondary heading of the same story."""
+        big, small = (h1, h2) if (h1["_size"], -h1["bbox"][1]) >= (h2["_size"], -h2["bbox"][1]) else (h2, h1)
+        w = max(0.1, small["bbox"][2] - small["bbox"][0])
+        return (small["_ink_top"] >= big["_bottom"] - 0.5
+                and overlap(small["bbox"][0], small["bbox"][2], big["_span"][0], big["_span"][1]) >= 0.8 * w)
+
+    def split_runon(self, T):
+        """Thread T up to (not including) the first later column that opens a paragraph (indented or with a run-in
+        dateline): the part that runs on, and the rest (None when it all runs on)."""
+        lines, cut = T["lines"], None
+        for k in range(1, len(lines)):
+            L, P = lines[k], lines[k - 1]
+            if (abs(L["L"] - P["L"]) > COL_TOL_MM or L["bl"] < P["bl"] - 0.5) and (self.indented(L) or self.runin_start(L)):
+                cut = k
+                break
+        if cut is None:
+            return T, None
+        keep = {id(L) for L in lines[:cut]}
+        def part(ls, items):
+            return {**T, "items": items, "lines": ls, "first": ls[0], "last": ls[-1]}
+        items_a, items_b, in_a = [], [], True
+        for it in T["items"]:
+            if it[0] == "line":
+                in_a = id(it[1]) in keep
+            (items_a if in_a else items_b).append(it)
+        return part(lines[:cut], items_a), part(lines[cut:], items_b)
 
     def indented(self, L):
         return L["left_off"] >= INDENT_EM * L["size"] / MM
@@ -1787,6 +1887,7 @@ class PageModel:
             S["cols_box"] = union([L["box"] for L in S["lines"]])
             S["decks"], S["kicker"], S["byline"], S["captions"], S["images"], S["jumps"], S["others"] = [], None, None, [], [], [], []
             S["extra_bylines"] = []
+            S["decks"] += S.get("forced_decks", [])
             h = S["head"]
             S["region"] = union([S["cols_box"]] + ([h["bbox"]] + [p["bbox"] for p in h["_parts"]] if h else []))
         used = set()
@@ -1797,6 +1898,8 @@ class PageModel:
         for E in self.texts:
             if E["id"] in self.inflow:
                 used.add(E["id"])
+        for S in S_all:
+            used.update(E["id"] for E in S.get("forced_decks", []))
         heads = {S["head"]["id"]: S for S in S_all if S["head"]}
         avail = lambda E: not E.get("_ad") and E["id"] not in used  # noqa: E731
         hrules = [r for r in self.rules if r["orient"] == "h"]

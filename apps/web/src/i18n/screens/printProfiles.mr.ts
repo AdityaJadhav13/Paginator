@@ -1,0 +1,40 @@
+/** The printProfiles screen's Marathi strings (spread into mr.ts): a first draft for the native reviewer (review.ts, D-5). */
+import type { PRINT_PROFILES_EN } from "./printProfiles.en.ts";
+
+export const PRINT_PROFILES_MR: Readonly<Record<keyof typeof PRINT_PROFILES_EN, string>> = {
+  "printProfiles.lede":
+    "हे प्रकाशन ज्या छापखान्यात छापले जाते तो. प्रत्येक जतन ही नवी आवृत्ती असते; प्रसिद्धी मंजूर होताना वापरात असलेली आवृत्ती नोंदवली जाते.",
+  "printProfiles.loading": "छपाई प्रोफाइल उघडत आहे…",
+  "printProfiles.inUse": "वापरात: आवृत्ती {version}",
+  "printProfiles.none": "अजून छपाई प्रोफाइल नाही",
+  "printProfiles.noneBody": "एखादे जतन होईपर्यंत प्रसिद्धीत छपाई प्रोफाइल नोंदवले जात नाही.",
+  "printProfiles.savedBy": "{name} यांनी जतन केले, {time}",
+  "printProfiles.pressName": "छापखान्याचे नाव",
+  "printProfiles.contact": "संपर्क (ऐच्छिक)",
+  "printProfiles.note": "टीप (ऐच्छिक)",
+  "printProfiles.new": "नवी आवृत्ती जतन करा",
+  "printProfiles.save": "नवी आवृत्ती म्हणून जतन करा",
+  "printProfiles.saved": "आवृत्ती {version} म्हणून जतन झाले.",
+  "printProfiles.history": "आधीच्या आवृत्त्या",
+  "printProfiles.version": "आवृत्ती",
+  "printProfiles.when": "जतन",
+  "printProfiles.by": "कोणी",
+  "printProfiles.facts": "इंजिन काय तयार करते",
+  "printProfiles.factsLede": "इंजिन प्रोफाइल आणि तपासण्यांमधील केवळ वाचण्याची माहिती. ती इथे बदलत नाही.",
+  "printProfiles.trim": "पानाचा आकार",
+  "printProfiles.trimValue": "{w} × {h} मिमी, इंजिन प्रोफाइल आवृत्ती {version} च्या पहिल्या पानाच्या साच्यातून",
+  "printProfiles.trimNone": "या प्रोफाइलसाठी नोंदलेले नाही",
+  "printProfiles.pdf": "तपासले जाणारे PDF मानक",
+  "printProfiles.pdfValue": "नव्या मांडणीची पाने स्वतंत्र {standard} तपासणीने तपासली (प्रत्येक पानाचा निकाल प्रकाशन टॅबवर आहे).",
+  "printProfiles.checker": "तपासक (नवीनतम मांडणी)",
+  "printProfiles.checkerNone": "अजून मांडणी झालेली नाही",
+  "printProfiles.icc": "आउटपुट इंटेंट (रंग प्रोफाइल)",
+  "printProfiles.notRecorded": "नोंदलेले नाही",
+  "printProfiles.ppi": "किमान रेझोल्यूशन",
+  "printProfiles.ppiValue":
+    "जाहिराती: {ad} ppi पेक्षा कमी कलाकृती तपासणीत नापास होते. फोटो: फोटो {photo} ppi वर कुठपर्यंत स्पष्ट छापला जातो ते माध्यम संग्रह दाखवतो; हा सल्ला आहे, प्रसिद्धीची तपासणी नाही.",
+  "printProfiles.delivery": "पाठवणी",
+  "printProfiles.deliveryValue": "डाउनलोड करा आणि स्वतः पाठवा",
+  "printProfiles.pinned": "छपाई प्रोफाइल: आवृत्ती {version}, {press}",
+  "printProfiles.pinnedNone": "हे मंजूर झाले तेव्हा कोणतेही छपाई प्रोफाइल जतन केलेले नव्हते.",
+};

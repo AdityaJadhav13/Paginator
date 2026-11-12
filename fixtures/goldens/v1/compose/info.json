@@ -1,0 +1,34 @@
+{
+ "body_pt_hex": "0x1.5b22d0e560419p+3",
+ "chosen_c3": "C3_floor0.66_stretch1.00",
+ "composer": "compose3/1.0.0",
+ "counts": {
+  "by_case": {
+   "C2": 3564,
+   "C3": 756,
+   "EN": 40,
+   "HEAD": 60,
+   "PROBE": 2145
+  },
+  "c2_signatures_checked_here": 3564,
+  "compositions": 6565,
+  "lines": 37788,
+  "policies": 37,
+  "prepared": 184,
+  "statuses": {
+   "OK": 5189,
+   "OVERSET": 1376
+  }
+ },
+ "environment": {
+  "fonttools": "4.63.0",
+  "harfbuzz": "14.3.0",
+  "machine": "arm64",
+  "oracle_manifest_sha256": "04522301c159261b7e6ef5e61c58eaca4fc7a44a2a014252f8e3487940c53b05",
+  "platform": "macOS-27.0.1",
+  "python": "3.11.14",
+  "uharfbuzz": "0.56.0"
+ },
+ "house_k_hex": "0x1.25c2e0fcfb841p+0",
+ "schema": "pageinator.golden.compose-info/1"
+}

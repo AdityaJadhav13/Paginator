@@ -1,0 +1,13 @@
+# The phone smoke's own services (apps/web/e2e/stack.ts): compose.dev.yml's Postgres, SeaweedFS and Mailpit under a
+# project of the smoke's own, on ports of its own, so it never meets the development stack (`pageinator`).
+services:
+  db:
+    ports: !override
+      - "127.0.0.1:${PGN_E2E_DB_PORT:?}:5432"
+  s3:
+    ports: !override
+      - "127.0.0.1:${PGN_E2E_S3_PORT:?}:8333"
+  mail:
+    ports: !override
+      - "127.0.0.1:${PGN_E2E_MAIL_PORT:?}:8025"
+      - "127.0.0.1:${PGN_E2E_SMTP_PORT:?}:1025"

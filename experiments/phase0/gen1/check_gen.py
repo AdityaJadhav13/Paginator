@@ -122,11 +122,20 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
             missing_photos += 1
         for k, v in (s.get("not_set") or {}).items():
             not_set[k] += len(v)
+    for fs in man.get("fixed_stories_out", []):          # stories kept where print had them: every character too
+        ms = sid.get(fs["story"])
+        if ms is None or fs["story"] in gen_ids:
+            continue
+        paras = [b for b in ms["flow"] if b["type"] == "para" and b["text"].strip()]
+        src = "".join(" ".join(fix_bullet(b["text"]) for b in paras).split())
+        ours = "".join(" ".join(l["text"] for l in lines if l.get("role") == "body" and l.get("story") == fs["story"]).split())
+        integ.append(ours == src)
     out["integrity_ok"], out["accounting_mismatches"], out["photos_missing"] = all(integ), acct, missing_photos
     drawn_chars = sum(nchar(l["text"]) for l in lines if l.get("story") in gen_ids)
     out["duplicate_words"] = max(0, drawn_chars - expected_chars)          # characters set twice (e.g. a run-in dateline)
     out["parts_not_set"] = dict(not_set)
-    out["overset_lines"] = sum(s.get("overset_lines", 0) for s in man["stories_out"])
+    # stories the generator keeps where print had them (fixed parts) must fit too
+    out["overset_lines"] = sum(s.get("overset_lines", 0) for s in man["stories_out"] + man.get("fixed_stories_out", []))
     out["overset_crosshead_words"] = sum(s.get("overset_crosshead_words", 0) for s in man["stories_out"])
     out["problems"] = len(man["problems"]) - man.get("fixed_problems", 0)
 
@@ -224,6 +233,7 @@ def check(ds: Path, name: str, man: dict, model: dict, pdf: Path, cmp_dir: Path)
                                   and e["id"] not in frame_owner and e["id"] not in body_src]
     out["page_text_lost"] = [e["id"] for e in model["elements"] if e["kind"] in TEXT_KINDS and e.get("text", "").split() and not e.get("run_in")
                              and not only_bullets(e["text"]) and not in_ad(e["bbox_mm"]) and e["id"] not in drawn_ids and e["id"] not in body_src
+                             and e["id"] not in set((man.get("masthead") or {}).get("ids", []))      # drawn as the paper's artwork
                              and not any(e["id"] in (sid[st].get("headline_parts") or []) or e["id"] in (man["head_ids"].get(st) or [])
                                          or e["id"] in (man["deck_ids"].get(st) or []) or e["id"] in (man.get("caption_ids", {}).get(st) or [])
                                          for st in gen_ids)]

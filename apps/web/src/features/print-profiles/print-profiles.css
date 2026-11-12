@@ -1,0 +1,28 @@
+/* Print profiles: the engine's facts as a term / value list (two columns on a laptop, stacked on a phone). */
+.pg-print__facts {
+  display: grid;
+  grid-template-columns: minmax(10rem, max-content) 1fr;
+  gap: var(--pg-space-2) var(--pg-space-4);
+  margin: 0;
+}
+
+.pg-print__facts dt {
+  font-weight: 600;
+}
+
+.pg-print__facts dd {
+  margin: 0;
+}
+
+/* the press test page's SHA-256: read character by character, selected whole, broken anywhere on a narrow screen */
+.pg-print__sha {
+  font-family: var(--pg-font-mono);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+@media (max-width: 40rem) {
+  .pg-print__facts {
+    grid-template-columns: 1fr;
+  }
+}
