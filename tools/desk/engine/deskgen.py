@@ -372,7 +372,7 @@ def layout_page(cx, cal: Calibration, tpl: Template, stories: list, elements: li
         return {"ok": False, "status": "too_many", "message": f"{len(g.stories)} modules: more than the layout search takes ({G.MAX_STORIES})"}
     if not g.stories:
         return {"ok": False, "status": "empty", "message": "no stories for this page"}
-    retries, ink_retries, good = [], [], None
+    retries, ink_retries, good, good_touch, good_gaps = [], [], None, False, 0
     res, info, placed, B, rep, n_fixed = None, {}, [], None, None, 0
     for attempt in range(G.RETRIES + 1):
         res, info = g.run(regions, cal.span_prior, cal.lead_side)
@@ -388,28 +388,34 @@ def layout_page(cx, cal: Calibration, tpl: Template, stories: list, elements: li
         if res is None:
             if good is not None:
                 res, info, placed, B, rep, n_fixed = good
-                info = {**info, "ink_touch_kept": True}
+                info = {**info, "ink_touch_kept": True} if good_touch else info
             break
         placed = [pl for k, tree in res[1] for pl in g.place(tree, G.ORIGIN + regions[k][0] * G.PITCH, regions[k][2])]
         B, rep, n_fixed = G.render(g, model, placed, news_top, news_bottom, photo_dir, [], keep, ({}, {}))
         over = [(st_, o) for st_, (_, _, _, _, _, o) in zip(rep["stories"], placed, strict=True) if st_["overset_lines"] or st_.get("overset_crosshead_words")]
         if not over:
-            good = (res, info, placed, B, rep, n_fixed)
             touch = G.body_touches(model, B, work_dir)
-            if not touch:
+            gapped = {x["story"] for x in column_gaps(B, g, rep, placed, regions) if x["story"]} \
+                if getattr(G, "ST", {}).get("refined") else set()      # refined: a story whose column ends short tries again
+            if good is None or (good_touch if touch else (good_touch or len(gapped) <= good_gaps)):   # keep the best: no ink
+                good, good_touch, good_gaps = (res, info, placed, B, rep, n_fixed), bool(touch), len(gapped)   # touch, then fewest gaps
+            if not touch and not gapped:
                 break
-            ink_retries.append(sorted(touch))
+            if touch:
+                ink_retries.append(sorted(touch))
             if attempt == G.RETRIES:
-                info = {**info, "ink_touch_kept": True}
+                res, info, placed, B, rep, n_fixed = good
+                if good_touch:
+                    info = {**info, "ink_touch_kept": True}
                 break
             for st_, (_, _, _, _, _, o) in zip(rep["stories"], placed, strict=True):
-                if st_["story"] in touch:
+                if st_["story"] in touch or st_["story"] in gapped:
                     g.banned.add((st_["story"], o["w"], o["m"], o["fit"], o["style"]))
             continue
         if attempt == G.RETRIES:
             if good is not None:
                 res, info, placed, B, rep, n_fixed = good
-                info = {**info, "ink_touch_kept": True}
+                info = {**info, "ink_touch_kept": True} if good_touch else info
             break
         for st_, o in over:
             k = (st_["story"], o["w"], o["m"], o["fit"], o["style"])
@@ -457,6 +463,15 @@ def layout_page(cx, cal: Calibration, tpl: Template, stories: list, elements: li
                          "problems": problems, "news_box_mm": [G.ORIGIN, round(news_top, 2), round(G.ORIGIN + G.span_mm(G.NCOL), 2), round(news_bottom, 2)],
                          "photos_drawn": rep.get("photos", 0)} | grid_record() | gap,
             "warnings": warnings}
+
+
+def foot_gap(manifest: dict, shrink_mm: float, lead_mm: float) -> dict:
+    """A refined page whose news area the planner had to shorten (too little to fill it): an empty foot taller than
+    G.GAP_LINES body lines fails the gap check too (the check measures inside the shortened area). → manifest."""
+    gc = manifest.get("gap_check")
+    if gc is not None and shrink_mm > G.GAP_LINES * lead_mm:
+        manifest["gap_check"] = {**gc, "pass": False, "gaps": gc["gaps"] + [{"story": None, "x_mm": None, "foot_mm": round(shrink_mm, 1)}]}
+    return manifest
 
 
 def column_gaps(B, g, rep, placed, regions) -> list:

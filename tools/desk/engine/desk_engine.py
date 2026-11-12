@@ -853,7 +853,7 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
 
     # 3. lay out every page in parallel
     status.set(state="layout", message=DM.msg("m.run.layingOut"))
-    futs = {}
+    futs, shrunk = {}, {}
     for pg, role in zip(plan, roles, strict=True):
         n = pg["page"]
         ps = status.page(n)
@@ -873,6 +873,7 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
             Hs = DP.region_heights(regions)[0]
             regions = [(c0, w, top, top + (Hs - pg["shrink_units"]) * G.UNIT + 0.01)]
             ps["warnings"].append(DM.msg("m.warn.emptyFoot", mm=round(pg["shrink_units"] * G.UNIT)))
+            shrunk[n] = pg["shrink_units"] * G.UNIT
         srcs = [(tpl.photo_dir, {e["id"]: tpl.photo_index[e["id"]] for e in tpl.keep if e["kind"] == "image" and e["id"] in tpl.photo_index}),
                 (b.photo_dir, {p: photos_idx[p] for p in photo_ids})]
         renames = {}
@@ -907,6 +908,8 @@ def generate_with(ex, cfg, ds, home, ed_dir, run_dir, status, edition, roles, da
                 r = {"ok": False, "message": error_text(e)}
             ps["seconds"] = r.get("seconds")
             if r.get("ok"):
+                if n in shrunk:                                          # a refined paper: an empty foot is a gap too
+                    DG.foot_gap(r["manifest"], shrunk[n], min(lead for _, lead in cal.styles) / G.MM)
                 write_json(run_dir / f"page-{n:02d}.manifest.json", {**r["manifest"], "template_role": tkeys[n - 1],   # the editor's template
                                                                     "sha256": r["sha256"], "warnings": r.get("warnings", [])})
                 ps.update(state="done", pdf=f"page-{n:02d}.pdf", message="",

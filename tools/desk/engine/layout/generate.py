@@ -135,6 +135,14 @@ HEAD_WDTH_MIN = 62.5                         # refined headlines: the width axis
 HEAD_SIZE_STEP = 0.92                        # … and then the size steps down by this factor (to half the ladder size at most)
 SUDOKU_MM = 110.0                            # a sudoku's grid at most this wide
 SUDOKU_SOL = 0.34                            # … its solution printed this much smaller, under it
+MIN_COL_LINES = 5                            # refined: text spread over columns sets at least this many lines in each
+
+
+def min_col_lines(m: int) -> int:
+    """Refined: the fewest lines each of m > 1 text columns may hold (the wider, the deeper: no strip across the page)."""
+    return max(MIN_COL_LINES, m + 2)
+
+
 GAP_LINES = 2                                # refined: no text column ends more than this many lines above its module's foot
 INSET_COLS = 4 / 3                           # an inset photo covers the story's last text column and a third of the one
                                              # before it: two thirds of a column stay beside it (half a column read 1–2 words a line)
@@ -871,7 +879,8 @@ class Generator:
                                 cands.append((0, 0.0, None))
                             else:
                                 R0 = math.ceil(L / m)
-                                cands.append((R0, SHORT_COST * (R0 * m - L), None))
+                                if not (ST["refined"] and m > 1 and R0 < min_col_lines(m)):   # refined: no shallow strips
+                                    cands.append((R0, SHORT_COST * (R0 * m - L), None))
                         else:
                             ph_top = top_text + max({"deck": SP["deck_to_photo"]}.get(after, SP["headline_to_photo"]), desc + 1.0) \
                                 if dsp["has_display"] else SP["rule_to_photo"]
@@ -904,6 +913,8 @@ class Generator:
                                     R = max(j, math.ceil((L + k * j) / m))
                                     if ST["refined"] and k < m and 0 < R - j < 3:
                                         continue                # refined: under a photo none or at least three lines
+                                    if ST["refined"] and k == m > 1 and 0 < R - j < min_col_lines(m):
+                                        continue                # refined: a photo across all columns: no shallow strip under it
                                     short = k * (R - j) + (m - k) * R - L          # empty lines at the last column's foot
                                     if ST["refined"] and short > m:
                                         continue                # refined: balanced columns, each at most one line short

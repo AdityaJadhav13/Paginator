@@ -491,6 +491,23 @@ class DailyRulesTest(Settings):
             res = render_one(g, o["w"], o)                  # the short lines spread one to a column: still no overset
             self.assertEqual(res["overset_lines"], 0)
 
+    def test_a_short_story_is_never_a_shallow_strip(self):
+        def shallow(g):
+            return [(w, o["m"], o["rows"]) for w in range(2, 9) for o in g._options(g.stories[0], w)
+                    if o["photo"] is None and o["m"] > 1 and 0 < o["rows"] < G.min_col_lines(o["m"])]
+        self.assertEqual([G.min_col_lines(m) for m in (2, 3, 4, 8)], [5, 5, 6, 10])   # the wider, the deeper
+        g = story(paras=1, kicker=False, byline=False)
+        self.assertEqual(shallow(g), [])                                   # a brief stacks in one or a few columns …
+        self.assertEqual(shallow(story(paras=3, kicker=False, byline=False)), [])
+        self.assertTrue(any(o["rows"] >= G.MIN_COL_LINES for o in g._options(g.stories[0], 1)))
+        photo("p1", 1500, 1000)
+        g = story(paras=2, image="p1", kicker=False, byline=False)        # under a photo across every column: deep or none
+        under = [(o["rows"] - o["photo"]["j"], o["m"]) for w in range(2, 6) for o in g._options(g.stories[0], w)
+                 if o["photo"] and o["photo"].get("k") == o["m"] > 1]
+        self.assertTrue(all(n == 0 or n >= G.min_col_lines(m) for n, m in under), under)
+        settings.use(None)                                                 # … the pilot keeps its wide strips
+        self.assertNotEqual(shallow(story(paras=1, kicker=False, byline=False)), [])
+
     def test_the_sudoku_filler(self):
         import sudoku as SU
         sd = SU.make("2026-11-11", "easy")

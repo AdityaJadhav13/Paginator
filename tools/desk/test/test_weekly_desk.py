@@ -5,6 +5,7 @@ paper's template and running head, per-page templates and story treatments. Fict
 """
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import types
@@ -520,6 +521,55 @@ class GapCheckTest(unittest.TestCase):
         placed = [(0, G.ORIGIN, y, 2, h, {"lines": 35, "style": (10.0, 13.0), "y_b0": 5.0, "rows": 20, "lo": h / G.UNIT})]
         gaps = DG.column_gaps(B, None, rep, placed, [(0, 2, y, y + h + 40.0)])
         self.assertEqual([(g["story"], round(g["lines"])) for g in gaps], [("s", 5), (None, 9), (None, 9)])
+
+    def test_an_empty_foot_fails_a_refined_pages_gap_check(self):
+        ok = {"gap_check": {"limit_lines": 2, "pass": True, "gaps": []}}
+        self.assertTrue(DG.foot_gap(json.loads(json.dumps(ok)), 9.0, 4.6)["gap_check"]["pass"])          # within two lines
+        got = DG.foot_gap(json.loads(json.dumps(ok)), 70.0, 4.6)["gap_check"]
+        self.assertEqual((got["pass"], got["gaps"]), (False, [{"story": None, "x_mm": None, "foot_mm": 70.0}]))
+        self.assertEqual(DG.foot_gap({"page": 1}, 70.0, 4.6), {"page": 1})                                # the pilot: no gap check
+
+    def _page(self, gaps_seq, refined):
+        """layout_page on stand-ins: each search places story s; column_gaps answers from gaps_seq. → (result, searches)."""
+        runs = []
+
+        class Gen:
+            def __init__(self, *a):
+                self.stories, self.banned, self.extra_rows, self.ext_styles = [types.SimpleNamespace(id="s", rank=0)], set(), {}, False
+
+            def run(self, *a):
+                runs.append(len(runs) + 1)
+                return (0.0, [(0, "tree")]), {}
+
+            def place(self, tree, x, top):
+                return [(0, float(len(runs)), top, 2, 50.0, {"w": 2, "m": 2, "fit": 1.0, "style": (10.0, 13.0), "photo": None, "size_h": 20.0})]
+        seq = iter(gaps_seq)
+        rep = lambda: {"stories": [{"story": "s", "overset_lines": 0}], "fixed_problems": 0}          # noqa: E731
+        tpl = types.SimpleNamespace(model={"elements": [], "unassigned": []}, regions=[(0, 2, 30.0, 100.0)], role="inside")
+        cal = types.SimpleNamespace(styles=[], styles_ext=[], space_em=0.25, span_prior={}, lead_side={})
+        with mock.patch.object(DG, "DeskGenerator", Gen), mock.patch.object(DG, "folio_plan", return_value=([], [])), \
+                mock.patch.object(DG.G, "render", side_effect=lambda *a: (types.SimpleNamespace(items=[], problems=[]), rep(), 0)), \
+                mock.patch.object(DG.G, "body_touches", return_value=set()), mock.patch.object(DG, "draw_folios", return_value=[]), \
+                mock.patch.object(DG, "pdf_bytes", return_value=b"%PDF"), mock.patch.object(DG, "column_gaps", side_effect=lambda *a: next(seq)):
+            LS.use({"refined": refined})
+            try:
+                out = DG.layout_page(None, cal, tpl, [{"id": "s"}], [], Path("."), {}, 2, 8, DAY, {}, Path("."))
+            finally:
+                LS.use({})
+        return out, runs
+
+    def test_a_story_whose_column_ends_short_is_laid_out_again(self):
+        short = [{"story": "s", "x_mm": 20.0, "lines": 3.0}]
+        out, runs = self._page([short, [], []], refined=True)             # 1st layout short, 2nd level, then the report
+        self.assertEqual((runs, out["manifest"]["gap_check"]["pass"]), ([1, 2], True))
+        two = [{"story": "s", "x_mm": 20.0, "lines": 3.0}, {"story": "t", "x_mm": 60.0, "lines": 3.0}]
+        out, runs = self._page([short] + [two] * DG.G.RETRIES + [short], refined=True)   # never level: the fewest gaps kept
+        self.assertEqual((len(runs), out["manifest"]["placed"][0]["x_mm"]), (DG.G.RETRIES + 1, 1.0))
+        out, runs = self._page([short] * 9, refined=True)                  # never level: kept and reported
+        self.assertEqual((len(runs), out["manifest"]["gap_check"]["pass"]), (DG.G.RETRIES + 1, False))
+        self.assertNotIn("two lines of a story touch", " ".join(out["warnings"]))
+        out, runs = self._page([], refined=False)                          # the pilot: no gap check, one search
+        self.assertEqual((runs, "gap_check" in out["manifest"]), ([1], False))
 
 
 class SudokuArticleTest(unittest.TestCase):
